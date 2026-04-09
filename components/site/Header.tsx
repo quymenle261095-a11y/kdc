@@ -35,16 +35,6 @@ export type HeaderInitialData = {
   headerConfig?: HeaderConfig | null;
   contact?: { contact_phone?: string; contact_email?: string };
   site?: { site_name?: string; site_logo?: string; site_tagline?: string };
-  moduleFlags?: {
-    cart?: boolean;
-    wishlist?: boolean;
-    customers?: boolean;
-    orders?: boolean;
-    products?: boolean;
-    posts?: boolean;
-    services?: boolean;
-    customerLogin?: boolean;
-  };
 };
 
 type HeaderStyle = 'classic' | 'topbar' | 'allbirds';
@@ -172,30 +162,21 @@ const HeaderSearchAutocomplete = dynamic(
   { ssr: false, loading: () => null }
 );
 
-export function Header({ initialData, deferInteractive = false }: { initialData?: HeaderInitialData; deferInteractive?: boolean }) {
+export function Header({ initialData }: { initialData?: HeaderInitialData }) {
   const brandColors = useBrandColors();
   const siteSettings = useSiteSettings();
-  const shouldFetchMenu = !initialData?.menuData;
-  const shouldFetchHeaderStyle = typeof initialData?.headerStyle === 'undefined';
-  const shouldFetchHeaderConfig = typeof initialData?.headerConfig === 'undefined';
-  const shouldFetchContact = !initialData?.contact;
-  const moduleFlags = initialData?.moduleFlags;
-  const shouldFetchModules = !moduleFlags;
-  const menuDataQuery = useQuery(api.menus.getFullMenu, shouldFetchMenu ? { location: 'header' } : 'skip');
-  const headerStyleSetting = useQuery(api.settings.getByKey, shouldFetchHeaderStyle ? { key: 'header_style' } : 'skip');
-  const headerConfigSetting = useQuery(api.settings.getByKey, shouldFetchHeaderConfig ? { key: 'header_config' } : 'skip');
-  const contactSettings = useQuery(api.settings.listByGroup, shouldFetchContact ? { group: 'contact' } : 'skip');
-  const cartModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'cart' } : 'skip');
-  const wishlistModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'wishlist' } : 'skip');
-  const customersModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'customers' } : 'skip');
-  const ordersModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'orders' } : 'skip');
-  const productsModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'products' } : 'skip');
-  const postsModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'posts' } : 'skip');
-  const servicesModule = useQuery(api.admin.modules.getModuleByKey, shouldFetchModules ? { key: 'services' } : 'skip');
-  const customerLoginFeature = useQuery(
-    api.admin.modules.getModuleFeature,
-    shouldFetchModules ? { moduleKey: 'customers', featureKey: 'enableLogin' } : 'skip'
-  );
+  const menuDataQuery = useQuery(api.menus.getFullMenu, { location: 'header' });
+  const headerStyleSetting = useQuery(api.settings.getByKey, { key: 'header_style' });
+  const headerConfigSetting = useQuery(api.settings.getByKey, { key: 'header_config' });
+  const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
+  const cartModule = useQuery(api.admin.modules.getModuleByKey, { key: 'cart' });
+  const wishlistModule = useQuery(api.admin.modules.getModuleByKey, { key: 'wishlist' });
+  const customersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'customers' });
+  const ordersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'orders' });
+  const productsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'products' });
+  const postsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'posts' });
+  const servicesModule = useQuery(api.admin.modules.getModuleByKey, { key: 'services' });
+  const customerLoginFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'customers', featureKey: 'enableLogin' });
   const router = useRouter();
   const { customer, isAuthenticated, logout } = useCustomerAuth();
   
@@ -230,15 +211,13 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
     };
   }, [config.topbar, settingsPhone, settingsEmail]);
 
-  const customersEnabled = (customersModule?.enabled ?? moduleFlags?.customers) ?? false;
-  const customerLoginEnabled = (customerLoginFeature?.enabled ?? moduleFlags?.customerLogin) ?? false;
-  const cartEnabled = (cartModule?.enabled ?? moduleFlags?.cart) ?? false;
-  const wishlistEnabled = (wishlistModule?.enabled ?? moduleFlags?.wishlist) ?? false;
-  const ordersEnabled = (ordersModule?.enabled ?? moduleFlags?.orders) ?? false;
-  const productsEnabled = (productsModule?.enabled ?? moduleFlags?.products) ?? false;
-  const postsEnabled = (postsModule?.enabled ?? moduleFlags?.posts) ?? false;
-  const servicesEnabled = (servicesModule?.enabled ?? moduleFlags?.services) ?? false;
-  const canLogin = customersEnabled && customerLoginEnabled;
+  const canLogin = (customersModule?.enabled ?? false) && (customerLoginFeature?.enabled ?? false);
+  const cartEnabled = cartModule?.enabled ?? false;
+  const wishlistEnabled = wishlistModule?.enabled ?? false;
+  const ordersEnabled = ordersModule?.enabled ?? false;
+  const productsEnabled = productsModule?.enabled ?? false;
+  const postsEnabled = postsModule?.enabled ?? false;
+  const servicesEnabled = servicesModule?.enabled ?? false;
   const showLogin = Boolean(config.login?.show && canLogin);
   const showUserMenu = showLogin && isAuthenticated;
   const showLoginLink = showLogin && !isAuthenticated;
@@ -391,36 +370,6 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
   const measureContainerRef = useRef<HTMLDivElement | null>(null);
   const measureItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const moreMeasureRef = useRef<HTMLDivElement | null>(null);
-  const [interactiveReady, setInteractiveReady] = useState(!deferInteractive);
-  const interactiveFeatureReady = !deferInteractive || interactiveReady;
-  const showSearchInteractive = showSearch && interactiveFeatureReady;
-  const showCartInteractive = showCart && interactiveFeatureReady;
-  const showWishlistInteractive = showWishlist && interactiveFeatureReady;
-
-  useEffect(() => {
-    if (!deferInteractive || interactiveReady) {
-      return;
-    }
-    const enable = () => setInteractiveReady(true);
-    const canIdle = typeof window.requestIdleCallback === 'function';
-    const handle = canIdle
-      ? window.requestIdleCallback(enable, { timeout: 1200 })
-      : window.setTimeout(enable, 1200);
-    const onInteract = () => enable();
-    window.addEventListener('pointerdown', onInteract, { once: true });
-    window.addEventListener('scroll', onInteract, { once: true, passive: true });
-    window.addEventListener('keydown', onInteract, { once: true });
-    return () => {
-      if (canIdle) {
-        window.cancelIdleCallback(handle as number);
-      } else {
-        window.clearTimeout(handle as number);
-      }
-      window.removeEventListener('pointerdown', onInteract);
-      window.removeEventListener('scroll', onInteract);
-      window.removeEventListener('keydown', onInteract);
-    };
-  }, [deferInteractive, interactiveReady]);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -513,10 +462,6 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
   }
 
   useLayoutEffect(() => {
-    if (deferInteractive && !interactiveReady) {
-      setVisibleRootCount(rootItems.length);
-      return;
-    }
     if (!navRef.current || rootItems.length === 0) {
       setVisibleRootCount(rootItems.length);
       return;
@@ -585,7 +530,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
     calculate();
 
     return () => resizeObserver.disconnect();
-  }, [deferInteractive, interactiveReady, rootItems.length, logoSizeLevel, showBrandName, headerStyle, config.cta?.show, showSearch, showCart, showWishlist, showLogin]);
+  }, [rootItems.length, logoSizeLevel, showBrandName, headerStyle, config.cta?.show, showSearch, showCart, showWishlist, showLogin]);
 
   const topbarSlogan = resolvedTagline ? resolvedTagline.trim() : '';
   const topbarSloganEnabled = (topbarConfig.sloganEnabled ?? true) !== false;
@@ -963,7 +908,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
             </div>
 
             <div ref={actionsRef} className="flex items-center gap-3 flex-shrink-0">
-              {showSearchInteractive && (
+              {showSearch && (
                 <div className="hidden lg:block">
                   <HeaderSearchAutocomplete
                     placeholder={config.search?.placeholder}
@@ -982,7 +927,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                   />
                 </div>
               )}
-              {showCartInteractive && (
+              {showCart && (
                 <CartIcon variant="mobile" className="hidden lg:flex" tokens={tokens} />
               )}
               {config.cta?.show && (
@@ -996,7 +941,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
               )}
             </div>
             <div className="ml-auto flex items-center gap-2 lg:hidden">
-              {showSearchInteractive && (
+              {showSearch && (
                 <button
                   onClick={() => { setSearchOpen((prev) => !prev); }}
                   className="p-2"
@@ -1005,7 +950,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                   <Search size={20} />
                 </button>
               )}
-              {showCartInteractive && (
+              {showCart && (
                 <CartIcon variant="mobile" tokens={tokens} />
               )}
               {renderMobileMenuButton(false)}
@@ -1186,7 +1131,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
             </Link>
 
             {/* Search Bar */}
-            {showSearchInteractive && (
+            {showSearch && (
               <div className="hidden md:block flex-1 max-w-md">
                 <HeaderSearchAutocomplete
                   placeholder={config.search?.placeholder}
@@ -1210,7 +1155,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
             <div className="flex items-center gap-2">
               {/* Mobile: Search + Cart */}
               <div className="flex lg:hidden items-center gap-2">
-                {showSearchInteractive && (
+                {showSearch && (
                   <button
                     onClick={() => { setSearchOpen((prev) => !prev); }}
                     className="p-2"
@@ -1219,7 +1164,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                     <Search size={20} />
                   </button>
                 )}
-                {showCartInteractive && (
+                {showCart && (
                   <CartIcon variant="mobile" tokens={tokens} />
                 )}
                 {renderMobileMenuButton(false)}
@@ -1227,7 +1172,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
 
               {/* Desktop: Wishlist + Cart */}
               <div className="hidden lg:flex items-center gap-2">
-                {showWishlistInteractive && (
+                {showWishlist && (
                   <Link
                     href={DEFAULT_LINKS.wishlist}
                     className="p-2 transition-colors flex flex-col items-center text-xs gap-0.5 hover:text-[var(--menu-icon-hover)]"
@@ -1237,7 +1182,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                     <span>Yêu thích</span>
                   </Link>
                 )}
-                {showCartInteractive && (
+                {showCart && (
                   <CartIcon tokens={tokens} />
                 )}
                 {config.cta?.show && (
@@ -1575,7 +1520,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                     {config.cta.text ?? 'Liên hệ'}
                   </Link>
                 )}
-                {showSearchInteractive && (
+                {showSearch && (
                   <div className="flex items-center gap-2">
                     <div className={cn('transition-all duration-200', searchOpen ? 'w-48 opacity-100' : 'w-0 opacity-0 pointer-events-none')}>
                       <HeaderSearchAutocomplete
@@ -1614,12 +1559,12 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                     <User size={18} />
                   </Link>
                 )}
-                {showCartInteractive && (
+                {showCart && (
                   <CartIcon variant="mobile" tokens={tokens} />
                 )}
               </div>
               <div className="flex items-center gap-1 lg:hidden">
-                {showSearchInteractive && (
+                {showSearch && (
                   <button
                     onClick={() => { setSearchOpen((prev) => !prev); }}
                     className="p-2"
@@ -1628,7 +1573,7 @@ export function Header({ initialData, deferInteractive = false }: { initialData?
                     <Search size={18} />
                   </button>
                 )}
-                {showCartInteractive && (
+                {showCart && (
                   <CartIcon variant="mobile" tokens={tokens} />
                 )}
                 {renderMobileMenuButton(false)}

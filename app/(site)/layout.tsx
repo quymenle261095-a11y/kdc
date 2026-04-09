@@ -2,13 +2,12 @@ import { JsonLd, generateNavigationSchema } from '@/components/seo/JsonLd';
 import { SiteShell } from '@/components/site/SiteShell';
 import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
-import { getPublicSettings } from '@/lib/get-settings';
+import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings } from '@/lib/get-settings';
 import { buildSeoMetadata } from '@/lib/seo/metadata';
 import { buildSiteSchemas } from '@/lib/seo/schema-policy';
 import { TelemetryGate } from '@/components/telemetry/TelemetryGate';
 import type { Metadata } from 'next';
 
-export const revalidate = 60;
 
 const resolveUrl = (url: string, baseUrl: string): string => {
   if (!url) {
@@ -21,7 +20,11 @@ const resolveUrl = (url: string, baseUrl: string): string => {
 };
 
 export const generateMetadata = (): Promise<Metadata> => {
-  return getPublicSettings().then(({ site, seo, contact, social }) => {
+  return Promise.all([
+    getSiteSettings(),
+    getSEOSettings(),
+    getContactSettings(),
+  ]).then(([site, seo, contact]) => {
     return {
       ...buildSeoMetadata({
         contact,
@@ -31,13 +34,10 @@ export const generateMetadata = (): Promise<Metadata> => {
         site,
         titleOverride: seo.seo_title || site.site_name,
         useTitleTemplate: true,
-        social,
       }),
       icons: {
         icon: `/api/favicon?v=${encodeURIComponent(site.site_favicon || '')}`,
-        apple: `/api/favicon?v=${encodeURIComponent(site.site_favicon || '')}`,
       },
-      manifest: '/manifest.webmanifest',
     };
   });
 };
@@ -47,39 +47,21 @@ const SiteLayout = ({
 }: {
   children: React.ReactNode;
 }): Promise<React.ReactElement> => {
-  const client = getConvexClient();
   return Promise.all([
-    getPublicSettings(),
-    client.query(api.menus.getMenuByLocation, { location: 'header' }),
-    client.query(api.settings.getMultiple, {
-      keys: ['header_style', 'header_config'],
-    }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'cart' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'wishlist' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'customers' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'orders' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'products' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'posts' }),
-    client.query(api.admin.modules.getModuleByKey, { key: 'services' }),
-    client.query(api.admin.modules.getModuleFeature, { moduleKey: 'customers', featureKey: 'enableLogin' }),
-  ]).then(async ([
-    publicSettings,
-    headerMenu,
-    headerSettings,
-    cartModule,
-    wishlistModule,
-    customersModule,
-    ordersModule,
-    productsModule,
-    postsModule,
-    servicesModule,
-    customerLoginFeature,
-  ]) => {
-    const { site, seo, contact, social } = publicSettings;
+    getSiteSettings(),
+    getSEOSettings(),
+    getContactSettings(),
+    getSocialSettings(),
+  ]).then(async ([site, seo, contact, social]) => {
     const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL) ?? '';
+    const client = getConvexClient();
+    const headerMenu = await client.query(api.menus.getMenuByLocation, { location: 'header' });
     const headerItems = headerMenu
       ? await client.query(api.menus.listActiveMenuItems, { menuId: headerMenu._id })
       : [];
+    const headerSettings = await client.query(api.settings.getMultiple, {
+      keys: ['header_style', 'header_config'],
+    });
     const initialHeaderData = {
       contact: {
         contact_email: contact.contact_email,
@@ -88,16 +70,6 @@ const SiteLayout = ({
       headerConfig: headerSettings.header_config as Record<string, unknown> | null,
       headerStyle: headerSettings.header_style as string | null,
       menuData: headerMenu ? { menu: headerMenu, items: headerItems } : null,
-      moduleFlags: {
-        cart: Boolean(cartModule?.enabled),
-        wishlist: Boolean(wishlistModule?.enabled),
-        customers: Boolean(customersModule?.enabled),
-        orders: Boolean(ordersModule?.enabled),
-        products: Boolean(productsModule?.enabled),
-        posts: Boolean(postsModule?.enabled),
-        services: Boolean(servicesModule?.enabled),
-        customerLogin: Boolean(customerLoginFeature?.enabled),
-      },
       site: {
         site_logo: site.site_logo,
         site_name: site.site_name,
@@ -105,7 +77,6 @@ const SiteLayout = ({
       },
     };
 
-    // Zero-config: schema engine tự quyết định Organization vs LocalBusiness
     const siteSchemas = buildSiteSchemas({ contact, seo, site, social });
 
     const navigationSchema = generateNavigationSchema({
