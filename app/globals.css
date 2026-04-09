@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode instead of media query */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --font-active: var(--font-be-vietnam-pro);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
+}
+
+html[data-theme='light'],
+body[data-theme='light'] {
+  color-scheme: light;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-be-vietnam-pro), var(--font-geist-sans), sans-serif;
+}
+
+.font-active {
+  font-family: var(--font-active), var(--font-be-vietnam-pro), var(--font-geist-sans), sans-serif;
+}
+
+/* ============================================
+   Custom Scrollbar - Best Practice
+   - Brand color, auto-hide when idle
+   - Desktop & Mobile unified experience
+   ============================================ */
+
+:root {
+  --scrollbar-color: #3b82f6;
+}
+
+/* Base scrollbar - 2px, 60% opacity brand color */
+::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--scrollbar-color) 60%, transparent);
+  border-radius: 1px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-color);
+}
+
+/* Firefox */
+@supports (scrollbar-color: auto) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--scrollbar-color) 60%, transparent) transparent;
+  }
+}
+
+/* Utility class */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-color);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================
+   Marquee Animation - for ProductCategories
+   ============================================ */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}

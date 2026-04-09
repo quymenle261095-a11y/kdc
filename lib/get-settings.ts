@@ -1,0 +1,177 @@
+import { api } from "@/convex/_generated/api";
+import { getConvexClient } from "./convex";
+import { cache } from "react";
+
+export interface SiteSettings {
+  site_name: string;
+  site_tagline: string;
+  site_url: string;
+  site_logo: string;
+  site_favicon: string;
+  site_brand_primary: string;
+  site_brand_secondary: string;
+  site_brand_mode: 'single' | 'dual';
+  site_brand_color: string;
+  site_timezone: string;
+  site_language: string;
+}
+
+export interface SEOSettings {
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  seo_og_image: string;
+  seo_google_verification: string;
+  seo_bing_verification: string;
+}
+
+export interface ContactSettings {
+  contact_email: string;
+  contact_phone: string;
+  contact_address: string;
+  contact_zalo: string;
+  contact_map_provider: string;
+  contact_google_map_embed_iframe: string;
+}
+
+export interface SocialSettings {
+  social_facebook: string;
+  social_instagram: string;
+  social_youtube: string;
+  social_tiktok: string;
+  social_twitter: string;
+  social_linkedin: string;
+  social_pinterest: string;
+}
+
+export interface PublicSettings {
+  contact: ContactSettings;
+  social: SocialSettings;
+  seo: SEOSettings;
+  site: SiteSettings;
+}
+
+const SETTINGS_KEYS = {
+  contact: [
+    "contact_email",
+    "contact_phone",
+    "contact_address",
+    "contact_zalo",
+    "contact_map_provider",
+    "contact_google_map_embed_iframe",
+  ],
+  seo: [
+    "seo_title",
+    "seo_description",
+    "seo_keywords",
+    "seo_og_image",
+    "seo_google_verification",
+    "seo_bing_verification",
+  ],
+  social: [
+    "social_facebook",
+    "social_instagram",
+    "social_youtube",
+    "social_tiktok",
+    "social_twitter",
+    "social_linkedin",
+    "social_pinterest",
+  ],
+  site: [
+    "site_name",
+    "site_tagline",
+    "site_url",
+    "site_logo",
+    "site_favicon",
+    "site_brand_primary",
+    "site_brand_secondary",
+    "site_brand_mode",
+    "site_brand_color",
+    "site_timezone",
+    "site_language",
+  ],
+};
+
+const normalizeSiteSettings = (settings: Record<string, unknown>): SiteSettings => ({
+  site_brand_primary: (settings.site_brand_primary as string) || (settings.site_brand_color as string) || "#3b82f6",
+  site_brand_secondary: (settings.site_brand_secondary as string) || "",
+  site_brand_mode: settings.site_brand_mode === 'single' ? 'single' : 'dual',
+  site_brand_color: (settings.site_brand_primary as string) || (settings.site_brand_color as string) || "#3b82f6",
+  site_favicon: (settings.site_favicon as string) || "",
+  site_language: (settings.site_language as string) || "vi",
+  site_logo: (settings.site_logo as string) || "",
+  site_name: (settings.site_name as string) || "Website",
+  site_tagline: (settings.site_tagline as string) || "",
+  site_timezone: (settings.site_timezone as string) || "Asia/Ho_Chi_Minh",
+  site_url: (settings.site_url as string) || "",
+});
+
+const normalizeSEOSettings = (settings: Record<string, unknown>): SEOSettings => ({
+  seo_bing_verification: (settings.seo_bing_verification as string) || "",
+  seo_description: (settings.seo_description as string) || "",
+  seo_google_verification: (settings.seo_google_verification as string) || "",
+  seo_keywords: (settings.seo_keywords as string) || "",
+  seo_og_image: (settings.seo_og_image as string) || "",
+  seo_title: (settings.seo_title as string) || "",
+});
+
+const normalizeContactSettings = (settings: Record<string, unknown>): ContactSettings => ({
+  contact_address: (settings.contact_address as string) || "",
+  contact_email: (settings.contact_email as string) || "",
+  contact_google_map_embed_iframe: (settings.contact_google_map_embed_iframe as string) || "",
+  contact_map_provider: (settings.contact_map_provider as string) || "openstreetmap",
+  contact_phone: (settings.contact_phone as string) || "",
+  contact_zalo: (settings.contact_zalo as string) || "",
+});
+
+const normalizeSocialSettings = (settings: Record<string, unknown>): SocialSettings => ({
+  social_facebook: (settings.social_facebook as string) || "",
+  social_instagram: (settings.social_instagram as string) || "",
+  social_linkedin: (settings.social_linkedin as string) || "",
+  social_pinterest: (settings.social_pinterest as string) || "",
+  social_tiktok: (settings.social_tiktok as string) || "",
+  social_twitter: (settings.social_twitter as string) || "",
+  social_youtube: (settings.social_youtube as string) || "",
+});
+
+const PUBLIC_SETTINGS_KEYS = [
+  ...SETTINGS_KEYS.site,
+  ...SETTINGS_KEYS.seo,
+  ...SETTINGS_KEYS.contact,
+  ...SETTINGS_KEYS.social,
+];
+
+const getSettingsByKeys = cache(async (keys: string[]) => {
+  const client = getConvexClient();
+  return client.query(api.settings.getMultiple, {
+    keys,
+  });
+});
+
+export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
+  const settings = await getSettingsByKeys(PUBLIC_SETTINGS_KEYS);
+  return {
+    contact: normalizeContactSettings(settings),
+    seo: normalizeSEOSettings(settings),
+    site: normalizeSiteSettings(settings),
+    social: normalizeSocialSettings(settings),
+  };
+});
+
+export const getSiteSettings = async (): Promise<SiteSettings> => (
+  getPublicSettings().then((settings) => settings.site)
+);
+
+export const getSEOSettings = async (): Promise<SEOSettings> => (
+  getPublicSettings().then((settings) => settings.seo)
+);
+
+export const getContactSettings = async (): Promise<ContactSettings> => (
+  getPublicSettings().then((settings) => settings.contact)
+);
+
+export const getSocialSettings = async (): Promise<SocialSettings> => (
+  getPublicSettings().then((settings) => settings.social)
+);
+
+export const getAllPublicSettings = async (): Promise<PublicSettings> => getPublicSettings();
