@@ -454,14 +454,16 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
   }, [menuItems]);
 
   const rootItems = menuTree;
-  const maxMenuLevel = useMemo(() => {
-    if (!menuItems || menuItems.length === 0) {return 1;}
-    return menuItems.reduce((max, item) => {
-      const level = Number.isFinite(item.depth) ? Math.round(item.depth) + 1 : 1;
-      return Math.max(max, level);
-    }, 1);
-  }, [menuItems]);
-  const isDeepMenuMode = maxMenuLevel >= 4;
+  const maxLevelByRootId = useMemo(() => {
+    const getNodeMaxLevel = (node: MenuItemWithChildren, level = 1): number => {
+      if (!node.children || node.children.length === 0) {
+        return level;
+      }
+      return node.children.reduce((max, child) => Math.max(max, getNodeMaxLevel(child, level + 1)), level);
+    };
+    return new Map<Id<'menuItems'>, number>(rootItems.map((root) => [root._id, getNodeMaxLevel(root, 1)]));
+  }, [rootItems]);
+  const isDeepMenuForItem = useCallback((itemId: Id<'menuItems'>) => (maxLevelByRootId.get(itemId) ?? 1) >= 4, [maxLevelByRootId]);
 
   if (measureItemRefs.current.length !== rootItems.length) {
     measureItemRefs.current = Array(rootItems.length).fill(null);
@@ -679,24 +681,24 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
     return 'md:grid-cols-2 xl:grid-cols-5';
   };
 
-  const renderDesktopFlyoutNodes = (nodes: MenuItemWithChildren[]): React.ReactNode => nodes.map((node) => {
-    if (!isDeepMenuMode) {
+  const renderDesktopFlyoutNodes = (nodes: MenuItemWithChildren[], deepMode: boolean): React.ReactNode => nodes.map((node) => {
+    if (!deepMode) {
       return (
         <div key={node._id} className="relative group/menu-node">
           <Link
             href={node.url}
             target={node.openInNewTab ? '_blank' : undefined}
             rel={node.openInNewTab ? 'noreferrer' : undefined}
-            className="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+            className="flex min-w-0 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
             style={{ color: tokens.dropdownItemText, ...menuVars }}
           >
-            <span>{node.label}</span>
+            <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{node.label}</span>
             {node.children.length > 0 && <ChevronRight size={14} />}
           </Link>
           {node.children.length > 0 && (
             <div className="absolute left-full top-0 ml-1 z-50 hidden">
               <div className="rounded-lg border py-2 min-w-[220px] max-w-[min(320px,calc(100vw-2rem))] shadow-lg group-hover/menu-node:block" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
-                {renderDesktopFlyoutNodes(node.children)}
+                {renderDesktopFlyoutNodes(node.children, deepMode)}
               </div>
             </div>
           )}
@@ -720,13 +722,13 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
           href={node.url}
           target={node.openInNewTab ? '_blank' : undefined}
           rel={node.openInNewTab ? 'noreferrer' : undefined}
-          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+          className="flex min-w-0 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
           style={{
             ...(isLevel4Open ? { backgroundColor: tokens.dropdownItemHoverBg, color: tokens.dropdownItemHoverText } : { color: tokens.dropdownItemText }),
             ...menuVars,
           }}
         >
-          <span>{node.label}</span>
+          <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{node.label}</span>
           {node.children.length > 0 && <ChevronRight size={14} />}
         </Link>
         {node.children.length > 0 && isLevel4Open && (
@@ -738,7 +740,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                   href={child.url}
                   target={child.openInNewTab ? '_blank' : undefined}
                   rel={child.openInNewTab ? 'noreferrer' : undefined}
-                  className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+                  className="block rounded-lg px-3 py-2 text-sm whitespace-normal break-words leading-snug transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
                   style={{ color: tokens.dropdownItemText, ...menuVars }}
                 >
                   {child.label}
@@ -914,8 +916,8 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                   </Link>
 
                   {item.children.length > 0 && hoveredItem === item._id && (
-                    <div className={cn('absolute top-full left-0 z-50', isDeepMenuMode ? 'pt-3' : 'pt-2')}>
-                      {isDeepMenuMode ? (
+                    <div className={cn('absolute top-full left-1/2 -translate-x-1/2 z-50', isDeepMenuForItem(item._id) ? 'pt-3' : 'pt-2')}>
+                      {isDeepMenuForItem(item._id) ? (
                         <div
                           className={cn('rounded-2xl border p-5 shadow-xl', getMegaMenuWidthClass(Math.min(Math.max(item.children.length, 1), 5)))}
                           style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
@@ -926,7 +928,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                 <Link
                                   href={child.url}
                                   target={child.openInNewTab ? '_blank' : undefined}
-                                  className="block text-sm font-semibold"
+                                  className="block text-sm font-semibold whitespace-normal break-words leading-snug"
                                   style={{ color: tokens.textPrimary }}
                                 >
                                   {child.label}
@@ -954,13 +956,13 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                           href={sub.url}
                                           target={sub.openInNewTab ? '_blank' : undefined}
                                           rel={sub.openInNewTab ? 'noreferrer' : undefined}
-                                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+                                          className="flex min-w-0 items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
                                           style={{
                                             ...(isLevel3Active ? { backgroundColor: tokens.dropdownItemHoverBg, color: tokens.dropdownItemHoverText } : { color: tokens.dropdownItemText }),
                                             ...menuVars,
                                           }}
                                         >
-                                          <span>{sub.label}</span>
+                                          <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{sub.label}</span>
                                           {sub.children.length > 0 && <ChevronRight size={14} />}
                                         </Link>
                                         {sub.children.length > 0 && isLevel3Active && (
@@ -970,7 +972,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                             onMouseLeave={scheduleDeepMenuClose}
                                           >
                                             <div className="rounded-xl border py-2 min-w-[220px] max-w-[min(320px,calc(100vw-2rem))] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
-                                              {renderDesktopFlyoutNodes(sub.children)}
+                                              {renderDesktopFlyoutNodes(sub.children, true)}
                                             </div>
                                           </div>
                                         )}
@@ -980,7 +982,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                     <Link
                                       href={child.url}
                                       target={child.openInNewTab ? '_blank' : undefined}
-                                      className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+                                      className="block rounded-lg px-3 py-2 text-sm whitespace-normal break-words leading-snug transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
                                       style={{ color: tokens.dropdownItemText, ...menuVars }}
                                     >
                                       Xem thêm
@@ -1002,10 +1004,10 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                 href={child.url}
                                 target={child.openInNewTab ? '_blank' : undefined}
                                 rel={child.openInNewTab ? 'noreferrer' : undefined}
-                                className="flex items-center justify-between px-4 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+                                className="flex min-w-0 items-start justify-between gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
                                 style={{ color: tokens.dropdownItemText, ...menuVars }}
                               >
-                                {child.label}
+                                <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{child.label}</span>
                                 {child.children.length > 0 && <ChevronRight size={14} />}
                               </Link>
                               {child.children.length > 0 && (
@@ -1015,12 +1017,12 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                     style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
                                   >
                                     {child.children.map((sub) => (
-                                      <Link
+                                    <Link
                                         key={sub._id}
                                         href={sub.url}
                                         target={sub.openInNewTab ? '_blank' : undefined}
                                         rel={sub.openInNewTab ? 'noreferrer' : undefined}
-                                        className="block px-4 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-sub-hover-text)]"
+                                      className="block px-4 py-2 text-sm whitespace-normal break-words leading-snug transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-sub-hover-text)]"
                                         style={{ color: tokens.dropdownSubItemText, ...menuVars }}
                                       >
                                         {sub.label}
@@ -1422,8 +1424,8 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                 </Link>
 
                 {item.children.length > 0 && hoveredItem === item._id && (
-                  <div className={cn('absolute top-full left-0 z-50', isDeepMenuMode ? 'pt-3' : 'pt-2')}>
-                    {isDeepMenuMode ? (
+                  <div className={cn('absolute top-full left-1/2 -translate-x-1/2 z-50', isDeepMenuForItem(item._id) ? 'pt-3' : 'pt-2')}>
+                    {isDeepMenuForItem(item._id) ? (
                       <div
                         className={cn('rounded-2xl border p-5 shadow-xl overflow-x-clip', getMegaMenuWidthClass(Math.min(Math.max(item.children.length, 1), 5)))}
                         style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
@@ -1477,8 +1479,8 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                           onMouseEnter={clearDeepMenuCloseIntent}
                                           onMouseLeave={scheduleDeepMenuClose}
                                         >
-                                          <div className="rounded-xl border py-2 min-w-[220px] max-w-[min(320px,calc(100vw-2rem))] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
-                                            {renderDesktopFlyoutNodes(sub.children)}
+                                            <div className="rounded-xl border py-2 min-w-[220px] max-w-[min(320px,calc(100vw-2rem))] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                              {renderDesktopFlyoutNodes(sub.children, true)}
                                           </div>
                                         </div>
                                       )}
@@ -1651,7 +1653,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
 
                     {item.children.length > 0 && hoveredItem === item._id && (
                       <div className="absolute left-1/2 top-full pt-6 -translate-x-1/2 z-50">
-                        {isDeepMenuMode ? (
+                        {isDeepMenuForItem(item._id) ? (
                           <div
                             className={cn('rounded-2xl border p-6', dropdownWidth)}
                             style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
@@ -1706,7 +1708,7 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
                                               onMouseLeave={scheduleDeepMenuClose}
                                             >
                                               <div className="rounded-xl border py-2 min-w-[220px] max-w-[min(320px,calc(100vw-2rem))] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
-                                                {renderDesktopFlyoutNodes(sub.children)}
+                                                {renderDesktopFlyoutNodes(sub.children, true)}
                                               </div>
                                             </div>
                                           )}
