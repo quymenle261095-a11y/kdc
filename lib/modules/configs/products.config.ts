@@ -1,4 +1,4 @@
-import { DollarSign, Image, Tag, Box, Package, Layers, Download, FolderTree, FileText, Code } from 'lucide-react';
+import { DollarSign, Image, Tag, Box, Package, Layers, Download, FolderTree, FileText, Code, SquareStack } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
 import { PRODUCT_IMAGE_ASPECT_RATIO_OPTIONS } from '../../products/image-aspect-ratio';
  
@@ -75,6 +75,7 @@ export const productsModule = defineModuleWithRuntime({
       label: 'Cách khung ôm ảnh',
       type: 'select',
       default: 'contain',
+      dependsOn: 'enableProductFrames',
       options: [
         { value: 'contain', label: 'Giữ khung trong ảnh (contain)' },
         { value: 'cover', label: 'Tràn khung theo ảnh (cover)' },
@@ -85,12 +86,43 @@ export const productsModule = defineModuleWithRuntime({
       label: 'Xóa khung lệch AR khi đổi tỉ lệ',
       type: 'toggle',
       default: true,
+      dependsOn: 'enableProductFrames',
     },
     {
       key: 'enableImageCrop',
       label: 'Bật cắt ảnh theo tỉ lệ khi upload',
       type: 'toggle',
       default: false,
+    },
+    {
+      key: 'enableProductSupplementalContent',
+      label: 'Bật nội dung bổ sung chi tiết sản phẩm',
+      type: 'toggle',
+      default: false,
+      group: 'supplementalContent',
+    },
+    {
+      key: 'supplementalContentAssignmentMode',
+      label: 'Kiểu áp dụng mặc định',
+      type: 'select',
+      default: 'products',
+      group: 'supplementalContent',
+      dependsOn: 'enableProductSupplementalContent',
+      options: [
+        { value: 'products', label: 'Theo sản phẩm' },
+        { value: 'categories', label: 'Theo danh mục' },
+      ],
+    },
+    {
+      key: 'supplementalContentConflictMode',
+      label: 'Chống chồng template',
+      type: 'select',
+      default: 'strict_single_effective',
+      group: 'supplementalContent',
+      dependsOn: 'enableProductSupplementalContent',
+      options: [
+        { value: 'strict_single_effective', label: 'Mỗi sản phẩm chỉ 1 template hiệu lực' },
+      ],
     },
     { key: 'lowStockThreshold', label: 'Ngưỡng tồn kho thấp', type: 'number', default: 10 },
     {
@@ -192,6 +224,7 @@ export const productsModule = defineModuleWithRuntime({
 
    settingGroups: [
      { key: 'general', label: 'Cài đặt chung' },
+     { key: 'supplementalContent', label: 'Nội dung bổ sung chi tiết', icon: SquareStack },
      { key: 'variants', label: 'Phiên bản sản phẩm', icon: Layers },
      { key: 'digital', label: 'Sản phẩm Digital', icon: Download },
    ],

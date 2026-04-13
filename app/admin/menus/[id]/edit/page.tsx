@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { ArrowDown, ArrowUp, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
 
+const MENU_ITEMS_LIMIT = 500;
+
 interface MenuItem {
   _id: Id<"menuItems">;
   _creationTime: number;
@@ -42,6 +44,7 @@ export default function MenuEditPage({ params }: { params: Promise<{ id: string 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const items = useMemo(() => menuItemsData ? [...menuItemsData].sort((a, b) => a.order - b.order) : [], [menuItemsData]);
+  const isAtMenuLimit = items.length >= MENU_ITEMS_LIMIT;
 
   // Initialize form when menu loads
   React.useEffect(() => {
@@ -99,6 +102,10 @@ export default function MenuEditPage({ params }: { params: Promise<{ id: string 
   };
 
   const handleAddItem = async () => {
+    if (isAtMenuLimit) {
+      toast.error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+      return;
+    }
     try {
       await createMenuItem({
         active: true,
@@ -108,8 +115,8 @@ export default function MenuEditPage({ params }: { params: Promise<{ id: string 
         url: '/',
       });
       toast.success('Đã thêm mục menu');
-    } catch {
-      toast.error('Có lỗi khi thêm');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi khi thêm');
     }
   };
 
@@ -196,9 +203,9 @@ export default function MenuEditPage({ params }: { params: Promise<{ id: string 
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Các mục trong menu ({items.length})</CardTitle>
-            <Button type="button" size="sm" variant="outline" className="gap-2" onClick={handleAddItem}>
-              <Plus size={14} /> Thêm mục
+            <CardTitle className="text-base">Các mục trong menu ({items.length}/{MENU_ITEMS_LIMIT})</CardTitle>
+            <Button type="button" size="sm" variant="outline" className="gap-2" onClick={handleAddItem} disabled={isAtMenuLimit}>
+              <Plus size={14} /> {isAtMenuLimit ? `Đã đạt giới hạn ${MENU_ITEMS_LIMIT}` : 'Thêm mục'}
             </Button>
           </CardHeader>
           <CardContent className="p-6">

@@ -436,7 +436,28 @@ export default defineSchema({
     .index("by_source_type", ["sourceType"])
     .index("by_season_key", ["seasonKey"]),
 
-  // 10d. productStats - Counter table cho product statistics (tránh full scan)
+  // 10d. productSupplementalContents - Khung nội dung bổ sung cho chi tiết sản phẩm
+  productSupplementalContents: defineTable({
+    name: v.string(),
+    status: v.union(v.literal("active"), v.literal("inactive")),
+    assignmentMode: v.union(v.literal("products"), v.literal("categories")),
+    productIds: v.optional(v.array(v.id("products"))),
+    categoryIds: v.optional(v.array(v.id("productCategories"))),
+    preContent: v.optional(v.string()),
+    postContent: v.optional(v.string()),
+    faqItems: v.array(v.object({
+      id: v.string(),
+      question: v.string(),
+      answer: v.string(),
+      order: v.number(),
+    })),
+    createdBy: v.optional(v.union(v.id("users"), v.null())),
+    updatedBy: v.optional(v.union(v.id("users"), v.null())),
+  })
+    .index("by_status", ["status"])
+    .index("by_assignment_mode", ["assignmentMode"]),
+
+  // 10e. productStats - Counter table cho product statistics (tránh full scan)
   productStats: defineTable({
     key: v.string(), // "total", "Active", "Draft", "Archived"
     count: v.number(),

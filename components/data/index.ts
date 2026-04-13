@@ -5,3 +5,5 @@ export { DependencyNode } from './DependencyNode';
 export { FactoryResetDialog } from './FactoryResetDialog';
 export { TableDetailsCard } from './TableDetailsCard';
 export { TableRow } from './TableRow';
+export { MigrationBundleCard } from './import-export/MigrationBundleCard';
+export { BundleReportViewer } from './import-export/BundleReportViewer';

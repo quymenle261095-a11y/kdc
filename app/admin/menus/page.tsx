@@ -15,8 +15,10 @@ import {
   GripVertical, Loader2, Menu, Plus, Trash2
 } from 'lucide-react';
 import { SimpleMenuPreview } from './SimpleMenuPreview';
+import { MENU_MAX_LEVEL, resolveMenuMaxDepthLevel } from '@/lib/utils/menu-tree';
 
 const MODULE_KEY = 'menus';
+const MENU_ITEMS_LIMIT = 500;
 
 type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục';
 
@@ -101,11 +103,21 @@ export default function MenuBuilderPageWrapper() {
 
 function MenuBuilderPage() {
   const menusData = useQuery(api.menus.listMenus);
+  const createMenu = useMutation(api.menus.createMenu);
 
   const isLoading = menusData === undefined;
 
   // Only get header menu
   const headerMenu = menusData?.find(m => m.location === 'header');
+
+  const handleCreateHeaderMenu = async () => {
+    try {
+      await createMenu({ location: 'header', name: 'Header Menu' });
+      toast.success('Đã tạo lại Header Menu');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể tạo Header Menu');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -116,7 +128,7 @@ function MenuBuilderPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Header Menu</h1>
@@ -132,6 +144,9 @@ function MenuBuilderPage() {
           <Menu className="w-12 h-12 mx-auto mb-4 text-slate-400" />
           <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">Chưa có Header Menu</h3>
           <p className="text-slate-500 mb-4">Chưa có dữ liệu menu.</p>
+          <Button type="button" onClick={handleCreateHeaderMenu}>
+            Tạo Header Menu
+          </Button>
         </Card>
       )}
     </div>
@@ -182,16 +197,12 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       : 'skip'
   );
 
-  // Settings from System Config
-  const menusPerPage = useMemo(() => {
-    const setting = settingsData?.find(s => s.settingKey === 'menusPerPage');
-    return (setting?.value as number) || 10;
+  const maxDepthLevel = useMemo(() => {
+    const setting = settingsData?.find(s => s.settingKey === 'maxDepth');
+    return resolveMenuMaxDepthLevel(setting?.value);
   }, [settingsData]);
 
-  const maxDepth = useMemo(() => {
-    const setting = settingsData?.find(s => s.settingKey === 'maxDepth');
-    return (setting?.value as number) || 3;
-  }, [settingsData]);
+  const maxDepth = maxDepthLevel;
 
   // Feature toggles from System Config
   const enabledFeatures = useMemo(() => {
@@ -285,6 +296,15 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
 
   const normalizeOrders = (items: DraftMenuItem[]) => items.map((item, index) => ({ ...item, order: index }));
 
+  const isValidMenuStructure = (items: DraftMenuItem[]) => items.every((item, index) => {
+    if (index === 0) {
+      return item.depth === 0;
+    }
+    return item.depth <= items[index - 1].depth + 1;
+  });
+
+  const canApplyDraftItems = (items: DraftMenuItem[]) => isValidMenuStructure(normalizeOrders(items));
+
   const createLocalItem = (partial: Partial<DraftMenuItem>): DraftMenuItem => ({
     localId: `new-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     label: 'Liên kết mới',
@@ -329,11 +349,11 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   }, [isQuickPickerOpen, quickRouteSearch]);
 
   // Pagination
-  const totalPages = Math.ceil(draftItems.length / menusPerPage);
+  const totalPages = Math.max(1, Math.ceil(draftItems.length / MENU_ITEMS_LIMIT));
   const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * menusPerPage;
-    return draftItems.slice(start, start + menusPerPage);
-  }, [draftItems, currentPage, menusPerPage]);
+    const start = (currentPage - 1) * MENU_ITEMS_LIMIT;
+    return draftItems.slice(start, start + MENU_ITEMS_LIMIT);
+  }, [draftItems, currentPage]);
 
   const allPageSelected = paginatedItems.length > 0 && paginatedItems.every(item => selectedIds.includes(item.localId));
   const somePageSelected = paginatedItems.some(item => selectedIds.includes(item.localId));
@@ -353,6 +373,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   }, [draftItems]);
 
   const isLoading = menuItemsData === undefined;
+  const isAtMenuLimit = draftItems.length >= MENU_ITEMS_LIMIT;
 
   const handleMove = (index: number, direction: 'up' | 'down') => {
     setDraftItems(prev => {
@@ -360,6 +381,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       const next = [...prev];
       const swapIndex = direction === 'up' ? index - 1 : index + 1;
       [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+      if (!canApplyDraftItems(next)) {return prev;}
       return normalizeOrders(next);
     });
   };
@@ -375,7 +397,10 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (draggedIndex !== null && draggedIndex !== index) {
-      setDragOverIndex(index);
+      const next = [...draftItems];
+      const [removed] = next.splice(draggedIndex, 1);
+      next.splice(index, 0, removed);
+      setDragOverIndex(canApplyDraftItems(next) ? index : null);
     }
   };
 
@@ -395,6 +420,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       const next = [...prev];
       const [removed] = next.splice(draggedIndex, 1);
       next.splice(dropIndex, 0, removed);
+      if (!canApplyDraftItems(next)) {return prev;}
       return normalizeOrders(next);
     });
 
@@ -414,7 +440,11 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     
     if (newDepth === item.depth) {return;}
 
-    setDraftItems(prev => prev.map(current => current.localId === item.localId ? { ...current, depth: newDepth } : current));
+    setDraftItems(prev => {
+      const next = prev.map(current => current.localId === item.localId ? { ...current, depth: newDepth } : current);
+      if (!canApplyDraftItems(next)) {return prev;}
+      return next;
+    });
   };
 
   const handleToggleActive = (item: DraftMenuItem) => {
@@ -451,6 +481,10 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   };
 
   const handleAdd = () => {
+    if (isAtMenuLimit) {
+      toast.error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+      return;
+    }
     setDraftItems(prev => {
       const next = [...prev, createLocalItem({ order: prev.length })];
       return normalizeOrders(next);
@@ -458,6 +492,10 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   };
 
   const handleAddBelow = (item: DraftMenuItem) => {
+    if (isAtMenuLimit) {
+      toast.error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+      return;
+    }
     setDraftItems(prev => {
       const index = prev.findIndex(current => current.localId === item.localId);
       const next = [...prev];
@@ -466,11 +504,16 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
         parentId: item.parentId,
       });
       next.splice(index + 1, 0, newItem);
+      if (!canApplyDraftItems(next)) {return prev;}
       return normalizeOrders(next);
     });
   };
 
   const handleCopy = (item: DraftMenuItem) => {
+    if (isAtMenuLimit) {
+      toast.error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+      return;
+    }
     setDraftItems(prev => {
       const index = prev.findIndex(current => current.localId === item.localId);
       const next = [...prev];
@@ -484,6 +527,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
         openInNewTab: item.openInNewTab,
       });
       next.splice(index + 1, 0, newItem);
+      if (!canApplyDraftItems(next)) {return prev;}
       return normalizeOrders(next);
     });
   };
@@ -515,6 +559,10 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
 
   const handleSaveAll = async () => {
     if (!hasChanges) {return;}
+    if (!isValidMenuStructure(draftItems)) {
+      toast.error('Cấu trúc menu không hợp lệ: không được nhảy tầng và item đầu phải ở tầng 1');
+      return;
+    }
     setIsSavingAll(true);
     try {
       await saveMenuItemsBulk({
@@ -604,15 +652,23 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     || (selectedModule === 'services' && detailServices === undefined)
   );
 
+  const stats = [
+    { label: 'Tổng', value: draftItems.length },
+    { label: 'Hiện', value: draftItems.filter(item => item.active).length },
+    { label: 'Ẩn', value: draftItems.filter(item => !item.active).length },
+    { label: 'Tầng', value: maxDepth },
+  ];
+  const hasInvalidStructure = !isValidMenuStructure(draftItems);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-3">
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(180px,1fr)] gap-4 xl:gap-6">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-500">Chỉnh sửa menu và bấm lưu để áp dụng</p>
+          <p className="text-sm text-slate-500">Chỉnh sửa menu và bấm lưu để áp dụng. Tối đa {MENU_ITEMS_LIMIT} menu items.</p>
           <Button
             type="button"
             onClick={handleSaveAll}
-            disabled={!hasChanges || isSavingAll}
+            disabled={!hasChanges || isSavingAll || hasInvalidStructure}
             className="gap-2"
           >
             {isSavingAll && <Loader2 size={14} className="animate-spin" />}
@@ -641,7 +697,23 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
 
         {paginatedItems.map((item) => {
           const actualIndex = getActualIndex(item);
-          
+          const canMoveUp = actualIndex > 0 && canApplyDraftItems((() => {
+            const next = [...draftItems];
+            [next[actualIndex], next[actualIndex - 1]] = [next[actualIndex - 1], next[actualIndex]];
+            return next;
+          })());
+          const canMoveDown = actualIndex < draftItems.length - 1 && canApplyDraftItems((() => {
+            const next = [...draftItems];
+            [next[actualIndex], next[actualIndex + 1]] = [next[actualIndex + 1], next[actualIndex]];
+            return next;
+          })());
+          const canIndentOut = item.depth > 0 && canApplyDraftItems(
+            draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.max(item.depth - 1, 0) } : current)
+          );
+          const canIndentIn = item.depth < maxDepth - 1 && canApplyDraftItems(
+            draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.min(item.depth + 1, maxDepth - 1) } : current)
+          );
+
           return (
             <div 
               key={item.localId}
@@ -652,14 +724,13 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
               onDrop={(e) => handleDrop(e, actualIndex)}
               onDragEnd={handleDragEnd}
               className={cn(
-                "flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all min-w-0",
+                "flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all min-w-0 border-slate-200 dark:border-slate-700",
                 selectedIds.includes(item.localId) && "ring-2 ring-blue-500/40 border-blue-300 dark:border-blue-700",
-                showNested && item.depth === 1 ? "ml-8 border-l-4 border-l-orange-500/30" : "",
-                showNested && item.depth === 2 ? "ml-16 border-l-4 border-l-orange-500/50" : "border-slate-200 dark:border-slate-700",
                 !item.active && "opacity-50",
                 draggedIndex === actualIndex && "opacity-50 scale-[0.98]",
                 dragOverIndex === actualIndex && "border-orange-500 border-2 bg-orange-50 dark:bg-orange-900/20"
               )}
+              style={showNested ? { marginLeft: Math.min(item.depth, MENU_MAX_LEVEL - 1) * 24 } : undefined}
             >
               <div className="flex items-center self-start pt-1">
                 <SelectCheckbox
@@ -670,9 +741,9 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
               </div>
 
               <div className="flex flex-col gap-1 text-slate-300 cursor-grab active:cursor-grabbing">
-                <button type="button" onClick={ async () => handleMove(actualIndex, 'up')} className="hover:text-orange-600 disabled:opacity-30" disabled={actualIndex === 0}><ArrowUp size={14}/></button>
+                <button type="button" onClick={ async () => handleMove(actualIndex, 'up')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveUp}><ArrowUp size={14}/></button>
                 <GripVertical size={14} className="text-slate-400" />
-                <button type="button" onClick={ async () => handleMove(actualIndex, 'down')} className="hover:text-orange-600 disabled:opacity-30" disabled={actualIndex === draftItems.length - 1}><ArrowDown size={14}/></button>
+                <button type="button" onClick={ async () => handleMove(actualIndex, 'down')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveDown}><ArrowDown size={14}/></button>
               </div>
               
               <div className="flex-1 grid grid-cols-2 gap-3 min-w-0">
@@ -708,18 +779,18 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
               <div className="flex items-center gap-0.5 border-l border-slate-100 dark:border-slate-700 pl-2">
                 {showNested && (
                   <>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'out')} disabled={item.depth === 0} title="Thụt lề trái">
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'out')} disabled={!canIndentOut} title="Thụt lề trái">
                       <ChevronRight size={14} className="rotate-180"/>
                     </Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'in')} disabled={item.depth >= maxDepth - 1} title="Thụt lề phải">
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'in')} disabled={!canIndentIn} title={`Thụt lề phải (tối đa ${MENU_MAX_LEVEL} tầng)`}>
                       <ChevronRight size={14}/>
                     </Button>
                   </>
                 )}
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleAddBelow(item)} title="Thêm ngay bên dưới">
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleAddBelow(item)} title="Thêm ngay bên dưới" disabled={isAtMenuLimit}>
                   <Plus size={14}/>
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCopy(item)} title="Copy menu item">
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCopy(item)} title="Copy menu item" disabled={isAtMenuLimit}>
                   <Copy size={14}/>
                 </Button>
                 {showNewTab && item.openInNewTab && (
@@ -736,15 +807,15 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           );
         })}
 
-        <Button variant="outline" className="w-full border-dashed" onClick={handleAdd}>
-          <Plus size={16} className="mr-2"/> Thêm liên kết mới
+        <Button variant="outline" className="w-full border-dashed" onClick={handleAdd} disabled={isAtMenuLimit}>
+          <Plus size={16} className="mr-2"/> {isAtMenuLimit ? `Đã đạt tối đa ${MENU_ITEMS_LIMIT} menu items` : 'Thêm liên kết mới'}
         </Button>
 
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
             <div className="text-sm text-slate-500">
-              Hiển thị {(currentPage - 1) * menusPerPage + 1}-{Math.min(currentPage * menusPerPage, draftItems.length)} / {draftItems.length}
+              Hiển thị {(currentPage - 1) * MENU_ITEMS_LIMIT + 1}-{Math.min(currentPage * MENU_ITEMS_LIMIT, draftItems.length)} / {draftItems.length}
             </div>
             <div className="flex items-center gap-2">
               <Button 
@@ -771,52 +842,16 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
         )}
       </div>
 
-      <div className="space-y-6">
+      <div>
         <Card>
-          <CardHeader><CardTitle className="text-base">Thống kê</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Tổng menu items:</span>
-              <span className="font-medium">{draftItems.length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Đang hiện:</span>
-              <span className="font-medium text-green-600">{draftItems.filter(i => i.active).length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Đang ẩn:</span>
-              <span className="font-medium text-slate-400">{draftItems.filter(i => !i.active).length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Cấp 1 (Root):</span>
-              <span className="font-medium">{draftItems.filter(i => i.depth === 0).length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Cấp 2 (Dropdown):</span>
-              <span className="font-medium">{draftItems.filter(i => i.depth === 1).length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Cấp 3 (Sub-menu):</span>
-              <span className="font-medium">{draftItems.filter(i => i.depth === 2).length}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Hướng dẫn</CardTitle></CardHeader>
-          <CardContent className="text-sm text-slate-500 space-y-4">
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-700">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">Cấp 1 (Root)</p>
-              <p>Hiển thị trực tiếp trên thanh menu ngang.</p>
-            </div>
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-700 ml-4 border-l-4 border-l-orange-500/30">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">Cấp 2 (Dropdown)</p>
-              <p>Hiển thị khi hover vào mục cấp 1.</p>
-            </div>
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-700 ml-8 border-l-4 border-l-orange-500/50">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">Cấp 3 (Sub-menu)</p>
-              <p>Hiển thị khi hover vào mục cấp 2.</p>
-            </div>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Thống kê</CardTitle></CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">{stat.label}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{stat.value}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

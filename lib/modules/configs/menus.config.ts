@@ -15,7 +15,19 @@ export const menusModule = defineModuleWithRuntime({
    ],
    
    settings: [
-     { key: 'maxDepth', label: 'Độ sâu tối đa', type: 'number', default: 3 },
+     {
+       key: 'maxDepth',
+       label: 'Độ sâu tối đa',
+       type: 'select',
+       default: '3',
+       options: [
+         { value: '1', label: '1 tầng' },
+         { value: '2', label: '2 tầng' },
+         { value: '3', label: '3 tầng' },
+         { value: '4', label: '4 tầng' },
+         { value: '5', label: '5 tầng' },
+       ],
+     },
      { 
        key: 'defaultLocation', 
        label: 'Vị trí mặc định', 
@@ -27,7 +39,6 @@ export const menusModule = defineModuleWithRuntime({
          { value: 'sidebar', label: 'Sidebar' },
        ],
      },
-     { key: 'menusPerPage', label: 'Số menu / trang', type: 'number', default: 10 },
    ],
    
    conventionNote: 'location: header, footer, sidebar. order tự động increment. parentId null = root item.',

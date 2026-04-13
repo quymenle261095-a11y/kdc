@@ -87,6 +87,24 @@ body {
   background: transparent;
 }
 
+.admin-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--scrollbar-color) 75%, transparent) transparent;
+}
+
+.admin-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.admin-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--scrollbar-color) 75%, transparent);
+  border-radius: 9999px;
+}
+
+.admin-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* ============================================
    Marquee Animation - for ProductCategories
    ============================================ */

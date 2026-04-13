@@ -75,5 +75,7 @@ export type WizardState = {
   variantPresetKey: VariantPresetKey;
   variantPricing: VariantPricing;
   variantStock: VariantStock;
+  productFramesEnabled: boolean;
+  productSupplementalContentEnabled: boolean;
   websiteType: WebsiteType;
 };

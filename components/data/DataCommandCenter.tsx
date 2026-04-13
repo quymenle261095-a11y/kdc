@@ -13,6 +13,7 @@ import { FactoryResetDialog } from './FactoryResetDialog';
 import { QuickActionsCard } from './QuickActionsCard';
 import { SeedWizardDialog } from './SeedWizardDialog';
 import { TableDetailsCard } from './TableDetailsCard';
+import { MigrationBundleCard } from './import-export/MigrationBundleCard';
 
 type PresetType = 'minimal' | 'standard' | 'large' | 'demo';
 
@@ -212,6 +213,8 @@ export function DataCommandCenter() {
         isFactoryResetting={isFactoryResetting}
         currentPreset={currentPreset}
       />
+
+      <MigrationBundleCard />
 
       {dependencyTree && (
         <DependencyTree

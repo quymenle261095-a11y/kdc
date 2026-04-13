@@ -244,9 +244,11 @@ export function useModuleConfig(config: ModuleDefinition) {
      // Auto-update linked fields
      const feature = config.features?.find(f => f.key === key);
      if (feature?.linkedField) {
-       setLocalFields(prev => prev.map(f => 
-         f.linkedFeature === key ? { ...f, enabled: newState } : f
-       ));
+       setLocalFields(prev => prev.map(f => {
+        if (f.linkedFeature !== key) {return f;}
+        if (f.isSystem && !newState) {return f;}
+        return { ...f, enabled: newState };
+      }));
      }
 
     if (moduleKey === 'subscriptions' && key === 'enablePriority') {

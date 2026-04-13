@@ -2120,11 +2120,23 @@ export const seedMenusModule = mutation({
     }
 
     // 7. Seed module settings
-    const existingSettings = await ctx.db.query("moduleSettings").withIndex("by_module", q => q.eq("moduleKey", "menus")).first();
-    if (!existingSettings) {
+    const existingSettings = await ctx.db.query("moduleSettings").withIndex("by_module", q => q.eq("moduleKey", "menus")).collect();
+    if (existingSettings.length === 0) {
       await ctx.db.insert("moduleSettings", { moduleKey: "menus", settingKey: "maxDepth", value: 3 });
       await ctx.db.insert("moduleSettings", { moduleKey: "menus", settingKey: "defaultLocation", value: "header" });
-      await ctx.db.insert("moduleSettings", { moduleKey: "menus", settingKey: "menusPerPage", value: 10 });
+    } else {
+      const hasMaxDepth = existingSettings.some((setting) => setting.settingKey === "maxDepth");
+      const hasDefaultLocation = existingSettings.some((setting) => setting.settingKey === "defaultLocation");
+      if (!hasMaxDepth) {
+        await ctx.db.insert("moduleSettings", { moduleKey: "menus", settingKey: "maxDepth", value: 3 });
+      }
+      if (!hasDefaultLocation) {
+        await ctx.db.insert("moduleSettings", { moduleKey: "menus", settingKey: "defaultLocation", value: "header" });
+      }
+      const legacyMenusPerPage = existingSettings.find((setting) => setting.settingKey === "menusPerPage");
+      if (legacyMenusPerPage) {
+        await ctx.db.delete(legacyMenusPerPage._id);
+      }
     }
 
     return null;

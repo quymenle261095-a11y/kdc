@@ -29,6 +29,7 @@ import { ArrowLeft, Award, BadgeCheck, Bell, Bolt, Calendar, Camera, CheckCircle
 import { VariantSelector, type VariantSelectorOption } from '@/components/products/VariantSelector';
 import type { Id } from '@/convex/_generated/dataModel';
 import { getPublicPriceLabel } from '@/lib/products/public-price';
+import { sortSupplementalFaqItems, toRichTextContent } from '@/lib/products/product-supplemental-content';
 
 type ProductDetailStyle = 'classic' | 'modern' | 'minimal';
 type ModernHeroStyle = 'full' | 'split' | 'minimal';
@@ -380,6 +381,10 @@ export default function ProductDetailPage({ params }: PageProps) {
   const decrementLike = useMutation(api.comments.decrementLike);
   
   const product = useQuery(api.products.getBySlug, { slug });
+  const supplementalTemplate = useQuery(
+    api.productSupplementalContents.getEffectiveByProduct,
+    product?._id ? { productId: product._id } : 'skip'
+  );
   const lightboxImages = useMemo(() => (product ? buildProductImages(product) : []), [product]);
   const category = useQuery(
     api.productCategories.getById,
@@ -793,6 +798,13 @@ export default function ProductDetailPage({ params }: PageProps) {
       onReplySubmit={handleSubmitReply}
     />
   ) : null;
+  const supplementalContent = supplementalTemplate
+    ? {
+        preContent: supplementalTemplate.preContent,
+        postContent: supplementalTemplate.postContent,
+        faqItems: supplementalTemplate.faqItems,
+      }
+    : null;
   const canOpenLightbox = experienceConfig.enableImageLightbox && lightboxImages.length > 0;
 
   const handleOpenLightbox = (index: number) => {
@@ -869,6 +881,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           onAddToCart={handleAddToCart}
           onBuyNow={handlePrimaryAction}
           commentsSection={commentsSection}
+          supplementalContent={supplementalContent}
           relatedProductsMode={relatedProductsMode}
           relatedProductsPerPage={relatedProductsPerPage}
           relatedProductsPage={relatedPage}
@@ -910,6 +923,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           onAddToCart={handleAddToCart}
           onBuyNow={handlePrimaryAction}
           commentsSection={commentsSection}
+          supplementalContent={supplementalContent}
           relatedProductsMode={relatedProductsMode}
           relatedProductsPerPage={relatedProductsPerPage}
           relatedProductsPage={relatedPage}
@@ -951,6 +965,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           onAddToCart={handleAddToCart}
           onBuyNow={handlePrimaryAction}
           commentsSection={commentsSection}
+          supplementalContent={supplementalContent}
           relatedProductsMode={relatedProductsMode}
           relatedProductsPerPage={relatedProductsPerPage}
           relatedProductsPage={relatedPage}
@@ -1014,6 +1029,12 @@ interface CommentData {
   rating?: number;
 }
 
+interface ProductSupplementalContentData {
+  preContent?: string;
+  postContent?: string;
+  faqItems: Array<{ id: string; question: string; answer: string; order: number }>;
+}
+
 interface StyleProps {
   product: ProductData;
   brandColor: string;
@@ -1034,6 +1055,7 @@ interface StyleProps {
   variantOptions: VariantSelectorOption[];
   saleMode: ProductsSaleMode;
   commentsSection?: React.ReactNode;
+  supplementalContent: ProductSupplementalContentData | null;
 }
 
 interface ExperienceBlocksProps {
@@ -1321,9 +1343,7 @@ function ProductDescriptionImages({
 
   return (
     <div className="mt-6 border-t pt-6" style={{ borderColor: tokens.divider }}>
-      <h3 className="text-base font-semibold" style={{ color: tokens.headingColor }}>Toàn bộ ảnh sản phẩm</h3>
-      <p className="mt-1 text-sm" style={{ color: tokens.metaText }}>Lăn xuống để xem đầy đủ bộ ảnh sản phẩm.</p>
-      <div className="mt-3 space-y-4">
+      <div className="space-y-4">
         {images.map((image, index) => (
           <div
             key={`${image}-${index}`}
@@ -1567,6 +1587,59 @@ const findExactVariant = (variants: ProductVariant[], selection: VariantSelectio
     variant.optionValues.every((optionValue) => selection[optionValue.optionId] === optionValue.valueId)
   ) ?? null;
 
+const stripHtmlTags = (value?: string) =>
+  (value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+function ProductSupplementalFaqAccordion({
+  faqItems,
+  tokens,
+}: {
+  faqItems: ProductSupplementalContentData['faqItems'];
+  tokens: ProductDetailColors;
+}) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const sortedFaqItems = sortSupplementalFaqItems(faqItems ?? []).filter((item) => item.question?.trim() && item.answer?.trim());
+
+  if (sortedFaqItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border px-5 py-5" style={{ borderColor: tokens.border, backgroundColor: tokens.surface }}>
+      <div className="space-y-3">
+        {sortedFaqItems.map((item, index) => {
+          const isOpen = openIndex === index;
+          return (
+            <div key={item.id} className="overflow-hidden rounded-xl border" style={{ borderColor: tokens.divider, backgroundColor: tokens.surfaceMuted }}>
+              <button
+                type="button"
+                onClick={() => setOpenIndex((prev) => (prev === index ? null : index))}
+                className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:opacity-90"
+                style={{ color: tokens.headingColor }}
+                aria-expanded={isOpen}
+              >
+                <span className="font-medium">{item.question}</span>
+                <ChevronDown size={18} className={`shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`.trim()} />
+              </button>
+              <div className={`grid transition-all duration-200 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`.trim()}>
+                <div className="overflow-hidden">
+                  <div className="border-t px-4 py-4 text-sm whitespace-pre-line" style={{ borderColor: tokens.divider, color: tokens.bodyText }}>
+                    {stripHtmlTags(item.answer)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RatingInline({ summary, tokens }: { summary: RatingSummary; tokens: ProductDetailColors }) {
   if (!summary.average || summary.count <= 0) {
     return null;
@@ -1630,6 +1703,7 @@ function ClassicStyle({
   onAddToCart,
   onBuyNow,
   commentsSection,
+  supplementalContent,
 }: ClassicStyleProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -1970,10 +2044,16 @@ function ClassicStyle({
               </div>
             )}
 
-            {(showDescription && resolvedDescription) || showAllProductImagesSection ? (
+            {(showDescription && resolvedDescription) || showAllProductImagesSection || supplementalContent?.preContent || supplementalContent?.postContent ? (
               <div className="border-t pt-6" style={{ borderColor: tokens.divider }}>
-                <h3 className="font-semibold mb-4" style={{ color: tokens.headingColor }}>Mô tả sản phẩm</h3>
                 <ExpandableProductDescriptionBlock buttonStyle={{ color: tokens.primary }}>
+                  {supplementalContent?.preContent ? (
+                    <RichContent
+                      content={toRichTextContent(supplementalContent.preContent)}
+                      className="prose prose-sm max-w-none"
+                      style={{ color: tokens.bodyText }}
+                    />
+                  ) : null}
                   {showDescription && resolvedDescription && (
                     <RichContent
                       content={resolvedDescription}
@@ -1981,6 +2061,13 @@ function ClassicStyle({
                       style={{ color: tokens.bodyText }}
                     />
                   )}
+                  {supplementalContent?.postContent ? (
+                    <RichContent
+                      content={toRichTextContent(supplementalContent.postContent)}
+                      className="prose prose-sm max-w-none"
+                      style={{ color: tokens.bodyText }}
+                    />
+                  ) : null}
                   {showAllProductImagesSection && (
                     <ProductDescriptionImages
                       images={images}
@@ -1991,6 +2078,8 @@ function ClassicStyle({
                 </ExpandableProductDescriptionBlock>
               </div>
             ) : null}
+
+            <ProductSupplementalFaqAccordion faqItems={supplementalContent?.faqItems ?? []} tokens={tokens} />
           </div>
         </div>
 
@@ -2064,6 +2153,7 @@ function ModernStyle({
   onAddToCart,
   onBuyNow,
   commentsSection,
+  supplementalContent,
 }: StyleProps & ExperienceBlocksProps & HighlightBlockProps & { heroStyle: ModernHeroStyle }) {
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -2484,13 +2574,27 @@ function ModernStyle({
           </div>
         </div>
 
-        <div className="mt-12 lg:mt-16">
+        <div className="mt-12 lg:mt-16 space-y-6">
           <div className="mt-6 border rounded-2xl p-6" style={{ borderColor: tokens.border }}>
-            {(showDescription && resolvedDescription) || showAllProductImagesSection ? (
+            {(showDescription && resolvedDescription) || showAllProductImagesSection || supplementalContent?.preContent || supplementalContent?.postContent ? (
               <ExpandableProductDescriptionBlock buttonStyle={{ color: tokens.primary }}>
+                {supplementalContent?.preContent ? (
+                  <RichContent
+                    content={toRichTextContent(supplementalContent.preContent)}
+                    className="prose prose-sm max-w-none"
+                    style={{ color: tokens.bodyText }}
+                  />
+                ) : null}
                 {showDescription && resolvedDescription ? (
                   <RichContent
                     content={resolvedDescription}
+                    className="prose prose-sm max-w-none"
+                    style={{ color: tokens.bodyText }}
+                  />
+                ) : null}
+                {supplementalContent?.postContent ? (
+                  <RichContent
+                    content={toRichTextContent(supplementalContent.postContent)}
                     className="prose prose-sm max-w-none"
                     style={{ color: tokens.bodyText }}
                   />
@@ -2507,6 +2611,8 @@ function ModernStyle({
               <p style={{ color: tokens.metaText }}>Chưa có mô tả chi tiết.</p>
             )}
           </div>
+
+          <ProductSupplementalFaqAccordion faqItems={supplementalContent?.faqItems ?? []} tokens={tokens} />
         </div>
 
         {commentsSection}
@@ -2575,6 +2681,7 @@ function MinimalStyle({
   onAddToCart,
   onBuyNow,
   commentsSection,
+  supplementalContent,
 }: StyleProps & ExperienceBlocksProps & HighlightBlockProps & { contentWidth: MinimalContentWidth }) {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState<VariantSelectionMap>({});
@@ -2928,10 +3035,16 @@ function MinimalStyle({
         </div>
 
         {commentsSection}
-        {(showDescription && resolvedDescription) || showAllProductImagesSection ? (
+        {(showDescription && resolvedDescription) || showAllProductImagesSection || supplementalContent?.preContent || supplementalContent?.postContent ? (
           <section className="mt-10 rounded-2xl border px-6 py-8" style={{ borderColor: tokens.border }}>
-            <h2 className="text-lg font-semibold mb-4" style={{ color: tokens.headingColor }}>Mô tả sản phẩm</h2>
             <ExpandableProductDescriptionBlock buttonStyle={{ color: tokens.primary }}>
+              {supplementalContent?.preContent ? (
+                <RichContent
+                  content={toRichTextContent(supplementalContent.preContent)}
+                  className="leading-relaxed font-light text-justify"
+                  style={{ color: tokens.bodyText }}
+                />
+              ) : null}
               {showDescription && resolvedDescription && (
                 <RichContent
                   content={resolvedDescription}
@@ -2939,6 +3052,13 @@ function MinimalStyle({
                   style={{ color: tokens.bodyText }}
                 />
               )}
+              {supplementalContent?.postContent ? (
+                <RichContent
+                  content={toRichTextContent(supplementalContent.postContent)}
+                  className="leading-relaxed font-light text-justify"
+                  style={{ color: tokens.bodyText }}
+                />
+              ) : null}
               {showAllProductImagesSection && (
                 <ProductDescriptionImages
                   images={images}
@@ -2949,6 +3069,9 @@ function MinimalStyle({
             </ExpandableProductDescriptionBlock>
           </section>
         ) : null}
+        <section className="mt-10">
+          <ProductSupplementalFaqAccordion faqItems={supplementalContent?.faqItems ?? []} tokens={tokens} />
+        </section>
         <RelatedProductsSection
           products={relatedProducts}
           categorySlug={product.categorySlug}

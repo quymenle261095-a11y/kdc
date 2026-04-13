@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { dependencyType, fieldType, moduleCategory } from "../lib/validators";
 import { syncModuleRuntimeConfig } from "../lib/moduleConfigSync";
 import { cleanupProductFramesByAspectRatio } from "../productImageFrames";
+import { resolveMenuMaxDepthLevel } from "../../lib/utils/menu-tree";
 
 // ============ ADMIN MODULES ============
 
@@ -106,6 +107,35 @@ async function resetHomeComponentCreateVisibility(ctx: MutationCtx) {
     return;
   }
   await ctx.db.insert("settings", { group: "home_components", key: "create_hidden_types", value: [] });
+}
+
+async function normalizeMenuItemsToMaxLevel(ctx: MutationCtx, maxLevelRaw: unknown) {
+  const maxLevel = resolveMenuMaxDepthLevel(maxLevelRaw);
+  const maxDepth = maxLevel - 1;
+  const items = await ctx.db.query("menuItems").collect();
+
+  const normalizedDepthById = new Map<Id<"menuItems">, number>();
+  items.forEach((item) => {
+    const nextDepth = Math.max(0, Math.min(maxDepth, Math.round(item.depth)));
+    normalizedDepthById.set(item._id, nextDepth);
+  });
+
+  await Promise.all(items.map(async (item) => {
+    const nextDepth = normalizedDepthById.get(item._id) ?? 0;
+    const parentDepth = item.parentId ? normalizedDepthById.get(item.parentId) : undefined;
+    const nextParentId = nextDepth === 0 || parentDepth === undefined || parentDepth >= nextDepth
+      ? undefined
+      : item.parentId;
+
+    if (nextDepth === item.depth && nextParentId === item.parentId) {
+      return;
+    }
+
+    await ctx.db.patch(item._id, {
+      depth: nextDepth,
+      parentId: nextParentId,
+    });
+  }));
 }
 
 export const migrateCalendarToSubscriptions = mutation({
@@ -858,6 +888,10 @@ export const setModuleSetting = mutation({
       await ctx.db.patch(existing._id, { value: args.value });
     } else {
       await ctx.db.insert("moduleSettings", args);
+    }
+
+    if (args.moduleKey === "menus" && args.settingKey === "maxDepth") {
+      await normalizeMenuItemsToMaxLevel(ctx, args.value);
     }
 
     if (args.moduleKey === "products" && args.settingKey === "defaultImageAspectRatio") {

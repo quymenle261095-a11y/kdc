@@ -1,10 +1,11 @@
 'use client';
 
-import { ChevronRight, Home, Menu as MenuIcon, Moon, Search as SearchIcon, Sun } from 'lucide-react';
+import { ChevronRight, Home, Menu as MenuIcon, Moon, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAdminAuth } from '../auth/context';
+import { AdminHeaderSearchAutocomplete } from './AdminHeaderSearchAutocomplete';
 
 const FIRST_INDEX = 0;
 const INDEX_OFFSET = 1;
@@ -65,9 +66,9 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleTheme, setMobi
   }
 
   return (
-    <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 flex items-center justify-between px-4 lg:px-8 transition-colors">
-      <div className="flex items-center gap-4">
-        <button className="lg:hidden p-2 -ml-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-md" onClick={() =>{  setMobileMenuOpen(true); }}>
+    <header className="h-[54px] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 flex items-center justify-between px-4 lg:px-8 transition-colors">
+      <div className="flex items-center gap-3">
+        <button className="lg:hidden p-1.5 -ml-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-md" onClick={() =>{  setMobileMenuOpen(true); }}>
           <MenuIcon size={24} />
         </button>
         <nav className="hidden md:flex items-center text-sm text-slate-500 dark:text-slate-400">
@@ -77,17 +78,12 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleTheme, setMobi
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="relative hidden md:block group">
-          <SearchIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm..." 
-            className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 dark:text-slate-200 border border-transparent focus:border-blue-500/50 rounded-full text-sm w-64 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
-          />
+        <div className="hidden md:block">
+          <AdminHeaderSearchAutocomplete />
         </div>
 
         {trialBadge && (
-          <div className="hidden md:flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+          <div className="hidden md:flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
             Trial còn {trialBadge}
           </div>
         )}
@@ -95,18 +91,18 @@ export const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleTheme, setMobi
         <Link
           href="/"
           target="_blank"
-          className="p-2.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-colors"
+          className="p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-colors"
           title="Mở trang chủ"
         >
-          <Home size={20} />
+          <Home size={18} />
         </Link>
         
         <button 
           onClick={toggleTheme}
-          className="p-2.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-colors focus:outline-none"
+          className="p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-colors focus:outline-none"
           title={themeTitle}
         >
-          <ThemeIcon size={20} />
+          <ThemeIcon size={18} />
         </button>
       </div>
     </header>

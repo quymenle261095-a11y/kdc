@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { MENU_MAX_DEPTH, clampMenuDepth } from "../lib/utils/menu-tree";
 
 const menuDoc = v.object({
   _creationTime: v.number(),
@@ -21,6 +22,15 @@ const menuItemDoc = v.object({
   parentId: v.optional(v.id("menuItems")),
   url: v.string(),
 });
+
+const normalizeMenuDepth = (depth: number | undefined) => clampMenuDepth(depth ?? 0);
+const MENU_ITEMS_LIMIT = 500;
+
+const ensureMenuItemsWithinLimit = (count: number) => {
+  if (count >= MENU_ITEMS_LIMIT) {
+    throw new Error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+  }
+};
 
 // ============ MENUS ============
 
@@ -155,7 +165,7 @@ export const listMenuItems = query({
   handler: async (ctx, args) => ctx.db
       .query("menuItems")
       .withIndex("by_menu_order", (q) => q.eq("menuId", args.menuId))
-      .take(200),
+      .take(MENU_ITEMS_LIMIT),
   returns: v.array(menuItemDoc),
 });
 
@@ -199,6 +209,12 @@ export const createMenuItem = mutation({
     url: v.string(),
   },
   handler: async (ctx, args) => {
+    const existingCount = (await ctx.db
+      .query("menuItems")
+      .withIndex("by_menu_order", (q) => q.eq("menuId", args.menuId))
+      .take(MENU_ITEMS_LIMIT)).length;
+    ensureMenuItemsWithinLimit(existingCount);
+
     // MED-005: Basic URL validation
     const url = args.url.trim();
     if (!url) {
@@ -221,7 +237,7 @@ export const createMenuItem = mutation({
       ...args,
       url,
       order: newOrder,
-      depth: args.depth ?? 0,
+      depth: normalizeMenuDepth(args.depth),
       active: args.active ?? true,
     });
   },
@@ -256,6 +272,10 @@ export const updateMenuItem = mutation({
         throw new Error("URL phải bắt đầu bằng /, # hoặc http");
       }
       updates.url = url;
+    }
+
+    if (updates.depth !== undefined) {
+      updates.depth = normalizeMenuDepth(updates.depth);
     }
     
     await ctx.db.patch(id, updates);
@@ -292,7 +312,7 @@ export const reorderMenuItems = mutation({
   handler: async (ctx, args) => {
     await Promise.all(args.items.map( async item => {
       const updates: Record<string, number> = { order: item.order };
-      if (item.depth !== undefined) {updates.depth = item.depth;}
+      if (item.depth !== undefined) {updates.depth = normalizeMenuDepth(item.depth);}
       return ctx.db.patch(item.id, updates);
     }));
     return null;
@@ -315,6 +335,10 @@ export const saveMenuItemsBulk = mutation({
     })),
   },
   handler: async (ctx, args) => {
+    if (args.items.length > MENU_ITEMS_LIMIT) {
+      throw new Error(`Tối đa ${MENU_ITEMS_LIMIT} menu items`);
+    }
+
     const existingItems = await ctx.db
       .query("menuItems")
       .withIndex("by_menu_order", (q) => q.eq("menuId", args.menuId))
@@ -332,12 +356,14 @@ export const saveMenuItemsBulk = mutation({
         throw new Error("URL phải bắt đầu bằng /, # hoặc http");
       }
 
+      const normalizedDepth = normalizeMenuDepth(item.depth);
+
       if (item.id && existingById.has(item.id)) {
         keepIds.add(item.id);
         await ctx.db.patch(item.id, {
           label: item.label,
           url,
-          depth: item.depth,
+          depth: normalizedDepth,
           active: item.active,
           icon: item.icon,
           openInNewTab: item.openInNewTab,
@@ -349,7 +375,7 @@ export const saveMenuItemsBulk = mutation({
           menuId: args.menuId,
           label: item.label,
           url,
-          depth: item.depth,
+          depth: normalizedDepth,
           active: item.active,
           icon: item.icon,
           openInNewTab: item.openInNewTab,
@@ -377,10 +403,13 @@ export const getFullMenu = query({
       .withIndex("by_location", (q) => q.eq("location", args.location))
       .unique();
     if (!menu) {return null;}
-    const items = await ctx.db
+    const items = (await ctx.db
       .query("menuItems")
       .withIndex("by_menu_active", (q) => q.eq("menuId", menu._id).eq("active", true))
-      .collect();
+      .collect()).map((item) => ({
+        ...item,
+        depth: normalizeMenuDepth(item.depth),
+      }));
     return { items, menu };
   },
   returns: v.union(
@@ -390,6 +419,27 @@ export const getFullMenu = query({
     }),
     v.null()
   ),
+});
+
+export const normalizeMenuDepths = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const items = await ctx.db.query("menuItems").collect();
+    let updated = 0;
+
+    await Promise.all(items.map(async (item) => {
+      const normalizedDepth = normalizeMenuDepth(item.depth);
+      if (normalizedDepth === item.depth) {return;}
+      updated += 1;
+      await ctx.db.patch(item._id, { depth: normalizedDepth });
+    }));
+
+    return { maxDepth: MENU_MAX_DEPTH, updated };
+  },
+  returns: v.object({
+    maxDepth: v.number(),
+    updated: v.number(),
+  }),
 });
 
 // ============ MENU PICKER ============
