@@ -15,6 +15,7 @@ import { QuickCreateCategoryModal } from '../../components/QuickCreateCategoryMo
 import { stripHtml, truncateText } from '@/lib/seo';
 import { getMacroTemplate, getTemplateFieldSpec, type GeneratorFieldKey } from '@/lib/posts/generator/macro-templates';
 import type { GeneratorRequest, GeneratedArticlePayload } from '@/lib/posts/generator/types';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 
 const MODULE_KEY = 'posts';
 const COC_TARGET_OPTIONS: Array<{ key: GeneratorRequest['templateKey']; label: string; description: string }> = [
@@ -822,12 +823,12 @@ export default function PostCreatePage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-end items-center z-10">
-        <Button type="submit" variant="accent" disabled={isSubmitting || !title.trim() || !categoryId}>
-          {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-          Đăng bài
-        </Button>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting}
+        submitLabel="Đăng bài"
+        align="end"
+        disableSave={isSubmitting || !title.trim() || !categoryId}
+      />
     </form>
     {galleryModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4" onClick={handleCloseGallery}>

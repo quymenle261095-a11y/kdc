@@ -111,6 +111,10 @@ export const BulkActionBar = ({
   onPublish,
   onUnpublish,
   isStatusLoading,
+  publishLabel = 'Đăng bán',
+  publishLoadingLabel = 'Đang đăng bán...',
+  unpublishLabel = 'Chuyển nháp',
+  unpublishLoadingLabel = 'Đang chuyển nháp...',
   onDelete,
   onClearSelection,
   isLoading,
@@ -126,6 +130,10 @@ export const BulkActionBar = ({
   onPublish?: () => void;
   onUnpublish?: () => void;
   isStatusLoading?: 'publish' | 'unpublish' | null;
+  publishLabel?: string;
+  publishLoadingLabel?: string;
+  unpublishLabel?: string;
+  unpublishLoadingLabel?: string;
   onDelete: () => void;
   onClearSelection: () => void;
   isLoading?: boolean;
@@ -185,7 +193,7 @@ export const BulkActionBar = ({
             disabled={isLoading || Boolean(isStatusLoading)}
           >
             {isStatusLoading === 'publish' ? <Loader2 size={14} className="animate-spin" /> : null}
-            {isStatusLoading === 'publish' ? 'Đang đăng bán...' : `Đăng bán (${selectedCount})`}
+            {isStatusLoading === 'publish' ? publishLoadingLabel : `${publishLabel} (${selectedCount})`}
           </Button>
         )}
         {onUnpublish && (
@@ -197,7 +205,7 @@ export const BulkActionBar = ({
             disabled={isLoading || Boolean(isStatusLoading)}
           >
             {isStatusLoading === 'unpublish' ? <Loader2 size={14} className="animate-spin" /> : null}
-            {isStatusLoading === 'unpublish' ? 'Đang chuyển nháp...' : `Chuyển nháp (${selectedCount})`}
+            {isStatusLoading === 'unpublish' ? unpublishLoadingLabel : `${unpublishLabel} (${selectedCount})`}
           </Button>
         )}
         <Button variant="destructive" size="sm" className="gap-2 h-8" onClick={onDelete} disabled={isLoading || Boolean(isStatusLoading)}>

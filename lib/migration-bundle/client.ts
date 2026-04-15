@@ -88,9 +88,11 @@ const responseToFile = async (url: string, logicalPath: string) => {
   if (!response.ok) {
     throw new Error(`Fetch media thất bại: ${response.status}`);
   }
+  const contentType = response.headers.get('Content-Type') || undefined;
   const blob = await response.blob();
   const name = logicalPath.split('/').pop() || 'file.bin';
-  return new File([blob], name, { type: blob.type || 'application/octet-stream' });
+  const fileType = contentType || blob.type || 'application/octet-stream';
+  return new File([blob], name, { type: fileType });
 };
 
 export async function createZipFromPayload(payload: MigrationBundlePayload): Promise<Blob> {
@@ -220,9 +222,10 @@ export async function parseBundleFile(file: File): Promise<ParsedBundleInput> {
       continue;
     }
     const blob = await zipFile.async('blob');
+    const fileType = media.mimeType || blob.type || 'application/octet-stream';
     mediaFiles.push({
       logicalPath: media.logicalPath,
-      file: new File([blob], media.logicalPath.split('/').pop() || 'file.bin', { type: blob.type || media.mimeType || 'application/octet-stream' }),
+      file: new File([blob], media.logicalPath.split('/').pop() || 'file.bin', { type: fileType }),
     });
   }
 

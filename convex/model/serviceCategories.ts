@@ -1,4 +1,4 @@
-import { ConvexError } from "convex/values";
+import { resolveUniqueSlug } from "../lib/iaSlugs";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -101,12 +101,10 @@ export async function create(
     active?: boolean;
   }
 ): Promise<Id<"serviceCategories">> {
-  if (await isSlugExists(ctx, { slug: args.slug })) {
-    throw new ConvexError({
-      code: "DUPLICATE_SLUG",
-      message: "Slug đã tồn tại, vui lòng chọn slug khác",
-    });
-  }
+  const resolvedSlug = await resolveUniqueSlug(ctx, {
+    scope: "category",
+    slug: args.slug,
+  });
 
   const order = args.order ?? (await getNextOrder(ctx));
 
@@ -116,7 +114,7 @@ export async function create(
     name: args.name,
     order,
     parentId: args.parentId,
-    slug: args.slug,
+    slug: resolvedSlug.slug,
     thumbnail: args.thumbnail,
   });
 }
@@ -137,11 +135,13 @@ export async function update(
   const category = await getByIdOrThrow(ctx, { id: args.id });
 
   if (args.slug && args.slug !== category.slug) {
-    if (await isSlugExists(ctx, { excludeId: args.id, slug: args.slug })) {
-      throw new ConvexError({
-        code: "DUPLICATE_SLUG",
-        message: "Slug đã tồn tại, vui lòng chọn slug khác",
-      });
+    const resolvedSlug = await resolveUniqueSlug(ctx, {
+      scope: "category",
+      slug: args.slug,
+      exclude: { id: args.id, table: "serviceCategories" },
+    });
+    if (resolvedSlug.slug !== args.slug) {
+      (args as { slug?: string }).slug = resolvedSlug.slug;
     }
   }
 

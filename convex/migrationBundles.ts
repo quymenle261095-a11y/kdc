@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { BUNDLE_VERSION, MIGRATION_MODULES, type BundleImportReport, type BundleManifest, type BundleMediaEntry, type BundleRecordIndexEntry, type MigrationBundlePayload, type MigrationModule } from "../lib/migration-bundle/types";
-import { slugify } from "../lib/image/uploadNaming";
+import { getExtensionFromMime, getMimeFromExtension, slugify } from "../lib/image/uploadNaming";
 
 type MenuItemExport = {
   active: boolean;
@@ -60,6 +60,21 @@ const parseLogicalPathParts = (logicalPath: string) => {
   return { clean, parts };
 };
 
+const extractExtensionFromPath = (value: string) => {
+  const clean = value.split("?")[0]?.split("#")[0] ?? value;
+  const lastPart = clean.split("/").pop() ?? "";
+  if (!lastPart.includes(".")) {
+    return undefined;
+  }
+  const ext = lastPart.split(".").pop();
+  return ext ? ext.toLowerCase() : undefined;
+};
+
+const detectMimeFromUrl = (sourceUrl: string) => {
+  const ext = extractExtensionFromPath(sourceUrl);
+  return ext ? getMimeFromExtension(ext) : undefined;
+};
+
 const buildRecordIndexMap = () => {
   const map: Record<string, BundleRecordIndexEntry[]> = {};
   for (const module of MIGRATION_MODULES) {
@@ -105,10 +120,19 @@ const extractUrls = (value: unknown, acc: Set<string>) => {
   }
 };
 
-const buildMediaLogicalPath = (module: MigrationModule, bucket: string, filenameBase: string, index: number, sourceUrl: string) => {
+const buildMediaLogicalPath = (
+  module: MigrationModule,
+  bucket: string,
+  filenameBase: string,
+  index: number,
+  sourceUrl: string,
+  mimeType?: string,
+) => {
   const parsed = parseLogicalPathParts(sourceUrl);
   const lastPart = parsed.parts[parsed.parts.length - 1] || "file";
-  const ext = lastPart.includes(".") ? lastPart.split(".").pop() || "bin" : "bin";
+  const extFromUrl = extractExtensionFromPath(lastPart);
+  const extFromMime = mimeType ? getExtensionFromMime(mimeType) : undefined;
+  const ext = extFromUrl ?? extFromMime ?? "bin";
   return `media/${module}/${bucket}/${slugify(filenameBase || "item")}-${index + 1}.${ext}`;
 };
 
@@ -153,20 +177,45 @@ const buildReadmeAgent = () => ({
 
 const ensureArray = <T>(value: unknown): T[] => (Array.isArray(value) ? value as T[] : []);
 
+const buildMimeTypeByStorageId = (images: Array<Doc<"images">>) => {
+  const map = new Map<string, string>();
+  images.forEach((img) => map.set(img.storageId as string, img.mimeType));
+  return map;
+};
+
+const buildMimeTypeByUrl = async (
+  ctx: Parameters<typeof query>[0] extends never ? never : any,
+  images: Array<Doc<"images">>,
+) => {
+  const entries = await Promise.all(images.map(async (img) => ({
+    url: await ctx.storage.getUrl(img.storageId),
+    mimeType: img.mimeType,
+  })));
+  const map = new Map<string, string>();
+  entries.forEach((entry) => {
+    if (entry.url) {
+      map.set(entry.url, entry.mimeType);
+    }
+  });
+  return map;
+};
+
 const collectProductMedia = (
   product: Doc<"products">,
   mediaEntries: BundleMediaEntry[],
   recordKey: string,
+  mimeTypeByUrl?: Map<string, string>,
 ) => {
   const refs: string[] = [];
   const urls = [product.image, ...(product.images ?? [])].filter((item): item is string => Boolean(item));
   urls.forEach((url, index) => {
-    const logicalPath = buildMediaLogicalPath("products", product.sku || product.slug, product.name, index, url);
+    const mimeType = mimeTypeByUrl?.get(url) ?? detectMimeFromUrl(url) ?? "application/octet-stream";
+    const logicalPath = buildMediaLogicalPath("products", product.sku || product.slug, product.name, index, url, mimeType);
     refs.push(logicalPath);
     pushMediaEntry(mediaEntries, {
       logicalPath,
       originalUrl: url,
-      mimeType: "application/octet-stream",
+      mimeType,
       sourceModule: "products",
       usedByRecordKeys: [recordKey],
     });
@@ -180,17 +229,19 @@ const collectSimpleMedia = (
   value: unknown,
   mediaEntries: BundleMediaEntry[],
   recordKey: string,
+  mimeTypeByUrl?: Map<string, string>,
 ) => {
   const refs: string[] = [];
   const urls = new Set<string>();
   extractUrls(value, urls);
   Array.from(urls).forEach((url, index) => {
-    const logicalPath = buildMediaLogicalPath(module, sourceKey, sourceKey, index, url);
+    const mimeType = mimeTypeByUrl?.get(url) ?? detectMimeFromUrl(url) ?? "application/octet-stream";
+    const logicalPath = buildMediaLogicalPath(module, sourceKey, sourceKey, index, url, mimeType);
     refs.push(logicalPath);
     pushMediaEntry(mediaEntries, {
       logicalPath,
       originalUrl: url,
-      mimeType: "application/octet-stream",
+      mimeType,
       sourceModule: module,
       usedByRecordKeys: [recordKey],
     });
@@ -350,6 +401,26 @@ const runPreflight = (
     if (!entry.originalUrl || !entry.logicalPath) {
       errors.push(createIssue(entry.sourceModule, "Media index thiếu logicalPath hoặc originalUrl", "MEDIA_INDEX_INVALID", "index/media.index.json"));
     }
+    if (entry.mimeType === "application/octet-stream") {
+      warnings.push(createWarning(
+        entry.sourceModule,
+        "Media entry thiếu MIME cụ thể, sẽ dễ sinh .bin khi import",
+        "MEDIA_MIME_GENERIC",
+        "index/media.index.json",
+        entry.logicalPath,
+      ));
+    }
+    const ext = extractExtensionFromPath(entry.logicalPath);
+    const mimeFromExt = ext ? getMimeFromExtension(ext) : undefined;
+    if (mimeFromExt && entry.mimeType && mimeFromExt !== entry.mimeType) {
+      warnings.push(createWarning(
+        entry.sourceModule,
+        `Extension không khớp MIME: ${ext} vs ${entry.mimeType}`,
+        "MEDIA_MIME_EXTENSION_MISMATCH",
+        "index/media.index.json",
+        entry.logicalPath,
+      ));
+    }
   });
 
   const homeComponents = (payload.modules?.["home-components"] as { components?: HomeComponentExport[] } | undefined)?.components ?? [];
@@ -467,6 +538,10 @@ export const exportBundle = query({
     const mediaEntries: BundleMediaEntry[] = [];
     const recordIndexMap = buildRecordIndexMap();
     const moduleData: Record<string, unknown> = {};
+    const needsImageMime = modules.some((module) => ["products", "services", "posts"].includes(module));
+    const images = needsImageMime ? await ctx.db.query("images").take(10000) : [];
+    const mimeTypeByStorageId = needsImageMime ? buildMimeTypeByStorageId(images) : new Map<string, string>();
+    const mimeTypeByUrlGlobal = needsImageMime ? await buildMimeTypeByUrl(ctx, images) : new Map<string, string>();
 
     if (modules.includes("settings")) {
       const [settings, moduleSettings, moduleFeatures, moduleFields] = await Promise.all([
@@ -521,7 +596,37 @@ export const exportBundle = query({
       const productsOut = products.map((item, index) => {
         const category = categoryById.get(item.categoryId);
         const recordKey = `product:${item.sku || item.slug}`;
-        const mediaRefs = collectProductMedia(item, mediaEntries, recordKey);
+        const mimeTypeByUrl = new Map<string, string>();
+        if (item.image) {
+          const mimeType = item.imageStorageId
+            ? mimeTypeByStorageId.get(item.imageStorageId as string)
+            : mimeTypeByUrlGlobal.get(item.image);
+          if (mimeType) {
+            mimeTypeByUrl.set(item.image, mimeType);
+          }
+        }
+        const imagesList = item.images ?? [];
+        const imageStorageIds = item.imageStorageIds ?? [];
+        if (imagesList.length > 0 && imagesList.length === imageStorageIds.length) {
+          imagesList.forEach((url, idx) => {
+            const storageId = imageStorageIds[idx];
+            if (!url || !storageId) {
+              return;
+            }
+            const mimeType = mimeTypeByStorageId.get(storageId as string) ?? mimeTypeByUrlGlobal.get(url);
+            if (mimeType) {
+              mimeTypeByUrl.set(url, mimeType);
+            }
+          });
+        } else if (imagesList.length > 0) {
+          imagesList.forEach((url) => {
+            const mimeType = mimeTypeByUrlGlobal.get(url);
+            if (mimeType) {
+              mimeTypeByUrl.set(url, mimeType);
+            }
+          });
+        }
+        const mediaRefs = collectProductMedia(item, mediaEntries, recordKey, mimeTypeByUrl);
         addRecordIndex(recordIndexMap, "products", {
           recordKey,
           chunkFile: "modules/products/products.chunk-001.json",
@@ -658,7 +763,16 @@ export const exportBundle = query({
       const servicesOut = services.map((item, index) => {
         const category = categoryById.get(item.categoryId);
         const recordKey = `service:${item.slug}`;
-        const mediaRefs = collectSimpleMedia("services", item.slug, item, mediaEntries, recordKey);
+        const mimeTypeByUrl = new Map<string, string>();
+        if (item.thumbnail) {
+          const mimeType = item.thumbnailStorageId
+            ? mimeTypeByStorageId.get(item.thumbnailStorageId as string)
+            : mimeTypeByUrlGlobal.get(item.thumbnail);
+          if (mimeType) {
+            mimeTypeByUrl.set(item.thumbnail, mimeType);
+          }
+        }
+        const mediaRefs = collectSimpleMedia("services", item.slug, item, mediaEntries, recordKey, mimeTypeByUrl);
         addRecordIndex(recordIndexMap, "services", {
           recordKey,
           chunkFile: "modules/services/services.chunk-001.json",
@@ -712,7 +826,16 @@ export const exportBundle = query({
       const postsOut = posts.map((item, index) => {
         const category = categoryById.get(item.categoryId);
         const recordKey = `post:${item.slug}`;
-        const mediaRefs = collectSimpleMedia("posts", item.slug, item, mediaEntries, recordKey);
+        const mimeTypeByUrl = new Map<string, string>();
+        if (item.thumbnail) {
+          const mimeType = item.thumbnailStorageId
+            ? mimeTypeByStorageId.get(item.thumbnailStorageId as string)
+            : mimeTypeByUrlGlobal.get(item.thumbnail);
+          if (mimeType) {
+            mimeTypeByUrl.set(item.thumbnail, mimeType);
+          }
+        }
+        const mediaRefs = collectSimpleMedia("posts", item.slug, item, mediaEntries, recordKey, mimeTypeByUrl);
         addRecordIndex(recordIndexMap, "posts", {
           recordKey,
           chunkFile: "modules/posts/posts.chunk-001.json",

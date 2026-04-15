@@ -8,22 +8,34 @@ type HomeComponentStickyFooterProps = {
   isSubmitting: boolean;
   hasChanges?: boolean;
   onCancel?: () => void;
+  onClickSave?: () => void | Promise<void>;
   submitLabel: string;
   submittingLabel?: string;
   savedLabel?: string;
   disableSave?: boolean;
   align?: 'between' | 'end';
+  cancelLabel?: string;
+  submitVariant?: React.ComponentProps<typeof Button>['variant'];
+  submitType?: 'submit' | 'button';
+  submitClassName?: string;
+  children?: React.ReactNode;
 };
 
 export function HomeComponentStickyFooter({
   isSubmitting,
   hasChanges,
   onCancel,
+  onClickSave,
   submitLabel,
   submittingLabel = 'Đang lưu...',
   savedLabel = 'Đã lưu',
   disableSave,
   align = 'between',
+  cancelLabel = 'Hủy bỏ',
+  submitVariant = 'accent',
+  submitType = 'submit',
+  submitClassName,
+  children,
 }: HomeComponentStickyFooterProps) {
   const { isSidebarCollapsed } = useSidebarState();
   const isDisabled = disableSave ?? (hasChanges === false || isSubmitting);
@@ -41,21 +53,29 @@ export function HomeComponentStickyFooter({
       )}
     >
       <div className={cn('flex items-center gap-3', align === 'between' ? 'justify-between' : 'justify-end')}>
-        {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
-            Hủy bỏ
-          </Button>
+        {children ?? (
+          <>
+            {onCancel && (
+              <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
+                {cancelLabel}
+              </Button>
+            )}
+            <Button
+              type={submitType}
+              onClick={onClickSave}
+              variant={submitVariant}
+              disabled={isDisabled}
+              className={cn(
+                hasChanges === false && !isSubmitting && !disableSave
+                  ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+                  : undefined,
+                submitClassName
+              )}
+            >
+              {label}
+            </Button>
+          </>
         )}
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={isDisabled}
-          className={hasChanges === false && !isSubmitting && !disableSave
-            ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-            : undefined}
-        >
-          {label}
-        </Button>
       </div>
     </div>
   );

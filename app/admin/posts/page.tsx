@@ -48,6 +48,7 @@ function PostsContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"posts"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [bulkStatusLoading, setBulkStatusLoading] = useState<'publish' | 'unpublish' | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     if (typeof window === 'undefined') {
       return ['status', 'views'];
@@ -69,6 +70,7 @@ function PostsContent() {
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: 'posts' });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'posts' });
   const deletePost = useMutation(api.posts.remove);
+  const updatePost = useMutation(api.posts.update);
   
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
 
@@ -243,6 +245,26 @@ function PostsContent() {
     }
   };
 
+  const handleBulkStatusUpdate = async (mode: 'publish' | 'unpublish') => {
+    const nextStatus = mode === 'publish' ? 'Published' : 'Draft';
+    setBulkStatusLoading(mode);
+    try {
+      for (const id of selectedIds) {
+        await updatePost({
+          id,
+          status: nextStatus,
+          publishImmediately: mode === 'publish' ? true : undefined,
+        });
+      }
+      applyManualSelection([]);
+      toast.success(`Đã cập nhật ${selectedIds.length} bài viết`);
+    } catch {
+      toast.error('Có lỗi khi cập nhật trạng thái');
+    } finally {
+      setBulkStatusLoading(null);
+    }
+  };
+
   const openFrontend = (slug: string) => {
     window.open(`/posts/${slug}`, '_blank');
   };
@@ -263,6 +285,13 @@ function PostsContent() {
         onSelectPage={() =>{  applyManualSelection(paginatedPosts.map(post => post._id)); }}
         onSelectAllResults={() =>{  setSelectionMode('all'); }}
         isSelectingAllResults={isSelectingAll}
+        onPublish={() =>{  void handleBulkStatusUpdate('publish'); }}
+        onUnpublish={() =>{  void handleBulkStatusUpdate('unpublish'); }}
+        isStatusLoading={bulkStatusLoading}
+        publishLabel="Xuất bản"
+        publishLoadingLabel="Đang xuất bản..."
+        unpublishLabel="Chuyển nháp"
+        unpublishLoadingLabel="Đang chuyển nháp..."
         onDelete={handleBulkDelete}
         onClearSelection={() =>{  applyManualSelection([]); }}
       />

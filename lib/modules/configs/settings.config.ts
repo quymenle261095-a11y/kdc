@@ -1,4 +1,4 @@
-import { Settings, MapPin, Globe, Share2, Mail } from 'lucide-react';
+import { Globe, Mail, MapPin, Settings, Share2, Sparkles } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
  
 export const settingsModule = defineModuleWithRuntime({
@@ -13,6 +13,7 @@ export const settingsModule = defineModuleWithRuntime({
      { key: 'enableSEO', label: 'SEO cơ bản', icon: Globe },
      { key: 'enableSocial', label: 'Mạng xã hội', icon: Share2 },
      { key: 'enableMail', label: 'Cấu hình Email', icon: Mail },
+     { key: 'enableTrustPagesAutoGenerate', label: 'Tự sinh Trust Pages', icon: Sparkles },
    ],
  
   settings: [

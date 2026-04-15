@@ -1,4 +1,5 @@
 import { analyticsModule } from '../configs/analytics.config';
+import { bookingsModule } from '../configs/bookings.config';
 import { cartModule } from '../configs/cart.config';
 import { commentsModule } from '../configs/comments.config';
 import { contactInboxModule } from '../configs/contact-inbox.config';
@@ -58,6 +59,7 @@ const CATEGORY_RUNTIME_DEFINITIONS: RuntimeModuleDefinition[] = [
 
 const moduleDefinitions = [
   analyticsModule,
+  bookingsModule,
   cartModule,
   commentsModule,
   contactInboxModule,

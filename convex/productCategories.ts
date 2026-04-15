@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
+import { resolveUniqueSlug } from "./lib/iaSlugs";
 import type { Doc, Id } from "./_generated/dataModel";
 
 const categoryDoc = v.object({
@@ -349,16 +350,10 @@ export const create = mutation({
       .unique();
     const hierarchyEnabled = hierarchyFeature?.enabled === true;
 
-    const existing = await ctx.db
-      .query("productCategories")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .unique();
-    if (existing) {
-      throw new ConvexError({
-        code: "DUPLICATE_SLUG",
-        message: "Slug đã tồn tại, vui lòng chọn slug khác",
-      });
-    }
+    const resolvedSlug = await resolveUniqueSlug(ctx, {
+      scope: "category",
+      slug: args.slug,
+    });
     
     // FIX: Get last order instead of fetching ALL
     let nextOrder = args.order;
@@ -372,6 +367,7 @@ export const create = mutation({
     
     return  ctx.db.insert("productCategories", {
       ...args,
+      slug: resolvedSlug.slug,
       order: nextOrder,
       active: args.active ?? true,
       parentId: hierarchyEnabled ? args.parentId : undefined,
@@ -407,16 +403,13 @@ export const update = mutation({
       delete updates.parentId;
     }
     if (args.slug && args.slug !== category.slug) {
-      const newSlug = args.slug;
-      const existing = await ctx.db
-        .query("productCategories")
-        .withIndex("by_slug", (q) => q.eq("slug", newSlug))
-        .unique();
-      if (existing) {
-        throw new ConvexError({
-          code: "DUPLICATE_SLUG",
-          message: "Slug đã tồn tại, vui lòng chọn slug khác",
-        });
+      const resolvedSlug = await resolveUniqueSlug(ctx, {
+        scope: "category",
+        slug: args.slug,
+        exclude: { id: args.id, table: "productCategories" },
+      });
+      if (resolvedSlug.slug !== args.slug) {
+        updates.slug = resolvedSlug.slug;
       }
     }
     await ctx.db.patch(id, updates);

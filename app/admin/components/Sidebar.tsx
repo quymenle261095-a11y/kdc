@@ -165,11 +165,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
     if (pathname.startsWith('/admin/users') || pathname.startsWith('/admin/roles')) {
       return 'Người dùng';
     }
-    if (pathname.startsWith('/admin/menus') || pathname.startsWith('/admin/home-components')) {
+    if (pathname.startsWith('/admin/menus') || pathname.startsWith('/admin/home-components') || pathname.startsWith('/admin/trust-pages')) {
       return 'Website';
     }
     if (pathname.startsWith('/admin/settings')) {
       return 'Cài đặt';
+    }
+    if (pathname.startsWith('/admin/bookings')) {
+      return 'Dịch vụ';
     }
     return null;
   }, [pathname]);
@@ -192,12 +195,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
   const showPostComments = isModuleEnabled('posts') && isModuleEnabled('comments');
   // Services section
   const showServicesSection = isModuleEnabled('services');
+  const showBookingsSection = isModuleEnabled('bookings');
   const showCommerceSection = isModuleEnabled('products') || isModuleEnabled('customers') || isModuleEnabled('orders') || isModuleEnabled('wishlist');
   // Product reviews chỉ hiện khi products VÀ comments đều bật  
   const showProductReviews = isModuleEnabled('products') && isModuleEnabled('comments');
   const showMediaSection = isModuleEnabled('media');
   const showUsersSection = isModuleEnabled('users') || isModuleEnabled('roles');
-  const showWebsiteSection = isModuleEnabled('menus') || isModuleEnabled('homepage');
+  const showWebsiteSection = isModuleEnabled('menus') || isModuleEnabled('homepage') || isModuleEnabled('settings');
   const showKanbanSection = isModuleEnabled('kanban');
   const showSubscriptionsSection = isModuleEnabled('subscriptions');
   const showSettingsSection = isModuleEnabled('settings');
@@ -364,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                   icon={Briefcase} 
                   label="Dịch vụ" 
                   href="/admin/services" 
-                  active={isActive('/admin/services') || isActive('/admin/service-categories')}
+                  active={isActive('/admin/services') || isActive('/admin/service-categories') || isActive('/admin/bookings')}
                   isCollapsed={isSidebarCollapsed}
                   isExpanded={currentExpandedMenu === 'Dịch vụ'}
                   onToggle={() =>{  handleMenuToggle('Dịch vụ'); }}
@@ -373,6 +377,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                   subItems={[
                     { href: '/admin/services', label: 'Tất cả dịch vụ', moduleKey: 'services' },
                     { href: '/admin/service-categories', label: 'Danh mục dịch vụ', moduleKey: 'services' },
+                    ...(showBookingsSection ? [{ href: '/admin/bookings', label: 'Đặt lịch', moduleKey: 'bookings' }] : []),
+                    ...(showBookingsSection ? [{ href: '/admin/bookings/settings', label: 'Cài đặt lịch', moduleKey: 'bookings' }] : []),
                   ]}
                 />
               </div>
@@ -485,7 +491,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                     icon={Globe} 
                     label="Website" 
                     href="/admin/menus"
-                    active={isActive('/admin/menus') || isActive('/admin/home-components')}
+                    active={isActive('/admin/menus') || isActive('/admin/home-components') || isActive('/admin/trust-pages')}
                     isCollapsed={isSidebarCollapsed}
                     isExpanded={currentExpandedMenu === 'Website'}
                     onToggle={() =>{  handleMenuToggle('Website'); }}
@@ -494,6 +500,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                     subItems={[
                       { href: '/admin/menus', label: 'Menu', moduleKey: 'menus' },
                       { href: '/admin/home-components', label: 'Giao diện trang chủ', moduleKey: 'homepage' },
+{ href: '/admin/trust-pages', label: 'Trang tin cậy', moduleKey: 'settings' },
                     ]}
                   />
                 )}

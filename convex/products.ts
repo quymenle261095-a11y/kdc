@@ -5,6 +5,7 @@ import { ConvexError, v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { productStatus } from "./lib/validators";
 import { rankByFuzzyMatches } from "./lib/search";
+import { resolveUniqueSlug } from "./lib/iaSlugs";
 import type { Doc, Id } from "./_generated/dataModel";
 
 const productDoc = v.object({
@@ -147,14 +148,8 @@ const buildCopyCode = (baseCode: string, attempt: number) => {
 };
 
 async function generateUniqueProductSlug(ctx: MutationCtx, baseSlug: string): Promise<string> {
-  for (let attempt = 1; attempt <= 500; attempt += 1) {
-    const candidate = buildCopyCode(baseSlug, attempt);
-    const existing = await ctx.db.query("products").withIndex("by_slug", (q) => q.eq("slug", candidate)).unique();
-    if (!existing) {
-      return candidate;
-    }
-  }
-  throw new ConvexError({ code: "UNIQUE_SLUG_GENERATION_FAILED", message: "Không thể tạo slug duy nhất cho bản sao" });
+  const resolved = await resolveUniqueSlug(ctx, { scope: "record", slug: baseSlug });
+  return resolved.slug;
 }
 
 async function generateUniqueProductSku(ctx: MutationCtx, baseSku: string): Promise<string> {
@@ -1335,17 +1330,10 @@ export const create = mutation({
       });
     }
 
-    // Validate unique slug
-    const existingSlug = await ctx.db
-      .query("products")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .unique();
-    if (existingSlug) {
-      throw new ConvexError({
-        code: "DUPLICATE_SLUG",
-        message: "Slug đã tồn tại, vui lòng chọn slug khác",
-      });
-    }
+    const resolvedSlug = await resolveUniqueSlug(ctx, {
+      scope: "record",
+      slug: args.slug,
+    });
 
     // FIX #3: Get next order from stats instead of fetching ALL
     const nextOrder = await getNextOrder(ctx);
@@ -1401,6 +1389,7 @@ export const create = mutation({
     }
     const productId = await ctx.db.insert("products", {
       ...restArgs,
+      slug: resolvedSlug.slug,
       renderType: renderType ?? "content",
       markdownRender,
       htmlRender,
@@ -1494,18 +1483,14 @@ export const update = mutation({
       }
     }
 
-    // Validate unique slug if changing
     if (args.slug && args.slug !== product.slug) {
-      const newSlug = args.slug;
-      const existing = await ctx.db
-        .query("products")
-        .withIndex("by_slug", (q) => q.eq("slug", newSlug))
-        .unique();
-      if (existing) {
-        throw new ConvexError({
-          code: "DUPLICATE_SLUG",
-          message: "Slug đã tồn tại, vui lòng chọn slug khác",
-        });
+      const resolvedSlug = await resolveUniqueSlug(ctx, {
+        scope: "record",
+        slug: args.slug,
+        exclude: { id: args.id, table: "products" },
+      });
+      if (resolvedSlug.slug !== args.slug) {
+        (args as { slug?: string }).slug = resolvedSlug.slug;
       }
     }
 

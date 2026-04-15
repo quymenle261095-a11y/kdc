@@ -42,6 +42,7 @@ export const seedModules = mutation({
       { category: "marketing" as const, description: "Báo cáo và phân tích dữ liệu", enabled: true, icon: "BarChart3", isCore: false, key: "analytics", name: "Thống kê", order: 17 },
       { category: "content" as const, description: "Quản lý dịch vụ và danh mục dịch vụ", enabled: true, icon: "Briefcase", isCore: false, key: "services", name: "Dịch vụ", order: 18 },
       { category: "system" as const, description: "Bảng Kanban quản lý công việc nội bộ", enabled: true, icon: "LayoutGrid", isCore: false, key: "kanban", name: "Kanban Board", order: 19 },
+      { category: "commerce" as const, dependencies: ["services"], dependencyType: "all" as const, description: "Quản lý lịch hẹn và đặt lịch", enabled: true, icon: "CalendarDays", isCore: false, key: "bookings", name: "Đặt lịch", order: 20 },
     ];
 
     for (const mod of modules) {
@@ -418,6 +419,7 @@ export const seedAll = mutation({
         { category: "marketing" as const, dependencies: ["products", "orders"], dependencyType: "all" as const, description: "Quản lý mã giảm giá, voucher", enabled: false, icon: "Megaphone", isCore: false, key: "promotions", name: "Khuyến mãi", order: 15 },
         { category: "marketing" as const, description: "Báo cáo và phân tích dữ liệu", enabled: true, icon: "BarChart3", isCore: false, key: "analytics", name: "Thống kê", order: 16 },
         { category: "content" as const, description: "Quản lý dịch vụ và danh mục dịch vụ", enabled: true, icon: "Briefcase", isCore: false, key: "services", name: "Dịch vụ", order: 17 },
+        { category: "commerce" as const, dependencies: ["services"], dependencyType: "all" as const, description: "Quản lý lịch hẹn và đặt lịch", enabled: true, icon: "CalendarDays", isCore: false, key: "bookings", name: "Đặt lịch", order: 18 },
       ];
       for (const mod of modules) {
         await ctx.db.insert("adminModules", mod);
@@ -1911,6 +1913,7 @@ export const seedSettingsModule = mutation({
         { description: "Quản lý email, phone, địa chỉ", enabled: true, featureKey: "enableContact", moduleKey: "settings", name: "Thông tin liên hệ" },
         { description: "Meta title, description, keywords", enabled: true, featureKey: "enableSEO", moduleKey: "settings", name: "SEO cơ bản" },
         { description: "Links Facebook, Instagram, Youtube...", enabled: true, featureKey: "enableSocial", moduleKey: "settings", name: "Mạng xã hội" },
+        { description: "Sinh tự động Trust Pages từ dữ liệu thực", enabled: false, featureKey: "enableTrustPagesAutoGenerate", moduleKey: "settings", name: "Tự sinh Trust Pages" },
       ];
       for (const feature of features) {
         await ctx.db.insert("moduleFeatures", feature);
@@ -2798,6 +2801,31 @@ export const addServicesModuleToList = mutation({
   returns: v.null(),
 });
 
+// Thêm module bookings vào danh sách adminModules (chỉ chạy 1 lần)
+export const addBookingsModuleToList = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const existing = await ctx.db.query("adminModules").withIndex("by_key", q => q.eq("key", "bookings")).first();
+    if (existing) {
+      return null;
+    }
+    await ctx.db.insert("adminModules", {
+      category: "commerce" as const,
+      dependencies: ["services"],
+      dependencyType: "all" as const,
+      description: "Quản lý lịch hẹn và đặt lịch",
+      enabled: true,
+      icon: "CalendarDays",
+      isCore: false,
+      key: "bookings",
+      name: "Đặt lịch",
+      order: 20,
+    });
+    return null;
+  },
+  returns: v.null(),
+});
+
 export const seedServicesModule = mutation({
   args: { configOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
@@ -2878,6 +2906,10 @@ export const seedServicesModule = mutation({
         { enabled: true, fieldKey: "renderType", isSystem: false, moduleKey: "services", name: "Kiểu render", order: 13, required: false, type: "select" as const },
         { enabled: false, fieldKey: "markdownRender", isSystem: false, linkedFeature: "enableMarkdownRender", moduleKey: "services", name: "Markdown render", order: 14, required: false, type: "textarea" as const },
         { enabled: false, fieldKey: "htmlRender", isSystem: false, linkedFeature: "enableHtmlRender", moduleKey: "services", name: "HTML render", order: 15, required: false, type: "textarea" as const },
+        { enabled: true, fieldKey: "bookingEnabled", group: "booking", isSystem: false, moduleKey: "services", name: "Cho phép đặt lịch", order: 16, required: false, type: "boolean" as const },
+        { enabled: true, fieldKey: "bookingDurationMin", group: "booking", isSystem: false, moduleKey: "services", name: "Thời lượng (phút)", order: 17, required: false, type: "number" as const },
+        { enabled: true, fieldKey: "bookingSlotIntervalMin", group: "booking", isSystem: false, moduleKey: "services", name: "Khoảng cách slot (phút)", order: 18, required: false, type: "number" as const },
+        { enabled: true, fieldKey: "bookingCapacityPerSlot", group: "booking", isSystem: false, moduleKey: "services", name: "Sức chứa / slot", order: 19, required: false, type: "number" as const },
       ];
       for (const field of serviceFields) {
         await ctx.db.insert("moduleFields", field);
@@ -2901,16 +2933,20 @@ export const seedServicesModule = mutation({
       const allFields = await ctx.db.query("moduleFields").withIndex("by_module", q => q.eq("moduleKey", "services")).collect();
       const existingKeys = new Set(allFields.map((field) => field.fieldKey));
       let nextOrder = Math.max(...allFields.map((field) => field.order)) + 1;
-      const seoFields = [
-        { fieldKey: "metaTitle", name: "Meta Title", type: "text" as const },
-        { fieldKey: "metaDescription", name: "Meta Description", type: "textarea" as const },
+      const upgradeFields = [
+        { fieldKey: "metaTitle", name: "Meta Title", type: "text" as const, group: "seo" },
+        { fieldKey: "metaDescription", name: "Meta Description", type: "textarea" as const, group: "seo" },
+        { fieldKey: "bookingEnabled", name: "Cho phép đặt lịch", type: "boolean" as const, group: "booking" },
+        { fieldKey: "bookingDurationMin", name: "Thời lượng (phút)", type: "number" as const, group: "booking" },
+        { fieldKey: "bookingSlotIntervalMin", name: "Khoảng cách slot (phút)", type: "number" as const, group: "booking" },
+        { fieldKey: "bookingCapacityPerSlot", name: "Sức chứa / slot", type: "number" as const, group: "booking" },
       ];
-      for (const field of seoFields) {
+      for (const field of upgradeFields) {
         if (existingKeys.has(field.fieldKey)) {continue;}
         await ctx.db.insert("moduleFields", {
           enabled: true,
           fieldKey: field.fieldKey,
-          group: "seo",
+          group: field.group,
           isSystem: false,
           moduleKey: "services",
           name: field.name,
@@ -2939,6 +2975,17 @@ export const seedServicesModule = mutation({
       await ctx.db.insert("settings", { group: "services", key: "services_detail_style", value: "classic" });
     }
 
+    return null;
+  },
+  returns: v.null(),
+});
+
+// ============ BOOKINGS MODULE ============
+export const seedBookingsModule = mutation({
+  args: { configOnly: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    void args;
+    await syncModuleRuntimeConfig(ctx, "bookings");
     return null;
   },
   returns: v.null(),
@@ -3055,6 +3102,7 @@ export const seedAllModulesConfig = action({
     await ctx.runMutation(api.seed.seedNotificationsModule, configArgs);
     await ctx.runMutation(api.seed.seedPromotionsModule, configArgs);
     await ctx.runMutation(api.seed.seedServicesModule, configArgs);
+    await ctx.runMutation(api.seed.seedBookingsModule, configArgs);
     await ctx.runMutation(api.seed.seedSubscriptionsModule, configArgs);
     return null;
   },

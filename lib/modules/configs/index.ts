@@ -1,4 +1,5 @@
 export { analyticsModule } from './analytics.config';
+export { bookingsModule } from './bookings.config';
 export { contactInboxModule } from './contact-inbox.config';
 export { subscriptionsModule } from './subscriptions.config';
 export { cartModule } from './cart.config';

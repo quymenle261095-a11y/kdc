@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { MENU_MAX_DEPTH, clampMenuDepth } from "../lib/utils/menu-tree";
 
 const menuDoc = v.object({
@@ -457,19 +458,30 @@ export const listPostsForPicker = query({
       .order("desc")
       .take(limit);
 
+    const categories = await Promise.all(posts.map((post) => ctx.db.get(post.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    const formatPost = (post: Doc<"posts">) => ({
+      _id: post._id,
+      title: post.title,
+      slug: post.slug,
+      categorySlug: categoryMap.get(post.categoryId)?.slug ?? "",
+    });
+
     if (args.search?.trim()) {
       const searchLower = args.search.toLowerCase();
       return posts
         .filter((post) => post.title.toLowerCase().includes(searchLower))
-        .map((post) => ({ _id: post._id, title: post.title, slug: post.slug }));
+        .map(formatPost);
     }
 
-    return posts.map((post) => ({ _id: post._id, title: post.title, slug: post.slug }));
+    return posts.map(formatPost);
   },
   returns: v.array(v.object({
     _id: v.id("posts"),
     title: v.string(),
     slug: v.string(),
+    categorySlug: v.string(),
   })),
 });
 
@@ -486,19 +498,30 @@ export const listProductsForPicker = query({
       .order("desc")
       .take(limit);
 
+    const categories = await Promise.all(products.map((product) => ctx.db.get(product.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    const formatProduct = (product: Doc<"products">) => ({
+      _id: product._id,
+      name: product.name,
+      slug: product.slug,
+      categorySlug: categoryMap.get(product.categoryId)?.slug ?? "",
+    });
+
     if (args.search?.trim()) {
       const searchLower = args.search.toLowerCase();
       return products
         .filter((product) => product.name.toLowerCase().includes(searchLower))
-        .map((product) => ({ _id: product._id, name: product.name, slug: product.slug }));
+        .map(formatProduct);
     }
 
-    return products.map((product) => ({ _id: product._id, name: product.name, slug: product.slug }));
+    return products.map(formatProduct);
   },
   returns: v.array(v.object({
     _id: v.id("products"),
     name: v.string(),
     slug: v.string(),
+    categorySlug: v.string(),
   })),
 });
 
@@ -515,18 +538,29 @@ export const listServicesForPicker = query({
       .order("desc")
       .take(limit);
 
+    const categories = await Promise.all(services.map((service) => ctx.db.get(service.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    const formatService = (service: Doc<"services">) => ({
+      _id: service._id,
+      title: service.title,
+      slug: service.slug,
+      categorySlug: categoryMap.get(service.categoryId)?.slug ?? "",
+    });
+
     if (args.search?.trim()) {
       const searchLower = args.search.toLowerCase();
       return services
         .filter((service) => service.title.toLowerCase().includes(searchLower))
-        .map((service) => ({ _id: service._id, title: service.title, slug: service.slug }));
+        .map(formatService);
     }
 
-    return services.map((service) => ({ _id: service._id, title: service.title, slug: service.slug }));
+    return services.map(formatService);
   },
   returns: v.array(v.object({
     _id: v.id("services"),
     title: v.string(),
     slug: v.string(),
+    categorySlug: v.string(),
   })),
 });

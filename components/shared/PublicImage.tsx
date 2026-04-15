@@ -17,5 +17,28 @@ const UNOPTIMIZED_MODES: Record<PublicImageMode, boolean> = {
 
 export function PublicImage({ mode = 'primary', unoptimized, ...props }: PublicImageProps) {
   const resolvedUnoptimized = unoptimized ?? UNOPTIMIZED_MODES[mode];
-  return <Image unoptimized={resolvedUnoptimized} {...props} />;
+  const resolvedSrc = typeof props.src === 'string'
+    ? normalizeLocalNextImageUrl(props.src)
+    : props.src;
+  return <Image unoptimized={resolvedUnoptimized} {...props} src={resolvedSrc} />;
 }
+
+const normalizeLocalNextImageUrl = (value: string) => {
+  if (!value.includes('/_next/image?')) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value, 'http://localhost');
+    if (parsed.hostname !== 'localhost') {
+      return value;
+    }
+    const original = parsed.searchParams.get('url');
+    if (!original) {
+      return value;
+    }
+    return decodeURIComponent(original);
+  } catch {
+    return value;
+  }
+};

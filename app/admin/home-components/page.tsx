@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Edit, Grid, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Edit, Grid, GripVertical, Loader2, Plus, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -12,6 +12,7 @@ import { BulkActionBar, SelectCheckbox } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { COMPONENT_TYPES } from './create/shared';
 import { getEditRoute as getEditRouteByType } from './_shared/lib/componentRoutes';
+import { HomepageSmartWizardDialog } from '@/components/modules/homepage/HomepageSmartWizardDialog';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -100,8 +101,10 @@ function HomeComponentsPage() {
   const removeMutation = useMutation(api.homeComponents.remove);
   const toggleMutation = useMutation(api.homeComponents.toggle);
   const reorderMutation = useMutation(api.homeComponents.reorder);
+  const wizardSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'homepage', settingKey: 'enableSmartWizard' });
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [openWizard, setOpenWizard] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -168,6 +171,8 @@ function HomeComponentsPage() {
     }
   };
 
+  const showWizard = wizardSetting?.value !== false;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -175,12 +180,21 @@ function HomeComponentsPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Giao diện Trang chủ</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý các khối nội dung hiển thị trên trang chủ</p>
         </div>
-        <Link href="/admin/home-components/create">
-          <Button className="gap-2" variant="accent">
-            <Plus size={16} /> Thêm Component
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {showWizard && (
+            <Button className="gap-2" variant="outline" onClick={() => setOpenWizard(true)}>
+              <Wand2 size={16} /> Smart Wizard
+            </Button>
+          )}
+          <Link href="/admin/home-components/create">
+            <Button className="gap-2" variant="accent">
+              <Plus size={16} /> Thêm Component
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {showWizard && <HomepageSmartWizardDialog open={openWizard} onOpenChange={setOpenWizard} />}
 
       <BulkActionBar
         selectedCount={selectedIds.length}

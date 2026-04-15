@@ -19,6 +19,7 @@ export default function ModuleManagementPage() {
   const presetsData = useQuery(api.admin.presets.listPresets);
   const toggleModuleWithCascade = useMutation(api.admin.modules.toggleModuleWithCascade);
   const migrateCalendarToSubscriptions = useMutation(api.admin.modules.migrateCalendarToSubscriptions);
+  const addBookingsModuleToList = useMutation(api.seed.addBookingsModuleToList);
   const applyPreset = useMutation(api.admin.presets.applyPreset);
   const seedModule = useMutation(api.seedManager.seedModule);
   
@@ -29,6 +30,7 @@ export default function ModuleManagementPage() {
   const [applyingPreset, setApplyingPreset] = useState(false);
   const [isReseeding, setIsReseeding] = useState(false);
   const [hasMigrated, setHasMigrated] = useState(false);
+  const [hasEnsuredBookings, setHasEnsuredBookings] = useState(false);
   
   // SYS-004: State cho cascade confirmation dialog
   const [cascadeDialog, setCascadeDialog] = useState<{
@@ -79,6 +81,20 @@ export default function ModuleManagementPage() {
       }
     })();
   }, [hasMigrated, migrateCalendarToSubscriptions]);
+
+  React.useEffect(() => {
+    if (hasEnsuredBookings) {
+      return;
+    }
+    setHasEnsuredBookings(true);
+    void (async () => {
+      try {
+        await addBookingsModuleToList({});
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+  }, [addBookingsModuleToList, hasEnsuredBookings]);
 
   const handlePresetSelect = async (presetKey: string) => {
     setSelectedPreset(presetKey);

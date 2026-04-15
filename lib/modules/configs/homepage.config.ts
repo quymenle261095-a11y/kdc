@@ -19,6 +19,7 @@ export const homepageModule = defineModuleWithRuntime({
    
    settings: [
      { key: 'maxSections', label: 'Số section tối đa', type: 'number', default: 10 },
+    { key: 'enableSmartWizard', label: 'Hiện Smart Wizard ở Admin', type: 'toggle', default: true },
      { 
        key: 'defaultSectionType', 
        label: 'Loại section mặc định', 

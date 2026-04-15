@@ -10,6 +10,7 @@ import {
 } from '../components/ui';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { BulkActionBar, SelectCheckbox } from '../components/TableUtilities';
+import { buildCategoryPath, buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 import { 
   ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, 
   GripVertical, Loader2, Menu, Plus, Trash2
@@ -161,6 +162,8 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   const productCategories = useQuery(api.productCategories.listActive);
   const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
   const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
   const saveMenuItemsBulk = useMutation(api.menus.saveMenuItemsBulk);
 
   const [draftItems, setDraftItems] = useState<DraftMenuItem[]>([]);
@@ -231,7 +234,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           group: 'Danh mục',
           label: category.name,
           source: 'products',
-          url: `/products?category=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'products' }),
         });
       });
     }
@@ -242,7 +245,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           group: 'Danh mục',
           label: category.name,
           source: 'posts',
-          url: `/posts?catpost=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'posts' }),
         });
       });
     }
@@ -253,7 +256,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           group: 'Danh mục',
           label: category.name,
           source: 'services',
-          url: `/services?category=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'services' }),
         });
       });
     }
@@ -266,7 +269,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     });
 
     return Array.from(deduped.values());
-  }, [enabledModules, postCategories, productCategories, serviceCategories]);
+  }, [enabledModules, postCategories, productCategories, routeMode, serviceCategories]);
 
   const filteredQuickRoutes = useMemo(() => {
     const keyword = quickRouteSearch.trim().toLowerCase();
@@ -1035,7 +1038,12 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: post.title,
-                                url: `/posts/${post.slug}`,
+                                url: buildDetailPath({
+                                  categorySlug: post.categorySlug,
+                                  mode: routeMode,
+                                  moduleKey: 'posts',
+                                  recordSlug: post.slug,
+                                }),
                                 source: 'posts',
                                 group: 'Module',
                               });
@@ -1060,7 +1068,12 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: product.name,
-                                url: `/products/${product.slug}`,
+                                url: buildDetailPath({
+                                  categorySlug: product.categorySlug,
+                                  mode: routeMode,
+                                  moduleKey: 'products',
+                                  recordSlug: product.slug,
+                                }),
                                 source: 'products',
                                 group: 'Module',
                               });
@@ -1085,7 +1098,12 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: service.title,
-                                url: `/services/${service.slug}`,
+                                url: buildDetailPath({
+                                  categorySlug: service.categorySlug,
+                                  mode: routeMode,
+                                  moduleKey: 'services',
+                                  recordSlug: service.slug,
+                                }),
                                 source: 'services',
                                 group: 'Module',
                               });

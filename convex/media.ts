@@ -2,12 +2,14 @@ import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
+import { getExtensionFromMime } from "../lib/image/uploadNaming";
 
 // ============ VALIDATORS ============
 const mediaDoc = v.object({
   _creationTime: v.number(),
   _id: v.id("images"),
   alt: v.optional(v.string()),
+  extension: v.optional(v.string()),
   filename: v.string(),
   folder: v.optional(v.string()),
   height: v.optional(v.number()),
@@ -22,6 +24,7 @@ const mediaWithUrl = v.object({
   _creationTime: v.number(),
   _id: v.id("images"),
   alt: v.optional(v.string()),
+  extension: v.optional(v.string()),
   filename: v.string(),
   folder: v.optional(v.string()),
   height: v.optional(v.number()),
@@ -43,6 +46,27 @@ function getMediaTypeKey(mimeType: string): "image" | "video" | "document" | "ot
     return "document";
   }
   return "other";
+}
+
+function getExtensionFromFilename(filename: string): string | undefined {
+  const match = filename.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match?.[1];
+}
+
+function resolveExtension(filename: string, mimeType: string): string {
+  const byName = getExtensionFromFilename(filename);
+  if (byName) {
+    return byName;
+  }
+  const ext = getExtensionFromMime(mimeType);
+  if (ext !== "bin") {
+    return ext;
+  }
+  const fallback = mimeType.split("/")[1];
+  if (!fallback) {
+    return "bin";
+  }
+  return fallback.replace("+xml", "").replace("jpeg", "jpg");
 }
 
 // Update mediaStats counter (increment or decrement)
@@ -102,11 +126,13 @@ async function updateMediaFolder(
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => ctx.db.query("images").order("desc").paginate(args.paginationOpts),
-  returns: v.object({
-    continueCursor: v.string(),
-    isDone: v.boolean(),
-    page: v.array(mediaDoc),
-  }),
+  returns: v.any(),
+});
+
+export const listForBackfill = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => ctx.db.query("images").order("desc").paginate(args.paginationOpts),
+  returns: v.any(),
 });
 
 // List all (for System Config preview - limited)
@@ -289,7 +315,8 @@ export const create = mutation({
     width: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const id = await ctx.db.insert("images", args);
+    const extension = resolveExtension(args.filename, args.mimeType);
+    const id = await ctx.db.insert("images", { ...args, extension });
     const url = await ctx.storage.getUrl(args.storageId);
 
     // Update counters
@@ -304,6 +331,18 @@ export const create = mutation({
     id: v.id("images"),
     url: v.union(v.string(), v.null()),
   }),
+});
+
+export const patchExtension = mutation({
+  args: {
+    id: v.id("images"),
+    extension: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { extension: args.extension });
+    return null;
+  },
+  returns: v.null(),
 });
 
 // Update media metadata

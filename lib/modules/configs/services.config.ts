@@ -51,6 +51,10 @@ export const servicesModule = defineModuleWithRuntime({
       { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 13, required: false, type: 'select' },
       { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 14, required: false, type: 'textarea' },
       { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 15, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'bookingEnabled', group: 'booking', isSystem: false, name: 'Cho phép đặt lịch', order: 16, required: false, type: 'boolean' },
+      { enabled: true, fieldKey: 'bookingDurationMin', group: 'booking', isSystem: false, name: 'Thời lượng (phút)', order: 17, required: false, type: 'number' },
+      { enabled: true, fieldKey: 'bookingSlotIntervalMin', group: 'booking', isSystem: false, name: 'Khoảng cách slot (phút)', order: 18, required: false, type: 'number' },
+      { enabled: true, fieldKey: 'bookingCapacityPerSlot', group: 'booking', isSystem: false, name: 'Sức chứa / slot', order: 19, required: false, type: 'number' },
     ],
   },
 

@@ -12,6 +12,7 @@ import { getProductsListColors, type ProductsListColors } from '@/components/sit
 import { useCartConfig, useCheckoutConfig, useProductsListConfig } from '@/lib/experiences';
 import { useCustomerAuth } from '@/app/(site)/auth/context';
 import { notifyAddToCart, useCart } from '@/lib/cart';
+import { buildCategoryPath, buildModuleListPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 import { QuickAddVariantModal } from '@/components/products/QuickAddVariantModal';
 import { ProductImageFrameOverlay, useProductFrameConfig } from '@/components/shared/ProductImageFrameBox';
 import { ChevronDown, Heart, Package, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react';
@@ -201,6 +202,8 @@ function ProductsContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
 
   const saleMode = useMemo<ProductsSaleMode>(() => {
     const value = saleModeSetting?.value;
@@ -258,12 +261,19 @@ function ProductsContent() {
     [visibleCategories, categories]
   );
 
+  const categorySlugFromPath = useMemo(() => {
+    if (routeMode !== 'unified') {return null;}
+    const segment = pathname.split('/').filter(Boolean)[0];
+    if (!segment || segment === 'products') {return null;}
+    return segment;
+  }, [pathname, routeMode]);
+
   const categoryFromUrl = useMemo(() => {
-    const catSlug = searchParams.get('category');
+    const catSlug = categorySlugFromPath ?? searchParams.get('category');
     if (!catSlug || categoryOptions.length === 0) {return null;}
     const matchedCategory = categoryOptions.find((c) => c.slug === catSlug);
     return matchedCategory?._id ?? null;
-  }, [searchParams, categoryOptions]);
+  }, [categorySlugFromPath, searchParams, categoryOptions]);
 
   const activeCategory = categoryFromUrl;
 
@@ -357,14 +367,20 @@ function ProductsContent() {
     if (categoryId && categoryOptions.length > 0) {
       const category = categoryOptions.find(c => c._id === categoryId);
       if (category) {
+        if (routeMode === 'unified') {
+          router.push(buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'products' }), { scroll: false });
+          return;
+        }
         params.set('category', category.slug);
       }
     } else {
       params.delete('category');
     }
-    const newUrl = params.toString() ? `/products?${params.toString()}` : '/products';
+    const newUrl = params.toString()
+      ? `${buildModuleListPath('products')}?${params.toString()}`
+      : buildModuleListPath('products');
     router.push(newUrl, { scroll: false });
-  }, [searchParams, categoryOptions, router]);
+  }, [searchParams, categoryOptions, router, routeMode]);
 
   const handlePageSizeChange = useCallback((value: number) => {
     setPageSizeOverride(value);
@@ -386,15 +402,19 @@ function ProductsContent() {
   }, [searchParams, pathname, router]);
 
   useEffect(() => {
-    const catSlug = searchParams.get('category');
+    const catSlug = categorySlugFromPath ?? searchParams.get('category');
     if (!catSlug || categoryOptions.length === 0) {return;}
     const hasMatch = categoryOptions.some((category) => category.slug === catSlug);
     if (hasMatch) {return;}
+    if (routeMode === 'unified' && categorySlugFromPath) {
+      router.replace(buildModuleListPath('products'), { scroll: false });
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.delete('category');
     const nextUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
     router.replace(nextUrl, { scroll: false });
-  }, [categoryOptions, pathname, router, searchParams]);
+  }, [categoryOptions, categorySlugFromPath, pathname, router, routeMode, searchParams]);
 
 
   const filterKey = `${activeCategory ?? ''}|${debouncedSearchQuery}|${sortBy}|${postsPerPage}`;

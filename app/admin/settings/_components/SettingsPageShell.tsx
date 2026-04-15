@@ -12,6 +12,7 @@ import { ModuleGuard } from '../../components/ModuleGuard';
 import { SettingsImageUploader } from '../../components/SettingsImageUploader';
 import { TagInput } from '../../components/TagInput';
 import MapLocationPicker from '../MapLocationPicker';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 
 type SettingsSection = 'site' | 'contact' | 'seo';
 
@@ -873,26 +874,36 @@ function SettingsContent({ section }: { section: SettingsSection }) {
         </Card>
       )}
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <span className={cn("text-sm", hasChanges ? "text-amber-600 dark:text-amber-400" : "text-slate-500")}>
-          {hasChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
-        </span>
-        <Button
-          variant="accent"
-          onClick={handleSave}
-          disabled={isSaving || !hasChanges}
-          className={!hasChanges && !isSaving
-            ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-            : undefined}
-        >
-          {isSaving ? (
-            <Loader2 size={16} className="mr-2 animate-spin" />
-          ) : (
-            <Save size={16} className="mr-2" />
-          )}
-          {isSaving ? 'Đang lưu...' : hasChanges ? 'Lưu thay đổi' : 'Đã lưu'}
-        </Button>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSaving}
+        submitLabel="Lưu thay đổi"
+        hasChanges={hasChanges}
+        submitType="button"
+        onClickSave={handleSave}
+        align="between"
+      >
+        <>
+          <span className={cn("text-sm", hasChanges ? "text-amber-600 dark:text-amber-400" : "text-slate-500")}>
+            {hasChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
+          </span>
+          <Button
+            type="button"
+            variant="accent"
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className={!hasChanges && !isSaving
+              ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+              : undefined}
+          >
+            {isSaving ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <Save size={16} className="mr-2" />
+            )}
+            {isSaving ? 'Đang lưu...' : hasChanges ? 'Lưu thay đổi' : 'Đã lưu'}
+          </Button>
+        </>
+      </HomeComponentStickyFooter>
     </div>
   );
 }

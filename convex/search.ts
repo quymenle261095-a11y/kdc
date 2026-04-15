@@ -114,27 +114,64 @@ export const autocomplete = query({
         : Promise.resolve([]),
     ]);
 
+    const routeModeSetting = await ctx.db
+      .query("settings")
+      .withIndex("by_key", (q) => q.eq("key", "ia_route_mode"))
+      .unique();
+    const routeMode = routeModeSetting?.value === "namespace" ? "namespace" : "unified";
+
+    const postCategories = await Promise.all(posts.map((item) => ctx.db.get(item.categoryId)));
+    const productCategories = await Promise.all(products.map((item) => ctx.db.get(item.categoryId)));
+    const serviceCategories = await Promise.all(services.map((item) => ctx.db.get(item.categoryId)));
+
+    const postCategoryMap = new Map(postCategories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+    const productCategoryMap = new Map(productCategories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+    const serviceCategoryMap = new Map(serviceCategories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    const buildDetailUrl = (params: {
+      moduleKey: "posts" | "products" | "services";
+      slug: string;
+      categorySlug?: string;
+    }) => {
+      if (routeMode === "unified" && params.categorySlug) {
+        return `/${params.categorySlug}/${params.slug}`;
+      }
+      return `/${params.moduleKey}/${params.slug}`;
+    };
+
     return {
       posts: buildSuggestions(
         posts,
         'post',
         (item) => item.title,
         (item) => item.thumbnail ?? undefined,
-        (item) => `/posts/${item.slug}`,
+        (item) => buildDetailUrl({
+          moduleKey: "posts",
+          slug: item.slug,
+          categorySlug: postCategoryMap.get(item.categoryId)?.slug,
+        }),
       ),
       products: buildSuggestions(
         products,
         'product',
         (item) => item.name,
         (item) => item.image ?? item.images?.[0],
-        (item) => `/products/${item.slug}`,
+        (item) => buildDetailUrl({
+          moduleKey: "products",
+          slug: item.slug,
+          categorySlug: productCategoryMap.get(item.categoryId)?.slug,
+        }),
       ),
       services: buildSuggestions(
         services,
         'service',
         (item) => item.title,
         (item) => item.thumbnail ?? undefined,
-        (item) => `/services/${item.slug}`,
+        (item) => buildDetailUrl({
+          moduleKey: "services",
+          slug: item.slug,
+          categorySlug: serviceCategoryMap.get(item.categoryId)?.slug,
+        }),
       ),
     };
   },

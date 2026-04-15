@@ -45,6 +45,12 @@ type PostsDetailConfig = PostDetailLayoutConfig & {
   layoutStyle: PostDetailLayoutStyle;
 };
 
+type BookingExperienceConfig = {
+  showLegend: boolean;
+  showCapacityHint: boolean;
+  showServiceSelect: boolean;
+};
+
 const DEFAULT_POST_DETAIL_CONFIG: PostDetailLayoutConfig = {
   showAuthor: true,
   showShare: true,
@@ -131,6 +137,19 @@ export function usePostsDetailConfig(): PostsDetailConfig {
       ...raw,
     };
   }, [experienceSetting?.value, legacyStyleSetting?.value]);
+}
+
+export function useBookingConfig(): BookingExperienceConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'booking_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as Partial<BookingExperienceConfig> | undefined;
+    return {
+      showLegend: raw?.showLegend ?? true,
+      showCapacityHint: raw?.showCapacityHint ?? true,
+      showServiceSelect: raw?.showServiceSelect ?? true,
+    };
+  }, [experienceSetting?.value]);
 }
 
 type ProductsListConfig = {

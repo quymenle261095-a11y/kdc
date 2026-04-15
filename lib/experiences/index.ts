@@ -19,6 +19,7 @@ export {
   useCheckoutConfig,
   useAccountOrdersConfig,
   useAccountProfileConfig,
+  useBookingConfig,
   useErrorPagesConfig,
   useOrderStatuses,
   usePostsListConfig,

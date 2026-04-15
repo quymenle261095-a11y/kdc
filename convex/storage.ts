@@ -1,5 +1,27 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getExtensionFromMime } from "../lib/image/uploadNaming";
+
+const getExtensionFromFilename = (filename: string) => {
+  const match = filename.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match?.[1];
+};
+
+const resolveExtension = (filename: string, mimeType: string) => {
+  const byName = getExtensionFromFilename(filename);
+  if (byName) {
+    return byName;
+  }
+  const ext = getExtensionFromMime(mimeType);
+  if (ext !== "bin") {
+    return ext;
+  }
+  const fallback = mimeType.split("/")[1];
+  if (!fallback) {
+    return "bin";
+  }
+  return fallback.replace("+xml", "").replace("jpeg", "jpg");
+};
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -29,9 +51,11 @@ export const saveImage = mutation({
     folder: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const extension = resolveExtension(args.filename, args.mimeType);
     const id = await ctx.db.insert("images", {
       storageId: args.storageId,
       filename: args.filename,
+      extension,
       mimeType: args.mimeType,
       size: args.size,
       width: args.width,

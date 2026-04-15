@@ -7,6 +7,13 @@ export const MIME_EXTENSION_MAP: Record<string, string> = {
   'image/svg+xml': 'svg',
 };
 
+const EXTENSION_MIME_MAP: Record<string, string> = Object.entries(MIME_EXTENSION_MAP).reduce((acc, [mime, ext]) => {
+  acc[ext] = mime;
+  return acc;
+}, {} as Record<string, string>);
+
+EXTENSION_MIME_MAP.jpeg = 'image/jpeg';
+
 export type ImageNamingStyle = 'legacy' | 'slug-index';
 
 export type ImageNamingContext = {
@@ -32,6 +39,11 @@ export function slugify(value: string): string {
 
 export function getExtensionFromMime(mimeType: string): string {
   return MIME_EXTENSION_MAP[mimeType] ?? 'bin';
+}
+
+export function getMimeFromExtension(extension: string): string | undefined {
+  const clean = extension.replace(/^\./, '').toLowerCase();
+  return EXTENSION_MIME_MAP[clean];
 }
 
 export function resolveNamingContext(

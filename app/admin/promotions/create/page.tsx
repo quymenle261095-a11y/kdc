@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 
 const MODULE_KEY = 'promotions';
 
@@ -633,16 +634,23 @@ export default function PromotionCreatePage() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/promotions'); }}>Hủy bỏ</Button>
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" onClick={() =>{  setStatus('Inactive'); }}>Lưu nháp</Button>
-          <Button type="submit" className="bg-pink-600 hover:bg-pink-500" disabled={isSubmitting}>
-            {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-            Tạo khuyến mãi
-          </Button>
-        </div>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting}
+        submitLabel="Tạo khuyến mãi"
+        onCancel={() =>{  router.push('/admin/promotions'); }}
+        disableSave={isSubmitting}
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/promotions'); }}>Hủy bỏ</Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() =>{  setStatus('Inactive'); }}>Lưu nháp</Button>
+            <Button type="submit" className="bg-pink-600 hover:bg-pink-500" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
+              Tạo khuyến mãi
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
     </form>
   );
 }

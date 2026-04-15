@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   LogOut,
+  Map,
   type LucideIcon,
   Menu,
   Moon,
@@ -168,6 +169,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
     if (pathname.includes('experiences')) {return t.pages.experiences;}
     if (pathname.includes('integrations')) {return t.pages.analyticsIntegrations;}
     if (pathname.includes('seo')) {return t.pages.seoConfiguration;}
+    if (pathname.includes('ia')) {return t.pages.informationArchitecture;}
     return 'System';
   };
 
@@ -203,6 +205,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
           <SidebarItem href="/system/data" icon={Database} label="Data Manager" collapsed={collapsed} />
           <SidebarItem href="/system/integrations" icon={BarChart3} label={t.sidebar.analytics} collapsed={collapsed} />
           <SidebarItem href="/system/seo" icon={Globe} label={t.sidebar.seo} collapsed={collapsed} />
+          <SidebarItem href="/system/ia" icon={Map} label={t.sidebar.ia} collapsed={collapsed} />
         </nav>
 
         {/* Sidebar Footer */}

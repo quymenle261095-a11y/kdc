@@ -15,9 +15,11 @@ import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $createHeadingNode, $createQuoteNode, HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, ListItemNode, ListNode } from '@lexical/list';
-import { AutoLinkNode, LinkNode } from '@lexical/link';
+import { AutoLinkNode, LinkNode, TOGGLE_LINK_COMMAND, $isLinkNode } from '@lexical/link';
 import type {
-  LexicalNode} from 'lexical';
+  LexicalNode,
+  RangeSelection,
+} from 'lexical';
 import { 
   $createParagraphNode, 
   $getRoot, 
@@ -26,23 +28,30 @@ import {
   $isElementNode,
   $isRangeSelection,
   $isTextNode,
+  CAN_REDO_COMMAND,
+  CAN_UNDO_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
   FORMAT_ELEMENT_COMMAND,
   FORMAT_TEXT_COMMAND,
+  REDO_COMMAND,
   SELECTION_CHANGE_COMMAND,
+  $setSelection,
+  UNDO_COMMAND,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import { $getSelectionStyleValueForProperty, $patchStyleText, $setBlocksType } from '@lexical/selection';
 import { 
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, ChevronDown, Heading1, 
   Heading2, Image as ImageIcon, Italic, List as ListIcon, ListOrdered, Loader2, Palette, 
-  Quote, Type, Underline 
+  Quote, Type, Underline, Undo2, Redo2, Link2, Youtube
 } from 'lucide-react';
 import { cn } from './ui';
 import { toast } from 'sonner';
 import ImagesPlugin, { INSERT_IMAGE_COMMAND, ImageNode } from './nodes/ImageNode';
+import YouTubePlugin, { INSERT_YOUTUBE_COMMAND, YouTubeNode } from './nodes/YouTubeNode';
 import { prepareImageForUpload, validateImageFile } from '@/lib/image/uploadPipeline';
 import { resolveNamingContext } from '@/lib/image/uploadNaming';
+import { mergeRegister } from '@lexical/utils';
 
 
 
@@ -90,13 +99,35 @@ const FONT_SIZE_OPTIONS = [
   ['30px', '30px'],
 ];
 
+const normalizeUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {return null;}
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) {return trimmed;}
+  return `https://${trimmed}`;
+};
+
+const getSelectedNode = (selection: ReturnType<typeof $getSelection>) => {
+  if (!$isRangeSelection(selection)) {
+    return selection?.getNodes()[0] ?? null;
+  }
+  const anchor = selection.anchor.getNode();
+  const focus = selection.focus.getNode();
+  if (anchor === focus) {
+    return anchor;
+  }
+  return selection.isBackward() ? focus : anchor;
+};
+
 interface ToolbarPluginProps {
   onImageUpload?: (file: File) => Promise<string | null>;
+  onRequestLinkEdit?: () => void;
 }
 
-const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
+const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload, onRequestLinkEdit }) => {
   const [editor] = useLexicalComposerContext();
   const [isUploading, setIsUploading] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [activeState, setActiveState] = useState({
     align: 'left',
     blockType: 'paragraph',
@@ -105,6 +136,7 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
     fontFamily: 'Inter',
     fontSize: '15px',
     italic: false,
+    link: false,
     underline: false,
   });
 
@@ -113,6 +145,9 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
     if ($isRangeSelection(selection)) {
       const anchorNode = selection.anchor.getNode();
       const element = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
+      const selectedNode = getSelectedNode(selection);
+      const parentNode = selectedNode?.getParent();
+      const isLink = Boolean($isLinkNode(parentNode) || $isLinkNode(selectedNode));
 
       setActiveState({
         align: String(element.getFormat()) || 'left',
@@ -122,6 +157,7 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
         fontFamily: $getSelectionStyleValueForProperty(selection, 'font-family', 'Inter'),
         fontSize: $getSelectionStyleValueForProperty(selection, 'font-size', '15px'),
         italic: selection.hasFormat('italic'),
+        link: isLink,
         underline: selection.hasFormat('underline'),
       });
     }
@@ -142,6 +178,25 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
       });
     }), [editor, updateToolbar]);
 
+  useEffect(() => mergeRegister(
+      editor.registerCommand(
+        CAN_UNDO_COMMAND,
+        (payload) => {
+          setCanUndo(payload);
+          return false;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+      editor.registerCommand(
+        CAN_REDO_COMMAND,
+        (payload) => {
+          setCanRedo(payload);
+          return false;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+    ), [editor]);
+
   const applyStyleText = (styles: Record<string, string>) => {
     editor.update(() => {
       const selection = $getSelection();
@@ -161,6 +216,15 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
 
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     applyStyleText({ 'color': e.target.value });
+  };
+
+  const parseYouTubeId = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {return null;}
+    const match = trimmed.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i,
+    );
+    return match?.[1] ?? null;
   };
 
   const formatBlock = (type: string) => {
@@ -189,6 +253,39 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
     } else if (type === 'ol') {
       editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
     }
+  };
+
+  const handleToggleLink = () => {
+    let canOpen = false;
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        return;
+      }
+      if (activeState.link || !selection.isCollapsed()) {
+        canOpen = true;
+      }
+    });
+    if (!canOpen) {
+      toast.error('Vui lòng chọn đoạn văn bản để gắn link');
+      return;
+    }
+    onRequestLinkEdit?.();
+  };
+
+  const handleInsertYouTube = () => {
+    if (!editor.hasNodes([YouTubeNode])) {
+      toast.error('YouTube chưa được cấu hình, vui lòng tải lại trang.');
+      return;
+    }
+    const url = window.prompt('Dán URL YouTube');
+    if (!url) {return;}
+    const videoId = parseYouTubeId(url);
+    if (!videoId) {
+      toast.error('URL YouTube không hợp lệ');
+      return;
+    }
+    editor.dispatchCommand(INSERT_YOUTUBE_COMMAND, { videoId });
   };
 
   const handleImageUpload = async () => {
@@ -220,14 +317,18 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
     input.click();
   };
 
-  const ToolbarBtn = ({ active, onClick, children, title }: { active?: boolean; onClick: () => void; children: React.ReactNode; title: string }) => (
+  const ToolbarBtn = ({ active, onClick, children, title, disabled }: { active?: boolean; onClick: () => void; children: React.ReactNode; title: string; disabled?: boolean }) => (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        if (!disabled) {onClick();}
+      }}
       title={title}
+      disabled={disabled}
       className={cn(
-        "p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400 flex items-center justify-center min-w-[28px]",
-        active ? "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-inner" : "hover:shadow-sm"
+        "p-1.5 rounded-md transition-colors text-slate-600 dark:text-slate-400 flex items-center justify-center min-w-[28px]",
+        disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-slate-200 dark:hover:bg-slate-700 hover:shadow-sm",
+        active ? "bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-inner" : ""
       )}
     >
       {children}
@@ -238,6 +339,16 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
 
   return (
     <div className="flex flex-wrap items-center gap-1 p-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-t-lg sticky top-0 z-10">
+      <div className="flex items-center gap-0.5">
+        <ToolbarBtn onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} active={false} title="Hoàn tác" disabled={!canUndo}>
+          <Undo2 size={16} />
+        </ToolbarBtn>
+        <ToolbarBtn onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)} active={false} title="Làm lại" disabled={!canRedo}>
+          <Redo2 size={16} />
+        </ToolbarBtn>
+      </div>
+
+      <Divider />
       
       <div className="flex items-center gap-1 mr-1">
         <div className="relative">
@@ -289,6 +400,9 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
         </ToolbarBtn>
         <ToolbarBtn onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} active={activeState.underline} title="Gạch chân (Ctrl+U)">
           <Underline size={16} />
+        </ToolbarBtn>
+        <ToolbarBtn onClick={handleToggleLink} active={activeState.link} title="Chèn/Bỏ link">
+          <Link2 size={16} />
         </ToolbarBtn>
       </div>
 
@@ -343,6 +457,199 @@ const ToolbarPlugin: React.FC<ToolbarPluginProps> = ({ onImageUpload }) => {
         <ToolbarBtn onClick={handleImageUpload} title="Tải ảnh lên">
           {isUploading ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
         </ToolbarBtn>
+        <ToolbarBtn onClick={handleInsertYouTube} title="Chèn YouTube">
+          <Youtube size={16} />
+        </ToolbarBtn>
+      </div>
+    </div>
+  );
+};
+
+interface FloatingLinkEditorProps {
+  anchorElem: HTMLElement | null;
+  openSignal: number;
+}
+
+const FloatingLinkEditor: React.FC<FloatingLinkEditorProps> = ({ anchorElem, openSignal }) => {
+  const [editor] = useLexicalComposerContext();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastSelectionRef = useRef<RangeSelection | null>(null);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [editedUrl, setEditedUrl] = useState('');
+  const [isVisible, setIsVisible] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+
+  const getSelectionRect = useCallback(() => {
+    if (!anchorElem) {
+      return null;
+    }
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) {
+      return null;
+    }
+    const domRange = domSelection.getRangeAt(0);
+    if (!anchorElem.contains(domRange.startContainer)) {
+      return null;
+    }
+    return domRange.getBoundingClientRect();
+  }, [anchorElem]);
+
+  const positionEditor = useCallback((rect: DOMRect) => {
+    if (!anchorElem) {
+      return;
+    }
+    const anchorRect = anchorElem.getBoundingClientRect();
+    const top = rect.bottom - anchorRect.top + anchorElem.scrollTop + 8;
+    const left = rect.left - anchorRect.left + anchorElem.scrollLeft + rect.width / 2;
+    const safeLeft = Math.max(8, Math.min(left, anchorRect.width - 8));
+    setPosition({ top, left: safeLeft });
+  }, [anchorElem]);
+
+  const updateEditor = useCallback(() => {
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        setIsVisible(false);
+        return;
+      }
+
+      const selectedNode = getSelectedNode(selection);
+      const parentNode = selectedNode?.getParent();
+      const linkNode = $isLinkNode(parentNode) ? parentNode : $isLinkNode(selectedNode) ? selectedNode : null;
+      const nextUrl = linkNode?.getURL() ?? '';
+      const shouldShow = Boolean(linkNode) || (isEditing && !selection.isCollapsed());
+
+      if (!shouldShow) {
+        setIsVisible(false);
+        return;
+      }
+
+      lastSelectionRef.current = selection;
+      setIsVisible(true);
+
+      if (!isEditing) {
+        setLinkUrl(nextUrl);
+        setEditedUrl(nextUrl);
+      } else if (linkNode && nextUrl !== linkUrl) {
+        setLinkUrl(nextUrl);
+      }
+
+      const selectionRect = getSelectionRect();
+      if (selectionRect) {
+        positionEditor(selectionRect);
+      }
+    });
+  }, [editor, getSelectionRect, isEditing, linkUrl, positionEditor]);
+
+  useEffect(() => mergeRegister(
+      editor.registerUpdateListener(() => {
+        updateEditor();
+      }),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          updateEditor();
+          return false;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+    ), [editor, updateEditor]);
+
+  useEffect(() => {
+    if (!openSignal) {
+      return;
+    }
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        return;
+      }
+      const selectedNode = getSelectedNode(selection);
+      const parentNode = selectedNode?.getParent();
+      const linkNode = $isLinkNode(parentNode) ? parentNode : $isLinkNode(selectedNode) ? selectedNode : null;
+      if (!linkNode && selection.isCollapsed()) {
+        return;
+      }
+      const nextUrl = linkNode?.getURL() ?? '';
+      setIsEditing(true);
+      setLinkUrl(nextUrl);
+      setEditedUrl(nextUrl);
+      setIsVisible(true);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    });
+  }, [editor, openSignal]);
+
+  const applyLink = useCallback(() => {
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) && lastSelectionRef.current) {
+        $setSelection(lastSelectionRef.current);
+      }
+      const normalized = normalizeUrl(editedUrl);
+      if (!normalized) {
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+        return;
+      }
+      editor.dispatchCommand(TOGGLE_LINK_COMMAND, normalized);
+    });
+    setIsEditing(false);
+    setIsVisible(false);
+  }, [editor, editedUrl]);
+
+  const removeLink = useCallback(() => {
+    editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+    setIsEditing(false);
+    setIsVisible(false);
+  }, [editor]);
+
+  if (!anchorElem || !isVisible) {
+    return null;
+  }
+
+  return (
+    <div
+      className="absolute z-20"
+      style={{ top: position.top, left: position.left, transform: 'translate(-50%, 0)' }}
+    >
+      <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 shadow-lg text-xs">
+        <input
+          ref={inputRef}
+          value={editedUrl}
+          onChange={(event) => setEditedUrl(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              applyLink();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setIsEditing(false);
+              setIsVisible(false);
+            }
+          }}
+          placeholder="Dán URL..."
+          className="w-56 bg-transparent text-slate-700 placeholder:text-slate-400 focus:outline-none"
+        />
+        <button
+          type="button"
+          className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100"
+          onClick={applyLink}
+        >
+          Áp dụng
+        </button>
+        {linkUrl && (
+          <button
+            type="button"
+            className="rounded px-1.5 py-0.5 text-rose-600 hover:bg-rose-50"
+            onClick={removeLink}
+          >
+            Gỡ
+          </button>
+        )}
       </div>
     </div>
   );
@@ -452,6 +759,9 @@ export const LexicalEditor: React.FC<LexicalEditorProps> = ({ onChange, initialC
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
   const saveImage = useMutation(api.storage.saveImage);
   const uploadCounterRef = useRef(1);
+  const composerKey = 'lexical-editor-v2';
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const [linkEditorSignal, setLinkEditorSignal] = useState(0);
   
   const initialConfig = {
     namespace: 'MyEditor',
@@ -462,7 +772,8 @@ export const LexicalEditor: React.FC<LexicalEditorProps> = ({ onChange, initialC
       ListItemNode, 
       AutoLinkNode, 
       LinkNode,
-      ImageNode
+      ImageNode,
+      YouTubeNode
     ],
     onError: (error: Error) =>{  console.error(error); },
     theme,
@@ -515,9 +826,9 @@ export const LexicalEditor: React.FC<LexicalEditorProps> = ({ onChange, initialC
 
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 shadow-sm w-full editor-shell">
-      <LexicalComposer initialConfig={initialConfig}>
-        <ToolbarPlugin onImageUpload={handleImageUpload} />
-        <div className="relative min-h-[400px] editor-container">
+      <LexicalComposer key={composerKey} initialConfig={initialConfig}>
+        <ToolbarPlugin onImageUpload={handleImageUpload} onRequestLinkEdit={() => setLinkEditorSignal((value) => value + 1)} />
+        <div ref={editorContainerRef} className="relative min-h-[400px] editor-container">
           <RichTextPlugin
             contentEditable={<ContentEditable className="editor-input outline-none h-full min-h-[400px] p-4" />}
             placeholder={<div className="editor-placeholder absolute top-4 left-4 text-slate-400 pointer-events-none">Bắt đầu viết nội dung tuyệt vời của bạn...</div>}
@@ -525,10 +836,12 @@ export const LexicalEditor: React.FC<LexicalEditorProps> = ({ onChange, initialC
           />
           <HistoryPlugin />
           <ListPlugin />
-          <LinkPlugin />
+          <LinkPlugin validateUrl={(url) => Boolean(normalizeUrl(url))} />
           <ImagesPlugin />
+          <YouTubePlugin />
           <PasteImagePlugin onImageUpload={handleImageUpload} />
           <InitialContentPlugin initialContent={initialContent} resetKey={resetKey} />
+          <FloatingLinkEditor anchorElem={editorContainerRef.current} openSignal={linkEditorSignal} />
           <OnChangePlugin onChange={(editorState, editor) => {
              editorState.read(() => {
                 const html = $generateHtmlFromNodes(editor, null);
@@ -548,7 +861,10 @@ export const LexicalEditor: React.FC<LexicalEditorProps> = ({ onChange, initialC
         .editor-text-bold { font-weight: bold; }
         .editor-text-italic { font-style: italic; }
         .editor-text-underline { text-decoration: underline; }
+        .editor-input a { color: #2563eb; }
         .editor-input img { max-width: 100%; height: auto; display: block; margin: 8px 0; border-radius: 4px; }
+        .editor-youtube { position: relative; padding-bottom: 56.25%; height: 0; margin: 12px 0; }
+        .editor-youtube iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 6px; }
       `}</style>
     </div>
   );

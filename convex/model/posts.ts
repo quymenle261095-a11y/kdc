@@ -1,4 +1,4 @@
-import { ConvexError } from "convex/values";
+import { resolveUniqueSlug } from "../lib/iaSlugs";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -166,12 +166,10 @@ export async function create(
     publishedAt?: number;
   }
 ): Promise<Id<"posts">> {
-  if (await isSlugExists(ctx, { slug: args.slug })) {
-    throw new ConvexError({
-      code: "DUPLICATE_SLUG",
-      message: "Slug đã tồn tại, vui lòng chọn slug khác",
-    });
-  }
+  const resolvedSlug = await resolveUniqueSlug(ctx, {
+    scope: "record",
+    slug: args.slug,
+  });
 
   const order = args.order ?? (await getNextOrder(ctx));
   const status = args.status ?? "Draft";
@@ -198,7 +196,7 @@ export async function create(
     metaTitle: args.metaTitle,
     order,
     publishedAt: resolvedPublishedAt,
-    slug: args.slug,
+    slug: resolvedSlug.slug,
     status,
     thumbnail: args.thumbnail,
     thumbnailStorageId: args.thumbnailStorageId ?? null,
@@ -236,11 +234,13 @@ export async function update(
   const post = await getByIdOrThrow(ctx, { id: args.id });
 
   if (args.slug && args.slug !== post.slug) {
-    if (await isSlugExists(ctx, { excludeId: args.id, slug: args.slug })) {
-      throw new ConvexError({
-        code: "DUPLICATE_SLUG",
-        message: "Slug đã tồn tại, vui lòng chọn slug khác",
-      });
+    const resolvedSlug = await resolveUniqueSlug(ctx, {
+      scope: "record",
+      slug: args.slug,
+      exclude: { id: args.id, table: "posts" },
+    });
+    if (resolvedSlug.slug !== args.slug) {
+      (args as { slug?: string }).slug = resolvedSlug.slug;
     }
   }
 

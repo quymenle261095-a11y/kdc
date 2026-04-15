@@ -542,6 +542,7 @@ export default defineSchema({
   // 14. images - Thư viện media
   images: defineTable({
     alt: v.optional(v.string()),
+    extension: v.optional(v.string()),
     filename: v.string(),
     folder: v.optional(v.string()),
     height: v.optional(v.number()),
@@ -910,6 +911,12 @@ export default defineSchema({
     categoryId: v.id("serviceCategories"),
     price: v.optional(v.number()),
     duration: v.optional(v.string()),
+    bookingEnabled: v.optional(v.boolean()),
+    bookingDurationMin: v.optional(v.number()),
+    bookingSlotIntervalMin: v.optional(v.number()),
+    bookingCapacityPerSlot: v.optional(v.number()),
+    bookingSlotTemplateDefault: v.optional(v.array(v.string())),
+    bookingSlotTemplateByWeekday: v.optional(v.record(v.string(), v.array(v.string()))),
     status: v.union(
       v.literal("Published"),
       v.literal("Draft"),
@@ -929,7 +936,28 @@ export default defineSchema({
     .index("by_status_views", ["status", "views"])
     .index("by_status_order", ["status", "order"])
     .index("by_status_featured", ["status", "featured"])
+    .index("by_booking_enabled", ["bookingEnabled"])
     .searchIndex("search_title", { filterFields: ["status", "categoryId"], searchField: "title" }),
+
+  // 27a. bookings - Đặt lịch
+  bookings: defineTable({
+    serviceId: v.id("services"),
+    customerName: v.string(),
+    bookingDate: v.string(), // "YYYY-MM-DD"
+    slotTime: v.string(), // "HH:mm"
+    timezone: v.string(),
+    status: v.union(
+      v.literal("Pending"),
+      v.literal("Confirmed"),
+      v.literal("Cancelled")
+    ),
+    note: v.optional(v.string()),
+    bookingFields: v.optional(v.record(v.string(), v.string())),
+  })
+    .index("by_service_date", ["serviceId", "bookingDate"])
+    .index("by_service_date_slot", ["serviceId", "bookingDate", "slotTime"])
+    .index("by_status_date", ["status", "bookingDate"])
+    .index("by_date_slot", ["bookingDate", "slotTime"]),
 
   // 28. promotions - Khuyến mãi & Voucher
   promotions: defineTable({

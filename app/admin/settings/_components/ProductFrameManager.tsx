@@ -17,6 +17,7 @@ import {
   type ProductImageFrameLogoConfig,
   type LegacyProductImageFrameLogoConfig,
 } from '@/lib/products/product-frame';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import {
   getProductImageAspectRatioCssValue,
   getProductImageAspectRatioLabel,
@@ -1217,23 +1218,32 @@ export function ProductFrameManager() {
           </div>
         )}
 
-        <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-          <span className={cn("text-sm", settingsChanged ? "text-amber-600 dark:text-amber-400" : "text-slate-500")}>
-            {settingsChanged ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
-          </span>
-          <Button
-            type="button"
-            variant="accent"
-            onClick={handleSaveSettings}
-            disabled={settingsStatus === 'saving' || !settingsChanged}
-            className={!settingsChanged && settingsStatus !== 'saving'
-              ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-              : undefined}
-          >
-            {settingsStatus === 'saving' && <Loader2 size={16} className="animate-spin mr-2" />}
-            {settingsStatus === 'saving' ? 'Đang lưu...' : settingsChanged ? 'Lưu thay đổi' : 'Đã lưu'}
-          </Button>
-        </div>
+        <HomeComponentStickyFooter
+          isSubmitting={settingsStatus === 'saving'}
+          submitLabel="Lưu thay đổi"
+          hasChanges={settingsChanged}
+          submitType="button"
+          onClickSave={handleSaveSettings}
+          align="between"
+        >
+          <>
+            <span className={cn("text-sm", settingsChanged ? "text-amber-600 dark:text-amber-400" : "text-slate-500")}>
+              {settingsChanged ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
+            </span>
+            <Button
+              type="button"
+              variant="accent"
+              onClick={handleSaveSettings}
+              disabled={settingsStatus === 'saving' || !settingsChanged}
+              className={!settingsChanged && settingsStatus !== 'saving'
+                ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+                : undefined}
+            >
+              {settingsStatus === 'saving' && <Loader2 size={16} className="animate-spin mr-2" />}
+              {settingsStatus === 'saving' ? 'Đang lưu...' : settingsChanged ? 'Lưu thay đổi' : 'Đã lưu'}
+            </Button>
+          </>
+        </HomeComponentStickyFooter>
       </CardContent>
     </Card>
   );

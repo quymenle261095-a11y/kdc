@@ -28,6 +28,7 @@ import {
   Label,
   cn,
 } from '@/app/admin/components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 
 type AssignmentMode = 'products' | 'categories';
 type TemplateStatus = 'active' | 'inactive';
@@ -657,28 +658,37 @@ export function ProductSupplementalContentManager() {
         ) : null}
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <Button type="button" variant="ghost" onClick={() => resetForm(selectedTemplate)}>
-          Hủy
-        </Button>
-        <div className="flex items-center gap-2">
-          <div className="hidden md:block text-xs text-slate-500">Backend sẽ chặn template bị trùng sản phẩm.</div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={!canEdit || !selectedTemplateId || isDeleting}
-            className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-900/60 dark:hover:bg-red-950/30"
-          >
-            {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Xóa
+      <HomeComponentStickyFooter
+        isSubmitting={isSaving}
+        submitLabel="Lưu template"
+        onCancel={() => resetForm(selectedTemplate)}
+        submitType="button"
+        onClickSave={handleSave}
+        disableSave={!canEdit || isSaving}
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() => resetForm(selectedTemplate)}>
+            Hủy
           </Button>
-          <Button type="button" onClick={handleSave} disabled={!canEdit || isSaving} className="gap-2">
-            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Lưu template
-          </Button>
-        </div>
-      </div>
+          <div className="flex items-center gap-2">
+            <div className="hidden md:block text-xs text-slate-500">Backend sẽ chặn template bị trùng sản phẩm.</div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={!canEdit || !selectedTemplateId || isDeleting}
+              className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-900/60 dark:hover:bg-red-950/30"
+            >
+              {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Xóa
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={!canEdit || isSaving} className="gap-2">
+              {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Lưu template
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent className="max-w-md">

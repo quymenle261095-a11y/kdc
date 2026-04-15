@@ -44,6 +44,7 @@ const ADMIN_MENU_ITEMS: MenuSuggestion[] = [
   { id: 'roles', title: 'Phân quyền', href: '/admin/roles', keywords: ['phan quyen', 'roles'] },
   { id: 'menus', title: 'Website', href: '/admin/menus', keywords: ['website', 'menu'] },
   { id: 'home-components', title: 'Giao diện trang chủ', href: '/admin/home-components', keywords: ['giao dien', 'homepage'] },
+  { id: 'trust-pages', title: 'Trang tin cậy', href: '/admin/trust-pages', keywords: ['trust pages', 'trang tin cay', 'chinh sach', 'policy', 'bao mat', 'dieu khoan'] },
   { id: 'media', title: 'Thư viện Media', href: '/admin/media', keywords: ['media', 'thu vien'] },
   { id: 'settings', title: 'Cài đặt', href: '/admin/settings', keywords: ['cai dat', 'settings'] },
 ];

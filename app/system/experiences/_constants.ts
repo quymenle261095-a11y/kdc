@@ -5,6 +5,7 @@ import {
   CreditCard,
   FileText,
   Heart,
+  CalendarDays,
   Mail,
   Menu,
   MessageSquare,
@@ -39,6 +40,12 @@ export const systemExperiences: SystemExperience[] = [
     href: '/system/experiences/services-list',
     icon: Briefcase,
     title: 'Danh sách dịch vụ',
+  },
+  {
+    description: 'Form đặt lịch, lịch trống và hiển thị public.',
+    href: '/system/experiences/booking',
+    icon: CalendarDays,
+    title: 'Đặt lịch',
   },
   {
     description: 'Layout, author info, comments cho chi tiết dịch vụ.',

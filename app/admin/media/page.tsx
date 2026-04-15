@@ -516,6 +516,17 @@ function MediaContent() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
+                      {media.url && (
+                        <a
+                          className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                          href={media.url}
+                          rel="noreferrer"
+                          target="_blank"
+                          title="Mở tab mới"
+                        >
+                          <Eye size={16} className="text-slate-400" />
+                        </a>
+                      )}
                       <button
                         className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                         onClick={ async () => handleCopyUrl(media.url, media._id)}

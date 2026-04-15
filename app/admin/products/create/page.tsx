@@ -20,6 +20,7 @@ import { stripHtml, truncateText } from '@/lib/seo';
 import { ProductCategoryCombobox } from '@/app/admin/products/components/ProductCategoryCombobox';
 import { QuickCreateCategoryModal } from '@/app/admin/products/components/QuickCreateCategoryModal';
 import { resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 
 const MODULE_KEY = 'products';
 
@@ -664,16 +665,23 @@ function ProductCreateContent() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/products'); }}>Hủy bỏ</Button>
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" onClick={() =>{  setStatus('Draft'); }}>Lưu nháp</Button>
-          <Button type="submit" variant="accent" disabled={isSubmitting}>
-            {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-            Tạo sản phẩm
-          </Button>
-        </div>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting}
+        submitLabel="Tạo sản phẩm"
+        onCancel={() =>{  router.push('/admin/products'); }}
+        disableSave={isSubmitting}
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/products'); }}>Hủy bỏ</Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() =>{  setStatus('Draft'); }}>Lưu nháp</Button>
+            <Button type="submit" variant="accent" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
+              Tạo sản phẩm
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
     </form>
     </>
   );
