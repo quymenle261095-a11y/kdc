@@ -5,6 +5,7 @@ import { DynamicFooter } from '@/components/site/DynamicFooter';
 import { Header, type HeaderInitialData } from '@/components/site/Header';
 import { CartDrawer } from '@/components/site/CartDrawer';
 import { SiteProviders } from '@/components/site/SiteProviders';
+import { GlobalSpeedDial } from '@/components/site/GlobalSpeedDial';
 
 export function SiteShell({
   children,
@@ -22,6 +23,7 @@ export function SiteShell({
           {children}
         </main>
         <DynamicFooter />
+        <GlobalSpeedDial />
       </div>
     </SiteProviders>
   );

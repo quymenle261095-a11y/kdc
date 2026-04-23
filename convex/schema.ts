@@ -603,6 +603,14 @@ export default defineSchema({
     .index("by_active_order", ["active", "order"])
     .index("by_type", ["type"]),
 
+  // 17a. homeComponentSnapshots - Snapshot bộ homepage để tái sử dụng liên dự án
+  homeComponentSnapshots: defineTable({
+    createdAt: v.number(),
+    label: v.string(),
+    payload: v.any(),
+    version: v.string(),
+  }).index("by_createdAt", ["createdAt"]),
+
   // 18. settings - Cấu hình hệ thống (Key-Value)
   settings: defineTable({
     group: v.string(),

@@ -535,11 +535,10 @@ export function Header({ initialData }: { initialData?: HeaderInitialData }) {
   }, [rootItems]);
   const isDeepMenuForItem = useCallback((itemId: Id<'menuItems'>) => (maxLevelByRootId.get(itemId) ?? 1) >= 4, [maxLevelByRootId]);
 
-  if (measureItemRefs.current.length !== rootItems.length) {
-    measureItemRefs.current = Array(rootItems.length).fill(null);
-  }
-
   useLayoutEffect(() => {
+    if (measureItemRefs.current.length !== rootItems.length) {
+      measureItemRefs.current = Array(rootItems.length).fill(null);
+    }
     if (!navRef.current || rootItems.length === 0) {
       setVisibleRootCount(rootItems.length);
       return;

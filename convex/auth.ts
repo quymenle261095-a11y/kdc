@@ -44,8 +44,7 @@ async function resolveAdminRoleId(ctx: MutationCtx) {
   return fallbackRole._id;
 }
 
-const TRIAL_DURATION_OPTIONS = [1, 7, 30, 90] as const;
-type TrialDurationDays = (typeof TRIAL_DURATION_OPTIONS)[number];
+type TrialDurationDays = 1 | 7 | 30 | 90;
 const trialDurationValidator = v.union(v.literal(1), v.literal(7), v.literal(30), v.literal(90));
 
 function resolveTrialMetadata(trialDurationDays?: TrialDurationDays) {

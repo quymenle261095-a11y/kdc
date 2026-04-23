@@ -9,8 +9,7 @@ import * as PostsModel from './model/posts';
 
 type SettingsMap = Map<string, unknown>;
 
-const TRUST_PAGE_ACTIONS = ['disabled', 'mapped', 'suggested', 'draft'] as const;
-type TrustPageAction = (typeof TRUST_PAGE_ACTIONS)[number];
+type TrustPageAction = 'disabled' | 'mapped' | 'suggested' | 'draft';
 
 const IA_GROUP = 'ia';
 

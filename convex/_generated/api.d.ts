@@ -22,6 +22,7 @@ import type * as customers from "../customers.js";
 import type * as dataManager from "../dataManager.js";
 import type * as homeComponentSystemConfig from "../homeComponentSystemConfig.js";
 import type * as homeComponents from "../homeComponents.js";
+import type * as homepageSnapshots from "../homepageSnapshots.js";
 import type * as homepageWizard from "../homepageWizard.js";
 import type * as ia from "../ia.js";
 import type * as kanban from "../kanban.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   dataManager: typeof dataManager;
   homeComponentSystemConfig: typeof homeComponentSystemConfig;
   homeComponents: typeof homeComponents;
+  homepageSnapshots: typeof homepageSnapshots;
   homepageWizard: typeof homepageWizard;
   ia: typeof ia;
   kanban: typeof kanban;
