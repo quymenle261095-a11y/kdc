@@ -5,6 +5,7 @@ import { Download, GripVertical, LayoutGrid, Loader2, Plus, Share2, Trash2 } fro
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
+import { IA_SETTINGS_KEYS } from '@/lib/ia/settings';
 import {
   Button,
   Card,
@@ -22,6 +23,7 @@ import {
 import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
 import { getFooterLayoutColors } from '../_lib/colors';
 import type { FooterBrandMode, FooterConfig, FooterColumn, FooterSocialLink } from '../_types';
+import { generateFooterConfigFromData } from '../_lib/auto-generate';
 
 interface FooterFormProps {
   value: FooterConfig;
@@ -139,14 +141,11 @@ const buildSuggestedColumns = (quickRouteOptions: QuickRouteOption[], columnCoun
 };
 
 export function FooterForm({ value, onChange, primary, secondary, mode }: FooterFormProps) {
-  const siteLogo = useQuery(api.settings.getByKey, { key: 'site_logo' });
-  const siteTagline = useQuery(api.settings.getByKey, { key: 'site_tagline' });
-  const socialFacebook = useQuery(api.settings.getByKey, { key: 'social_facebook' });
-  const socialInstagram = useQuery(api.settings.getByKey, { key: 'social_instagram' });
-  const socialYoutube = useQuery(api.settings.getByKey, { key: 'social_youtube' });
-  const socialTiktok = useQuery(api.settings.getByKey, { key: 'social_tiktok' });
-  const socialZalo = useQuery(api.settings.getByKey, { key: 'contact_zalo' });
+  const footerSettings = useQuery(api.settings.getMultiple, {
+    keys: [...IA_SETTINGS_KEYS, 'contact_zalo', 'site_logo', 'site_name', 'site_tagline', 'social_facebook', 'social_instagram', 'social_tiktok', 'social_youtube'],
+  });
   const enabledModules = useQuery(api.admin.modules.listEnabledModules);
+  const trustPagesFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'settings', featureKey: 'enableTrustPages' });
   const productCategories = useQuery(api.productCategories.listActive);
   const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
   const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
@@ -277,28 +276,53 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
     const newSocialLinks: FooterSocialLink[] = [];
     let idCounter = 1;
 
-    if (socialFacebook?.value) {
-      newSocialLinks.push({ icon: 'facebook', id: idCounter++, platform: 'facebook', url: socialFacebook.value as string });
+    if (typeof footerSettings?.social_facebook === 'string' && footerSettings.social_facebook) {
+      newSocialLinks.push({ icon: 'facebook', id: idCounter++, platform: 'facebook', url: footerSettings.social_facebook });
     }
-    if (socialInstagram?.value) {
-      newSocialLinks.push({ icon: 'instagram', id: idCounter++, platform: 'instagram', url: socialInstagram.value as string });
+    if (typeof footerSettings?.social_instagram === 'string' && footerSettings.social_instagram) {
+      newSocialLinks.push({ icon: 'instagram', id: idCounter++, platform: 'instagram', url: footerSettings.social_instagram });
     }
-    if (socialYoutube?.value) {
-      newSocialLinks.push({ icon: 'youtube', id: idCounter++, platform: 'youtube', url: socialYoutube.value as string });
+    if (typeof footerSettings?.social_youtube === 'string' && footerSettings.social_youtube) {
+      newSocialLinks.push({ icon: 'youtube', id: idCounter++, platform: 'youtube', url: footerSettings.social_youtube });
     }
-    if (socialTiktok?.value) {
-      newSocialLinks.push({ icon: 'tiktok', id: idCounter++, platform: 'tiktok', url: socialTiktok.value as string });
+    if (typeof footerSettings?.social_tiktok === 'string' && footerSettings.social_tiktok) {
+      newSocialLinks.push({ icon: 'tiktok', id: idCounter++, platform: 'tiktok', url: footerSettings.social_tiktok });
     }
-    if (socialZalo?.value) {
-      newSocialLinks.push({ icon: 'zalo', id: idCounter++, platform: 'zalo', url: socialZalo.value as string });
+    if (typeof footerSettings?.contact_zalo === 'string' && footerSettings.contact_zalo) {
+      newSocialLinks.push({ icon: 'zalo', id: idCounter++, platform: 'zalo', url: footerSettings.contact_zalo });
     }
 
     updateConfig({
-      description: (siteTagline?.value as string) || value.description,
-      logo: (siteLogo?.value as string) || value.logo,
+      description: (typeof footerSettings?.site_tagline === 'string' && footerSettings.site_tagline) || value.description,
+      logo: (typeof footerSettings?.site_logo === 'string' && footerSettings.site_logo) || value.logo,
       socialLinks: newSocialLinks.length > 0 ? newSocialLinks : socialsWithId,
     });
     toast.success('Đã load dữ liệu từ Settings');
+  };
+
+  const handleGenerateFooter = () => {
+    if ((trustPagesFeature?.enabled ?? true) === false) {
+      toast.error('Trang tin cậy đang tắt ở System Settings');
+      return;
+    }
+    if (!footerSettings) {
+      toast.error('Dữ liệu settings chưa sẵn sàng');
+      return;
+    }
+
+    const generated = generateFooterConfigFromData({
+      settings: footerSettings,
+      style: value.style,
+    });
+
+    updateConfig(generated.patch);
+
+    if (generated.summary.missingTrustKeys.length > 0) {
+      toast.warning(`Đã sinh ${generated.summary.totalLinks} links | cột ${generated.summary.balance.join('/')} | loại trùng ${generated.summary.dedupedCount}. Thiếu mapping: ${generated.summary.missingTrustKeys.join(', ')}`);
+      return;
+    }
+
+    toast.success(`Đã sinh ${generated.summary.totalLinks} links với ${generated.summary.generatedColumns} cột | balance ${generated.summary.balance.join('/')}${generated.summary.dedupedCount > 0 ? ` | loại trùng ${generated.summary.dedupedCount}` : ''}`);
   };
 
   const handleColumnDragStart = (columnId: number | string) => { setDraggedColumnId(columnId); };
@@ -524,9 +548,14 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
   return (
     <>
       <div className="mb-4 flex justify-end">
-        <Button type="button" variant="outline" size="sm" onClick={loadFromSettings}>
-          <Download size={14} className="mr-1" /> Load từ Settings
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={handleGenerateFooter}>
+            <LayoutGrid size={14} className="mr-1" /> Sinh footer chuẩn BCT/Google
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={loadFromSettings}>
+            <Download size={14} className="mr-1" /> Load từ Settings
+          </Button>
+        </div>
       </div>
 
       <Card className="mb-6">

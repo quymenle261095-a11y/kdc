@@ -36,6 +36,10 @@ const normalizeString = (value: unknown, fallback = '') => (
   typeof value === 'string' ? value : fallback
 );
 
+const normalizeBoolean = (value: unknown, fallback: boolean) => (
+  typeof value === 'boolean' ? value : fallback
+);
+
 const normalizeActions = (value: unknown): SpeedDialAction[] => {
   if (!Array.isArray(value) || value.length === 0) {
     return DEFAULT_SPEED_DIAL_CONFIG.actions.map((action, idx) => ({ ...action, id: `default-${idx}` }));
@@ -60,6 +64,8 @@ const toSnapshot = (payload: {
   active: boolean;
   style: SpeedDialStyle;
   position: SpeedDialPosition;
+  defaultOpen: boolean;
+  showOnAllPages: boolean;
   actions: SpeedDialAction[];
 }) => JSON.stringify({
   ...payload,
@@ -85,6 +91,8 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
   const [actions, setActions] = useState<SpeedDialAction[]>([]);
   const [style, setStyle] = useState<SpeedDialStyle>(normalizeSpeedDialStyle(DEFAULT_SPEED_DIAL_CONFIG.style));
   const [position, setPosition] = useState<SpeedDialPosition>(DEFAULT_SPEED_DIAL_CONFIG.position);
+  const [defaultOpen, setDefaultOpen] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
+  const [showOnAllPages, setShowOnAllPages] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.showOnAllPages);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
@@ -100,18 +108,24 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
     const normalizedActions = normalizeActions((rawConfig as Record<string, unknown>).actions);
     const normalizedStyle = normalizeSpeedDialStyle((rawConfig as Record<string, unknown>).style as string | undefined);
     const normalizedPosition = normalizePosition((rawConfig as Record<string, unknown>).position);
+    const normalizedDefaultOpen = normalizeBoolean((rawConfig as Record<string, unknown>).defaultOpen, DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
+    const normalizedShowOnAllPages = normalizeBoolean((rawConfig as Record<string, unknown>).showOnAllPages, DEFAULT_SPEED_DIAL_CONFIG.showOnAllPages);
 
     setTitle(component.title);
     setActive(component.active);
     setActions(normalizedActions);
     setStyle(normalizedStyle);
     setPosition(normalizedPosition);
+    setDefaultOpen(normalizedDefaultOpen);
+    setShowOnAllPages(normalizedShowOnAllPages);
 
     setInitialSnapshot(toSnapshot({
       title: component.title,
       active: component.active,
       style: normalizedStyle,
       position: normalizedPosition,
+      defaultOpen: normalizedDefaultOpen,
+      showOnAllPages: normalizedShowOnAllPages,
       actions: normalizedActions,
     }));
   }, [component, id, router]);
@@ -121,6 +135,8 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
     active,
     style,
     position,
+    defaultOpen,
+    showOnAllPages,
     actions,
   });
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
@@ -148,6 +164,8 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
         })),
         style,
         position,
+        defaultOpen,
+        showOnAllPages,
       };
 
       await updateMutation({
@@ -172,6 +190,8 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
         active,
         style,
         position,
+        defaultOpen,
+        showOnAllPages,
         actions,
       }));
       if (showCustomBlock) {
@@ -256,6 +276,10 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
           onActionsChange={setActions}
           position={position}
           onPositionChange={setPosition}
+          defaultOpen={defaultOpen}
+          onDefaultOpenChange={setDefaultOpen}
+          showOnAllPages={showOnAllPages}
+          onShowOnAllPagesChange={setShowOnAllPages}
           defaultActionColor={effectiveColors.secondary}
         />
 
@@ -300,6 +324,7 @@ export default function SpeedDialEditPage({ params }: { params: Promise<{ id: st
               title={title}
               selectedStyle={style}
               onStyleChange={setStyle}
+              defaultOpen={defaultOpen}
             />
           </div>
         </div>

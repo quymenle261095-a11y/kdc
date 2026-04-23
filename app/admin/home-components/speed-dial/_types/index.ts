@@ -16,4 +16,6 @@ export interface SpeedDialConfig {
   actions: SpeedDialAction[];
   style: SpeedDialStyle;
   position: SpeedDialPosition;
+  defaultOpen: boolean;
+  showOnAllPages: boolean;
 }

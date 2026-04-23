@@ -47,6 +47,7 @@ interface SpeedDialSectionSharedProps {
   mode: SpeedDialBrandMode;
   sectionTitle: string;
   context: SpeedDialSectionContext;
+  defaultOpen?: boolean;
   previewDevice?: PreviewDevice;
   setPreviewDevice?: (device: PreviewDevice) => void;
   includePreviewWrapper?: boolean;
@@ -764,6 +765,7 @@ export function SpeedDialSectionShared({
   mode,
   sectionTitle,
   context,
+  defaultOpen = false,
   previewDevice = 'desktop',
   setPreviewDevice,
   includePreviewWrapper = false,
@@ -778,8 +780,12 @@ export function SpeedDialSectionShared({
     secondary,
     mode,
   }), [brandColor, secondary, mode]);
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
   const [isScrolled, setIsScrolled] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsOpen(defaultOpen);
+  }, [defaultOpen]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') {return;}

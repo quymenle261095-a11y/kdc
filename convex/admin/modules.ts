@@ -7,6 +7,7 @@ import { dependencyType, fieldType, moduleCategory } from "../lib/validators";
 import { syncModuleRuntimeConfig } from "../lib/moduleConfigSync";
 import { cleanupProductFramesByAspectRatio } from "../productImageFrames";
 import { resolveMenuMaxDepthLevel } from "../../lib/utils/menu-tree";
+import { TRUST_PAGE_SLOTS } from "../../lib/ia/trust-pages";
 
 // ============ ADMIN MODULES ============
 
@@ -136,6 +137,68 @@ async function normalizeMenuItemsToMaxLevel(ctx: MutationCtx, maxLevelRaw: unkno
       parentId: nextParentId,
     });
   }));
+}
+
+const toSearchableTrust = (value?: string | null) =>
+  (value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .replaceAll(/đ/g, "d");
+
+const isPolicyCategory = (name?: string, slug?: string) => {
+  const target = toSearchableTrust(`${name ?? ""} ${slug ?? ""}`);
+  return target.includes("chinh sach") || target.includes("policy") || target.includes("chinh-sach");
+};
+
+async function ensureTrustPagesPolicyCategory(ctx: MutationCtx) {
+  const categories = await ctx.db.query("postCategories").take(200);
+  const existing = categories.find((category) => isPolicyCategory(category.name, category.slug));
+  if (existing) {
+    return existing._id;
+  }
+
+  const allCategories = await ctx.db.query("postCategories").take(1000);
+  const maxOrder = allCategories.reduce((acc, item) => Math.max(acc, item.order ?? 0), 0);
+
+  return ctx.db.insert("postCategories", {
+    active: true,
+    name: "Chính sách",
+    slug: "chinh-sach",
+    order: maxOrder + 1,
+  });
+}
+
+async function cleanupTrustPagesData(ctx: MutationCtx) {
+  const trustSettingsKeys = [
+    ...TRUST_PAGE_SLOTS.flatMap((slot) => [slot.iaKey, slot.mappingKey]),
+    "trust_page_last_autogen_at",
+  ];
+
+  for (const key of trustSettingsKeys) {
+    const setting = await ctx.db
+      .query("settings")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (!setting) {
+      continue;
+    }
+
+    const nextValue = TRUST_PAGE_SLOTS.some((slot) => slot.iaKey === key) ? false : null;
+    await ctx.db.patch(setting._id, { group: "ia", value: nextValue });
+  }
+
+  const categories = await ctx.db.query("postCategories").take(500);
+  const policyCategories = categories.filter((category) => isPolicyCategory(category.name, category.slug));
+
+  for (const category of policyCategories) {
+    const posts = await ctx.db
+      .query("posts")
+      .withIndex("by_category_status", (q) => q.eq("categoryId", category._id))
+      .collect();
+    await Promise.all(posts.map((post) => ctx.db.delete(post._id)));
+    await ctx.db.delete(category._id);
+  }
 }
 
 export const migrateCalendarToSubscriptions = mutation({
@@ -804,6 +867,22 @@ export const toggleModuleFeature = mutation({
         enabled: args.enabled,
         name: derivedName || args.featureKey,
       });
+      if (args.moduleKey === "settings" && args.featureKey === "enableTrustPages") {
+        if (args.enabled) {
+          await ensureTrustPagesPolicyCategory(ctx);
+        } else {
+          const autoGenerateFeature = await ctx.db
+            .query("moduleFeatures")
+            .withIndex("by_module_feature", (q) =>
+              q.eq("moduleKey", "settings").eq("featureKey", "enableTrustPagesAutoGenerate")
+            )
+            .unique();
+          if (autoGenerateFeature?.enabled) {
+            await ctx.db.patch(autoGenerateFeature._id, { enabled: false });
+          }
+          await cleanupTrustPagesData(ctx);
+        }
+      }
       if (args.moduleKey === 'products' && args.featureKey === 'enableCategoryHierarchy' && !args.enabled) {
         const categories = await ctx.db
           .query('productCategories')
@@ -822,6 +901,22 @@ export const toggleModuleFeature = mutation({
       const linkedField = fields.find((f) => f.fieldKey === feature.linkedFieldKey);
       if (linkedField && !linkedField.isSystem) {
         await ctx.db.patch(linkedField._id, { enabled: args.enabled });
+      }
+    }
+    if (args.moduleKey === "settings" && args.featureKey === "enableTrustPages") {
+      if (args.enabled) {
+        await ensureTrustPagesPolicyCategory(ctx);
+      } else {
+        const autoGenerateFeature = await ctx.db
+          .query("moduleFeatures")
+          .withIndex("by_module_feature", (q) =>
+            q.eq("moduleKey", "settings").eq("featureKey", "enableTrustPagesAutoGenerate")
+          )
+          .unique();
+        if (autoGenerateFeature?.enabled) {
+          await ctx.db.patch(autoGenerateFeature._id, { enabled: false });
+        }
+        await cleanupTrustPagesData(ctx);
       }
     }
     if (args.moduleKey === 'products' && args.featureKey === 'enableCategoryHierarchy' && !args.enabled) {

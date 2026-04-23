@@ -4,6 +4,7 @@ import React from 'react';
 import { SpeedDialSectionShared } from '@/app/admin/home-components/speed-dial/_components/SpeedDialSectionShared';
 import { normalizeSpeedDialActions } from '@/app/admin/home-components/speed-dial/_lib/colors';
 import {
+  DEFAULT_SPEED_DIAL_CONFIG,
   normalizeSpeedDialStyle,
 } from '@/app/admin/home-components/speed-dial/_lib/constants';
 import type {
@@ -35,11 +36,16 @@ const normalizeSiteActions = (input: unknown): SpeedDialAction[] => (
   }))
 );
 
+const normalizeBoolean = (value: unknown, fallback: boolean) => (
+  typeof value === 'boolean' ? value : fallback
+);
+
 export function SpeedDialSection({ config, brandColor, secondary, mode, title }: SpeedDialSectionProps) {
   const actions = React.useMemo(() => normalizeSiteActions(config.actions), [config.actions]);
 
   const style = normalizeSpeedDialStyle(typeof config.style === 'string' ? config.style : undefined);
   const position = normalizePosition(config.position);
+  const defaultOpen = normalizeBoolean(config.defaultOpen, DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
 
   return (
     <SpeedDialSectionShared
@@ -51,6 +57,7 @@ export function SpeedDialSection({ config, brandColor, secondary, mode, title }:
       mode={mode}
       sectionTitle={title}
       context="site"
+      defaultOpen={defaultOpen}
     />
   );
 }

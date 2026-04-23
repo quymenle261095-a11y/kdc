@@ -32,6 +32,8 @@ export default function SpeedDialCreatePage() {
   const [actions, setActions] = React.useState<SpeedDialAction[]>(createDefaultActions(secondary));
   const [style, setStyle] = React.useState<SpeedDialStyle>(normalizeSpeedDialStyle(DEFAULT_SPEED_DIAL_CONFIG.style));
   const [position, setPosition] = React.useState<SpeedDialPosition>(DEFAULT_SPEED_DIAL_CONFIG.position);
+  const [defaultOpen, setDefaultOpen] = React.useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
+  const [showOnAllPages, setShowOnAllPages] = React.useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.showOnAllPages);
 
   const onSubmit = (event: React.FormEvent) => {
     const payload: SpeedDialConfig = {
@@ -44,6 +46,8 @@ export default function SpeedDialCreatePage() {
       })),
       style,
       position,
+      defaultOpen,
+      showOnAllPages,
     };
 
     void handleSubmit(event, payload as unknown as Record<string, unknown>);
@@ -68,6 +72,10 @@ export default function SpeedDialCreatePage() {
         onActionsChange={setActions}
         position={position}
         onPositionChange={setPosition}
+        defaultOpen={defaultOpen}
+        onDefaultOpenChange={setDefaultOpen}
+        showOnAllPages={showOnAllPages}
+        onShowOnAllPagesChange={setShowOnAllPages}
         defaultActionColor={secondary || primary}
       />
 
@@ -81,6 +89,7 @@ export default function SpeedDialCreatePage() {
         title={title}
         selectedStyle={style}
         onStyleChange={setStyle}
+        defaultOpen={defaultOpen}
       />
     </ComponentFormWrapper>
   );

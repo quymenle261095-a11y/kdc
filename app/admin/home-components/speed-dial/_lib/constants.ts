@@ -28,4 +28,6 @@ export const DEFAULT_SPEED_DIAL_CONFIG: SpeedDialConfig = {
   ],
   position: 'bottom-right',
   style: 'fab',
+  defaultOpen: true,
+  showOnAllPages: false,
 };

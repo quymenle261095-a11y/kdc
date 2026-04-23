@@ -74,6 +74,10 @@ interface SpeedDialFormProps {
   onActionsChange: (actions: SpeedDialAction[]) => void;
   position: SpeedDialPosition;
   onPositionChange: (position: SpeedDialPosition) => void;
+  defaultOpen: boolean;
+  onDefaultOpenChange: (value: boolean) => void;
+  showOnAllPages: boolean;
+  onShowOnAllPagesChange: (value: boolean) => void;
   defaultActionColor: string;
 }
 
@@ -82,6 +86,10 @@ export function SpeedDialForm({
   onActionsChange,
   position,
   onPositionChange,
+  defaultOpen,
+  onDefaultOpenChange,
+  showOnAllPages,
+  onShowOnAllPagesChange,
   defaultActionColor,
 }: SpeedDialFormProps) {
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
@@ -216,6 +224,48 @@ export function SpeedDialForm({
               <option value="bottom-right">Góc phải</option>
               <option value="bottom-left">Góc trái</option>
             </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Mặc định mở</Label>
+            <button
+              type="button"
+              onClick={() => { onDefaultOpenChange(!defaultOpen); }}
+              className={cn(
+                'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
+                defaultOpen ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
+              )}
+              aria-pressed={defaultOpen}
+            >
+              <div
+                className={cn(
+                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
+                  defaultOpen ? 'translate-x-2.5' : '-translate-x-2.5',
+                )}
+              />
+            </button>
+            <p className="text-xs text-slate-500">Khi bật, Speed Dial mở sẵn khi tải trang.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Hiển thị toàn site public</Label>
+            <button
+              type="button"
+              onClick={() => { onShowOnAllPagesChange(!showOnAllPages); }}
+              className={cn(
+                'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
+                showOnAllPages ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
+              )}
+              aria-pressed={showOnAllPages}
+            >
+              <div
+                className={cn(
+                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
+                  showOnAllPages ? 'translate-x-2.5' : '-translate-x-2.5',
+                )}
+              />
+            </button>
+            <p className="text-xs text-slate-500">Khi bật, Speed Dial xuất hiện trên mọi trang public (không chỉ trang chủ).</p>
           </div>
         </CardContent>
       </Card>
