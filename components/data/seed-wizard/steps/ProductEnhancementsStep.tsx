@@ -51,7 +51,7 @@ export function ProductEnhancementsStep({
           Bật thêm tiện ích cho sản phẩm?
         </h3>
         <p className="text-xs text-slate-500">
-          Mặc định cả hai đều tắt để seed gọn. Bạn có thể bật sau trong /system/modules/products.
+          Mặc định cả hai đều tắt để seed gọn. Bạn có thể bật sau trong trang Cài đặt.
         </p>
       </div>
 
@@ -61,13 +61,13 @@ export function ProductEnhancementsStep({
           <ToggleCard
             active={!productFramesEnabled}
             title="Tắt"
-            description="Không tạo route quản lý khung sản phẩm ngay từ đầu."
+            description="Không kích hoạt tính năng khung viền sản phẩm."
             onClick={() => onChangeFrames(false)}
           />
           <ToggleCard
             active={productFramesEnabled}
             title="Bật"
-            description="Hiện cấu hình khung viền và route quản lý khung sản phẩm."
+            description="Kích hoạt tính năng và cấu hình khung viền sản phẩm."
             onClick={() => onChangeFrames(true)}
           />
         </div>

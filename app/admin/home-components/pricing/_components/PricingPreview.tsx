@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, Eye } from 'lucide-react';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import { getSectionSpacingClassName, normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
   PRICING_STYLES,
 } from '../_lib/constants';
@@ -31,6 +32,21 @@ interface PricingPreviewProps {
   onStyleChange?: (style: PricingStyle) => void;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  // Header config for SectionHeader preview
+  headerConfig?: {
+    subtitle?: string;
+    hideHeader?: boolean;
+    showTitle?: boolean;
+    showSubtitle?: boolean;
+    headerAlign?: 'left' | 'center' | 'right';
+    titleColorPrimary?: boolean;
+    subtitleAboveTitle?: boolean;
+    uppercaseText?: boolean;
+    showBadge?: boolean;
+    badgeText?: string;
+  spacing?: SectionSpacing;
+  };
+  gridCols?: 3 | 4;
 }
 
 export function PricingPreview({
@@ -44,6 +60,8 @@ export function PricingPreview({
   onStyleChange,
   fontStyle,
   fontClassName,
+  headerConfig,
+  gridCols: gridColsProp = 3,
 }: PricingPreviewProps) {
   const { device, setDevice } = usePreviewDevice();
   const [isYearly, setIsYearly] = React.useState(false);
@@ -54,7 +72,7 @@ export function PricingPreview({
     onStyleChange(nextStyle as PricingStyle);
   };
 
-  const subtitle = String(config?.subtitle ?? 'Chọn gói phù hợp với nhu cầu của bạn');
+  const subtitle = headerConfig?.subtitle ?? String(config?.subtitle ?? 'Chọn gói phù hợp với nhu cầu của bạn');
   const showBillingToggle = config?.showBillingToggle !== false;
   const monthlyLabel = String(config?.monthlyLabel ?? 'Hàng tháng');
   const yearlyLabel = String(config?.yearlyLabel ?? 'Hàng năm');
@@ -67,16 +85,6 @@ export function PricingPreview({
     mode,
   }), [brandColor, secondary, mode]);
 
-  const warningMessages = React.useMemo(() => {
-    const messages: string[] = [];
-
-    if (mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
-      messages.push(`Màu phụ đang khá gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}). Nên tăng độ tách biệt.`);
-    }
-
-    return messages;
-  }, [mode, validation]);
-
   const modeLabel = mode === 'single' ? '1 màu (single)' : '2 màu (dual)';
 
   return (
@@ -88,28 +96,53 @@ export function PricingPreview({
         previewStyle={previewStyle}
         setPreviewStyle={setPreviewStyle}
         styles={PRICING_STYLES}
-        info={`${plans.length} gói • ${modeLabel}`}
+        info={`${plans.length}/4 gói • ${modeLabel} • ${gridColsProp} cột`}
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
       >
         <BrowserFrame url="yoursite.com/pricing">
-          <PricingSectionShared
-            context="preview"
-            title={title}
-            subtitle={subtitle}
-            plans={plans}
-            style={previewStyle}
-            mode={mode}
-            tokens={validation.tokens}
-            texts={texts}
-            isYearly={isYearly}
-            showBillingToggle={showBillingToggle}
-            monthlyLabel={monthlyLabel}
-            yearlyLabel={yearlyLabel}
-            yearlySavingText={yearlySavingText}
-            onBillingToggle={setIsYearly}
-          />
+          <div className={getSectionSpacingClassName(normalizeSectionSpacing(headerConfig?.spacing))}>
+            {/* Render SectionHeader matching site pattern */}
+            <div className="px-4">
+              <div className="mx-auto max-w-7xl">
+                <SectionHeader
+                  title={title}
+                  subtitle={subtitle}
+                  badgeText={headerConfig?.badgeText}
+                  hideHeader={headerConfig?.hideHeader}
+                  showTitle={headerConfig?.showTitle}
+                  showSubtitle={headerConfig?.showSubtitle}
+                  showBadge={headerConfig?.showBadge}
+                  headerAlign={headerConfig?.headerAlign}
+                  titleColorPrimary={headerConfig?.titleColorPrimary}
+                  subtitleAboveTitle={headerConfig?.subtitleAboveTitle}
+                  uppercaseText={headerConfig?.uppercaseText}
+                  brandColor={brandColor}
+                />
+              </div>
+            </div>
+            <PricingSectionShared
+              context="preview"
+              title={title}
+              subtitle={subtitle}
+              plans={plans}
+              style={previewStyle}
+              mode={mode}
+              tokens={validation.tokens}
+              texts={texts}
+              isYearly={isYearly}
+              showBillingToggle={showBillingToggle}
+              monthlyLabel={monthlyLabel}
+              yearlyLabel={yearlyLabel}
+              yearlySavingText={yearlySavingText}
+              onBillingToggle={setIsYearly}
+              skipHeader={true}
+              previewDevice={device}
+              gridCols={gridColsProp}
+              cornerRadius={config?.cornerRadius}
+            />
+          </div>
         </BrowserFrame>
       </PreviewWrapper>
 
@@ -121,18 +154,6 @@ export function PricingPreview({
         />
       )}
 
-      {warningMessages.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <div className="space-y-2">
-            {warningMessages.map((message) => (
-              <div key={message} className="flex items-start gap-2">
-                {message.includes('deltaE') ? <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> : <Eye size={14} className="mt-0.5 flex-shrink-0" />}
-                <p>{message}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

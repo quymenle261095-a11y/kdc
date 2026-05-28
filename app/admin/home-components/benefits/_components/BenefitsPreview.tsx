@@ -1,23 +1,24 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { BENEFITS_STYLES } from '../_lib/constants';
 import {
-  buildBenefitsWarningMessages,
   getBenefitsSectionColors,
   getBenefitsValidationResult,
   normalizeBenefitsHarmony,
+  normalizeBenefitsStyle,
 } from '../_lib/colors';
 import { BenefitsSectionShared } from './BenefitsSectionShared';
 import type { BenefitItem, BenefitsBrandMode, BenefitsConfig, BenefitsStyle } from '../_types';
 
 interface BenefitsPreviewProps {
   items: BenefitItem[];
+  title?: string;
   brandColor: string;
   secondary: string;
   mode?: BenefitsBrandMode;
@@ -30,6 +31,7 @@ interface BenefitsPreviewProps {
 
 export const BenefitsPreview = ({
   items,
+  title,
   brandColor,
   secondary,
   mode = 'dual',
@@ -40,8 +42,9 @@ export const BenefitsPreview = ({
   fontClassName,
 }: BenefitsPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const resolvedTitle = typeof title === 'string' ? title.trim() : '';
 
-  const previewStyle = selectedStyle ?? 'cards';
+  const previewStyle = normalizeBenefitsStyle(selectedStyle ?? '1');
   const setPreviewStyle = (nextStyle: string) => {
     onStyleChange?.(nextStyle as BenefitsStyle);
   };
@@ -69,31 +72,39 @@ export const BenefitsPreview = ({
     [brandColor, secondary, mode, harmony],
   );
 
-  const warningMessages = React.useMemo(
-    () => buildBenefitsWarningMessages({ mode, validation }),
-    [mode, validation],
-  );
-
   const sectionConfig = React.useMemo(
     () => ({
       buttonLink: config?.buttonLink,
       buttonText: config?.buttonText,
+      cornerRadius: config?.cornerRadius,
       gridColumnsDesktop: config?.gridColumnsDesktop,
       gridColumnsMobile: config?.gridColumnsMobile,
       heading: config?.heading,
       headerAlign: config?.headerAlign,
+      highlightIndex: config?.highlightIndex,
+      showDecorativeVisuals: config?.showDecorativeVisuals,
+      showItemNumbers: config?.showItemNumbers,
       subHeading: config?.subHeading,
+      visualImage: config?.visualImage,
     }),
     [
       config?.buttonLink,
       config?.buttonText,
+      config?.cornerRadius,
       config?.gridColumnsDesktop,
       config?.gridColumnsMobile,
       config?.heading,
       config?.headerAlign,
+      config?.highlightIndex,
+      config?.showDecorativeVisuals,
+      config?.showItemNumbers,
       config?.subHeading,
+      config?.visualImage,
     ],
   );
+
+  const previewSubtitle = (config?.subtitle ?? '').trim();
+  const previewBadgeText = (config?.badgeText ?? '').trim();
 
   return (
     <>
@@ -110,31 +121,38 @@ export const BenefitsPreview = ({
         fontClassName={fontClassName}
       >
         <BrowserFrame url="yoursite.com/benefits">
-          <BenefitsSectionShared
-            items={items}
-            style={previewStyle}
-            title={config?.heading || 'Giá trị cốt lõi'}
-            config={sectionConfig}
-            tokens={tokens}
-            mode={mode}
-            context="preview"
-            previewDevice={device}
-          />
+          <section className="px-4 py-10" style={{ backgroundColor: tokens.neutralBackground }}>
+            <div className="mx-auto max-w-6xl space-y-6">
+              <SectionHeader
+                title={resolvedTitle}
+                subtitle={previewSubtitle}
+                badgeText={previewBadgeText}
+                hideHeader={config?.hideHeader}
+                showTitle={config?.showTitle}
+                showSubtitle={config?.showSubtitle}
+                showBadge={config?.showBadge}
+                headerAlign={config?.headerAlign}
+                titleColorPrimary={config?.titleColorPrimary}
+                subtitleAboveTitle={config?.subtitleAboveTitle}
+                uppercaseText={config?.uppercaseText}
+                brandColor={brandColor}
+              />
+
+              <BenefitsSectionShared
+                items={items}
+                style={previewStyle}
+                title={resolvedTitle}
+                config={sectionConfig}
+                tokens={tokens}
+                mode={mode}
+                context="preview"
+                previewDevice={device}
+                skipHeader={true}
+              />
+            </div>
+          </section>
         </BrowserFrame>
       </PreviewWrapper>
-
-      {mode === 'dual' && warningMessages.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <div className="space-y-1">
-              {warningMessages.map((message, idx) => (
-                <p key={`benefits-preview-warning-${idx}`}>{message}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {mode === 'dual' ? (
         <ColorInfoPanel

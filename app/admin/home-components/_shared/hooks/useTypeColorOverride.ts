@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSystemBrandColors } from '../../create/shared';
@@ -33,9 +33,7 @@ export const useTypeColorOverride = (type: string) => {
     getTypeOverrideState({ type, systemColors, overrides })
   ), [
     type,
-    systemColors.mode,
-    systemColors.primary,
-    systemColors.secondary,
+    systemColors,
     overrides,
   ]);
 
@@ -43,9 +41,7 @@ export const useTypeColorOverride = (type: string) => {
     resolveTypeOverrideColors({ type, systemColors, overrides })
   ), [
     type,
-    systemColors.mode,
-    systemColors.primary,
-    systemColors.secondary,
+    systemColors,
     overrides,
   ]);
   const isSupportedType = HOME_COMPONENT_TYPE_VALUES.includes(type);
@@ -63,14 +59,9 @@ export const useTypeColorOverride = (type: string) => {
 export const useTypeColorOverrideState = (type: string, options?: TypeColorOverrideOptions) => {
   const { overrideState, showCustomBlock, systemColors } = useTypeColorOverride(type);
   const shouldSeedFromSettings = Boolean(options?.seedCustomFromSettingsWhenTypeEmpty);
-  const typeItems = useQuery(
-    api.homeComponents.listByType,
-    shouldSeedFromSettings ? { type } : 'skip',
-  );
-  const hasTypeData = (typeItems?.length ?? 0) > 0;
-  const shouldSeedState = shouldSeedFromSettings && !hasTypeData;
   const [customState, setCustomState] = useState<ColorOverrideState>(overrideState);
   const [initialCustom, setInitialCustom] = useState<ColorOverrideState>(overrideState);
+  const lastSyncedStateRef = useRef<ColorOverrideState>(overrideState);
 
   const seededState: ColorOverrideState = useMemo(() => {
     const systemSecondary = resolveSecondaryByMode(
@@ -87,10 +78,18 @@ export const useTypeColorOverrideState = (type: string, options?: TypeColorOverr
   }, [overrideState.enabled, systemColors.mode, systemColors.primary, systemColors.secondary]);
 
   useEffect(() => {
-    const nextState = shouldSeedState ? seededState : overrideState;
-    setCustomState((current) => (isSameColorOverrideState(current, nextState) ? current : nextState));
-    setInitialCustom((current) => (isSameColorOverrideState(current, nextState) ? current : nextState));
-  }, [overrideState, seededState, shouldSeedState]);
+    const nextState = shouldSeedFromSettings ? seededState : overrideState;
+    const lastSyncedState = lastSyncedStateRef.current;
+    const sourceChanged = !isSameColorOverrideState(lastSyncedState, nextState);
+
+    if (!sourceChanged) {
+      return;
+    }
+
+    lastSyncedStateRef.current = nextState;
+    setInitialCustom(nextState);
+    setCustomState((current) => (isSameColorOverrideState(current, lastSyncedState) ? nextState : current));
+  }, [overrideState, seededState, shouldSeedFromSettings]);
 
   useEffect(() => {
     if (customState.enabled) {

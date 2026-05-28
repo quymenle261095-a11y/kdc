@@ -35,6 +35,7 @@ export function MigrationBundleCard() {
   const importBundle = useMutation(api.migrationBundles.importBundle);
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
   const saveImage = useMutation(api.storage.saveImage);
+  const cleanupImportedBinOrphans = useMutation(api.storage.cleanupImportedBinOrphans);
   const [importMode, setImportMode] = useState<'full' | 'partial'>('full');
   const [isExporting, setIsExporting] = useState(false);
   const [isPreflighting, setIsPreflighting] = useState(false);
@@ -188,7 +189,11 @@ export function MigrationBundleCard() {
       if (!result.applied) {
         toast.error('Import bị chặn do lỗi blocking');
       } else {
+        const cleanup = await cleanupImportedBinOrphans({});
         toast.success(`Import thành công: +${result.result.created} created, +${result.result.updated} updated`);
+        if (cleanup.deleted > 0) {
+          toast.success(`Đã dọn ${cleanup.deleted} file .bin dư`);
+        }
       }
     } catch (error) {
       console.error(error);

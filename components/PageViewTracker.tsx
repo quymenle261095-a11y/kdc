@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -57,23 +57,15 @@ function getBrowser(): string {
 export function PageViewTracker() {
   const pathname = usePathname();
   const trackPageView = useMutation(api.pageViews.track);
-  const trackedPaths = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    // Skip system routes only (keep tracking /admin for bandwidth stats)
-    if (pathname.startsWith('/system')) {
-      return;
-    }
-
-    // Prevent duplicate tracking for same path in same render cycle
-    if (trackedPaths.current.has(pathname)) {
+    // Bỏ qua các trang quản trị và hệ thống
+    if (pathname.startsWith('/admin') || pathname.startsWith('/system')) {
       return;
     }
 
     const sessionId = getSessionId();
     if (!sessionId) {return;}
-
-    trackedPaths.current.add(pathname);
 
     const shouldTrack = () => document.visibilityState === 'visible';
     const sendTracking = () => {
@@ -96,18 +88,12 @@ export function PageViewTracker() {
       ? window.requestIdleCallback(sendTracking, { timeout: 1200 })
       : window.setTimeout(sendTracking, 1200);
 
-    // Clear tracked path after some time to allow re-tracking on navigation back
-    const timeout = setTimeout(() => {
-      trackedPaths.current.delete(pathname);
-    }, 5000);
-
     return () => {
       if (canIdle) {
         window.cancelIdleCallback(handle as number);
       } else {
         window.clearTimeout(handle as number);
       }
-      clearTimeout(timeout);
     };
   }, [pathname, trackPageView]);
 

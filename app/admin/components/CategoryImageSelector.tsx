@@ -20,6 +20,10 @@ import { toast } from 'sonner';
 import { Button, Input, Label, cn } from './ui';
 import { prepareImageForUpload, validateImageFile } from '@/lib/image/uploadPipeline';
 import { resolveNamingContext } from '@/lib/image/uploadNaming';
+import { ImageEditorDialog } from './ImageEditorDialog';
+import { getProductImageAspectRatioLabel, type ImageAspectRatioInput } from '@/lib/products/image-aspect-ratio';
+import { ImageSourceActions } from './ImageSourceActions';
+import { useFileDraftUploads } from './useFileDraftUploads';
 
 // Available icons for categories
 const CATEGORY_ICONS = [
@@ -102,11 +106,12 @@ const resolveImageMode = (value: string): ImageMode => {
 
 interface CategoryImageSelectorProps {
   value: string;
-  onChange: (value: string, mode: ImageMode) => void;
+  onChange: (value: string, mode: ImageMode, storageId?: Id<'_storage'> | null) => void;
   categoryImage?: string;
   categoryId?: string;
   brandColor?: string;
   className?: string;
+  cropAspectRatio?: ImageAspectRatioInput;
 }
 
 export function CategoryImageSelector({
@@ -116,6 +121,7 @@ export function CategoryImageSelector({
   categoryId,
   brandColor = '#3b82f6',
   className,
+  cropAspectRatio,
 }: CategoryImageSelectorProps) {
   // Determine current mode from value
   const initialMode = resolveImageMode(value);
@@ -127,10 +133,12 @@ export function CategoryImageSelector({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [cropSourceUrl, setCropSourceUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
   const saveImage = useMutation(api.storage.saveImage);
+  const { trackDraftUpload } = useFileDraftUploads(`category-image-selector:${categoryId ?? 'new'}`);
   const productsByCategory = useQuery(
     api.products.listByCategory,
     categoryId ? { categoryId: categoryId as Id<"productCategories">, paginationOpts: { cursor: null, numItems: 50 }, status: 'Active' } : "skip"
@@ -157,17 +165,17 @@ export function CategoryImageSelector({
     setMode(newMode);
     setShowIconPicker(false);
     if (newMode === 'default') {
-      onChange('', 'default');
+      onChange('', 'default', null);
     } else if (newMode === 'product-image') {
       if (selectedProductId) {
-        onChange(`product:${selectedProductId}`, 'product-image');
+        onChange(`product:${selectedProductId}`, 'product-image', null);
       } else {
-        onChange('', 'product-image');
+        onChange('', 'product-image', null);
       }
     } else if (newMode === 'icon' && selectedIcon) {
-      onChange(`icon:${selectedIcon}`, 'icon');
+      onChange(`icon:${selectedIcon}`, 'icon', null);
     } else if (newMode === 'url' && urlInput) {
-      onChange(urlInput, 'url');
+      onChange(urlInput, 'url', null);
     } else if (newMode === 'upload' && uploadedUrl) {
       onChange(uploadedUrl, 'upload');
     }
@@ -176,21 +184,21 @@ export function CategoryImageSelector({
   const handleProductSelect = (productId: string) => {
     setSelectedProductId(productId);
     if (productId) {
-      onChange(`product:${productId}`, 'product-image');
+      onChange(`product:${productId}`, 'product-image', null);
     } else {
-      onChange('', 'product-image');
+      onChange('', 'product-image', null);
     }
   };
 
   const handleIconSelect = (iconName: string) => {
     setSelectedIcon(iconName);
-    onChange(`icon:${iconName}`, 'icon');
+    onChange(`icon:${iconName}`, 'icon', null);
     setShowIconPicker(false);
   };
 
   const handleUrlApply = () => {
     if (urlInput.trim()) {
-      onChange(urlInput.trim(), 'url');
+      onChange(urlInput.trim(), 'url', null);
     }
   };
 
@@ -226,10 +234,11 @@ export function CategoryImageSelector({
         storageId: storageId as Id<"_storage">,
         width: prepared.width,
       });
+      await trackDraftUpload(storageId as Id<'_storage'>, 'category-images');
 
       const imageUrl = result.url ?? '';
       setUploadedUrl(imageUrl);
-      onChange(imageUrl, 'upload');
+      onChange(imageUrl, 'upload', storageId as Id<'_storage'>);
       toast.success('Tải ảnh lên thành công');
     } catch (error) {
       console.error('Upload error:', error);
@@ -237,7 +246,7 @@ export function CategoryImageSelector({
     } finally {
       setIsUploading(false);
     }
-  }, [generateUploadUrl, saveImage, onChange]);
+  }, [generateUploadUrl, saveImage, onChange, trackDraftUpload]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -249,13 +258,45 @@ export function CategoryImageSelector({
     }
   }, [handleFileSelect]);
 
+  const handleClipboardPaste = useCallback(async () => {
+    if (isUploading) return;
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const ext = imageType.split('/')[1] || 'png';
+          const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: imageType });
+          setMode('upload');
+          void handleFileSelect(file);
+          return;
+        }
+      }
+      toast.error('Clipboard không có ảnh. Hãy copy ảnh trước.');
+    } catch {
+      toast.error('Không đọc được clipboard. Hãy copy ảnh trước.');
+    }
+  }, [isUploading, handleFileSelect]);
+
   const handleRemoveUpload = () => {
     setUploadedUrl('');
-    onChange('', 'default');
+    onChange('', 'default', null);
     setMode('default');
   };
 
   const currentIconData = getCategoryIcon(selectedIcon);
+  const currentCropSourceUrl = mode === 'upload'
+    ? uploadedUrl
+    : mode === 'url'
+      ? urlInput || value
+      : mode === 'product-image'
+        ? selectedProduct?.image
+        : mode === 'default'
+          ? categoryImage
+          : undefined;
+  const cropRatioLabel = cropAspectRatio ? getProductImageAspectRatioLabel(cropAspectRatio) : undefined;
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -322,6 +363,21 @@ export function CategoryImageSelector({
           URL
         </button>
       </div>
+
+      <ImageSourceActions
+        mode={mode === 'url' ? 'url' : 'upload'}
+        onUpload={() => {
+          setMode('upload');
+          inputRef.current?.click();
+        }}
+        onUrl={() => handleModeChange('url')}
+        onPaste={handleClipboardPaste}
+        onCrop={() => currentCropSourceUrl && setCropSourceUrl(currentCropSourceUrl)}
+        cropLabel={cropRatioLabel}
+        cropDisabled={!currentCropSourceUrl || isUploading}
+        disabled={isUploading}
+        iconSize={12}
+      />
 
       {/* Hidden file input */}
       <input
@@ -528,6 +584,18 @@ export function CategoryImageSelector({
             Áp dụng
           </Button>
         </div>
+      )}
+      {cropSourceUrl && (
+        <ImageEditorDialog
+          imageUrl={cropSourceUrl}
+          preferredCropAspectRatio={cropAspectRatio}
+          onClose={() => setCropSourceUrl(null)}
+          onApply={(editedFile) => {
+            setCropSourceUrl(null);
+            setMode('upload');
+            void handleFileSelect(editedFile);
+          }}
+        />
       )}
     </div>
   );

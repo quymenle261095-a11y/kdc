@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Doc, Id } from '@/convex/_generated/dataModel';
-import { Check, ChevronDown, Copy, Edit, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Copy, Edit, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
 import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
@@ -113,7 +113,7 @@ function PromotionsContent() {
       : 'skip'
   );
 
-  const isLoading = promotionsData === undefined || totalCountData === undefined;
+  const isTableLoading = promotionsData === undefined || totalCountData === undefined;
 
   useEffect(() => {
     if (selectAllData?.hasMore) {
@@ -306,14 +306,6 @@ function PromotionsContent() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-pink-500" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -394,8 +386,18 @@ function PromotionsContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedPromotions.map(promo => (
-              <TableRow key={promo._id} className={selectedIds.includes(promo._id) ? 'bg-pink-500/5' : ''}>
+            {isTableLoading ? (
+              Array.from({ length: resolvedPromotionsPerPage }).map((_, index) => (
+                <TableRow key={`loading-${index}`}>
+                  <TableCell colSpan={tableColumnCount}>
+                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <>
+                {paginatedPromotions.map(promo => (
+                  <TableRow key={promo._id} className={selectedIds.includes(promo._id) ? 'bg-pink-500/5' : ''}>
                 {resolvedVisibleColumns.includes('select') && (
                   <TableCell><SelectCheckbox checked={selectedIds.includes(promo._id)} onChange={() =>{  toggleSelectItem(promo._id); }} /></TableCell>
                 )}
@@ -479,9 +481,11 @@ function PromotionsContent() {
                   </div>
                   </TableCell>
                 )}
-              </TableRow>
-            ))}
-            {paginatedPromotions.length === 0 && (
+                  </TableRow>
+                ))}
+              </>
+            )}
+            {!isTableLoading && paginatedPromotions.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
                   {searchTerm || filterStatus || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có khuyến mãi nào.'}
@@ -490,7 +494,7 @@ function PromotionsContent() {
             )}
           </TableBody>
         </Table>
-        {totalCount > 0 && !isLoading && (
+        {totalCount > 0 && !isTableLoading && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
               <div className="flex items-center gap-2">

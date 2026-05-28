@@ -564,3 +564,22 @@ export const listServicesForPicker = query({
     categorySlug: v.string(),
   })),
 });
+
+export const getSmartMenuBuilderData = query({
+  args: {},
+  handler: async (ctx) => {
+    const productTypes = await ctx.db.query("productTypes").filter(q => q.eq(q.field("active"), true)).collect().then(res => res.sort((a, b) => a.order - b.order));
+    const productCategoryTypes = await ctx.db.query("productCategoryTypes").collect();
+    const attributeGroups = await ctx.db.query("attributeGroups").collect();
+    const productTypeAttributeGroups = await ctx.db.query("productTypeAttributeGroups").collect();
+    const attributeTerms = await ctx.db.query("attributeTerms").filter(q => q.eq(q.field("active"), true)).collect().then(res => res.sort((a, b) => a.order - b.order));
+
+    return {
+      productTypes,
+      productCategoryTypes,
+      attributeGroups,
+      productTypeAttributeGroups,
+      attributeTerms,
+    };
+  },
+});

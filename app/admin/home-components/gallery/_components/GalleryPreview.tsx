@@ -1,15 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Image as ImageIcon, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Image as ImageIcon, X } from 'lucide-react';
 import { cn } from '../../../components/ui';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
+import { getPreviewDeviceClass } from '../../_shared/lib/previewResponsive';
 import { getGalleryMarqueeBaseItems } from '../_lib/constants';
-import type { GalleryItem, GalleryStyle } from '../_types';
+import type { GalleryItem, GalleryStyle, GalleryCornerRadius, GalleryDesktopColumns } from '../_types';
 import { getGalleryColorTokens } from '../_lib/colors';
 import type { GalleryColorTokens, GalleryHarmony } from '../_lib/colors';
 
@@ -44,21 +47,32 @@ const GalleryLightbox = ({
   onNavigate?: (direction: 'prev' | 'next') => void;
   colors: GalleryColorTokens;
 }) => {
+  const originalBodyOverflowRef = React.useRef<string | null>(null);
+  const isOpen = Boolean(photo?.url);
+
   React.useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    if (originalBodyOverflowRef.current === null) {
+      originalBodyOverflowRef.current = document.body.style.overflow;
+    }
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {onClose();}
       if (e.key === 'ArrowLeft' && onNavigate) {onNavigate('prev');}
       if (e.key === 'ArrowRight' && onNavigate) {onNavigate('next');}
     };
-    if (photo) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = originalBodyOverflowRef.current ?? '';
+      originalBodyOverflowRef.current = null;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [photo, onClose, onNavigate]);
+  }, [isOpen, onClose, onNavigate]);
 
   if (!photo || !photo.url) {return null;}
 
@@ -88,6 +102,7 @@ const GalleryLightbox = ({
       {hasMultiple && (
         <>
           <button 
+            type="button"
             onClick={(e) => { e.stopPropagation(); onNavigate('prev'); }}
             className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full border flex items-center justify-center transition-all z-[70] hover:opacity-90"
             style={{
@@ -100,6 +115,7 @@ const GalleryLightbox = ({
             <ChevronLeft size={24} />
           </button>
           <button 
+            type="button"
             onClick={(e) => { e.stopPropagation(); onNavigate('next'); }}
             className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full border flex items-center justify-center transition-all z-[70] hover:opacity-90"
             style={{
@@ -139,7 +155,32 @@ const GalleryLightbox = ({
   );
 };
 
-export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, selectedStyle, onStyleChange, title, fontStyle, fontClassName }: {
+export const GalleryPreview = ({ 
+  items, 
+  brandColor, 
+  secondary, 
+  mode, 
+  harmony, 
+  selectedStyle, 
+  onStyleChange, 
+  title, 
+  fontStyle, 
+  fontClassName,
+  hideHeader,
+  showTitle,
+  subtitle,
+  showSubtitle,
+  headerAlign,
+  titleColorPrimary,
+  subtitleAboveTitle,
+  uppercaseText,
+  showBadge,
+  badgeText,
+  fullWidthDesktop = false,
+  desktopColumns = 4,
+  cornerRadius = 'lg',
+  spacing = 'normal',
+}: {
   items: GalleryItem[];
   brandColor: string;
   secondary: string;
@@ -150,6 +191,20 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
   title?: string;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  subtitle?: string;
+  showSubtitle?: boolean;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing;
+  fullWidthDesktop?: boolean;
+  desktopColumns?: GalleryDesktopColumns;
+  cornerRadius?: GalleryCornerRadius;
 }): React.ReactElement => {
   const { device, setDevice } = usePreviewDevice();
   const [selectedPhoto, setSelectedPhoto] = useState<GalleryItem | null>(null);
@@ -166,7 +221,23 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
   if (!previewStyle) {
     previewStyle = 'spotlight';
   }
-  const layoutAccent = colors.sectionAccentBarByStyle[previewStyle] ?? colors.sectionAccentBar;
+  const sectionSpacingClassName = {
+    compact: 'pt-2 pb-4 md:pt-3 md:pb-6',
+    none: 'py-0',
+    normal: 'pt-4 pb-8 md:pt-6 md:pb-12',
+  }[spacing];
+  
+  const roundedClass = {
+    none: 'rounded-none',
+    sm: 'rounded-md',
+    lg: 'rounded-2xl',
+  }[cornerRadius || 'lg'];
+
+  const _galleryTitleClassName = getPreviewDeviceClass(device, {
+    mobile: 'text-2xl font-bold tracking-tighter mb-3',
+    tablet: 'text-3xl font-bold tracking-tighter mb-3',
+    desktop: 'text-3xl font-bold tracking-tighter mb-3',
+  });
   const marqueeBaseItems = React.useMemo(() => getGalleryMarqueeBaseItems(items), [items]);
   const lightboxItems = previewStyle === 'marquee' ? marqueeBaseItems : items;
 
@@ -288,20 +359,27 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
     return (
       <div
         className={cn(
-          'grid gap-1 border',
-          device === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3',
+          'grid gap-2',
+          getPreviewDeviceClass(device, {
+            mobile: 'grid-cols-1',
+            tablet: 'grid-cols-3',
+            desktop: 'grid-cols-3',
+          }),
         )}
-        style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
       >
         <div
           className={cn(
-            'relative group cursor-pointer overflow-hidden border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-            device === 'mobile' ? 'aspect-[4/3]' : 'md:col-span-2 aspect-[4/3] md:aspect-auto md:row-span-1',
+            'relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+            roundedClass,
+            getPreviewDeviceClass(device, {
+              mobile: 'aspect-[4/3]',
+              tablet: 'col-span-2 row-span-1 aspect-auto',
+              desktop: 'col-span-2 row-span-1 aspect-auto',
+            }),
           )}
           style={{
             ...(device !== 'mobile' ? { minHeight: '300px' } : {}),
             backgroundColor: colors.neutralSurface,
-            borderColor: colors.neutralBorder,
             '--tw-ring-color': colors.focusRing,
           } as React.CSSProperties}
           onClick={() =>{  setSelectedPhoto(featured); }}
@@ -316,17 +394,15 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
               <ImageIcon size={48} style={{ color: colors.placeholderIcon }} />
             </div>
           )}
-          <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-          <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+          <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
         </div>
-        <div className={cn('grid gap-1 p-1.5 rounded border-2', device === 'mobile' ? 'grid-cols-3' : 'grid-cols-1')} style={{ borderColor: colors.secondary, backgroundColor: colors.neutralBackground }}>
+        <div className={cn('grid gap-2', device === 'mobile' ? 'grid-cols-3' : 'grid-cols-1')}>
           {sub.map((photo, idx) => (
             <div
               key={photo.id}
-              className="aspect-square relative group cursor-pointer overflow-hidden border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+              className={cn("aspect-square relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2", roundedClass)}
               style={{ 
-                backgroundColor: colors.neutralSurface, 
-                borderColor: colors.neutralBorder,
+                backgroundColor: colors.neutralSurface,
                 '--tw-ring-color': colors.focusRing,
               } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
@@ -341,16 +417,10 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                   <ImageIcon size={24} style={{ color: colors.placeholderIcon }} />
                 </div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
               {showCounters && (
                 <div 
-                  className="absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full border"
-                  style={{ 
-                    backgroundColor: colors.counterBg, 
-                    color: colors.counterText,
-                    borderColor: colors.counterBorder,
-                  }}
+                  className="absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/50 text-white"
                 >
                   {idx + 2}
                 </div>
@@ -367,18 +437,25 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
     if (items.length === 0) {return renderGalleryEmptyState();}
     const showCounters = items.length > 6;
 
+    const colsClass = desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
+    
     return (
       <div
-        className={cn('grid gap-0.5 border', device === 'mobile' ? 'grid-cols-3' : (device === 'tablet' ? 'grid-cols-4' : 'grid-cols-5'))}
-        style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
+        className={cn(
+          'flex gap-3',
+          device === 'mobile' ? 'overflow-x-auto snap-x snap-mandatory flex-nowrap hide-scrollbar' : cn('grid', colsClass)
+        )}
       >
         {items.map((photo, idx) => (
           <div
             key={photo.id}
-            className="aspect-square relative group cursor-pointer overflow-hidden border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            className={cn(
+              "aspect-square relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+              roundedClass,
+              device === 'mobile' ? 'shrink-0 w-[85%] snap-center' : ''
+            )}
             style={{ 
-              backgroundColor: colors.neutralSurface, 
-              borderColor: colors.neutralBorder,
+              backgroundColor: colors.neutralSurface,
               '--tw-ring-color': colors.focusRing,
             } as React.CSSProperties}
             onClick={() =>{  setSelectedPhoto(photo); }}
@@ -390,23 +467,16 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
               <PreviewImage
                 src={photo.url}
                 alt=""
-                className="w-full h-full object-cover transition-opacity duration-300 hover:opacity-90"
+                className="w-full h-full object-cover transition-all duration-300 group-hover:scale-[1.03] group-hover:brightness-95"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}>
                 <ImageIcon size={24} style={{ color: colors.placeholderIcon }} />
               </div>
             )}
-            <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-            <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
             {showCounters && (
               <div 
-                className="absolute top-1.5 right-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-full border"
-                style={{ 
-                  backgroundColor: colors.counterBg, 
-                  color: colors.counterText,
-                  borderColor: colors.counterBorder,
-                }}
+                className="absolute top-1.5 right-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-black/50 text-white"
               >
                 {idx + 1}
               </div>
@@ -425,22 +495,24 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
     return (
       <div
         className={cn(
-          'grid gap-4 rounded-lg border p-2',
-          device === 'mobile' ? 'grid-cols-3 auto-rows-[110px]' : 'grid-cols-1 md:grid-cols-3 auto-rows-[250px] md:auto-rows-[300px]',
+          'grid gap-2',
+          getPreviewDeviceClass(device, {
+            mobile: 'grid-cols-3 auto-rows-[110px]',
+            tablet: 'grid-cols-3 auto-rows-[250px]',
+            desktop: 'grid-cols-3 auto-rows-[300px]',
+          }),
         )}
-        style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
       >
         {items.map((photo, i) => {
           const isLarge = i % 4 === 0 || i % 4 === 3;
-          const colSpan = isLarge ? 'col-span-2 md:col-span-2' : 'col-span-1 md:col-span-1';
+          const colSpan = isLarge ? 'col-span-2' : 'col-span-1';
 
           return (
             <div
               key={photo.id}
-              className={`${colSpan} relative group cursor-pointer overflow-hidden rounded-sm border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2`}
+              className={cn(`${colSpan} relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2`, roundedClass)}
               style={{ 
-                backgroundColor: colors.neutralSurface, 
-                borderColor: colors.neutralBorder,
+                backgroundColor: colors.neutralSurface,
                 '--tw-ring-color': colors.focusRing,
               } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
@@ -459,16 +531,10 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                   <ImageIcon size={32} style={{ color: colors.placeholderIcon }} />
                 </div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
               {showCounters && isLarge && (
                 <div 
-                  className="absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full border"
-                  style={{ 
-                    backgroundColor: colors.counterBg, 
-                    color: colors.counterText,
-                    borderColor: colors.counterBorder,
-                  }}
+                  className="absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-black/50 text-white"
                 >
                   {i + 1}
                 </div>
@@ -488,20 +554,18 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
 
     const MAX_VISIBLE = device === 'mobile' ? 6 : (device === 'tablet' ? 9 : 12);
     const visibleItems = items.slice(0, MAX_VISIBLE);
-    const remainingCount = items.length - MAX_VISIBLE;
 
     // Centered layout for 1-2 items
     if (items.length <= 2) {
       return (
-        <div className="py-8 px-4">
-        <div className={cn('mx-auto flex items-center justify-center gap-4', items.length === 1 ? 'max-w-sm' : 'max-w-xl')}>
+        <div className="px-4">
+        <div className={cn('mx-auto flex items-center justify-center gap-3', items.length === 1 ? 'max-w-sm' : 'max-w-xl')}>
             {items.map((photo) => (
               <div
                 key={photo.id}
-                className="flex-1 aspect-square rounded-xl overflow-hidden cursor-pointer group border relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                className={cn("flex-1 aspect-square overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2", roundedClass)}
                 style={{ 
-                  backgroundColor: colors.neutralSurface, 
-                  borderColor: colors.neutralBorder,
+                  backgroundColor: colors.neutralSurface,
                   '--tw-ring-color': colors.focusRing,
                 } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
@@ -516,7 +580,7 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                     <ImageIcon size={40} style={{ color: colors.placeholderIcon }} />
                   </div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
+                <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
               </div>
             ))}
           </div>
@@ -524,24 +588,20 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
       );
     }
 
+    const colsClass = desktopColumns === 3 ? 'columns-3' : 'columns-4';
+
     return (
-      <div className="py-8 px-4">
+      <div className={cn('px-4', fullWidthDesktop ? 'w-full' : 'max-w-7xl mx-auto')}>
         <div className={cn(
-          'grid gap-2 rounded-lg border-2 p-2 relative',
-          device === 'mobile' ? 'grid-cols-2' : (device === 'tablet' ? 'grid-cols-3' : 'grid-cols-4'),
-        )} style={{ backgroundColor: colors.neutralBackground, borderColor: colors.secondary }}>
-          {/* Corner decorations with secondary color */}
-          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-lg" style={{ borderColor: colors.secondary }} />
-          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-lg" style={{ borderColor: colors.secondary }} />
-          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-lg" style={{ borderColor: colors.secondary }} />
-          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-lg" style={{ borderColor: colors.secondary }} />
+          'gap-3',
+          device === 'mobile' ? 'columns-2' : (device === 'tablet' ? 'columns-3' : colsClass),
+        )}>
           {visibleItems.map((photo) => (
             <div
               key={photo.id}
-              className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+              className={cn("mb-3 aspect-square overflow-hidden cursor-pointer group relative break-inside-avoid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2", roundedClass)}
               style={{ 
-                backgroundColor: colors.neutralSurface, 
-                borderColor: colors.neutralBorder,
+                backgroundColor: colors.neutralSurface,
                 '--tw-ring-color': colors.focusRing,
               } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
@@ -556,21 +616,9 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                   <ImageIcon size={28} style={{ color: colors.placeholderIcon }} />
                 </div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
             </div>
           ))}
-          {/* +N remaining badge with secondary color */}
-          {remainingCount > 0 && (
-            <div
-              className="aspect-square rounded-lg overflow-hidden flex flex-col items-center justify-center cursor-pointer border"
-              style={{ backgroundColor: colors.badgeBg, borderColor: colors.counterBorder }}
-            >
-              <Plus size={28} style={{ color: colors.secondary }} className="mb-1" />
-              <span className="text-lg font-bold" style={{ color: colors.badgeText }}>+{remainingCount}</span>
-              <span className="text-xs" style={{ color: colors.mutedText }}>ảnh khác</span>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -581,17 +629,44 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
     if (items.length === 0) {return renderGalleryEmptyState();}
     if (marqueeBaseItems.length === 0) {return renderGalleryEmptyState();}
 
-    const visualGapClass = 'gap-6 md:gap-8';
+    const visualGapClass = getPreviewDeviceClass(device, {
+      mobile: 'gap-6',
+      tablet: 'gap-8',
+      desktop: 'gap-8',
+    });
 
     return (
-      <div className="py-8">
-      <div className="w-full max-w-7xl mx-auto relative overflow-hidden rounded-2xl border p-4 md:p-6" style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
+      <div>
+      <div
+        className={cn(
+          'w-full max-w-7xl mx-auto relative overflow-hidden rounded-2xl',
+          getPreviewDeviceClass(device, {
+            mobile: 'py-2',
+            tablet: 'py-4',
+            desktop: 'py-4',
+          }),
+        )}
+      >
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-20 z-10"
+            className={cn(
+              'pointer-events-none absolute inset-y-0 left-0 z-10',
+              getPreviewDeviceClass(device, {
+                mobile: 'w-16',
+                tablet: 'w-20',
+                desktop: 'w-20',
+              }),
+            )}
             style={{ background: `linear-gradient(to right, ${colors.neutralBackground} 0%, transparent 100%)` }}
           />
           <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-16 md:w-20 z-10"
+            className={cn(
+              'pointer-events-none absolute inset-y-0 right-0 z-10',
+              getPreviewDeviceClass(device, {
+                mobile: 'w-16',
+                tablet: 'w-20',
+                desktop: 'w-20',
+              }),
+            )}
             style={{ background: `linear-gradient(to left, ${colors.neutralBackground} 0%, transparent 100%)` }}
           />
           <div
@@ -642,11 +717,17 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                     <button
                       type="button"
                       key={`gallery-marquee-${loopIdx}-${photo.id}-${idx}`}
-                      className="shrink-0 h-40 md:h-56 lg:h-64 aspect-[4/3] rounded-xl overflow-hidden group relative border text-left appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                      className={cn(
+                        'shrink-0 aspect-[4/3] overflow-hidden group relative text-left appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                        roundedClass,
+                        getPreviewDeviceClass(device, {
+                          mobile: 'h-40',
+                          tablet: 'h-56',
+                          desktop: 'h-64',
+                        }),
+                      )}
                       style={{
                         backgroundColor: colors.neutralSurface,
-                        borderColor: colors.neutralBorder,
-                        boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
                         '--tw-ring-color': colors.focusRing,
                       } as React.CSSProperties}
                       onClick={() =>{  setSelectedPhoto(photo); }}
@@ -659,8 +740,7 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                           <ImageIcon size={32} style={{ color: colors.placeholderIcon }} />
                         </div>
                       )}
-                      <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-                      <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+                      <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors", roundedClass)} />
                     </button>
                   );
                 })}
@@ -678,20 +758,18 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
 
     const MAX_VISIBLE = device === 'mobile' ? 6 : 10;
     const visibleItems = items.slice(0, MAX_VISIBLE);
-    const remainingCount = items.length - MAX_VISIBLE;
 
     // Centered layout for 1-2 items
     if (items.length <= 2) {
       return (
-        <div className="py-8 px-4">
-        <div className={cn('mx-auto flex items-center justify-center gap-4', items.length === 1 ? 'max-w-md' : 'max-w-2xl')}>
+        <div className="px-4">
+        <div className={cn('mx-auto flex items-center justify-center gap-3', items.length === 1 ? 'max-w-md' : 'max-w-2xl')}>
             {items.map((photo, idx) => (
               <div
                 key={photo.id}
-                className={cn('flex-1 rounded-xl overflow-hidden cursor-pointer group border relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', idx % 2 === 0 ? 'aspect-[3/4]' : 'aspect-[4/3]')}
+                className={cn('flex-1 overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', roundedClass, idx % 2 === 0 ? 'aspect-[3/4]' : 'aspect-[4/3]')}
                 style={{ 
-                  backgroundColor: colors.neutralSurface, 
-                  borderColor: colors.neutralBorder,
+                  backgroundColor: colors.neutralSurface,
                   '--tw-ring-color': colors.focusRing,
                 } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
@@ -706,7 +784,7 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                     <ImageIcon size={40} style={{ color: colors.placeholderIcon }} />
                   </div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
+                <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
               </div>
             ))}
           </div>
@@ -716,16 +794,11 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
 
     // Masonry layout with CSS columns
     return (
-      <div className="py-8 px-4">
-      <div className={cn(
-        'gap-3 rounded-lg border-2 p-2 relative',
-        device === 'mobile' ? 'columns-2' : (device === 'tablet' ? 'columns-3' : 'columns-4'),
-      )} style={{ backgroundColor: colors.neutralBackground, borderColor: colors.secondary }}>
-          {/* Corner decorations with secondary color */}
-          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 rounded-tl-lg z-10" style={{ borderColor: colors.secondary }} />
-          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 rounded-tr-lg z-10" style={{ borderColor: colors.secondary }} />
-          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 rounded-bl-lg z-10" style={{ borderColor: colors.secondary }} />
-          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 rounded-br-lg z-10" style={{ borderColor: colors.secondary }} />
+      <div className="px-4">
+        <div className={cn(
+          'gap-3',
+          device === 'mobile' ? 'columns-2' : (device === 'tablet' ? 'columns-3' : 'columns-4'),
+        )}>
           {visibleItems.map((photo, idx) => {
             // Varying heights for masonry effect
             const heights = ['h-48', 'h-64', 'h-56', 'h-72', 'h-52', 'h-60'];
@@ -734,10 +807,9 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
             return (
               <div
                 key={photo.id}
-                className={cn('mb-3 break-inside-avoid rounded-xl overflow-hidden cursor-pointer group relative border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', heightClass)}
+                className={cn('mb-3 break-inside-avoid overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', roundedClass, heightClass)}
                 style={{ 
-                  backgroundColor: colors.neutralSurface, 
-                  borderColor: colors.neutralBorder,
+                  backgroundColor: colors.neutralSurface,
                   '--tw-ring-color': colors.focusRing,
                 } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
@@ -752,37 +824,22 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
                     <ImageIcon size={28} style={{ color: colors.placeholderIcon }} />
                   </div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-                <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+                <div className={cn("absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors", roundedClass)} />
               </div>
             );
           })}
         </div>
-        {/* +N remaining badge with secondary color */}
-        {remainingCount > 0 && (
-          <div className="flex items-center justify-center mt-4">
-            <span className="text-sm font-medium px-4 py-2 rounded-full border" style={{ backgroundColor: colors.badgeBg, color: colors.badgeText, borderColor: colors.counterBorder }}>
-              +{remainingCount} ảnh khác
-            </span>
-          </div>
-        )}
       </div>
     );
   };
 
   // Render Gallery styles with container and Lightbox (with keyboard navigation)
   const renderGalleryContent = () => (
-    <section className="w-full" style={{ backgroundColor: colors.neutralSurface }}>
+    <section className={cn("w-full", sectionSpacingClassName)} style={{ backgroundColor: colors.neutralSurface }}>
       <div className={cn(
-        'container mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-12',
-        previewStyle === 'marquee' ? 'max-w-7xl' : 'max-w-[1600px]',
+        'mx-auto',
+        fullWidthDesktop ? 'w-full px-2' : 'max-w-7xl px-4',
       )}>
-        {title && (
-          <div className="text-center mb-6">
-            <h2 className="text-2xl md:text-3xl font-bold tracking-tighter mb-3" style={{ color: colors.heading }}>{title}</h2>
-            <div className="mx-auto h-1 w-16 rounded-full" style={{ backgroundColor: layoutAccent }} />
-          </div>
-        )}
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out">
           {previewStyle === 'spotlight' && renderSpotlightStyle()}
           {previewStyle === 'explore' && renderExploreStyle()}
@@ -809,7 +866,7 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
     switch (previewStyle) {
       case 'spotlight': {
         if (count === 0) {return 'Chưa có ảnh';}
-        if (count === 1) {return 'Ảnh 1: 1200×800px (3:2)';}
+        if (count === 1) {return 'Ảnh 1: 1200×900px (4:3)';}
         if (count <= 4) {return `Ảnh 1: 1200×800px • Ảnh 2-${count}: 600×600px`;}
         return `Ảnh 1: 1200×800px • Ảnh 2-4: 600×600px (+${count - 4} ảnh)`;
       }
@@ -852,7 +909,24 @@ export const GalleryPreview = ({ items, brandColor, secondary, mode, harmony, se
         fontClassName={fontClassName}
       >
         <BrowserFrame>
-          {renderGalleryContent()}
+          <div className="w-full">
+            <SectionHeader
+              title={title}
+              subtitle={subtitle}
+              badgeText={badgeText}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              showBadge={showBadge}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              brandColor={colors.primary}
+              className={cn("mx-auto mb-0", fullWidthDesktop ? 'w-full px-4' : 'max-w-7xl px-4')}
+            />
+            {renderGalleryContent()}
+          </div>
         </BrowserFrame>
       </PreviewWrapper>
       {mode === 'dual' ? <ColorInfoPanel brandColor={brandColor} secondary={secondary} /> : null}

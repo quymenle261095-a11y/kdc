@@ -13,6 +13,9 @@ import { ImageUploader } from '../../../components/ImageUploader';
 import { QuickCreateCategoryModal } from '../../../components/QuickCreateCategoryModal';
 import { stripHtml, truncateText } from '@/lib/seo';
 import { normalizeRichText } from '@/app/admin/lib/normalize-rich-text';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
+import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
 
 const MODULE_KEY = 'posts';
 
@@ -34,9 +37,11 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
   const SCHEDULE_SKEW_MS = 30_000;
 
   const postData = useQuery(api.posts.getById, { id: id as Id<"posts"> });
+  const additionalCategoryIdsData = useQuery(api.posts.getAdditionalCategoryIds, { id: id as Id<"posts"> });
   const categoriesData = useQuery(api.postCategories.listAll, {});
   const updatePost = useMutation(api.posts.update);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
+  const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: MODULE_KEY });
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -50,6 +55,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
   const [thumbnail, setThumbnail] = useState<string | undefined>();
   const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | undefined>();
   const [categoryId, setCategoryId] = useState('');
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([]);
   const [authorName, setAuthorName] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published' | 'Archived'>('Draft');
   const [publishAtLocal, setPublishAtLocal] = useState('');
@@ -57,8 +63,13 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [editorResetKey] = useState(0);
+  const [editorResetKey, setEditorResetKey] = useState(0);
   const [snapshotVersion, setSnapshotVersion] = useState(0);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const selectedCategorySlug = useMemo(
+    () => categoriesData?.find((category) => category._id === categoryId)?.slug,
+    [categoriesData, categoryId]
+  );
   const initialSnapshotRef = useRef<{
     title: string;
     slug: string;
@@ -72,6 +83,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
     thumbnail: string;
     thumbnailStorageId?: Id<'_storage'> | null;
     categoryId: string;
+    additionalCategoryIds: string[];
     authorName: string;
     status: 'Draft' | 'Published' | 'Archived';
     publishedAt?: number;
@@ -89,6 +101,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
   const showAdvancedRenderCard = hasMarkdownRender || hasHtmlRender;
   const schedulingFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableScheduling', moduleKey: MODULE_KEY });
   const schedulingEnabled = enabledFields.has('publish_date') && (schedulingFeature?.enabled ?? false);
+  const multiCategoryEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableMultipleCategories')?.value);
 
   const normalizedContent = useMemo(() => normalizeRichText(content), [content]);
   const resolvedPublishedAt = useMemo(
@@ -99,6 +112,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
   const currentSnapshot = useMemo(() => ({
     authorName: authorName.trim(),
     categoryId,
+    additionalCategoryIds,
     content: normalizedContent,
     renderType,
     markdownRender: markdownRender.trim(),
@@ -111,14 +125,12 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
     publishedAt: resolvedPublishedAt,
     thumbnail: thumbnail ?? '',
     title: title.trim(),
-    thumbnailStorageId,
-  }), [authorName, categoryId, normalizedContent, renderType, markdownRender, htmlRender, excerpt, metaDescription, metaTitle, slug, status, resolvedPublishedAt, thumbnail, title, thumbnailStorageId]);
+    thumbnailStorageId: thumbnail ? (thumbnailStorageId ?? null) : null,
+  }), [authorName, categoryId, additionalCategoryIds, normalizedContent, renderType, markdownRender, htmlRender, excerpt, metaDescription, metaTitle, slug, status, resolvedPublishedAt, thumbnail, title, thumbnailStorageId]);
 
   const hasChanges = useMemo(() => {
     if (!initialSnapshotRef.current) {return false;}
-    const initialSnapshot = initialSnapshotRef.current;
-    return (Object.keys(initialSnapshot) as Array<keyof typeof initialSnapshot>)
-      .some((key) => initialSnapshot[key] !== currentSnapshot[key]);
+    return JSON.stringify(initialSnapshotRef.current) !== JSON.stringify(currentSnapshot);
   }, [currentSnapshot, snapshotVersion]);
 
   useEffect(() => {
@@ -153,8 +165,40 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
     setSlug(generateSlugFromTitle(val));
   };
 
+  const handleApplyAiPost = (item: AiEntityImportPayload) => {
+    const nextTitle = item.title?.trim() || item.name?.trim() || '';
+    if (!nextTitle) {return;}
+
+    setTitle(nextTitle);
+    setSlug(item.slug?.trim() || generateSlugFromTitle(nextTitle));
+    const nextContent = item.content || item.description || item.htmlRender || item.markdownRender || '';
+    setContent(nextContent);
+    if (item.content) {
+      setRenderType('content');
+      setHtmlRender(item.htmlRender || '');
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.htmlRender) {
+      setRenderType('html');
+      setHtmlRender(item.htmlRender);
+      setMarkdownRender('');
+    } else if (item.markdownRender) {
+      setRenderType('markdown');
+      setMarkdownRender(item.markdownRender);
+      setHtmlRender('');
+    }
+    setExcerpt(item.excerpt || item.description || truncateText(stripHtml(nextContent), 180));
+    setMetaTitle(item.metaTitle || truncateText(nextTitle, 60));
+    setMetaDescription(item.metaDescription || truncateText(stripHtml(item.excerpt || nextContent), 160));
+    if (item.thumbnail) {
+      setThumbnail(item.thumbnail);
+      setThumbnailStorageId(undefined);
+    }
+    if (item.authorName) {setAuthorName(item.authorName);}
+    setEditorResetKey((prev) => prev + 1);
+  };
+
   useEffect(() => {
-    if (postData) {
+    if (postData && !isDataLoaded) {
       setTitle(postData.title);
       setSlug(postData.slug);
       setContent(postData.content);
@@ -162,7 +206,8 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
       const allowedRenderTypes = new Set<'content' | 'markdown' | 'html'>(['content']);
       if (hasMarkdownRender) {allowedRenderTypes.add('markdown');}
       if (hasHtmlRender) {allowedRenderTypes.add('html');}
-      setRenderType(allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content');
+      const normalizedRenderType = allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content';
+      setRenderType(normalizedRenderType);
       setMarkdownRender(postData.markdownRender ?? '');
       setHtmlRender(postData.htmlRender ?? '');
       setExcerpt(postData.excerpt ?? '');
@@ -171,6 +216,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
       setThumbnail(postData.thumbnail);
       setThumbnailStorageId((postData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId);
       setCategoryId(postData.categoryId);
+      setAdditionalCategoryIds(additionalCategoryIdsData ?? []);
       setAuthorName(postData.authorName ?? '');
       setStatus(postData.status);
       const now = Date.now();
@@ -180,8 +226,9 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
       initialSnapshotRef.current = {
         authorName: (postData.authorName ?? '').trim(),
         categoryId: postData.categoryId,
+        additionalCategoryIds: additionalCategoryIdsData ?? [],
         content: normalizeRichText(postData.content),
-        renderType: postData.renderType ?? 'content',
+        renderType: normalizedRenderType,
         markdownRender: (postData.markdownRender ?? '').trim(),
         htmlRender: (postData.htmlRender ?? '').trim(),
         excerpt: (postData.excerpt ?? '').trim(),
@@ -192,11 +239,14 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
         publishedAt: isScheduled ? postData.publishedAt : undefined,
         thumbnail: postData.thumbnail ?? '',
         title: postData.title.trim(),
-        thumbnailStorageId: (postData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId,
+        thumbnailStorageId: postData.thumbnail
+          ? ((postData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId ?? null)
+          : null,
       };
       setSnapshotVersion((prev) => prev + 1);
+      setIsDataLoaded(true);
     }
-  }, [postData, hasMarkdownRender, hasHtmlRender]);
+  }, [postData, additionalCategoryIdsData, hasMarkdownRender, hasHtmlRender, isDataLoaded]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,6 +273,9 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
       await updatePost({
         authorName: enabledFields.has('author_name') ? authorName.trim() || undefined : undefined,
         categoryId: categoryId as Id<"postCategories">,
+        additionalCategoryIds: multiCategoryEnabled
+          ? additionalCategoryIds.filter((category) => category !== categoryId) as Id<"postCategories">[]
+          : undefined,
         content,
         renderType,
         markdownRender: markdownRender.trim() || undefined,
@@ -239,7 +292,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
         publishedAt: status === 'Published' ? resolvedPublishedAt : undefined,
         slug: slug.trim(),
         status,
-        thumbnail,
+        thumbnail: thumbnail ?? '',
         thumbnailStorageId: thumbnail ? (thumbnailStorageId ?? null) : null,
         title: title.trim(),
       });
@@ -294,22 +347,9 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
       onCreated={(id) =>{  setCategoryId(id); }}
     />
     <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa bài viết</h1>
-          <div className="text-sm text-slate-500 mt-1">Cập nhật nội dung bài viết hiện có</div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.open(`/posts/${slug}`, '_blank')}
-            className="gap-2"
-          >
-            <ExternalLink size={16} />
-            Xem trên web
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa bài viết</h1>
+        <div className="text-sm text-slate-500 mt-1">Cập nhật nội dung bài viết hiện có</div>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -423,7 +463,7 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
                     {metaTitle.trim() || title || 'Tiêu đề bài viết'}
                   </div>
                   <div className="text-emerald-600 text-xs">
-                    /posts/{slug || 'bai-viet'}
+                    /{selectedCategorySlug || 'chua-phan-loai'}/{slug || 'bai-viet'}
                   </div>
                   <div className="text-slate-600 text-xs mt-1 line-clamp-2">
                     {metaDescription.trim() || excerpt || 'Mô tả ngắn sẽ hiển thị tại đây.'}
@@ -476,7 +516,21 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
               )}
               <div className="space-y-2">
                 <Label>Danh mục</Label>
-                <div className="flex gap-2">
+                {multiCategoryEnabled ? (
+                  <>
+                  <CategoryTagsInput
+                    categories={categoriesData}
+                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
+                    onQuickCreate={() =>{  setShowCategoryModal(true); }}
+                    onChange={(ids) => {
+                      setCategoryId(ids[0] ?? '');
+                      setAdditionalCategoryIds(ids.slice(1));
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
                   <select 
                     value={categoryId}
                     onChange={(e) =>{  setCategoryId(e.target.value); }}
@@ -495,7 +549,8 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
                   >
                     <Plus size={16} />
                   </Button>
-                </div>
+                  </div>
+                )}
               </div>
               {enabledFields.has('author_name') && (
                 <div className="space-y-2">
@@ -530,21 +585,38 @@ export default function PostEditPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-end items-center z-10">
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={isSubmitting || !hasChanges}
-          className={!hasChanges && !isSubmitting
-            ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-            : undefined}
-        >
-          {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-          {isSubmitting || saveStatus === 'saving'
-            ? 'Đang lưu...'
-            : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
-        </Button>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting || saveStatus === 'saving'}
+        hasChanges={hasChanges}
+        submitLabel="Lưu thay đổi"
+        align="end"
+      >
+        <>
+          <AiEntityImportDialog kind="post" enabledFields={enabledFields} onApply={handleApplyAiPost} />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => window.open(`/${selectedCategorySlug || 'chua-phan-loai'}/${slug}`, '_blank')}
+            className="gap-2"
+            disabled={!slug.trim()}
+          >
+            <ExternalLink size={16} />
+            Xem trên web
+          </Button>
+          <Button
+            type="submit"
+            variant="accent"
+            disabled={isSubmitting || !hasChanges}
+            className={!hasChanges && !isSubmitting
+              ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+              : undefined}
+          >
+            {isSubmitting || saveStatus === 'saving'
+              ? 'Đang lưu...'
+              : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
+          </Button>
+        </>
+      </HomeComponentStickyFooter>
     </form>
     </>
   );

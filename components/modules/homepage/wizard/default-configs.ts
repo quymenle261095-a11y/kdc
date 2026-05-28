@@ -143,6 +143,9 @@ export const buildDefaultConfig = (type: string, sampleIds: SampleIds) => {
             url: '',
           },
         ],
+        logoSize: 'normal',
+        showBorder: true,
+        spacing: 'normal',
         style: 'grid',
       };
     case 'HomepageCategoryHero':

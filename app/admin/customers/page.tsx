@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ChevronDown, Edit, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
 import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
@@ -110,7 +110,7 @@ function CustomersContent() {
       : 'skip'
   );
 
-  const isLoading = customersData === undefined || totalCountData === undefined;
+  const isTableLoading = customersData === undefined || totalCountData === undefined;
 
   useEffect(() => {
     if (selectAllData?.hasMore) {
@@ -265,14 +265,6 @@ function CustomersContent() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -348,8 +340,18 @@ function CustomersContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.map(customer => (
-              <TableRow key={customer._id} className={selectedIds.includes(customer._id) ? 'bg-blue-500/5' : ''}>
+            {isTableLoading ? (
+              Array.from({ length: resolvedCustomersPerPage }).map((_, index) => (
+                <TableRow key={`loading-${index}`}>
+                  <TableCell colSpan={tableColumnCount}>
+                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <>
+                {paginatedData.map(customer => (
+                  <TableRow key={customer._id} className={selectedIds.includes(customer._id) ? 'bg-blue-500/5' : ''}>
                 {resolvedVisibleColumns.includes('select') && (
                   <TableCell>
                     <SelectCheckbox checked={selectedIds.includes(customer._id)} onChange={() =>{  toggleSelectItem(customer._id); }} />
@@ -414,9 +416,11 @@ function CustomersContent() {
                     </div>
                   </TableCell>
                 )}
-              </TableRow>
-            ))}
-            {paginatedData.length === 0 && (
+                  </TableRow>
+                ))}
+              </>
+            )}
+            {!isTableLoading && paginatedData.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
                   {searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có khách hàng nào'}
@@ -426,7 +430,7 @@ function CustomersContent() {
           </TableBody>
         </Table>
 
-        {totalCount > 0 && !isLoading && (
+        {totalCount > 0 && !isTableLoading && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
               <div className="flex items-center gap-2">

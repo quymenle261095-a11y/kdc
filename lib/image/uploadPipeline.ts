@@ -1,5 +1,6 @@
 import { buildImageFilename, getExtensionFromMime, slugify, type ImageNamingContext } from './uploadNaming';
-import { getProductImageAspectRatioValue, isAspectRatioMatch, type ProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import { getProductImageAspectRatioValue, isAspectRatioMatch, type ImageAspectRatioInput } from '@/lib/products/image-aspect-ratio';
+import { smartCropLogoFile, type SmartLogoCropProgress } from './logoSmartCrop';
 
 export const WEBP_UPLOAD_QUALITY = 0.85;
 
@@ -11,13 +12,15 @@ type PrepareImageOptions = {
   preservePngWithTransparency?: boolean;
   crop?: ImageCropSelection;
   naming?: ImageNamingContext;
+  smartLogoCrop?: boolean;
+  onProgress?: (progress: SmartLogoCropProgress) => void;
 };
 
 export type ImageCropSelection = {
   scale: number;
   xPercent: number;
   yPercent: number;
-  aspectRatio: ProductImageAspectRatio;
+  aspectRatio: ImageAspectRatioInput;
 };
 
 export type PreparedUploadImage = {
@@ -225,8 +228,16 @@ export async function prepareImageForUpload(
   let sourceFile = file;
   let dimensions = initialDimensions;
 
-  if (cropSelection && !isAspectRatioMatch(initialDimensions, cropSelection.aspectRatio)) {
-    sourceFile = await cropImageToAspectRatio(file, cropSelection);
+  if (options.smartLogoCrop) {
+    sourceFile = await smartCropLogoFile(sourceFile, {
+      onProgress: options.onProgress,
+      useModelFallback: true,
+    });
+    dimensions = await getImageDimensions(sourceFile);
+  }
+
+  if (cropSelection && !isAspectRatioMatch(dimensions, cropSelection.aspectRatio)) {
+    sourceFile = await cropImageToAspectRatio(sourceFile, cropSelection);
     dimensions = await getImageDimensions(sourceFile);
   }
 

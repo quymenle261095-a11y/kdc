@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
-import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import {
+  DEFAULT_DEMO_VOUCHERS,
   VOUCHER_PROMOTIONS_STYLES,
 } from '../_lib/constants';
 import { getVoucherPromotionsValidationResult } from '../_lib/colors';
@@ -29,65 +29,11 @@ interface VoucherPromotionsPreviewProps {
   selectedStyle?: VoucherPromotionsStyle;
   limit?: number;
   onStyleChange?: (style: VoucherPromotionsStyle) => void;
+  previewVouchers?: VoucherPromotionItem[];
+  canUseRealData?: boolean;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
 }
-
-const voucherSamples: VoucherPromotionItem[] = [
-  {
-    code: 'EGA50',
-    name: 'Giảm 15% đơn từ 500K',
-    description: 'Áp dụng cho tất cả sản phẩm',
-    maxDiscountAmount: 250000,
-    endDate: new Date('2026-12-28').getTime(),
-    discountType: 'percent',
-    discountValue: 15,
-  },
-  {
-    code: 'EGAT10',
-    name: 'Giảm 10% cho đơn 1 triệu',
-    description: 'Không áp dụng combo',
-    maxDiscountAmount: 300000,
-    endDate: new Date('2026-12-30').getTime(),
-    discountType: 'percent',
-    discountValue: 10,
-  },
-  {
-    code: 'FREESHIP',
-    name: 'Miễn phí vận chuyển nội thành',
-    description: 'Áp dụng đơn từ 500K',
-    maxDiscountAmount: 50000,
-    endDate: new Date('2026-12-31').getTime(),
-    discountType: 'free_shipping',
-  },
-  {
-    code: 'EGA500K',
-    name: 'Giảm 90K cho đơn 1 triệu',
-    description: 'Tối đa 1 mã/đơn',
-    maxDiscountAmount: 90000,
-    endDate: new Date('2026-12-31').getTime(),
-    discountType: 'fixed',
-    discountValue: 90000,
-  },
-  {
-    code: 'VIP150',
-    name: 'Ưu đãi khách VIP',
-    description: 'Chỉ áp dụng khách VIP',
-    maxDiscountAmount: 150000,
-    endDate: new Date('2027-01-05').getTime(),
-    discountType: 'fixed',
-    discountValue: 150000,
-  },
-  {
-    code: 'NEW100',
-    name: 'Ưu đãi khách mới',
-    description: 'Áp dụng khách đăng ký mới',
-    maxDiscountAmount: 100000,
-    endDate: new Date('2027-01-10').getTime(),
-    discountType: 'fixed',
-    discountValue: 100000,
-  },
-];
 
 export const VoucherPromotionsPreview = ({
   config,
@@ -97,6 +43,8 @@ export const VoucherPromotionsPreview = ({
   selectedStyle,
   limit,
   onStyleChange,
+  previewVouchers,
+  canUseRealData = true,
   fontStyle,
   fontClassName,
 }: VoucherPromotionsPreviewProps) => {
@@ -108,11 +56,20 @@ export const VoucherPromotionsPreview = ({
   const previewLimit = normalizeVoucherLimit(limit);
 
   const heading = config.texts?.heading || 'Voucher khuyến mãi';
-  const description = config.texts?.description || 'Áp dụng mã để nhận ưu đãi tốt nhất hôm nay.';
+  const description = config.subtitle || config.texts?.description || 'Áp dụng mã để nhận ưu đãi tốt nhất hôm nay.';
   const ctaLabel = config.texts?.ctaLabel || 'Xem tất cả ưu đãi';
   const ctaUrl = config.ctaUrl?.trim() || '/promotions';
 
-  const vouchers = React.useMemo(() => voucherSamples.slice(0, previewLimit), [previewLimit]);
+  const vouchers = React.useMemo(() => {
+    if (config.selectionMode === 'demo') {
+      const demoSource = config.demoVouchers && config.demoVouchers.length > 0
+        ? config.demoVouchers
+        : DEFAULT_DEMO_VOUCHERS;
+      return demoSource.slice(0, previewLimit).map((voucher) => ({ ...voucher, _id: voucher.id }));
+    }
+
+    return (previewVouchers ?? []).slice(0, previewLimit);
+  }, [config.demoVouchers, config.selectionMode, previewLimit, previewVouchers]);
 
   const validation = React.useMemo(() => getVoucherPromotionsValidationResult({
     primary: brandColor,
@@ -136,7 +93,7 @@ export const VoucherPromotionsPreview = ({
         previewStyle={previewStyle}
         setPreviewStyle={(nextStyle) => onStyleChange?.(nextStyle as VoucherPromotionsStyle)}
         styles={VOUCHER_PROMOTIONS_STYLES}
-        info={`${vouchers.length} voucher mẫu`}
+        info={config.selectionMode === 'demo' ? `${vouchers.length} voucher demo` : `${vouchers.length} voucher thực`}
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
@@ -148,6 +105,8 @@ export const VoucherPromotionsPreview = ({
           description={description}
           ctaLabel={ctaLabel}
           ctaUrl={ctaUrl}
+          showCta={config.showCta ?? true}
+          ctaVariant={config.ctaVariant ?? 'button'}
           vouchers={vouchers}
           tokens={validation.tokens}
           copiedCode={copiedCode}
@@ -155,15 +114,27 @@ export const VoucherPromotionsPreview = ({
           currentIndex={currentIndex}
           onCurrentIndexChange={setCurrentIndex}
           device={device}
+          hideHeader={config.hideHeader}
+          showTitleHeader={config.showTitle}
+          showSubtitleHeader={config.showSubtitle}
+          showBadge={config.showBadge}
+          badgeText={config.badgeText}
+          headerAlign={config.headerAlign}
+          titleColorPrimary={config.titleColorPrimary}
+          subtitleAboveTitle={config.subtitleAboveTitle}
+          uppercaseText={config.uppercaseText}
+          brandColor={brandColor}
+          desktopColumns={config.desktopColumns === 3 ? 3 : 4}
+          cornerRadius={config.cornerRadius ?? 'lg'}
+          spacing={config.spacing ?? 'normal'}
+          iconName={config.iconName}
         />
       </PreviewWrapper>
 
-      {mode === 'dual' && (
-        <ColorInfoPanel
-          brandColor={validation.tokens.primary}
-          secondary={validation.resolvedSecondary}
-          description="Màu phụ được áp dụng cho: copy button, badge, accent line, carousel indicators."
-        />
+      {config.selectionMode === 'auto' && !canUseRealData && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Module Quảng cáo/Promotions đang tắt nên preview không hiển thị dữ liệu thực.
+        </div>
       )}
     </div>
   );

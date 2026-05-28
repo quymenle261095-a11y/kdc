@@ -66,7 +66,31 @@ export interface FullscreenColorScheme {
   similarity: number;
 }
 
+export interface ConquestColorScheme {
+  sectionBg: string;
+  sectionText: string;
+  descriptionText: string;
+  accentSolid: string;
+  accentMuted: string;
+  badgeBg: string;
+  badgeText: string;
+  primaryCTA: string;
+  primaryCTAText: string;
+  secondaryCTA: string;
+  secondaryCTAText: string;
+  pillarGradient: string;
+  baseGradient: string;
+  dotActive: string;
+  dotInactive: string;
+  placeholderBg: string;
+  placeholderIcon: string;
+  similarity: number;
+}
+
 export interface SplitColorScheme {
+  contentBg: string;
+  headingText: string;
+  descriptionText: string;
   badgeBg: string;
   badgeText: string;
   primaryCTA: string;
@@ -80,6 +104,10 @@ export interface SplitColorScheme {
 }
 
 export interface ParallaxColorScheme {
+  cardBg: string;
+  headingText: string;
+  descriptionText: string;
+  countdownText: string;
   cardBadgeBg: string;
   cardBadgeText: string;
   cardBadgeDot: string;
@@ -186,6 +214,11 @@ const getNavIndicatorColors = (baseColor: string) => {
   };
 };
 
+const getAdaptiveContentSurface = (baseColor: string) => {
+  const color = oklch(baseColor);
+  return color.l < 0.55 ? '#0f172a' : '#f8fafc';
+};
+
 export function getSliderColors(
   primary: string,
   secondary: string,
@@ -199,7 +232,7 @@ export function getSliderColors(
   const navBase = mode === 'dual' ? secondaryPalette.solid : primaryPalette.solid;
   const navIndicator = getNavIndicatorColors(navBase);
   const dotActive = mode === 'dual' ? secondaryPalette.solid : primaryPalette.solid;
-  const navIconColor = mode === 'dual' ? primaryPalette.solid : navIndicator.icon;
+  const navIconColor = getAPCATextColor(navIndicator.bg, 16, 700);
 
   return {
     navButtonBg: navIndicator.bg,
@@ -282,6 +315,46 @@ export function getFullscreenColors(
   };
 }
 
+export function getConquestColors(
+  primary: string,
+  secondary: string,
+  mode: 'single' | 'dual',
+): ConquestColorScheme {
+  const secondaryColor = mode === 'dual' ? resolveSecondaryColor(primary, secondary, mode) : primary;
+  const primaryPalette = generatePalette(primary);
+  const secondaryPalette = generatePalette(secondaryColor);
+  const similarity = getSimilarity(primary, secondaryColor);
+  const sectionBg = primary;
+  const sectionText = getAPCATextColor(sectionBg, 32, 700);
+  const neutralSolid = sectionText === '#ffffff' ? '#ffffff' : '#111827';
+  const neutralMuted = sectionText === '#ffffff' ? '#d4d4d8' : '#797979';
+  const neutralSoft = sectionText === '#ffffff' ? '#71717a' : '#d4d4d8';
+  const canUseDual = mode === 'dual' && similarity < 0.92;
+  const ctaBg = canUseDual ? secondaryPalette.solid : neutralSolid;
+  const badgeBg = canUseDual ? secondaryPalette.solid : neutralSolid;
+
+  return {
+    sectionBg,
+    sectionText,
+    descriptionText: sectionText === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(15,23,42,0.78)',
+    accentSolid: neutralSolid,
+    accentMuted: neutralMuted,
+    badgeBg,
+    badgeText: getAPCATextColor(badgeBg, 12, 600),
+    primaryCTA: ctaBg,
+    primaryCTAText: getAPCATextColor(ctaBg, 16, 600),
+    secondaryCTA: sectionBg,
+    secondaryCTAText: sectionText,
+    pillarGradient: `linear-gradient(180deg, ${neutralSolid} 0%, ${neutralMuted} 100%)`,
+    baseGradient: `linear-gradient(180deg, ${neutralMuted} 0%, ${neutralSoft} 100%)`,
+    dotActive: ctaBg,
+    dotInactive: sectionText === '#ffffff' ? 'rgba(255,255,255,0.42)' : 'rgba(15,23,42,0.28)',
+    placeholderBg: primaryPalette.surface,
+    placeholderIcon: ctaBg,
+    similarity,
+  };
+}
+
 export function getSplitColors(
   primary: string,
   secondary: string,
@@ -295,8 +368,12 @@ export function getSplitColors(
   const navBase = mode === 'dual' ? secondaryPalette.solid : primaryPalette.solid;
   const navIndicator = getNavIndicatorColors(navBase);
   const progressDotActive = mode === 'dual' ? secondaryPalette.solid : primaryPalette.solid;
+  const contentBg = getAdaptiveContentSurface(primary);
 
   return {
+    contentBg,
+    headingText: getAPCATextColor(contentBg, 28, 700),
+    descriptionText: getAPCATextColor(contentBg, 16, 500),
     badgeBg: getSecondaryTint(0.4),
     badgeText: getAPCATextColor(getSecondaryTint(0.4), 12, 600),
     primaryCTA: primary,
@@ -322,8 +399,13 @@ export function getParallaxColors(
   const getSecondaryTint = (lightness: number) => formatHex(oklch({ ...secondaryColorValue, l: Math.min(secondaryColorValue.l + lightness, 0.98) }));
   const navBase = mode === 'dual' ? secondaryPalette.solid : primaryPalette.solid;
   const navIndicator = getNavIndicatorColors(navBase);
+  const cardBg = getAdaptiveContentSurface(primary);
 
   return {
+    cardBg,
+    headingText: getAPCATextColor(cardBg, 20, 700),
+    descriptionText: getAPCATextColor(cardBg, 14, 500),
+    countdownText: getAPCATextColor(cardBg, 14, 500),
     cardBadgeBg: getSecondaryTint(0.4),
     cardBadgeText: getAPCATextColor(getSecondaryTint(0.4), 12, 600),
     cardBadgeDot: primary,

@@ -3,10 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Card, CardContent } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { useSectionHeaderState } from '../../_shared/hooks/useSectionHeaderState';
+import { HeaderConfigSection } from '../../_shared/components/HeaderConfigSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { ContactPreview } from '../../contact/_components/ContactPreview';
 import {
   buildDefaultContactItemsFromSettings,
@@ -15,7 +17,7 @@ import {
 } from '../../contact/_lib/constants';
 import { getContactValidationResult } from '../../contact/_lib/colors';
 import { normalizeContactConfig, toContactConfigPayload } from '../../contact/_lib/normalize';
-import type { ContactConfigState, ContactStyle } from '../../contact/_types';
+import type { ContactConfigState } from '../../contact/_types';
 import { getContactMapDataFromSettings } from '@/lib/contact/getContactMapData';
 import { ConfigEditor } from '../../contact/_components/ConfigEditor';
 
@@ -26,6 +28,27 @@ export default function ContactCreatePage() {
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
+
+  const headerState = useSectionHeaderState({
+    hideHeader: false,
+    showTitle: true,
+    showSubtitle: true,
+    subtitle: '',
+    headerAlign: 'left',
+    titleColorPrimary: false,
+    subtitleAboveTitle: false,
+    uppercaseText: false,
+    showBadge: true,
+    badgeText: '',
+  });
+
+  const { openSections: headerOpenSections, toggleSection: toggleHeaderSection } = useFormSectionsState(['header'], true);
+  const [displayExpanded, setDisplayExpanded] = useState(true);
+  const [contactDataExpanded, setContactDataExpanded] = useState(true);
+  const [formExpanded, setFormExpanded] = useState(true);
+  const [socialExpanded, setSocialExpanded] = useState(true);
+  const [labelsExpanded, setLabelsExpanded] = useState(true);
+
   const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
   const socialSettings = useQuery(api.settings.listByGroup, { group: 'social' });
   const mapData = useMemo(() => getContactMapDataFromSettings(contactSettings ?? []), [contactSettings]);
@@ -48,37 +71,43 @@ export default function ContactCreatePage() {
     seededRef.current = true;
   }, [contactSettings, seedConfig, socialSettings]);
 
-  const normalizedConfig = useMemo(() => normalizeContactConfig(config), [config]);
-  const style = normalizedConfig.style;
+  const _normalizedConfig = useMemo(() => normalizeContactConfig(config), [config]);
+  const previewConfig = useMemo(() => normalizeContactConfig({
+    ...config,
+    hideHeader: headerState.hideHeader,
+    showTitle: headerState.showTitle,
+    subtitle: headerState.subtitle,
+    showSubtitle: headerState.showSubtitle,
+    headerAlign: headerState.headerAlign,
+    titleColorPrimary: headerState.titleColorPrimary,
+    subtitleAboveTitle: headerState.subtitleAboveTitle,
+    uppercaseText: headerState.uppercaseText,
+    showBadge: headerState.showBadge,
+    badgeText: headerState.badgeText,
+  }), [config, headerState.badgeText, headerState.headerAlign, headerState.hideHeader, headerState.showBadge, headerState.showSubtitle, headerState.showTitle, headerState.subtitle, headerState.subtitleAboveTitle, headerState.titleColorPrimary, headerState.uppercaseText]);
+  const style = previewConfig.style;
 
-  const validation = useMemo(() => getContactValidationResult({
+  useMemo(() => getContactValidationResult({
     primary,
     secondary,
     mode,
   }), [primary, secondary, mode]);
 
-  const warningMessages = useMemo(() => {
-    if (mode === 'single') {return [];}
-
-    const warnings: string[] = [];
-
-    if (validation.harmonyStatus.isTooSimilar) {
-      warnings.push(`Màu chính và màu phụ đang khá gần nhau (deltaE=${validation.harmonyStatus.deltaE}).`);
-    }
-
-    if (validation.accessibility.failing.length > 0) {
-      warnings.push(`Có ${validation.accessibility.failing.length} cặp màu chưa đạt APCA (minLc=${validation.accessibility.minLc.toFixed(1)}).`);
-    }
-
-    return warnings;
-  }, [mode, validation]);
-
   const onSubmit = (event: React.FormEvent) => {
-    const nextConfig = normalizeContactConfig(config);
-    void handleSubmit(event, {
-      ...toContactConfigPayload(nextConfig),
-      style: nextConfig.style,
+    const normalizedConfig = normalizeContactConfig({
+      ...config,
+      hideHeader: headerState.hideHeader,
+      showTitle: headerState.showTitle,
+      subtitle: headerState.subtitle,
+      showSubtitle: headerState.showSubtitle,
+      headerAlign: headerState.headerAlign,
+      titleColorPrimary: headerState.titleColorPrimary,
+      subtitleAboveTitle: headerState.subtitleAboveTitle,
+      uppercaseText: headerState.uppercaseText,
+      showBadge: headerState.showBadge,
+      badgeText: headerState.badgeText,
     });
+    void handleSubmit(event, toContactConfigPayload(normalizedConfig));
   };
 
   return (
@@ -97,32 +126,61 @@ export default function ContactCreatePage() {
       customFontState={customFontState}
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
+      skipTitleInput={true}
     >
-      <ConfigEditor
-        value={normalizedConfig}
-        onChange={(next) => { setConfig(normalizeContactConfig(next)); }}
-        title="Cấu hình Contact"
+      <HeaderConfigSection
+        hideHeader={headerState.hideHeader}
+        title={title}
+        showTitle={headerState.showTitle}
+        subtitle={headerState.subtitle}
+        showSubtitle={headerState.showSubtitle}
+        headerAlign={headerState.headerAlign}
+        titleColorPrimary={headerState.titleColorPrimary}
+        subtitleAboveTitle={headerState.subtitleAboveTitle}
+        uppercaseText={headerState.uppercaseText}
+        showBadge={headerState.showBadge}
+        badgeText={headerState.badgeText}
+        onHideHeaderChange={headerState.setHideHeader}
+        onTitleChange={setTitle}
+        onShowTitleChange={headerState.setShowTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onShowSubtitleChange={headerState.setShowSubtitle}
+        onHeaderAlignChange={headerState.setHeaderAlign}
+        onTitleColorPrimaryChange={headerState.setTitleColorPrimary}
+        onSubtitleAboveTitleChange={headerState.setSubtitleAboveTitle}
+        onUppercaseTextChange={headerState.setUppercaseText}
+        onShowBadgeChange={headerState.setShowBadge}
+        onBadgeTextChange={headerState.setBadgeText}
+        expanded={headerOpenSections.header}
+        onExpandedChange={(open) => toggleHeaderSection('header', open)}
+        titleRequired={true}
+        titleLabel="Tiêu đề hiển thị"
+        titlePlaceholder="Nhập tiêu đề component..."
       />
 
-      {mode === 'dual' && warningMessages.length > 0 && (
-        <Card className="mb-6 border-amber-200 bg-amber-50/70">
-          <CardContent className="pt-6">
-            <div className="space-y-2 text-xs text-amber-800">
-              {warningMessages.map((warning) => (
-                <p key={warning}>• {warning}</p>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <ConfigEditor
+        value={config}
+        onChange={setConfig}
+        title="Cấu hình liên hệ"
+        displayExpanded={displayExpanded}
+        contactDataExpanded={contactDataExpanded}
+        formExpanded={formExpanded}
+        socialExpanded={socialExpanded}
+        labelsExpanded={labelsExpanded}
+        onDisplayExpandedChange={setDisplayExpanded}
+        onContactDataExpandedChange={setContactDataExpanded}
+        onFormExpandedChange={setFormExpanded}
+        onSocialExpandedChange={setSocialExpanded}
+        onLabelsExpandedChange={setLabelsExpanded}
+      />
 
       <ContactPreview
-        config={{ ...normalizedConfig, style }}
+        config={previewConfig}
         brandColor={primary}
         secondary={secondary}
         mode={mode}
         selectedStyle={style}
-        onStyleChange={(nextStyle) => { setConfig({ ...normalizedConfig, style: nextStyle as ContactStyle }); }}
+        onStyleChange={(newStyle) => setConfig({ ...config, style: newStyle })}
         title={title}
         mapData={mapData}
         fontStyle={fontStyle}

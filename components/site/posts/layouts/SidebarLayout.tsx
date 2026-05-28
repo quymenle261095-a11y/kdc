@@ -40,6 +40,7 @@ interface SidebarLayoutProps {
   enabledFields: Set<string>;
   showSearch?: boolean;
   showCategories?: boolean;
+  getDetailHref: (post: Post) => string;
 }
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -64,6 +65,7 @@ export function SidebarLayout({
   enabledFields,
   showSearch = true,
   showCategories = true,
+  getDetailHref,
 }: SidebarLayoutProps) {
   const showExcerpt = enabledFields.has('excerpt');
   const [brokenThumbnails, setBrokenThumbnails] = React.useState<Set<string>>(new Set());
@@ -196,7 +198,7 @@ export function SidebarLayout({
               const showImage = Boolean(post.thumbnail) && !brokenThumbnails.has(String(post._id));
 
               return (
-                <Link key={post._id} href={`/posts/${post.slug}`} className="group block">
+                <Link key={post._id} href={getDetailHref(post)} className="group block">
                     <article
                     className="rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 border"
                       style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}

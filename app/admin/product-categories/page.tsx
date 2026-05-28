@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ChevronDown, Edit, ExternalLink, FolderTree, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit, ExternalLink, FolderTree, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
 import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
@@ -90,7 +90,7 @@ function ProductCategoriesContent() {
       : 'skip'
   );
 
-  const isLoading = categoriesData === undefined || totalCountData === undefined || productsData === undefined;
+  const isTableLoading = categoriesData === undefined || totalCountData === undefined || productsData === undefined;
 
   useEffect(() => {
     if (selectAllData?.hasMore) {
@@ -209,14 +209,6 @@ function ProductCategoriesContent() {
     window.open(`/category/${slug}`, '_blank');
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -274,8 +266,18 @@ function ProductCategoriesContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.map(cat => (
-              <TableRow key={cat.id} className={selectedIds.includes(cat.id) ? 'bg-orange-500/5' : ''}>
+            {isTableLoading ? (
+              Array.from({ length: resolvedPageSize }).map((_, index) => (
+                <TableRow key={`loading-${index}`}>
+                  <TableCell colSpan={tableColumnCount}>
+                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <>
+                {paginatedData.map(cat => (
+                  <TableRow key={cat.id} className={selectedIds.includes(cat.id) ? 'bg-orange-500/5' : ''}>
                 {resolvedVisibleColumns.includes('select') && (
                   <TableCell><SelectCheckbox checked={selectedIds.includes(cat.id)} onChange={() =>{  toggleSelectItem(cat.id); }} /></TableCell>
                 )}
@@ -303,9 +305,11 @@ function ProductCategoriesContent() {
                     </div>
                   </TableCell>
                 )}
-              </TableRow>
-            ))}
-            {paginatedData.length === 0 && (
+                  </TableRow>
+                ))}
+              </>
+            )}
+            {!isTableLoading && paginatedData.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
                   {searchTerm ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có danh mục nào.'}
@@ -314,7 +318,7 @@ function ProductCategoriesContent() {
             )}
           </TableBody>
         </Table>
-        {totalCount > 0 && !isLoading && (
+        {totalCount > 0 && !isTableLoading && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
               <div className="flex items-center gap-2">

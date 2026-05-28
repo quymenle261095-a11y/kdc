@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, Eye } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
   SERVICE_LIST_STYLES,
 } from '../_lib/constants';
@@ -15,6 +15,8 @@ import {
 import { ServiceListSectionShared } from './ServiceListSectionShared';
 import type {
   ServiceListBrandMode,
+  ServiceListCardRadius,
+  ServiceListDesktopColumns,
   ServiceListPreviewItem,
   ServiceListStyle,
 } from '../_types';
@@ -28,6 +30,19 @@ interface ServiceListPreviewProps {
   onStyleChange?: (style: ServiceListStyle) => void;
   items?: ServiceListPreviewItem[];
   title?: string;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  subtitle?: string;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing;
+  cardRadius?: ServiceListCardRadius;
+  desktopColumns?: ServiceListDesktopColumns;
   showViewAll?: boolean;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
@@ -84,8 +99,21 @@ export const ServiceListPreview = ({
   onStyleChange,
   items,
   title = 'Dịch vụ',
+  hideHeader,
   showViewAll = true,
   fontStyle,
+  showTitle,
+  showSubtitle,
+  subtitle,
+  headerAlign,
+  titleColorPrimary,
+  subtitleAboveTitle,
+  uppercaseText,
+  showBadge,
+  badgeText,
+  spacing,
+  cardRadius,
+  desktopColumns,
   fontClassName,
 }: ServiceListPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
@@ -103,20 +131,6 @@ export const ServiceListPreview = ({
     primary: brandColor,
     secondary,
   }), [brandColor, secondary, mode]);
-
-  const warningMessages = React.useMemo(() => {
-    const messages: string[] = [];
-
-    if (mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
-      messages.push(`Màu phụ đang khá gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}). Nên tăng độ tách biệt.`);
-    }
-
-    if (validation.accessibility.failing.length > 0) {
-      messages.push(`Một số cặp màu chữ/nền chưa đủ tương phản APCA (minLc = ${validation.accessibility.minLc.toFixed(1)}).`);
-    }
-
-    return messages;
-  }, [mode, validation]);
 
   const modeLabel = mode === 'single' ? '1 màu (single)' : '2 màu (dual)';
 
@@ -139,6 +153,19 @@ export const ServiceListPreview = ({
             context="preview"
             mode={mode}
             style={previewStyle}
+            hideHeader={hideHeader}
+            showTitle={showTitle}
+            showSubtitle={showSubtitle}
+            subtitle={subtitle}
+            headerAlign={headerAlign}
+            titleColorPrimary={titleColorPrimary}
+            subtitleAboveTitle={subtitleAboveTitle}
+            uppercaseText={uppercaseText}
+            showBadge={showBadge}
+            badgeText={badgeText}
+            spacing={spacing}
+            cardRadius={cardRadius}
+            desktopColumns={desktopColumns}
             sectionTitle={title}
             items={displayItems}
             tokens={validation.tokens}
@@ -156,18 +183,6 @@ export const ServiceListPreview = ({
         />
       )}
 
-      {warningMessages.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <div className="space-y-2">
-            {warningMessages.map((message) => (
-              <div key={message} className="flex items-start gap-2">
-                {message.includes('deltaE') ? <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> : <Eye size={14} className="mt-0.5 flex-shrink-0" />}
-                <p>{message}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

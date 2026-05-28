@@ -5,6 +5,7 @@ import { RelatedPagesBlock } from '@/components/seo/RelatedPagesBlock';
 import InternalLinkCluster from '@/components/seo/InternalLinkCluster';
 import { getFunnelInternalLinks, getRelatedLandingPages } from '@/lib/seo/internal-links';
 import LandingHeroImage from '@/components/seo/LandingHeroImage';
+import { RichContent } from '@/components/common/RichContent';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -39,12 +40,7 @@ export default async function FeaturePage({ params }: Props) {
         {page.summary}
       </p>
 
-      {page.content && (
-        <div
-          className="prose max-w-none"
-          dangerouslySetInnerHTML={{ __html: page.content }}
-        />
-      )}
+      {page.content && <RichContent content={page.content} className="max-w-none" />}
 
       {page.faqItems && page.faqItems.length > 0 && (
         <div className="mt-12">

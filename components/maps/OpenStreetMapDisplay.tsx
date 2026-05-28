@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MapPin } from 'lucide-react';
 
@@ -39,9 +39,29 @@ export default function OpenStreetMapDisplay({
   height = '300px',
   zoom = 15,
 }: OpenStreetMapDisplayProps) {
+  const [isVisible, setIsVisible] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Lazy load: chỉ mount Leaflet khi user scroll gần tới
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!isVisible) return;
     setIsClient(true);
     if (typeof window !== 'undefined') {
       const link = document.createElement('link');
@@ -58,21 +78,25 @@ export default function OpenStreetMapDisplay({
         });
       });
     }
-  }, []);
+  }, [isVisible]);
 
-  if (!isClient) {
+  if (!isVisible || !isClient) {
     return (
-      <div className="bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 border" style={{ height }}>
+      <div
+        ref={containerRef}
+        className="bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 border"
+        style={{ height }}
+      >
         <div className="text-center">
           <MapPin size={32} className="mx-auto mb-2" />
-          <span className="text-sm">{location.address || 'Đang tải bản đồ...'}</span>
+          <span className="text-sm">{location.address || 'Bản đồ'}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ height }} className="relative z-0 rounded-xl overflow-hidden border">
+    <div ref={containerRef} style={{ height }} className="relative z-0 rounded-xl overflow-hidden border">
       <MapContainer
         center={[location.lat, location.lng]}
         zoom={zoom}

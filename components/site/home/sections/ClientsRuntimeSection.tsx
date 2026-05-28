@@ -1,25 +1,56 @@
 'use client';
 
 import React from 'react';
-import { ClientsSectionShared } from '@/app/admin/home-components/clients/_components/ClientsSectionShared';
+import { SectionHeader } from '@/app/admin/home-components/_shared/components/SectionHeader';
+import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
+import { getSectionSpacingClassName, normalizeSectionSpacing } from '@/app/admin/home-components/_shared/types/sectionSpacing';
+import { ClientsSectionShared, normalizeClientsStyleSafe } from '@/app/admin/home-components/clients/_components/ClientsSectionShared';
 import { getClientsColorTokens } from '@/app/admin/home-components/clients/_lib/colors';
-import type { ClientItem, ClientsConfig, ClientsStyle } from '@/app/admin/home-components/clients/_types';
+import { normalizeClientItems } from '@/app/admin/home-components/clients/_lib/items';
+import type { ClientsConfig } from '@/app/admin/home-components/clients/_types';
+import { normalizeClientsCornerRadius } from '@/app/admin/home-components/clients/_types';
 import type { HomeComponentSectionProps } from '../types';
 
 export function ClientsRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
-  const clientsConfig = config as Partial<ClientsConfig> & { items?: ClientItem[]; style?: ClientsStyle };
-  const style = clientsConfig.style ?? 'simpleGrid';
+  const clientsConfig = config as Partial<ClientsConfig>;
+  const items = normalizeClientItems(clientsConfig.items);
+  if (items.length === 0) {return null;}
+
+  const style = normalizeClientsStyleSafe(clientsConfig.style);
   const tokens = getClientsColorTokens({ primary: brandColor, secondary, mode });
-  const texts = clientsConfig.texts?.[style] ?? undefined;
+  const headerConfig = extractSectionHeaderConfig(config);
+  const spacing = clientsConfig.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(clientsConfig.spacing);
+  const cornerRadius = normalizeClientsCornerRadius(clientsConfig.cornerRadius, clientsConfig.noBorderRadius);
 
   return (
-    <ClientsSectionShared
-      context="site"
-      title={title}
-      style={style}
-      items={clientsConfig.items ?? []}
-      tokens={tokens}
-      texts={texts}
-    />
+    <section className={`${getSectionSpacingClassName(spacing)} px-3`} style={{ backgroundColor: tokens.neutralBackground }}>
+      <div className="mx-auto max-w-7xl">
+        <SectionHeader
+          title={title}
+          subtitle={headerConfig.subtitle}
+          badgeText={headerConfig.badgeText}
+          hideHeader={headerConfig.hideHeader}
+          showTitle={headerConfig.showTitle}
+          showSubtitle={headerConfig.showSubtitle}
+          showBadge={headerConfig.showBadge}
+          headerAlign={headerConfig.headerAlign}
+          titleColorPrimary={headerConfig.titleColorPrimary}
+          subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+          uppercaseText={headerConfig.uppercaseText}
+          brandColor={brandColor}
+        />
+        <ClientsSectionShared
+          context="site"
+          title={title}
+          style={style}
+          items={items}
+          tokens={tokens}
+          skipHeader={true}
+          spacing={spacing}
+          cornerRadius={cornerRadius}
+          brandColor={brandColor}
+        />
+      </div>
+    </section>
   );
 }

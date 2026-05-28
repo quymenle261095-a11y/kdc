@@ -5,6 +5,7 @@ import { HomePageLoading } from '@/components/site/loading/HomePageLoading';
 import { api } from '@/convex/_generated/api';
 import type { Doc } from '@/convex/_generated/dataModel';
 import { useQuery } from 'convex/react';
+import Link from 'next/link';
 import React, { useEffect, useRef, useState } from 'react';
 
 const EMPTY_COMPONENTS_COUNT = 0;
@@ -21,22 +22,13 @@ export default function HomePageClient({
   const [idleReady, setIdleReady] = useState(false);
   const [interactionReady, setInteractionReady] = useState(false);
   const [intersectionReady, setIntersectionReady] = useState(false);
-  const shouldFetchLive = !initialComponents;
-  const components = useQuery(
-    api.homeComponents.listActive,
-    shouldFetchLive ? undefined : 'skip'
-  );
+  const components = useQuery(api.homeComponents.listActive);
   const resolvedComponents = components ?? initialComponents;
   const [showLoading, setShowLoading] = useState(false);
   const loadingStartRef = useRef<number | null>(null);
   const delayTimerRef = useRef<number | null>(null);
   const deferredTriggerRef = useRef<HTMLDivElement | null>(null);
-  const [criticalCount, setCriticalCount] = useState(() => {
-    if (typeof window === 'undefined') {
-      return MAX_CRITICAL_COMPONENTS;
-    }
-    return window.innerWidth < 768 ? 1 : MAX_CRITICAL_COMPONENTS;
-  });
+  const [criticalCount, setCriticalCount] = useState(MAX_CRITICAL_COMPONENTS);
 
   const isDataReady = typeof resolvedComponents !== 'undefined';
 
@@ -155,13 +147,17 @@ export default function HomePageClient({
   }, [isDataReady, showLoading]);
 
   if (!isDataReady && !showLoading) {
-    return <></>;
+    return <div className="min-h-screen" aria-hidden />;
   }
 
-  if (!isDataReady || showLoading) {
+  if (showLoading && !isDataReady) {
     return (
       <HomePageLoading />
     );
+  }
+
+  if (!resolvedComponents) {
+    return <div className="min-h-screen" aria-hidden />;
   }
 
   if (resolvedComponents.length === EMPTY_COMPONENTS_COUNT) {
@@ -171,9 +167,9 @@ export default function HomePageClient({
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Chào mừng!</h1>
           <p className="text-slate-500">
             Chưa có nội dung trang chủ. Vui lòng thêm components trong{' '}
-            <a href="/admin/home-components" className="text-blue-600 hover:underline">
+            <Link href="/admin/home-components" className="text-blue-600 hover:underline">
               Admin Panel
-            </a>
+            </Link>
           </p>
         </div>
       </div>
@@ -181,10 +177,18 @@ export default function HomePageClient({
   }
 
   const sortedComponents = [...resolvedComponents]
-    .filter((componentItem) => componentItem.type !== 'Footer')
+    .filter((componentItem) => {
+      if (componentItem.type === 'Footer') {return false;}
+      if (componentItem.type === 'Popup') {return false;}
+      if (componentItem.type !== 'SpeedDial') {return true;}
+
+      const config = componentItem.config as Record<string, unknown>;
+      return config.showOnAllPages !== true;
+    })
     .sort((firstComponent, secondComponent) => firstComponent.order - secondComponent.order);
   const criticalComponents = sortedComponents.slice(0, criticalCount);
   const deferredComponents = showDeferred ? sortedComponents.slice(criticalCount) : [];
+  const popupComponents = resolvedComponents.filter((componentItem) => componentItem.type === 'Popup');
 
   return (
     <>
@@ -201,8 +205,22 @@ export default function HomePageClient({
           }}
         />
       ))}
-      {!showDeferred && <div ref={deferredTriggerRef} className="h-px w-px" aria-hidden />}
+      {!showDeferred && <div ref={deferredTriggerRef} className="h-px w-px" aria-hidden={true} />}
       {deferredComponents.map((component) => (
+        <div key={component._id} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 500px' } as React.CSSProperties}>
+          <HomeComponentRenderer
+            component={{
+              _id: component._id,
+              active: component.active,
+              config: component.config as Record<string, unknown>,
+              order: component.order,
+              title: component.title,
+              type: component.type,
+            }}
+          />
+        </div>
+      ))}
+      {popupComponents.map((component) => (
         <HomeComponentRenderer
           key={component._id}
           component={{

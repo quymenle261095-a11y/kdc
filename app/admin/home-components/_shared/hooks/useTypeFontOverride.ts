@@ -47,12 +47,6 @@ export const useTypeFontOverride = (type: string) => {
 export const useTypeFontOverrideState = (type: string, options?: TypeFontOverrideOptions) => {
   const { overrideState, showCustomBlock, globalOverride } = useTypeFontOverride(type);
   const shouldSeedFromSettings = Boolean(options?.seedCustomFromSettingsWhenTypeEmpty);
-  const typeItems = useQuery(
-    api.homeComponents.listByType,
-    shouldSeedFromSettings ? { type } : 'skip',
-  );
-  const hasTypeData = (typeItems?.length ?? 0) > 0;
-  const shouldSeedState = shouldSeedFromSettings && !hasTypeData;
   const [customState, setCustomState] = useState<FontOverrideState>(overrideState);
   const [initialCustom, setInitialCustom] = useState<FontOverrideState>(overrideState);
 
@@ -62,10 +56,10 @@ export const useTypeFontOverrideState = (type: string, options?: TypeFontOverrid
   }), [overrideState.enabled, overrideState.fontKey, globalOverride?.fontKey]);
 
   useEffect(() => {
-    const nextState = shouldSeedState ? seededState : overrideState;
+    const nextState = shouldSeedFromSettings ? seededState : overrideState;
     setCustomState((current) => (isSameFontState(current, nextState) ? current : nextState));
     setInitialCustom((current) => (isSameFontState(current, nextState) ? current : nextState));
-  }, [overrideState, seededState, shouldSeedState]);
+  }, [overrideState, seededState, shouldSeedFromSettings]);
 
   useEffect(() => {
     if (customState.enabled) {

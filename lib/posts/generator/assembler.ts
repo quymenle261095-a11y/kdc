@@ -163,6 +163,10 @@ const buildGalleryStrip = ({ images, slotKey }: { images: string[]; slotKey: Slo
   `;
 };
 
+const buildProductHref = (product: Pick<GeneratorProduct, 'slug' | 'categorySlug'>) => (
+  product.categorySlug ? `/${product.categorySlug}/${product.slug}` : `/products/${product.slug}`
+);
+
 const renderProductCard = ({
   product,
   saleMode,
@@ -176,8 +180,9 @@ const renderProductCard = ({
 }) => {
   const summary = truncateSentence(product.description, 120) ?? 'Phù hợp nhu cầu cần lựa chọn ổn định, dễ triển khai.';
   const image = product.image ?? product.images?.[0] ?? product.categoryImage;
-  const primaryLink = saleMode === 'affiliate' ? product.affiliateLink?.trim() : `/products/${product.slug}`;
-  const secondaryLink = saleMode === 'affiliate' ? `/products/${product.slug}` : undefined;
+  const detailLink = buildProductHref(product);
+  const primaryLink = saleMode === 'affiliate' ? product.affiliateLink?.trim() : detailLink;
+  const secondaryLink = saleMode === 'affiliate' ? detailLink : undefined;
   const primaryLabel = saleMode === 'affiliate' ? 'Mua ngay' : 'Xem chi tiết';
   const secondaryLabel = saleMode === 'affiliate' ? 'Xem chi tiết' : 'Tư vấn';
   const overlayButton = primaryLink && saleMode === 'affiliate'
@@ -241,6 +246,7 @@ const renderTopListBody = ({
 
   if (pick === 'featured') {
     const [featured, ...others] = products;
+    const featuredHref = featured ? buildProductHref(featured) : '';
     const featuredHtml = featured ? `
       <div class="group relative overflow-hidden rounded-xl border border-slate-100 bg-white">
         <div class="relative aspect-[4/3] overflow-hidden border-b border-slate-100 bg-slate-50 p-2">
@@ -260,9 +266,9 @@ const renderTopListBody = ({
           <div class="flex gap-2 flex-wrap">
             ${featured.affiliateLink?.trim()
               ? buildButton({ label: 'Mua ngay', href: featured.affiliateLink.trim(), variant: 'primary' })
-              : buildButton({ label: 'Xem chi tiết', href: `/products/${featured.slug}`, variant: 'secondary' })
+              : buildButton({ label: 'Xem chi tiết', href: featuredHref, variant: 'secondary' })
             }
-            ${saleMode === 'affiliate' ? buildButton({ label: 'Xem chi tiết', href: `/products/${featured.slug}`, variant: 'secondary' }) : ''}
+            ${saleMode === 'affiliate' ? buildButton({ label: 'Xem chi tiết', href: featuredHref, variant: 'secondary' }) : ''}
           </div>
         </div>
       </div>
@@ -315,9 +321,10 @@ const renderHeroBody = ({
     return { html: wrapParagraphs(paragraphs), variant: 'hero-text' };
   }
   const image = product.image ?? product.images?.[0] ?? product.categoryImage;
-  const primaryLink = saleMode === 'affiliate' ? product.affiliateLink?.trim() : `/products/${product.slug}`;
+  const detailLink = buildProductHref(product);
+  const primaryLink = saleMode === 'affiliate' ? product.affiliateLink?.trim() : detailLink;
   const primaryLabel = saleMode === 'affiliate' ? 'Mua ngay' : 'Xem chi tiết';
-  const secondaryLink = saleMode === 'affiliate' ? `/products/${product.slug}` : undefined;
+  const secondaryLink = saleMode === 'affiliate' ? detailLink : undefined;
   const secondaryLabel = 'Xem chi tiết';
   return {
     variant: 'hero-card',

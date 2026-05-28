@@ -62,12 +62,6 @@ const getAPCALc = (text: string, background: string) => {
   return Number.isFinite(lc) ? lc : 0;
 };
 
-const pickReadableTextOnSolid = (background: string): string => {
-  const whiteLc = getAPCALc('#ffffff', background);
-  const nearBlackLc = getAPCALc('#111111', background);
-  return whiteLc > nearBlackLc ? '#ffffff' : '#111111';
-};
-
 export const getAPCATextColor = (background: string, fontSize = 16, fontWeight = 500) => {
   const whiteLc = getAPCALc('#ffffff', background);
   const blackLc = getAPCALc('#000000', background);
@@ -274,28 +268,25 @@ export const getContactColorTokens = ({
   const primaryPalette = buildPalette(primaryResolved, DEFAULT_BRAND_COLOR);
   const secondaryPalette = buildPalette(secondaryResolved, primaryResolved);
 
-  const neutralBackground = '#f8fafc';
+  const neutralBackground = '#faf7f0';
   const neutralSurface = '#ffffff';
   const neutralBorder = '#e2e8f0';
   const neutralText = '#0f172a';
   const mutedText = '#64748b';
 
-  const sectionBadgeBg = primaryPalette.surface;
-  const badgeTextCandidate = pickReadableTextOnSolid(sectionBadgeBg);
-  const sectionBadgeText = ensureAPCATextColor(badgeTextCandidate, sectionBadgeBg, 11, 600);
+  const sectionBadgeBg = neutralSurface;
+  const sectionBadgeText = ensureAPCATextColor(primaryPalette.interactiveText, neutralSurface, 11, 600);
 
-  const iconBg = primaryPalette.surface;
-  const iconCandidate = pickReadableTextOnSolid(iconBg);
-  const iconTintColor = ensureAPCATextColor(iconCandidate, iconBg, 14, 600);
+  const iconBg = neutralSurface;
+  const iconTintColor = ensureAPCATextColor(primaryPalette.interactiveText, neutralSurface, 14, 600);
 
-  const socialBg = secondaryPalette.surface;
-  const socialCandidate = pickReadableTextOnSolid(socialBg);
-  const socialIcon = ensureAPCATextColor(socialCandidate, socialBg, 14, 600);
+  const socialBg = neutralSurface;
+  const socialIcon = neutralText;
 
   const formFieldBorder = neutralBorder;
-  const formFieldFocus = secondaryPalette.border;
-  const formButtonBackground = primaryPalette.solid;
-  const formButtonText = primaryPalette.textOnSolid;
+  const formFieldFocus = neutralText;
+  const formButtonBackground = neutralText;
+  const formButtonText = '#ffffff';
 
   return {
     primary: primaryResolved,
@@ -307,10 +298,10 @@ export const getContactColorTokens = ({
     neutralText,
     mutedText,
 
-    heading: primaryPalette.solid,
-    sectionTint: shiftColor(secondaryPalette.solid, 0.4, 0.7, primaryResolved),
+    heading: neutralText,
+    sectionTint: neutralBackground,
     sectionBadgeBg,
-    sectionBadgeBorder: secondaryPalette.border,
+    sectionBadgeBorder: neutralBorder,
     sectionBadgeText,
 
     cardBackground: neutralSurface,
@@ -320,19 +311,19 @@ export const getContactColorTokens = ({
     iconTintBackground: iconBg,
     iconTintColor,
 
-    labelText: ensureAPCATextColor(secondaryPalette.interactiveText, neutralSurface, 12, 600),
+    labelText: ensureAPCATextColor(primaryPalette.interactiveText, neutralSurface, 12, 600),
     valueText: neutralText,
     helperText: mutedText,
 
     socialBackground: socialBg,
-    socialBorder: secondaryPalette.border,
+    socialBorder: neutralBorder,
     socialIcon,
 
     mapPlaceholderBg: neutralBackground,
-    mapPlaceholderIcon: primaryPalette.solid,
+    mapPlaceholderIcon: ensureAPCATextColor(primaryPalette.interactiveText, neutralBackground, 14, 600),
 
-    centeredHeaderBg: shiftColor(secondaryPalette.solid, 0.38, 0.7, primaryResolved),
-    centeredSurface: shiftColor(secondaryPalette.solid, 0.42, 0.7, primaryResolved),
+    centeredHeaderBg: neutralSurface,
+    centeredSurface: neutralBackground,
 
     floatingCardBg: neutralSurface,
     floatingCardBorder: neutralBorder,
@@ -341,7 +332,7 @@ export const getContactColorTokens = ({
     formBorder: neutralBorder,
     formTitle: neutralText,
     formDescription: mutedText,
-    formAccent: secondaryPalette.solid,
+    formAccent: ensureAPCATextColor(primaryPalette.interactiveText, neutralSurface, 14, 600),
     formFieldBackground: neutralSurface,
     formFieldBorder,
     formFieldText: neutralText,

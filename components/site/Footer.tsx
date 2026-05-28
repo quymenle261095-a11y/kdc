@@ -7,16 +7,19 @@ import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useBrandColor, useContactSettings, useSiteSettings } from './hooks';
 import { Facebook, Instagram, Mail, MapPin, Phone, Youtube } from 'lucide-react';
+import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 
 export function Footer() {
+  const snapshotDemo = useSnapshotDemoContext();
   const brandColor = useBrandColor();
   const { siteName, siteDescription, logo } = useSiteSettings();
   const contact = useContactSettings();
   const menuData = useQuery(api.menus.getFullMenu, { location: 'footer' });
+  const resolvedMenuData = snapshotDemo?.getMenu('footer') ?? menuData;
 
   // Group menu items by depth 0 (columns)
-  const footerColumns = menuData?.items ? (() => {
-    const items = [...menuData.items].sort((a, b) => a.order - b.order);
+  const footerColumns = resolvedMenuData?.items ? (() => {
+    const items = [...resolvedMenuData.items].sort((a, b) => a.order - b.order);
     const columns: { title: string; links: { label: string; url: string }[] }[] = [];
 
     let currentColumn: { title: string; links: { label: string; url: string }[] } | null = null;

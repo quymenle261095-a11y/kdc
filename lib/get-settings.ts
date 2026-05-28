@@ -1,4 +1,4 @@
-import { api } from "@/convex/_generated/api";
+import { api } from "../convex/_generated/api";
 import { getConvexClient } from "./convex";
 
 export interface SiteSettings {
@@ -133,32 +133,33 @@ const normalizeSocialSettings = (settings: Record<string, unknown>): SocialSetti
   social_youtube: (settings.social_youtube as string) || "",
 });
 
+const getSettingsGroup = async (keys: string[]): Promise<Record<string, unknown>> => {
+  try {
+    const client = getConvexClient();
+    return await client.query(api.settings.getMultiple, { keys });
+  } catch {
+    return {};
+  }
+};
+
 export const getSiteSettings =  async (): Promise<SiteSettings> => {
-  const client = getConvexClient();
-  return client.query(api.settings.getMultiple, {
-    keys: SETTINGS_KEYS.site,
-  }).then(normalizeSiteSettings);
+  const settings = await getSettingsGroup(SETTINGS_KEYS.site);
+  return normalizeSiteSettings(settings);
 };
 
 export const getSEOSettings =  async (): Promise<SEOSettings> => {
-  const client = getConvexClient();
-  return client.query(api.settings.getMultiple, {
-    keys: SETTINGS_KEYS.seo,
-  }).then(normalizeSEOSettings);
+  const settings = await getSettingsGroup(SETTINGS_KEYS.seo);
+  return normalizeSEOSettings(settings);
 };
 
 export const getContactSettings =  async (): Promise<ContactSettings> => {
-  const client = getConvexClient();
-  return client.query(api.settings.getMultiple, {
-    keys: SETTINGS_KEYS.contact,
-  }).then(normalizeContactSettings);
+  const settings = await getSettingsGroup(SETTINGS_KEYS.contact);
+  return normalizeContactSettings(settings);
 };
 
 export const getSocialSettings = async (): Promise<SocialSettings> => {
-  const client = getConvexClient();
-  return client.query(api.settings.getMultiple, {
-    keys: SETTINGS_KEYS.social,
-  }).then(normalizeSocialSettings);
+  const settings = await getSettingsGroup(SETTINGS_KEYS.social);
+  return normalizeSocialSettings(settings);
 };
 
 export const getAllPublicSettings =  async (): Promise<PublicSettings> => Promise.all([

@@ -3,7 +3,7 @@
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Noto_Sans } from 'next/font/google';
+
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useBrandColors } from '@/components/site/hooks';
@@ -12,11 +12,9 @@ import { RichContent, withFormatMarker } from '@/components/common/RichContent';
 import { Button, Card, CardContent } from '@/app/admin/components/ui';
 import { ArrowLeft, Calendar, Check, ChevronRight, Clock, Eye, FileText, Home, Link as LinkIcon, MessageSquare, Reply, Send, Share2, ThumbsUp, User } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
+import { buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 
-const notoSans = Noto_Sans({
-  display: 'swap',
-  subsets: ['vietnamese', 'latin'],
-});
+
 
 const isValidHexColor = (value: string) => /^#[0-9A-Fa-f]{6}$/.test(value.trim());
 
@@ -91,7 +89,6 @@ export default function PostDetailPage({ params }: PageProps) {
   const brandColors = useBrandColors();
   const brandColor = brandColors.primary;
   const secondaryColor = resolveSecondary(brandColors.primary, brandColors.secondary, brandColors.mode || 'single');
-  const SCHEDULE_SKEW_MS = 30_000;
   const postDetailConfig = usePostsDetailConfig();
   const style = postDetailConfig.layoutStyle;
   const enabledFields = useEnabledPostFields();
@@ -105,9 +102,12 @@ export default function PostDetailPage({ params }: PageProps) {
     api.postCategories.getById, 
     post?.categoryId ? { id: post.categoryId } : 'skip'
   );
+  const categories = useQuery(api.postCategories.listActive, { limit: 100 });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
   const isVisiblePost = useMemo(() => {
     if (!post) {return false;}
-    return post.status === 'Published' && (!post.publishedAt || post.publishedAt <= Date.now() + SCHEDULE_SKEW_MS);
+    return post.status === 'Published';
   }, [post]);
   const incrementViews = useMutation(api.posts.incrementViews);
   const createComment = useMutation(api.comments.create);
@@ -179,6 +179,11 @@ export default function PostDetailPage({ params }: PageProps) {
     }
   }, [post?._id, incrementViews, isVisiblePost]);
 
+  const categorySlugMap = useMemo(() => {
+    if (!categories) {return new Map<string, string>();}
+    return new Map(categories.map((item) => [item._id, item.slug]));
+  }, [categories]);
+
   if (post === undefined) {
     return <PostDetailSkeleton />;
   }
@@ -210,6 +215,13 @@ export default function PostDetailPage({ params }: PageProps) {
     ...post,
     categoryName: category?.name ?? 'Tin tức',
   };
+
+  const getPostDetailHref = (relatedPost: RelatedPost) => buildDetailPath({
+    categorySlug: categorySlugMap.get(relatedPost.categoryId),
+    mode: routeMode,
+    moduleKey: 'posts',
+    recordSlug: relatedPost.slug,
+  });
 
   const handleSubmitComment = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -324,6 +336,7 @@ export default function PostDetailPage({ params }: PageProps) {
     <>
       {style === 'classic' && (
         <ClassicStyle
+          getDetailHref={getPostDetailHref}
           post={postData}
           brandColor={brandColor}
           secondaryColor={secondaryColor}
@@ -340,6 +353,7 @@ export default function PostDetailPage({ params }: PageProps) {
       )}
       {style === 'modern' && (
         <ModernStyle
+          getDetailHref={getPostDetailHref}
           post={postData}
           brandColor={brandColor}
           secondaryColor={secondaryColor}
@@ -356,6 +370,7 @@ export default function PostDetailPage({ params }: PageProps) {
       )}
       {style === 'minimal' && (
         <MinimalStyle
+          getDetailHref={getPostDetailHref}
           post={postData}
           brandColor={brandColor}
           secondaryColor={secondaryColor}
@@ -402,6 +417,7 @@ interface RelatedPost {
   _id: Id<"posts">;
   title: string;
   slug: string;
+  categoryId: Id<"postCategories">;
   thumbnail?: string;
   excerpt?: string;
   publishedAt?: number;
@@ -420,10 +436,11 @@ interface StyleProps {
   showThumbnail: boolean;
   tags: string[];
   commentsSection?: React.ReactNode;
+  getDetailHref: (post: RelatedPost) => string;
 }
 
 // Style 1: Classic - Truyền thống với sidebar
-function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection }: StyleProps) {
+function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection, getDetailHref }: StyleProps) {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isCopied, setIsCopied] = useState(false);
   const { isBroken, markBroken } = useImageFallback();
@@ -558,7 +575,7 @@ function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
             {resolvedContent && (
               <RichContent
                 content={resolvedContent}
-                className="prose-zinc prose-lg max-w-none"
+                className="max-w-none"
               />
             )}
 
@@ -599,9 +616,13 @@ function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
                 </div>
                 <div className="p-6 pt-0 px-0 sm:px-6 gap-3 flex flex-col">
                   {relatedPosts.map((p) => (
-                    <Link key={p._id} href={`/posts/${p.slug}`} className="group flex gap-3 items-start">
-                      <div className="relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-md bg-muted/60">
-                        {p.thumbnail && !isBroken(p.thumbnail) ? (
+                    <Link
+                      key={p._id}
+                      href={getDetailHref(p)}
+                      className="group -mx-2 flex items-start gap-3 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-border/60 hover:bg-background/80"
+                    >
+                      {p.thumbnail && !isBroken(p.thumbnail) ? (
+                        <div className="relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-md bg-muted/60">
                           <Image
                             src={p.thumbnail}
                             alt={p.title}
@@ -615,13 +636,13 @@ function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
                             }}
                             onError={() =>{  markBroken(p.thumbnail); }}
                           />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center text-muted-foreground">
-                            <FileText className="h-4 w-4" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-1">
+                        </div>
+                      ) : (
+                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex flex-col gap-1">
                         <h4 className="text-sm font-medium leading-snug line-clamp-2 group-hover:opacity-80 transition-colors">
                           {p.title}
                         </h4>
@@ -642,7 +663,7 @@ function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
 }
 
 // Style 2: Modern - Medium/Substack inspired - Focus on typography and reading experience
-function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFields, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection }: StyleProps) {
+function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFields, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection, getDetailHref }: StyleProps) {
   const resolvedContent = useMemo(() => resolvePostContent(post), [post]);
   const resolvedContentLength = useMemo(() => resolvePostContentLength(post), [post]);
   const readingTime = Math.max(1, Math.ceil(resolvedContentLength / 1000));
@@ -661,7 +682,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
   };
   
   return (
-    <div className={`min-h-screen bg-background pb-12 selection:bg-accent/30 ${notoSans.className}`}>
+    <div className="min-h-screen bg-background pb-12 selection:bg-accent/30" style={{ fontFamily: 'var(--font-noto-sans)' }}>
       <main className="container mx-auto max-w-7xl px-4 py-6 md:py-10 space-y-8 md:space-y-12">
         <div className="flex flex-col gap-4">
           <nav className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
@@ -775,7 +796,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
           {resolvedContent && (
             <RichContent
               content={resolvedContent}
-              className="prose-lg prose-zinc max-w-none text-muted-foreground leading-loose"
+              className="max-w-none text-muted-foreground leading-loose"
             />
           )}
 
@@ -797,7 +818,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
                 {relatedPosts.map((p) => (
                   <Link
                     key={p._id}
-                    href={`/posts/${p.slug}`}
+                    href={getDetailHref(p)}
                     className="group rounded-lg border bg-background p-4 shadow-sm transition-colors duration-200 flex flex-col"
                     style={{ borderColor: `${brandColor}25` }}
                   >
@@ -847,7 +868,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
 }
 
 // Style 3: Minimal - Tối giản, tập trung nội dung
-function MinimalStyle({ post, brandColor, secondaryColor, relatedPosts, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection }: StyleProps) {
+function MinimalStyle({ post, brandColor, secondaryColor, relatedPosts, showAuthor, authorName, showTags, showShare, showThumbnail, tags, commentsSection, getDetailHref }: StyleProps) {
   const [isCopied, setIsCopied] = useState(false);
   const resolvedContent = useMemo(() => resolvePostContent(post), [post]);
   const resolvedContentLength = useMemo(() => resolvePostContentLength(post), [post]);
@@ -1039,7 +1060,7 @@ function MinimalStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
           {resolvedContent && (
             <RichContent
               content={resolvedContent}
-              className="prose-slate prose-lg max-w-none text-muted-foreground prose-headings:text-foreground prose-strong:text-foreground prose-img:rounded-lg"
+              className="max-w-none text-muted-foreground"
             />
           )}
 
@@ -1059,49 +1080,55 @@ function MinimalStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
               </Link>
             </div>
             <div className="space-y-4">
-              {relatedPosts.map((p) => (
-                <Link
-                  key={p._id}
-                  href={`/posts/${p.slug}`}
-                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <Card className="transition-colors hover:bg-muted/40">
-                    <CardContent className="flex items-center justify-between gap-4 px-4 py-4">
-                      <div className="flex min-w-0 items-center gap-4">
-                        <div className="relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-md bg-muted">
-                          {p.thumbnail && !isBroken(p.thumbnail) ? (
-                            <Image
-                              src={p.thumbnail}
-                              alt={p.title}
-                              fill
-                              sizes="80px"
-                              className="object-cover"
-                              ref={(img) => {
-                                if (img?.complete && img.naturalWidth === 0) {
-                                  markBroken(p.thumbnail);
-                                }
-                              }}
-                              onError={() =>{  markBroken(p.thumbnail); }}
-                            />
+              {relatedPosts.map((p) => {
+                const hasThumbnail = Boolean(p.thumbnail && !isBroken(p.thumbnail));
+
+                return (
+                  <Link
+                    key={p._id}
+                    href={getDetailHref(p)}
+                    className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Card className="transition-colors hover:bg-muted/40">
+                      <CardContent className="flex items-center justify-between gap-4 px-4 py-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {hasThumbnail ? (
+                            <div className="relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+                              <Image
+                                src={p.thumbnail as string}
+                                alt={p.title}
+                                fill
+                                sizes="80px"
+                                className="object-cover"
+                                ref={(img) => {
+                                  if (img?.complete && img.naturalWidth === 0) {
+                                    markBroken(p.thumbnail);
+                                  }
+                                }}
+                                onError={() =>{  markBroken(p.thumbnail); }}
+                              />
+                            </div>
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                            <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
                               <FileText className="h-4 w-4" />
                             </div>
                           )}
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                              {p.title}
+                            </h3>
+                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>{p.publishedAt ? new Date(p.publishedAt).toLocaleDateString('vi-VN') : ''}</span>
+                            </div>
+                          </div>
                         </div>
-                        <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
-                          {p.title}
-                        </h3>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>{p.publishedAt ? new Date(p.publishedAt).toLocaleDateString('vi-VN') : ''}</span>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
             </div>
           </section>
         )}

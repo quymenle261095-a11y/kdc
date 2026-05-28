@@ -88,7 +88,7 @@ export default function BookingPage() {
   const visibilityMode = availability?.visibilityMode ?? monthOverview?.visibilityMode ?? settings?.visibilityMode ?? 'show_anonymous';
   const slots = availability?.slots ?? [];
   const capacityPerSlot = availability?.capacityPerSlot ?? monthOverview?.capacityPerSlot ?? 1;
-  const serviceOptions = services ?? [];
+  const serviceOptions = useMemo(() => services ?? [], [services]);
   const customerFieldConfigs = useMemo(
     () => normalizeBookingCustomerFieldConfigs(settings?.customerFieldConfigs),
     [settings?.customerFieldConfigs]

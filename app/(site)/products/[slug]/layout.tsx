@@ -4,8 +4,9 @@ import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings 
 import { buildSeoMetadata } from '@/lib/seo/metadata';
 import { stripHtml, truncateText } from '@/lib/seo';
 import { JsonLd, generateBreadcrumbSchema, generateProductSchema } from '@/components/seo/JsonLd';
+import { buildDetailPath } from '@/lib/ia/route-mode';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 
 const resolveProductTitle = (value: string): string => truncateText(value.trim(), 70);
 
@@ -65,6 +66,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ]);
 
     if (!product) {
+      const resolvedContext = await client.query(api.ia.resolveProductLandingContext, {
+        slugs: ['products', decodeURIComponent(slug)],
+      });
+
+      if (resolvedContext && resolvedContext.type === 'productTypeAttribute') {
+        const title = resolvedContext.termName
+          ? `${resolvedContext.termName} - ${resolvedContext.productTypeSlug.toUpperCase()}`
+          : `${resolvedContext.groupName} - ${resolvedContext.productTypeSlug.toUpperCase()}`;
+
+        return buildSeoMetadata({
+          contact,
+          descriptionOverride: seo.seo_description,
+          pathname: `/products/${slug}`,
+          routeType: 'list',
+          seo,
+          site,
+          social,
+          titleOverride: title,
+          useTitleTemplate: true,
+        });
+      }
+
       return buildSeoMetadata({
         contact,
         descriptionOverride: 'Sản phẩm này không tồn tại hoặc đã bị xóa.',
@@ -77,6 +100,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         titleOverride: 'Không tìm thấy sản phẩm',
       });
     }
+
+    const category = await client.query(api.productCategories.getById, { id: product.categoryId });
+    const canonicalPath = buildDetailPath({
+      categorySlug: category?.slug,
+      mode: 'unified',
+      moduleKey: 'products',
+      recordSlug: product.slug,
+    });
 
     const title = resolveProductTitle(product.metaTitle ?? product.name);
     const description = resolveProductDescription({
@@ -97,7 +128,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         name: product.name,
       },
       entityExists: true,
-      pathname: `/products/${product.slug}`,
+      pathname: canonicalPath,
       routeType: 'detail',
       seo,
       site,
@@ -158,8 +189,24 @@ export default async function ProductLayout({ params, children }: Props) {
 
     if (!product) {return children;}
 
+    const category = await client.query(api.productCategories.getById, { id: product.categoryId });
+    if (category?.slug) {
+      permanentRedirect(buildDetailPath({
+        categorySlug: category.slug,
+        mode: 'unified',
+        moduleKey: 'products',
+        recordSlug: product.slug,
+      }));
+    }
+
     const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL) ?? '';
-    const productUrl = `${baseUrl}/products/${product.slug}`;
+    const productPath = buildDetailPath({
+      categorySlug: category?.slug,
+      mode: 'unified',
+      moduleKey: 'products',
+      recordSlug: product.slug,
+    });
+    const productUrl = `${baseUrl}${productPath}`;
     const image = (product.image ?? (product.images && product.images[0])) ?? seo.seo_og_image;
     const productImages = product.images && product.images.length > 0
       ? product.images
@@ -197,7 +244,12 @@ export default async function ProductLayout({ params, children }: Props) {
 
     const breadcrumbSchema = generateBreadcrumbSchema([
       { name: 'Trang chủ', url: baseUrl },
-      { name: 'Sản phẩm', url: `${baseUrl}/products` },
+      {
+        name: category?.name ?? 'Sản phẩm',
+        url: category?.slug
+          ? `${baseUrl}/${category.slug}`
+          : `${baseUrl}/products`,
+      },
       { name: product.name, url: productUrl },
     ]);
 

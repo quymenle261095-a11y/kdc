@@ -274,7 +274,7 @@ export const getPricingColorTokens = ({
 
   const neutralBackground = '#f8fafc';
   const neutralSurface = '#ffffff';
-  const neutralBorder = '#e2e8f0';
+  const neutralBorder = '#111111';
   const neutralText = FALLBACK_TEXT;
   const mutedText = '#64748b';
 
@@ -282,7 +282,7 @@ export const getPricingColorTokens = ({
   const comparisonPopularColumnBg = neutralSurface;
 
   const badgeSoftBg = neutralSurface;
-  const badgeSoftBorder = secondaryPalette.border;
+  const badgeSoftBorder = neutralBorder;
   const badgeSoftText = ensureAPCATextColor(secondaryPalette.solid, badgeSoftBg, 11, 600);
 
   const badgeSoftOnHeaderText = ensureAPCATextColor(secondaryPalette.solid, comparisonHeaderBg, 10, 600);
@@ -306,7 +306,7 @@ export const getPricingColorTokens = ({
 
     cardBackground: neutralSurface,
     cardBorder: neutralBorder,
-    cardPopularBorder: secondaryPalette.border,
+    cardPopularBorder: neutralBorder,
 
     priceText: secondaryPalette.solid,
     periodText: mutedText,
@@ -329,7 +329,7 @@ export const getPricingColorTokens = ({
     ctaSolidHoverBg: primaryPalette.activeSurface,
 
     ctaGhostBg,
-    ctaGhostBorder: secondaryPalette.border,
+    ctaGhostBorder: neutralBorder,
     ctaGhostText: ensureAPCATextColor(secondaryPalette.solid, ctaGhostBg, 14, 600),
     ctaGhostHoverBg: secondaryPalette.surface,
 

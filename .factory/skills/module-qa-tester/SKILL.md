@@ -447,29 +447,38 @@ convex/{module}.ts
    });
    ```
 
-9. **⚠️ Missing Storage Cleanup on Delete**
-   ```tsx
-   // Bad - chỉ xóa DB record, không xóa file storage
-   export const remove = mutation({
-     handler: async (ctx, args) => {
-       await ctx.db.delete(args.id); // Storage file orphaned!
-     },
-   });
-   
-   // Good - xóa cả storage file
-   export const remove = mutation({
-     handler: async (ctx, args) => {
-       const media = await ctx.db.get(args.id);
-       if (!media) throw new Error("Media not found");
-       try {
-         await ctx.storage.delete(media.storageId);
-       } catch {
-         // Storage file might already be deleted
-       }
-       await ctx.db.delete(args.id);
-     },
-   });
-   ```
+ 9. **⚠️ Missing Storage Cleanup on Delete**
+    ```tsx
+    // Bad - chỉ xóa DB record, không xóa file storage
+    export const remove = mutation({
+      handler: async (ctx, args) => {
+        await ctx.db.delete(args.id); // Storage file orphaned!
+      },
+    });
+    
+    // Good - giải phóng references và gọi safe cleanup qua FLS gateway
+    export const remove = mutation({
+      handler: async (ctx, args) => {
+        const media = await ctx.db.get(args.id);
+        if (!media) throw new Error("Media not found");
+        
+        // FLS Safe Cleanup: Giải phóng reference
+        const { removedStorageIds } = await removeOwnerFileReferences(ctx, {
+          ownerTable: "media",
+          ownerId: args.id,
+        }, {
+          previousStorageIds: [media.storageId],
+        });
+        
+        await ctx.db.delete(args.id);
+        
+        // Dọn dẹp an toàn qua Convex storage cleanup mutation
+        for (const storageId of removedStorageIds) {
+          await ctx.runMutation(api.storage.cleanupStorageIfUnreferenced, { storageId });
+        }
+      },
+    });
+    ```
 
 10. **⚠️ LexicalEditor Image Upload Issues (CRITICAL)**
     ```tsx

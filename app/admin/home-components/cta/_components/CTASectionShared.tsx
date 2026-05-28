@@ -2,9 +2,10 @@
 
 import React from 'react';
 import { cn } from '../../../components/ui';
-import { normalizeCTAStyle } from '../_lib/constants';
+import { normalizeCTAContainerWidth, normalizeCTACornerRadius, normalizeCTAStyle } from '../_lib/constants';
 import type { CTAStyleTokens } from '../_lib/colors';
 import type { CTAConfig, CTAStyle } from '../_types';
+import { normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 
 interface CTASectionSharedProps {
   config: CTAConfig;
@@ -25,11 +26,60 @@ const getValue = (value?: string) => {
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
 };
 
-const buttonBaseClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg px-5 py-2.5 text-sm font-bold transition-colors duration-200';
+const buttonBaseClass = 'inline-flex min-h-[44px] items-center justify-center px-5 py-2.5 text-sm font-bold transition-colors duration-200';
+
+const getRadiusClassNames = (value: CTAConfig['cornerRadius']) => {
+  const radius = normalizeCTACornerRadius(value);
+  if (radius === 'none') {
+    return {
+      accent: 'rounded-none',
+      badge: 'rounded-none',
+      button: 'rounded-none',
+      card: 'rounded-none',
+    };
+  }
+  if (radius === 'sm') {
+    return {
+      accent: 'rounded-md',
+      badge: 'rounded-md',
+      button: 'rounded-md',
+      card: 'rounded-md',
+    };
+  }
+  return {
+    accent: 'rounded-full',
+    badge: 'rounded-full',
+    button: 'rounded-lg',
+    card: 'rounded-xl',
+  };
+};
+
+const getContainerWidthClassName = (value: CTAConfig['containerWidth']) => (
+  normalizeCTAContainerWidth(value) === 'full' ? 'w-full' : 'mx-auto max-w-7xl'
+);
+
+const getSpacingClassName = (style: CTAStyle, spacing?: SectionSpacing) => {
+  const normalizedSpacing = normalizeSectionSpacing(spacing);
+  if (normalizedSpacing === 'none') {return 'py-0';}
+  if (normalizedSpacing === 'compact') {return 'py-4 md:py-6 lg:py-8';}
+
+  if (style === 'centered') {return 'py-10 md:py-14 lg:py-16';}
+  if (style === 'minimal') {return 'py-6 md:py-8 lg:py-10 @max-md/preview:py-6';}
+  if (style === 'floating') {return 'py-8 md:py-14 lg:py-16 @max-md/preview:py-8';}
+  if (style === 'gradient') {return 'py-8 md:py-12 lg:py-16';}
+  return 'py-8 md:py-12 lg:py-14 @max-md/preview:py-8';
+};
 
 export function CTASectionShared({ config, style, tokens, context }: CTASectionSharedProps) {
   const normalizedStyle = normalizeCTAStyle(style);
   const HeadingTag = context === 'site' ? 'h2' : 'h3';
+  const radiusClassNames = getRadiusClassNames(config.cornerRadius);
+  const containerWidthClassName = getContainerWidthClassName(config.containerWidth);
+  const spacingClassName = getSpacingClassName(normalizedStyle, config.noVerticalMargin === true ? 'none' : config.spacing);
+  const usesNeutralBorder = normalizedStyle === 'centered'
+    || normalizedStyle === 'split'
+    || normalizedStyle === 'floating'
+    || normalizedStyle === 'minimal';
 
   const badge = getValue(config.badge);
   const title = getValue(config.title) ?? CTA_FALLBACKS.title;
@@ -44,7 +94,7 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
   const primaryButton = (
     <a
       href={primaryButtonLink}
-      className={cn(buttonBaseClass, 'whitespace-nowrap')}
+      className={cn(buttonBaseClass, radiusClassNames.button, 'whitespace-nowrap')}
       style={{
         backgroundColor: tokens.primaryButtonBg,
         border: tokens.primaryButtonBorder ? `1px solid ${tokens.primaryButtonBorder}` : undefined,
@@ -58,10 +108,15 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
   const secondaryButton = secondaryButtonText ? (
     <a
       href={secondaryButtonLink}
-      className={cn(buttonBaseClass, 'whitespace-nowrap border')}
+      className={cn(
+        buttonBaseClass,
+        radiusClassNames.button,
+        'whitespace-nowrap border',
+        usesNeutralBorder && 'border-slate-200 hover:border-slate-400 hover:bg-slate-50/80 dark:border-white/15 dark:hover:border-white/35 dark:hover:bg-white/5',
+      )}
       style={{
         backgroundColor: tokens.secondaryButtonBg ?? 'transparent',
-        borderColor: tokens.secondaryButtonBorder,
+        borderColor: usesNeutralBorder ? undefined : tokens.secondaryButtonBorder,
         color: tokens.secondaryButtonText,
       }}
     >
@@ -71,7 +126,7 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   const badgeNode = badge ? (
     <span
-      className="mb-3 inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide"
+      className={cn('mb-3 inline-flex w-fit items-center border px-3 py-1 text-xs font-semibold uppercase tracking-wide', radiusClassNames.badge)}
       style={{
         backgroundColor: tokens.badgeBg,
         borderColor: tokens.badgeBorder ?? 'transparent',
@@ -84,8 +139,8 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   if (normalizedStyle === 'banner') {
     return (
-      <section className={cn('px-4 py-8 md:py-12 lg:py-14 @max-md/preview:py-8', sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-5 px-4 sm:gap-6 sm:px-6 md:flex-row md:gap-8 @max-md/preview:flex-col @max-md/preview:gap-5 @max-md/preview:px-4">
+      <section className={cn('px-4', spacingClassName, sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
+        <div className={cn(containerWidthClassName, 'flex flex-col items-center justify-between gap-5 px-4 sm:gap-6 sm:px-6 md:flex-row md:gap-8 @max-md/preview:flex-col @max-md/preview:gap-5 @max-md/preview:px-4')}>
           <div className="max-w-xl text-center md:text-left @max-md/preview:text-center @max-md/preview:max-w-full">
             {badgeNode}
             <HeadingTag className="text-xl font-bold sm:text-2xl md:text-3xl break-words" style={{ color: tokens.title }}>
@@ -106,8 +161,8 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   if (normalizedStyle === 'centered') {
     return (
-      <section className={cn('px-4 py-10 md:py-14 lg:py-16', sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+      <section className={cn('px-4', spacingClassName, sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
+        <div className={cn(containerWidthClassName, 'px-4 text-center sm:px-6')}>
           {badgeNode}
           <HeadingTag className="text-xl font-bold sm:text-2xl md:text-3xl lg:text-4xl" style={{ color: tokens.title }}>
             {title}
@@ -126,18 +181,18 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   if (normalizedStyle === 'split') {
     return (
-      <section className={cn('bg-slate-50 px-4 py-8 md:py-12 lg:py-14', sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
+      <section className={cn('bg-slate-50 px-4', spacingClassName, sectionClass)} style={{ background: tokens.sectionBg, borderColor: tokens.sectionBorder }}>
         <div
-          className="mx-auto max-w-5xl rounded-xl border p-4 sm:p-6 md:p-8"
+          className={cn(containerWidthClassName, radiusClassNames.card, 'border border-slate-200 p-4 transition-colors hover:border-slate-400 sm:p-6 md:p-8 dark:border-white/10 dark:hover:border-white/30')}
           style={{
             backgroundColor: tokens.cardBg,
-            borderColor: tokens.cardBorder,
+            borderColor: undefined,
           }}
         >
           <div className="grid grid-cols-1 items-center gap-5 sm:gap-6 md:grid-cols-[1fr,auto]">
             <div>
               {badgeNode}
-              <div className="mb-3 h-1 w-12 rounded-full sm:mb-4 sm:w-16" style={{ backgroundColor: tokens.accentLine ?? tokens.secondaryButtonBorder }} />
+              <div className={cn('mb-3 h-1 w-12 sm:mb-4 sm:w-16', radiusClassNames.accent)} style={{ backgroundColor: tokens.accentLine ?? tokens.secondaryButtonBorder }} />
               <HeadingTag className="text-lg font-bold sm:text-xl md:text-2xl" style={{ color: tokens.title }}>
                 {title}
               </HeadingTag>
@@ -157,13 +212,13 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   if (normalizedStyle === 'floating') {
     return (
-      <section className={cn('bg-slate-50 px-4 py-8 md:py-14 lg:py-16 @max-md/preview:py-8', sectionClass)} style={{ background: tokens.sectionBg }}>
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 @max-md/preview:px-4">
+      <section className={cn('bg-slate-50 px-4', spacingClassName, sectionClass)} style={{ background: tokens.sectionBg }}>
+        <div className={cn(containerWidthClassName, 'px-4 sm:px-6 @max-md/preview:px-4')}>
           <div
-            className="rounded-xl border p-5 sm:p-6 md:p-8 @max-md/preview:p-5"
+            className={cn(radiusClassNames.card, 'border border-slate-200 p-5 transition-colors hover:border-slate-400 sm:p-6 md:p-8 @max-md/preview:p-5 dark:border-white/10 dark:hover:border-white/30')}
             style={{
               backgroundColor: tokens.cardBg,
-              borderColor: tokens.cardBorder,
+              borderColor: undefined,
             }}
           >
             <div className="flex flex-col items-center justify-between gap-5 text-center sm:gap-6 md:flex-row md:text-left @max-md/preview:flex-col @max-md/preview:text-center @max-md/preview:gap-5">
@@ -189,8 +244,8 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   if (normalizedStyle === 'gradient') {
     return (
-      <section className={cn('px-4 py-8 md:py-12 lg:py-16', sectionClass)} style={{ background: tokens.sectionBg }}>
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+      <section className={cn('px-4', spacingClassName, sectionClass)} style={{ background: tokens.sectionBg }}>
+        <div className={cn(containerWidthClassName, 'px-4 text-center sm:px-6')}>
           {badgeNode}
           <HeadingTag className="text-xl font-bold sm:text-2xl md:text-3xl lg:text-4xl" style={{ color: tokens.title }}>
             {title}
@@ -209,15 +264,15 @@ export function CTASectionShared({ config, style, tokens, context }: CTASectionS
 
   return (
     <section
-      className={cn('border-y px-4 py-6 md:py-8 lg:py-10 @max-md/preview:py-6', sectionClass)}
+      className={cn('border-y border-slate-200 px-4 transition-colors hover:border-slate-400 dark:border-white/10 dark:hover:border-white/30', spacingClassName, sectionClass)}
       style={{
         background: tokens.sectionBg,
-        borderColor: tokens.sectionBorder,
+        borderColor: undefined,
       }}
     >
-      <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-4 sm:gap-5 sm:px-6 md:flex-row md:gap-8 @max-md/preview:flex-col @max-md/preview:gap-4 @max-md/preview:px-4">
+      <div className={cn(containerWidthClassName, 'flex flex-col items-center justify-between gap-4 px-4 sm:gap-5 sm:px-6 md:flex-row md:gap-8 @max-md/preview:flex-col @max-md/preview:gap-4 @max-md/preview:px-4')}>
         <div className="flex items-center gap-3 text-center sm:gap-4 md:text-left @max-md/preview:text-center">
-          <div className="block h-8 w-1 rounded-full sm:h-12 md:h-14" style={{ backgroundColor: tokens.accentLine }} />
+          <div className={cn('block h-8 w-1 sm:h-12 md:h-14', radiusClassNames.accent)} style={{ backgroundColor: tokens.accentLine }} />
           <div>
             <HeadingTag className="text-lg font-bold sm:text-xl break-words" style={{ color: tokens.title }}>
               {title}

@@ -1,9 +1,12 @@
 import type {
+  ContactCornerRadius,
   ContactConfigState,
+  ContactDesktopColumns,
   ContactInfoItem,
   ContactSocialLink,
   ContactStyle,
 } from '../_types';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const CONTACT_STYLES: Array<{ id: ContactStyle; label: string }> = [
   { id: 'modern', label: 'Modern Split' },
@@ -32,7 +35,64 @@ export const DEFAULT_CONTACT_CONFIG: ContactConfigState = {
   workingHours: '',
   style: 'modern',
   texts: {},
+  hideHeader: false,
+  showTitle: true,
+  subtitle: '',
+  showSubtitle: true,
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+  spacing: DEFAULT_SECTION_SPACING,
+  cornerRadius: 'lg',
+  desktopColumns: 4,
 };
+
+export const normalizeContactCornerRadius = (value: unknown, noBorderRadius?: unknown): ContactCornerRadius => {
+  if (noBorderRadius === true) {
+    return 'none';
+  }
+
+  if (value === 'small') {
+    return 'sm';
+  }
+
+  if (value === 'large') {
+    return 'lg';
+  }
+
+  if (value === 'none' || value === 'sm' || value === 'lg') {
+    return value;
+  }
+
+  return 'lg';
+};
+
+export const getContactCornerRadiusClassName = (value: ContactCornerRadius = 'lg') => {
+  if (value === 'none') {
+    return 'rounded-none';
+  }
+
+  if (value === 'sm') {
+    return 'rounded-md';
+  }
+
+  return 'rounded-xl';
+};
+
+export const normalizeContactDesktopColumns = (value: unknown): ContactDesktopColumns => {
+  if (value === 3 || value === '3') {
+    return 3;
+  }
+
+  return 4;
+};
+
+export const normalizeContactSpacing = (value: unknown, noVerticalMargin?: unknown) => (
+  noVerticalMargin === true ? 'none' : normalizeSectionSpacing(value)
+);
 
 export const DEFAULT_CONTACT_TEXTS: Record<ContactStyle, Record<string, string>> = {
   modern: {

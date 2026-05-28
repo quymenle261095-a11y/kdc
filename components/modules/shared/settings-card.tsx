@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, HelpCircle } from 'lucide-react';
 import { ToggleSwitch } from './toggle-switch';
 
 const DEFAULT_MAX = 100;
@@ -10,16 +9,29 @@ const DEFAULT_MIN = 1;
 interface SettingsCardProps {
   children: React.ReactNode;
   title?: string;
+  tooltip?: string;
 }
 
 export const SettingsCard: React.FC<SettingsCardProps> = ({ 
   children, 
-  title = 'Cài đặt' 
+  title = 'Cài đặt',
+  tooltip
 }) => (
   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4">
-    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
-      <Settings size={14} className="text-slate-500" />
-      <span>{title}</span>
+    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Settings size={14} className="text-slate-500" />
+        <span>{title}</span>
+      </div>
+      {tooltip && (
+        <div className="relative group/tooltip cursor-help flex items-center">
+          <HelpCircle size={14} className="text-slate-400 hover:text-slate-600 transition-colors" />
+          <div className="absolute bottom-full right-0 mb-2 w-64 p-2.5 bg-slate-900 dark:bg-slate-850 text-white text-[11px] leading-relaxed font-normal rounded shadow-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-50 pointer-events-none">
+            {tooltip}
+            <div className="absolute top-full right-1.5 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900 dark:border-t-slate-850" />
+          </div>
+        </div>
+      )}
     </h3>
     <div className="space-y-3">
       {children}
@@ -158,6 +170,7 @@ interface SettingToggleProps {
   value: boolean;
   onChange: () => void;
   description?: string;
+  onHelpClick?: () => void;
 }
 
 export const SettingToggle: React.FC<SettingToggleProps> = ({
@@ -165,10 +178,26 @@ export const SettingToggle: React.FC<SettingToggleProps> = ({
   value,
   onChange,
   description,
+  onHelpClick,
 }) => (
   <div className="flex items-center justify-between gap-4">
     <div>
-      <p className="text-xs text-slate-600 dark:text-slate-300">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs text-slate-600 dark:text-slate-300">{label}</p>
+        {onHelpClick && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onHelpClick();
+            }}
+            className="text-slate-400 hover:text-cyan-500 transition-colors p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+            title="Xem hướng dẫn chi tiết"
+          >
+            <HelpCircle size={13} />
+          </button>
+        )}
+      </div>
       {description && (
         <p className="text-xs text-slate-400 mt-1">{description}</p>
       )}

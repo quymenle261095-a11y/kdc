@@ -4,6 +4,7 @@ import { useQuery } from 'convex/react';
 import { formatHex, oklch } from 'culori';
 import { api } from '@/convex/_generated/api';
 import { useInitialBrandColors } from '@/components/providers/InitialBrandColorsProvider';
+import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 
 const DEFAULT_BRAND_COLOR = '#3b82f6';
 
@@ -32,22 +33,30 @@ const generateComplementary = (hex: string): string => {
 };
 
 export function useBrandColors() {
+  const snapshotDemo = useSnapshotDemoContext();
   const initialBrandColors = useInitialBrandColors();
-  const primarySetting = useQuery(api.settings.getByKey, { key: 'site_brand_primary' });
-  const legacySetting = useQuery(api.settings.getByKey, { key: 'site_brand_color' });
-  const secondarySetting = useQuery(api.settings.getByKey, { key: 'site_brand_secondary' });
-  const modeSetting = useQuery(api.settings.getByKey, { key: 'site_brand_mode' });
-  const primary = resolveColorSetting(primarySetting?.value)
+  const snapshotSite = snapshotDemo?.getSiteSettings();
+  // Skip DB queries entirely when snapshot provides site settings
+  const skipDb = Boolean(snapshotSite);
+  const primarySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_primary' });
+  const legacySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_color' });
+  const secondarySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_secondary' });
+  const modeSetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_mode' });
+  const primary = resolveColorSetting(snapshotSite?.site_brand_primary)
+    ?? resolveColorSetting(snapshotSite?.site_brand_color)
+    ?? resolveColorSetting(primarySetting?.value)
     ?? resolveColorSetting(legacySetting?.value)
     ?? initialBrandColors?.primary
     ?? resolveColorSetting(getCssVariableFromDoc('--site-brand-primary'))
     ?? DEFAULT_BRAND_COLOR;
-  const mode = modeSetting?.value === 'single'
-    ? 'single'
-    : (initialBrandColors?.mode ?? (getCssVariableFromDoc('--site-brand-mode') === 'single' ? 'single' : 'dual'));
+  const mode = snapshotSite?.site_brand_mode
+    ?? (modeSetting?.value === 'single'
+      ? 'single'
+      : (initialBrandColors?.mode ?? (getCssVariableFromDoc('--site-brand-mode') === 'single' ? 'single' : 'dual')));
   const secondary = mode === 'single'
     ? ''
-    : resolveColorSetting(secondarySetting?.value)
+    : resolveColorSetting(snapshotSite?.site_brand_secondary)
+      ?? resolveColorSetting(secondarySetting?.value)
       ?? initialBrandColors?.secondary
       ?? resolveColorSetting(getCssVariableFromDoc('--site-brand-secondary'))
       ?? generateComplementary(primary);
@@ -62,16 +71,24 @@ export function useBrandColor() {
 
 // Hook lấy site settings
 export function useSiteSettings() {
-  const settings = useQuery(api.settings.listByGroup, { group: 'site' });
+  const snapshotDemo = useSnapshotDemoContext();
+  const snapshotSite = snapshotDemo?.getSiteSettings();
+  const settings = useQuery(api.settings.listByGroup, snapshotSite ? 'skip' : { group: 'site' });
   
-  if (settings === undefined) {
+  if (!snapshotSite && settings === undefined) {
     return { isLoading: true, settings: {} as Record<string, string | boolean> };
   }
   
   const settingsMap: Record<string, string | boolean> = {};
-  settings.forEach(s => {
-    settingsMap[s.key] = typeof s.value === 'boolean' ? s.value : (s.value as string);
-  });
+  if (snapshotSite) {
+    Object.entries(snapshotSite).forEach(([key, value]) => {
+      settingsMap[key] = value;
+    });
+  } else {
+    settings?.forEach(s => {
+      settingsMap[s.key] = typeof s.value === 'boolean' ? s.value : (s.value as string);
+    });
+  }
   
   const brandPrimary = (settingsMap.site_brand_primary as string) || (settingsMap.site_brand_color as string) || DEFAULT_BRAND_COLOR;
   const brandMode = settingsMap.site_brand_mode === 'single' ? 'single' : 'dual';
@@ -94,16 +111,24 @@ export function useSiteSettings() {
 
 // Hook lấy contact settings
 export function useContactSettings() {
-  const settings = useQuery(api.settings.listByGroup, { group: 'contact' });
+  const snapshotDemo = useSnapshotDemoContext();
+  const snapshotContact = snapshotDemo?.getContactSettings();
+  const settings = useQuery(api.settings.listByGroup, snapshotContact ? 'skip' : { group: 'contact' });
   
-  if (settings === undefined) {
+  if (!snapshotContact && settings === undefined) {
     return { isLoading: true };
   }
   
   const settingsMap: Record<string, string> = {};
-  settings.forEach(s => {
-    settingsMap[s.key] = s.value as string;
-  });
+  if (snapshotContact) {
+    Object.entries(snapshotContact).forEach(([key, value]) => {
+      settingsMap[key] = value;
+    });
+  } else {
+    settings?.forEach(s => {
+      settingsMap[s.key] = s.value as string;
+    });
+  }
   
   return {
     address: settingsMap.contact_address || '',
@@ -115,31 +140,55 @@ export function useContactSettings() {
 
 // Hook lấy social links settings
 export function useSocialLinks() {
-  const settings = useQuery(api.settings.listByGroup, { group: 'social' });
-  const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
+  const snapshotDemo = useSnapshotDemoContext();
+  const snapshotSocial = snapshotDemo?.getSocialSettings();
+  const snapshotContact = snapshotDemo?.getContactSettings();
+  const skipSocial = Boolean(snapshotSocial);
+  const skipContact = Boolean(snapshotContact);
+  const settings = useQuery(api.settings.listByGroup, skipSocial ? 'skip' : { group: 'social' });
+  const contactSettings = useQuery(api.settings.listByGroup, skipContact ? 'skip' : { group: 'contact' });
+  const enabledFields = useQuery(api.admin.modules.listEnabledModuleFields, skipSocial && skipContact ? 'skip' : { moduleKey: 'settings' });
   
-  if (settings === undefined || contactSettings === undefined) {
+  if (!snapshotSocial && (settings === undefined || contactSettings === undefined || enabledFields === undefined)) {
     return { isLoading: true };
   }
   
   const settingsMap: Record<string, string> = {};
-  settings.forEach(s => {
-    settingsMap[s.key] = s.value as string;
-  });
+  if (snapshotSocial) {
+    Object.entries(snapshotSocial).forEach(([key, value]) => {
+      settingsMap[key] = value;
+    });
+  } else {
+    settings?.forEach(s => {
+      settingsMap[s.key] = s.value as string;
+    });
+  }
 
   const contactMap: Record<string, string> = {};
-  contactSettings.forEach(s => {
-    contactMap[s.key] = s.value as string;
-  });
+  if (snapshotContact) {
+    Object.entries(snapshotContact).forEach(([key, value]) => {
+      contactMap[key] = value;
+    });
+  } else {
+    contactSettings?.forEach(s => {
+      contactMap[s.key] = s.value as string;
+    });
+  }
+
+  const enabledKeys = new Set(
+    skipSocial && skipContact
+      ? ['social_facebook', 'social_instagram', 'social_linkedin', 'social_tiktok', 'social_twitter', 'social_youtube', 'contact_zalo']
+      : (enabledFields?.map(f => f.fieldKey) ?? [])
+  );
   
   return {
-    facebook: settingsMap.social_facebook || '',
-    instagram: settingsMap.social_instagram || '',
+    facebook: enabledKeys.has('social_facebook') ? (settingsMap.social_facebook || '') : '',
+    instagram: enabledKeys.has('social_instagram') ? (settingsMap.social_instagram || '') : '',
     isLoading: false,
-    linkedin: settingsMap.social_linkedin || '',
-    tiktok: settingsMap.social_tiktok || '',
-    twitter: settingsMap.social_twitter || '',
-    youtube: settingsMap.social_youtube || '',
-    zalo: contactMap.contact_zalo || '',
+    linkedin: enabledKeys.has('social_linkedin') ? (settingsMap.social_linkedin || '') : '',
+    tiktok: enabledKeys.has('social_tiktok') ? (settingsMap.social_tiktok || '') : '',
+    twitter: enabledKeys.has('social_twitter') ? (settingsMap.social_twitter || '') : '',
+    youtube: enabledKeys.has('social_youtube') ? (settingsMap.social_youtube || '') : '',
+    zalo: enabledKeys.has('contact_zalo') ? (contactMap.contact_zalo || '') : '',
   };
 }

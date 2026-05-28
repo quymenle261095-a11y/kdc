@@ -5,6 +5,14 @@
 - Không mở rộng scope ngoài yêu cầu.
 - Ưu tiên thay đổi nhỏ, dễ rollback.
 
+# Large-scale System Design Guardrails
+- Không thể “test đến đúng”: test chỉ hỗ trợ; correctness phải đến từ thiết kế đơn giản, invariant rõ, data model chặt và edge case được nghĩ trước.
+- Chậm kéo dài có thể tệ hơn lỗi rõ ràng: với hot path/user-facing, ưu tiên timeout, fail-fast, backpressure, load shedding hoặc degrade có kiểm soát thay vì treo âm thầm.
+- Steady state nên là worst state: thiết kế sao cho trạng thái bình thường đã chịu được tải/queue/data thường trực; không phụ thuộc cleanup thủ công, job phục hồi nặng hoặc “sau này xử lý”.
+- Simple beats clever: chọn giải pháp dễ đọc, dễ suy luận, dễ rollback và dễ vận hành trước khi dùng abstraction/magic/công nghệ phức tạp.
+- Architecture > raw performance: ưu tiên boundary, ownership, data flow, cache strategy và failure mode đúng; chỉ tối ưu micro khi có evidence đo được.
+- Queue không phải mặc định tốt: chỉ thêm queue khi cần tách tải/độ trễ rõ ràng và đã có idempotency, retry policy, dead-letter/monitoring; tránh dùng queue để che thiết kế đồng bộ sai.
+
 # Clean-by-construction
 - Ưu tiên đọc code kỹ, bám pattern sẵn có để giảm lỗi ngay từ lúc viết.
 - Cấm tuyệt đối tự chạy lint/unit test.
@@ -128,7 +136,12 @@
 - Khi user đưa URL localhost, đọc route Next.js tương ứng, không hỏi lại.
 - Mọi thay đổi code khi hoàn thành đều phải commit, không push.
 - Khi commit luôn add kèm `.factory/docs` (nếu có).
-- Trước commit chỉ chạy `bunx tsc --noEmit` khi có thay đổi code/TS; không chạy khi chỉ sửa docs/cấu hình không liên quan.
+- Trước khi commit KHÔNG cần chạy `bunx tsc --noEmit` thủ công nếu chuẩn bị thực hiện lệnh commit ngay, vì hệ thống Git Hook (Harness Engine) đã tự động tích hợp chạy `oxlint` trên các file staged (qua `lint-staged`) và chạy `tsc --noEmit` toàn dự án trước khi commit. Tuy nhiên, khuyến khích chạy thủ công trong quá trình coding nếu muốn kiểm tra nhanh lỗi và sửa lỗi type sớm.
+- Khi chạy `bunx tsc --noEmit` thủ công, luôn pipe output qua `2>&1 | Select-Object -First 10` để giới hạn context (tsc luôn scan toàn bộ project bất kể pipe; pipe chỉ cắt hiển thị, không tăng tốc).
+
+# Task Completion Notification (Âm báo hoàn thành Task)
+- Khi hoàn thành xong task và chuẩn bị phản hồi kết quả cuối cùng cho người dùng, Agent BẮT BUỘC phải chạy lệnh sau qua công cụ `run_command` với `WaitMsBeforeAsync: 5000`:
+  `powershell -c "(New-Object -ComObject SAPI.SpVoice).Speak('Done, Sir.')"`
 
 # Convex Real Data Ops (Best Practices)
 - Mặc định ưu tiên sửa dữ liệu thật qua query/mutation/action đã có sẵn; không tự ý thêm schema/table/function mới nếu yêu cầu chỉ là chỉnh data.
@@ -155,3 +168,17 @@
 - Chỉ lấy data cần thiết (projection, no select *).
 - Load song song bằng Promise.all cho query độc lập.
 - Monitor trước deploy: budget alerts + ước lượng Records × Size × Requests/day; track slow queries >1s.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

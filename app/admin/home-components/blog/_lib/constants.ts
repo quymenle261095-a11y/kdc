@@ -1,22 +1,42 @@
 import type { Id } from '@/convex/_generated/dataModel';
-import type { BlogConfig } from '../_types';
+import type { BlogConfig, DemoBlogItem } from '../_types';
 
 export const BLOG_STYLES = [
-  { id: 'grid', label: 'Grid' },
-  { id: 'list', label: 'List' },
-  { id: 'featured', label: 'Featured' },
-  { id: 'magazine', label: 'Magazine' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'minimal', label: 'Minimal' }
+  { id: 'layout1', label: 'Layout 1' },
+  { id: 'layout2', label: 'Layout 2' },
+  { id: 'layout3', label: 'Layout 3' },
+  { id: 'layout4', label: 'Layout 4' },
+  { id: 'layout5', label: 'Layout 5' },
+  { id: 'layout6', label: 'Layout 6' },
+  { id: 'layout7', label: 'Layout 7' }
 ];
 
 export const DEFAULT_BLOG_CONFIG: BlogConfig = {
   itemCount: 8,
   selectedPostIds: [],
   selectionMode: 'auto',
+  demoPosts: [],
+  showAuthor: true,
+  showDate: true,
+  showExcerpt: true,
   sortBy: 'newest',
-  style: 'grid'
+  spacing: 'normal',
+  desktopColumns: 4,
+  cornerRadius: 'lg',
+  style: 'layout1',
+  subtitle: '',
 };
+
+export const DEFAULT_DEMO_BLOG_POSTS: DemoBlogItem[] = [
+  { id: 'demo-1', title: 'Xu hướng thiết kế web hiện đại năm 2026', excerpt: 'Những xu hướng thiết kế website nổi bật giúp tăng trải nghiệm người dùng.', thumbnail: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=500&fit=crop', category: 'Thiết kế', date: '15/04/2026', author: 'Admin' },
+  { id: 'demo-2', title: 'Tối ưu SEO cho website doanh nghiệp', excerpt: 'Các chiến lược SEO on-page và technical SEO để đạt thứ hạng cao.', thumbnail: 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800&h=500&fit=crop', category: 'SEO', date: '12/04/2026', author: 'Admin' },
+  { id: 'demo-3', title: 'React 19: Những tính năng mới cần biết', excerpt: 'Khám phá các cập nhật quan trọng trong React 19 và cách áp dụng.', thumbnail: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&h=500&fit=crop', category: 'Frontend', date: '10/04/2026', author: 'Admin' },
+  { id: 'demo-4', title: 'Bảo mật website: 10 lỗi phổ biến cần tránh', excerpt: 'Những lỗ hổng bảo mật thường gặp và biện pháp phòng tránh hiệu quả.', thumbnail: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=800&h=500&fit=crop', category: 'Bảo mật', date: '08/04/2026', author: 'Admin' },
+  { id: 'demo-5', title: 'Performance tối ưu: Core Web Vitals', excerpt: 'Hướng dẫn tối ưu LCP, FID, CLS để cải thiện trải nghiệm.', thumbnail: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=500&fit=crop', category: 'Performance', date: '05/04/2026', author: 'Admin' },
+  { id: 'demo-6', title: 'Thiết kế landing page tăng tỷ lệ chuyển đổi', excerpt: 'Nguyên tắc thiết kế landing page hiệu quả cho chiến dịch marketing.', thumbnail: 'https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?w=800&h=500&fit=crop', category: 'Marketing', date: '02/04/2026', author: 'Admin' },
+  { id: 'demo-7', title: 'Hướng dẫn chọn hosting phù hợp cho doanh nghiệp', excerpt: 'So sánh shared hosting, VPS và cloud để chọn giải pháp phù hợp.', thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=500&fit=crop', category: 'Hạ tầng', date: '28/03/2026', author: 'Admin' },
+  { id: 'demo-8', title: 'Chiến lược nội dung giúp tăng traffic tự nhiên', excerpt: 'Lập kế hoạch content marketing bền vững để thu hút khách hàng.', thumbnail: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=500&fit=crop', category: 'Content', date: '25/03/2026', author: 'Admin' },
+];
 
 export interface BlogSortablePost {
   _id: Id<'posts'>;

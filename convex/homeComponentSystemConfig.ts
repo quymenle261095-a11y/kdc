@@ -9,6 +9,7 @@ const HIDDEN_TYPES_KEY = "create_hidden_types";
 const OVERRIDES_KEY = "type_color_overrides";
 const FONT_OVERRIDES_KEY = "type_font_overrides";
 const GLOBAL_FONT_OVERRIDE_KEY = "global_font_override";
+const AI_IMPORT_OVERRIDES_KEY = "type_ai_import_overrides";
 const DEFAULT_BRAND_COLOR = "#3b82f6";
 const SUPPORTED_CUSTOM_TYPES = new Set(HOME_COMPONENT_TYPE_VALUES);
 const FONT_KEYS = new Set(FONT_REGISTRY.map((font) => font.key));
@@ -31,6 +32,10 @@ const fontOverrideDoc = v.object({
 const globalFontOverrideDoc = v.object({
   enabled: v.boolean(),
   fontKey: v.string(),
+});
+
+const aiImportOverrideDoc = v.object({
+  enabled: v.boolean(),
 });
 
 const isValidHexColor = (value: string) => /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value.trim());
@@ -126,6 +131,23 @@ const normalizeFontOverrides = (value: unknown): Record<string, { enabled: boole
   return result;
 };
 
+const normalizeAiImportOverrides = (value: unknown): Record<string, { enabled: boolean }> => {
+  if (!value || typeof value !== "object") {return {};}
+  const result: Record<string, { enabled: boolean }> = {};
+  const record = value as Record<string, unknown>;
+  Object.entries(record).forEach(([key, entry]) => {
+    if (!SUPPORTED_CUSTOM_TYPES.has(key)) {return;}
+    if (typeof entry === "boolean") {
+      result[key] = { enabled: entry };
+      return;
+    }
+    if (entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).enabled === "boolean") {
+      result[key] = { enabled: Boolean((entry as Record<string, unknown>).enabled) };
+    }
+  });
+  return result;
+};
+
 const getSettingValue = async (ctx: QueryCtx | MutationCtx, key: string) => {
   const setting = await ctx.db
     .query("settings")
@@ -153,11 +175,13 @@ export const getConfig = query({
     const overrides = normalizeOverrides(await getSettingValue(ctx, OVERRIDES_KEY));
     const fontOverrides = normalizeFontOverrides(await getSettingValue(ctx, FONT_OVERRIDES_KEY));
     const globalFontOverride = normalizeGlobalFontOverride(await getSettingValue(ctx, GLOBAL_FONT_OVERRIDE_KEY));
+    const aiImportOverrides = normalizeAiImportOverrides(await getSettingValue(ctx, AI_IMPORT_OVERRIDES_KEY));
     return {
       hiddenTypes,
       typeColorOverrides: overrides,
       typeFontOverrides: fontOverrides,
       globalFontOverride,
+      typeAiImportOverrides: aiImportOverrides,
     };
   },
   returns: v.object({
@@ -165,6 +189,7 @@ export const getConfig = query({
     typeColorOverrides: v.record(v.string(), colorOverrideDoc),
     typeFontOverrides: v.record(v.string(), fontOverrideDoc),
     globalFontOverride: globalFontOverrideDoc,
+    typeAiImportOverrides: v.record(v.string(), aiImportOverrideDoc),
   }),
 });
 
@@ -313,6 +338,38 @@ export const setGlobalFontOverride = mutation({
       fontKey,
     };
     await upsertSetting(ctx, GLOBAL_FONT_OVERRIDE_KEY, next);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const setTypeAiImportOverride = mutation({
+  args: {
+    enabled: v.boolean(),
+    type: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!SUPPORTED_CUSTOM_TYPES.has(args.type)) {
+      return null;
+    }
+    const overrides = normalizeAiImportOverrides(await getSettingValue(ctx, AI_IMPORT_OVERRIDES_KEY));
+    overrides[args.type] = { enabled: args.enabled };
+    await upsertSetting(ctx, AI_IMPORT_OVERRIDES_KEY, overrides);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const bulkSetTypeAiImportOverride = mutation({
+  args: { enabled: v.boolean(), types: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const overrides = normalizeAiImportOverrides(await getSettingValue(ctx, AI_IMPORT_OVERRIDES_KEY));
+    args.types
+      .filter((type) => SUPPORTED_CUSTOM_TYPES.has(type))
+      .forEach((type) => {
+        overrides[type] = { enabled: args.enabled };
+      });
+    await upsertSetting(ctx, AI_IMPORT_OVERRIDES_KEY, overrides);
     return null;
   },
   returns: v.null(),

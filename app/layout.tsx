@@ -23,18 +23,22 @@ import {
 const geistSans = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
+  display: "optional",
 });
 
 const vietnameseSans = Be_Vietnam_Pro({
   subsets: ["latin", "vietnamese"],
   variable: "--font-be-vietnam-pro",
   weight: ["400", "500", "600", "700"],
+  display: "optional",
+  adjustFontFallback: true,
 });
 
 const robotoSans = Roboto({
   subsets: ["latin", "vietnamese"],
   variable: "--font-roboto",
   weight: ["400", "500", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -42,6 +46,7 @@ const notoSans = Noto_Sans({
   subsets: ["latin", "vietnamese"],
   variable: "--font-noto-sans",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -49,6 +54,7 @@ const nunitoSans = Nunito({
   subsets: ["latin", "vietnamese"],
   variable: "--font-nunito",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -56,6 +62,7 @@ const sourceSans = Source_Sans_3({
   subsets: ["latin", "vietnamese"],
   variable: "--font-source-sans-3",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -63,6 +70,7 @@ const merriweather = Merriweather({
   subsets: ["latin", "vietnamese"],
   variable: "--font-merriweather",
   weight: ["400", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -70,6 +78,7 @@ const lora = Lora({
   subsets: ["latin", "vietnamese"],
   variable: "--font-lora",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -77,6 +86,7 @@ const montserrat = Montserrat({
   subsets: ["latin", "vietnamese"],
   variable: "--font-montserrat",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -84,6 +94,7 @@ const robotoSlab = Roboto_Slab({
   subsets: ["latin", "vietnamese"],
   variable: "--font-roboto-slab",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
@@ -91,12 +102,14 @@ const notoSerif = Noto_Serif({
   subsets: ["latin", "vietnamese"],
   variable: "--font-noto-serif",
   weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 });
 
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+  preload: false,
 });
 
 const resolveMetadataBase = (): URL => {
@@ -107,8 +120,6 @@ const resolveMetadataBase = (): URL => {
   const normalizedBaseUrl = rawBaseUrl.startsWith("http") ? rawBaseUrl : `https://${rawBaseUrl}`;
   return new URL(normalizedBaseUrl);
 };
-
-export const dynamic = "force-dynamic";
 
 export const generateMetadata = async (): Promise<Metadata> => {
   const seo = await getSEOSettings();

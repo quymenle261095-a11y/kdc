@@ -1,6 +1,11 @@
 import { resolveUniqueSlug } from "../lib/iaSlugs";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  deleteServiceAggregates,
+  recordServiceAggregates,
+  replaceServiceAggregates,
+} from "../lib/aggregates/publicContent";
 
 const MAX_ITEMS_LIMIT = 100;
 
@@ -141,7 +146,7 @@ export async function create(
   const order = args.order ?? (await getNextOrder(ctx));
   const status = args.status ?? "Draft";
 
-  return  ctx.db.insert("services", {
+  const id = await ctx.db.insert("services", {
     categoryId: args.categoryId,
     content: args.content,
     renderType: args.renderType ?? "content",
@@ -168,6 +173,11 @@ export async function create(
     title: args.title,
     views: 0,
   });
+  const service = await ctx.db.get(id);
+  if (service) {
+    await recordServiceAggregates(ctx, service);
+  }
+  return id;
 }
 
 export async function update(
@@ -220,6 +230,10 @@ export async function update(
   }
 
   await ctx.db.patch(id, patchData);
+  const updatedService = await ctx.db.get(id);
+  if (updatedService) {
+    await replaceServiceAggregates(ctx, service, updatedService);
+  }
 }
 
 /**
@@ -229,6 +243,7 @@ export async function remove(
   ctx: MutationCtx,
   { cascade, id }: { cascade?: boolean; id: Id<"services"> }
 ): Promise<void> {
+  const service = await getByIdOrThrow(ctx, { id });
   const preview = await ctx.db
     .query("comments")
     .withIndex("by_target_status", (q) =>
@@ -251,6 +266,7 @@ export async function remove(
   }
 
   await ctx.db.delete(id);
+  await deleteServiceAggregates(ctx, service);
 }
 
 export async function getDeleteInfo(

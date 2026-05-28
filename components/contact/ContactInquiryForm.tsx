@@ -91,7 +91,6 @@ export function ContactInquiryForm({
     return (
       <div
         role="form"
-        aria-disabled
         className={withContainer ? 'space-y-4 rounded-xl border p-5' : 'space-y-4'}
         style={formTokens && withContainer ? { backgroundColor: formTokens.formBackground, borderColor: formTokens.formBorder } : undefined}
       >

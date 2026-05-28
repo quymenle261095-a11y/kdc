@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { api } from '@/convex/_generated/api';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Label } from '@/app/admin/components/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox } from '@/app/admin/components/ui';
 import { IA_SETTINGS_KEYS } from '@/lib/ia/settings';
-import { normalizeRouteMode, type RouteMode } from '@/lib/ia/route-mode';
+import type { RouteMode } from '@/lib/ia/route-mode';
 import { TRUST_PAGE_SLOTS } from '@/lib/ia/trust-pages';
 
 type TrustPageSetting = {
@@ -32,15 +32,13 @@ export default function InformationArchitecturePage() {
   const resolveConflicts = useMutation(api.ia.resolveConflicts);
 
   const [routeMode, setRouteMode] = useState<RouteMode>('unified');
-  const [autoResolve, setAutoResolve] = useState(true);
   const [pageToggles, setPageToggles] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     if (!settings) {return;}
-    setRouteMode(normalizeRouteMode(settings.ia_route_mode));
-    setAutoResolve(typeof settings.ia_auto_resolve_slug === 'boolean' ? settings.ia_auto_resolve_slug : true);
+    setRouteMode('unified');
     const nextToggles: Record<string, boolean> = {};
     TRUST_PAGES.forEach((page) => {
       const value = settings[page.key];
@@ -51,24 +49,22 @@ export default function InformationArchitecturePage() {
 
   const hasChanges = useMemo(() => {
     if (!settings) {return false;}
-    if (normalizeRouteMode(settings.ia_route_mode) !== routeMode) {return true;}
-    if ((typeof settings.ia_auto_resolve_slug === 'boolean' ? settings.ia_auto_resolve_slug : true) !== autoResolve) {return true;}
+    if (settings.ia_route_mode !== 'unified') {return true;}
+    if (settings.ia_auto_resolve_slug !== true) {return true;}
     return TRUST_PAGES.some((page) => {
       const current = typeof settings[page.key] === 'boolean' ? settings[page.key] : true;
       return current !== pageToggles[page.key];
     });
-  }, [autoResolve, pageToggles, routeMode, settings]);
+  }, [pageToggles, routeMode, settings]);
 
-  const routeModeLabel = routeMode === 'unified' ? 'hợp nhất' : 'phân vùng';
+  const routeModeLabel = 'hợp nhất';
 
   const iaTreePreview = useMemo(() => {
     const baseRoutes = ['/', '/contact', '/promotions', '/stores'];
     const trustRoutes = TRUST_PAGES
       .filter((page) => pageToggles[page.key] ?? true)
       .map((page) => page.slug);
-    const moduleRoutes = routeMode === 'unified'
-      ? ['/{category}', '/{category}/{record}']
-      : ['/posts', '/posts/{slug}', '/products', '/products/{slug}', '/services', '/services/{slug}'];
+    const moduleRoutes = ['/{category}', '/{category}/{record}'];
 
     return {
       baseRoutes,
@@ -84,7 +80,7 @@ export default function InformationArchitecturePage() {
       await saveSettings({
         settings: [
           { group: 'ia', key: 'ia_route_mode', value: routeMode },
-          { group: 'ia', key: 'ia_auto_resolve_slug', value: autoResolve },
+          { group: 'ia', key: 'ia_auto_resolve_slug', value: true },
           ...TRUST_PAGES.map((page) => ({
             group: 'ia',
             key: page.key,
@@ -120,39 +116,13 @@ export default function InformationArchitecturePage() {
           <CardTitle className="text-base">Chế độ URL</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-              <input
-                type="radio"
-                name="route-mode"
-                checked={routeMode === 'unified'}
-                onChange={() => setRouteMode('unified')}
-              />
-              <div>
-                <p className="font-medium">Hợp nhất (mặc định)</p>
-                <p className="text-xs text-slate-500">/{'{'}category{'}'}/{'{'}record{'}'}</p>
-              </div>
-            </label>
-            <label className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-              <input
-                type="radio"
-                name="route-mode"
-                checked={routeMode === 'namespace'}
-                onChange={() => setRouteMode('namespace')}
-              />
-              <div>
-                <p className="font-medium">Phân vùng</p>
-                <p className="text-xs text-slate-500">/posts, /products, /services</p>
-              </div>
-            </label>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <p className="font-medium">Canonical URL: /{'{'}categorySlug{'}'}/{'{'}recordSlug{'}'}</p>
+            <p className="mt-1 text-xs">Các route /products, /posts, /services chỉ giữ vai trò legacy redirect để không mất traffic cũ.</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Checkbox
-              checked={autoResolve}
-              onCheckedChange={(value) => setAutoResolve(Boolean(value))}
-            />
-            <Label>Tự động xử lý slug trùng (gợi ý hậu tố -1/-2...)</Label>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            Slug trùng sẽ luôn được cảnh báo trong mục xung đột bên dưới. Khi bấm xử lý, hệ thống tự thêm hậu tố an toàn như <span className="font-mono">-1</span>, <span className="font-mono">-2</span> để giữ URL duy nhất.
           </div>
         </CardContent>
       </Card>

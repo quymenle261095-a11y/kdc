@@ -1,26 +1,40 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Briefcase, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Label } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { CareerPreview } from '../../_components/CareerPreview';
+import { CareerForm } from '../../_components/CareerForm';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
 import {
   createCareerJob,
+  DEFAULT_CAREER_CONFIG,
+  DEFAULT_CAREER_CORNER_RADIUS,
+  DEFAULT_CAREER_DESKTOP_COLUMNS,
+  DEFAULT_CAREER_LOGO_SIZE,
   DEFAULT_CAREER_TEXTS,
+  normalizeCareerCornerRadius,
+  normalizeCareerDesktopColumns,
+  normalizeCareerLogoSize,
 } from '../../_lib/constants';
-import { getCareerValidationResult } from '../../_lib/colors';
 import {
   normalizeCareerConfig,
   normalizeCareerJobs,
@@ -28,6 +42,9 @@ import {
 } from '../../_lib/normalize';
 import type {
   CareerConfig,
+  CareerCornerRadius,
+  CareerDesktopColumns,
+  CareerLogoSize,
   CareerStyle,
   CareerTexts,
   JobPosition,
@@ -35,38 +52,103 @@ import type {
 
 const COMPONENT_TYPE = 'Career';
 
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type CareerEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
 interface CareerSnapshotPayload {
   title: string;
   active: boolean;
   jobs: JobPosition[];
   style: CareerStyle;
+  spacing: SectionSpacing;
   texts: CareerTexts;
+  hideHeader: boolean;
+  showTitle: boolean;
+  subtitle: string;
+  showSubtitle: boolean;
+  headerAlign: 'left' | 'center' | 'right';
+  titleColorPrimary: boolean;
+  subtitleAboveTitle: boolean;
+  uppercaseText: boolean;
+  showBadge: boolean;
+  badgeText: string;
+  desktopColumns: CareerDesktopColumns;
+  cornerRadius: CareerCornerRadius;
+  noBorderRadius: boolean;
+  noVerticalMargin: boolean;
+  logoSize: CareerLogoSize;
 }
 
 const toSnapshot = (payload: CareerSnapshotPayload) => JSON.stringify(payload);
 
-export default function CareerEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function CareerEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: CareerEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
-  const [jobs, setJobs] = useState<JobPosition[]>([createCareerJob({ type: 'Full-time' })]);
+  const {
+    state: jobs,
+    set: setJobs,
+    undo: undojobs,
+    redo: redojobs,
+    canUndo: canUndojobs,
+    canRedo: canRedojobs,
+    reset: resetjobs,
+  } = useUndoRedo<JobPosition[]>([createCareerJob({ type: 'Full-time' })], { maxHistory: 15 });
   const [careerStyle, setCareerStyle] = useState<CareerStyle>('cards');
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
   const [texts, setTexts] = useState<CareerTexts>(DEFAULT_CAREER_TEXTS);
+  const [hideHeader, setHideHeader] = useState(Boolean(DEFAULT_CAREER_CONFIG.hideHeader));
+  const [showTitle, setShowTitle] = useState(DEFAULT_CAREER_CONFIG.showTitle ?? true);
+  const [subtitle, setSubtitle] = useState(DEFAULT_CAREER_CONFIG.subtitle ?? DEFAULT_CAREER_TEXTS.subtitle ?? '');
+  const [showSubtitle, setShowSubtitle] = useState(DEFAULT_CAREER_CONFIG.showSubtitle ?? true);
+  const [headerAlign, setHeaderAlign] = useState<'left' | 'center' | 'right'>(DEFAULT_CAREER_CONFIG.headerAlign ?? 'center');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(Boolean(DEFAULT_CAREER_CONFIG.titleColorPrimary));
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(Boolean(DEFAULT_CAREER_CONFIG.subtitleAboveTitle));
+  const [uppercaseText, setUppercaseText] = useState(Boolean(DEFAULT_CAREER_CONFIG.uppercaseText));
+  const [showBadge, setShowBadge] = useState(Boolean(DEFAULT_CAREER_CONFIG.showBadge));
+  const [badgeText, setBadgeText] = useState(DEFAULT_CAREER_CONFIG.badgeText ?? '');
+  const [expandedSections, setExpandedSections] = useState({ header: false, display: false });
+  const [desktopColumns, setDesktopColumns] = useState<CareerDesktopColumns>(DEFAULT_CAREER_DESKTOP_COLUMNS);
+  const [cornerRadius, setCornerRadius] = useState<CareerCornerRadius>(DEFAULT_CAREER_CORNER_RADIUS);
+  const [logoSize, setLogoSize] = useState<CareerLogoSize>(DEFAULT_CAREER_LOGO_SIZE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!component) {return;}
 
-    if (component.type !== 'Career') {
+    if (!snapshotComponent && component.type !== 'Career') {
       router.replace(`/admin/home-components/${id}/edit`);
       return;
     }
@@ -80,86 +162,90 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
 
     setTitle(component.title);
     setActive(component.active);
-    setJobs(normalizedJobs);
+    resetjobs(normalizedJobs);
     setCareerStyle(normalized.style);
+    setSpacing(normalizeSectionSpacing(normalized.spacing));
     setTexts(normalizedTexts);
+    setHideHeader(Boolean(normalized.hideHeader));
+    setShowTitle(normalized.showTitle ?? true);
+    setSubtitle(normalized.subtitle ?? DEFAULT_CAREER_TEXTS.subtitle ?? '');
+    setShowSubtitle(normalized.showSubtitle ?? true);
+    setHeaderAlign(normalized.headerAlign ?? 'center');
+    setTitleColorPrimary(Boolean(normalized.titleColorPrimary));
+    setSubtitleAboveTitle(Boolean(normalized.subtitleAboveTitle));
+    setUppercaseText(Boolean(normalized.uppercaseText));
+    setShowBadge(Boolean(normalized.showBadge));
+    setBadgeText(normalized.badgeText ?? '');
+    setDesktopColumns(normalizeCareerDesktopColumns(normalized.desktopColumns));
+    setCornerRadius(normalizeCareerCornerRadius(normalized.cornerRadius));
+    setLogoSize(normalizeCareerLogoSize(normalized.logoSize));
 
     setInitialSnapshot(toSnapshot({
       title: component.title,
       active: component.active,
       jobs: normalizedJobs,
       style: normalized.style,
-      texts: normalizedTexts,
+      spacing: normalizeSectionSpacing(normalized.spacing),
+      texts: { ...normalizedTexts, subtitle: normalized.subtitle ?? DEFAULT_CAREER_TEXTS.subtitle ?? '' },
+      hideHeader: Boolean(normalized.hideHeader),
+      showTitle: normalized.showTitle ?? true,
+      subtitle: normalized.subtitle ?? DEFAULT_CAREER_TEXTS.subtitle ?? '',
+      showSubtitle: normalized.showSubtitle ?? true,
+      headerAlign: normalized.headerAlign ?? 'center',
+      titleColorPrimary: Boolean(normalized.titleColorPrimary),
+      subtitleAboveTitle: Boolean(normalized.subtitleAboveTitle),
+      uppercaseText: Boolean(normalized.uppercaseText),
+      showBadge: Boolean(normalized.showBadge),
+      badgeText: normalized.badgeText ?? '',
+      desktopColumns: normalizeCareerDesktopColumns(normalized.desktopColumns),
+      cornerRadius: normalizeCareerCornerRadius(normalized.cornerRadius),
+      noBorderRadius: normalizeCareerCornerRadius(normalized.cornerRadius) === 'none',
+      noVerticalMargin: normalizeSectionSpacing(normalized.spacing) === 'none',
+      logoSize: normalizeCareerLogoSize(normalized.logoSize),
     }));
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   const normalizedJobs = useMemo(() => normalizeCareerJobs(jobs), [jobs]);
+  const mergedTexts = useMemo(() => ({ ...texts, subtitle }), [texts, subtitle]);
 
   const currentSnapshot = useMemo(() => toSnapshot({
     title,
     active,
     jobs: toCareerJobsForConfig(normalizedJobs),
     style: careerStyle,
-    texts,
-  }), [title, active, normalizedJobs, careerStyle, texts]);
+    spacing,
+    texts: mergedTexts,
+    hideHeader,
+    showTitle,
+    subtitle,
+    showSubtitle,
+    headerAlign,
+    titleColorPrimary,
+    subtitleAboveTitle,
+    uppercaseText,
+    showBadge,
+    badgeText,
+    desktopColumns,
+    cornerRadius,
+    noBorderRadius: cornerRadius === 'none',
+    noVerticalMargin: spacing === 'none',
+    logoSize,
+  }), [title, active, normalizedJobs, careerStyle, spacing, mergedTexts, hideHeader, showTitle, subtitle, showSubtitle, headerAlign, titleColorPrimary, subtitleAboveTitle, uppercaseText, showBadge, badgeText, desktopColumns, cornerRadius, logoSize]);
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
   const hasChanges = initialSnapshot !== null && (currentSnapshot !== initialSnapshot || customChanged || customFontChanged);
 
-  const validation = useMemo(() => getCareerValidationResult({
-    primary: effectiveColors.primary,
-    secondary: effectiveColors.secondary,
-    mode: effectiveColors.mode,
-  }), [effectiveColors.primary, effectiveColors.secondary, effectiveColors.mode]);
-
-  const warningMessages = useMemo(() => {
-    const warnings: string[] = [];
-
-    if (effectiveColors.mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
-      warnings.push(`Màu chính và màu phụ đang khá gần nhau (deltaE=${validation.harmonyStatus.deltaE}).`);
-    }
-
-    if (validation.accessibility.failing.length > 0) {
-      warnings.push(`Có ${validation.accessibility.failing.length} cặp màu chưa đạt APCA (minLc=${validation.accessibility.minLc.toFixed(1)}).`);
-    }
-
-    return warnings;
-  }, [effectiveColors.mode, validation]);
-
-  const updateJob = (index: number, field: keyof JobPosition, value: string) => {
-    setJobs((prev) => prev.map((job, idx) => (
-      idx === index ? { ...job, [field]: value } : job
-    )));
-  };
-
-  const handleAddJob = () => {
-    setJobs((prev) => ([
-      ...prev,
-      createCareerJob({
-        id: `career-job-${Date.now()}-${prev.length}`,
-        type: 'Full-time',
-      }),
-    ]));
-  };
-
-  const handleRemoveJob = (index: number) => {
-    setJobs((prev) => {
-      if (prev.length <= 1) {
-        return prev;
-      }
-      return prev.filter((_, idx) => idx !== index);
-    });
-  };
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -170,16 +256,36 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
       const nextConfig: CareerConfig = {
         jobs: toCareerJobsForConfig(normalizedJobs),
         style: careerStyle,
-        texts,
+        spacing,
+        texts: mergedTexts,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        desktopColumns,
+        cornerRadius,
+        noBorderRadius: cornerRadius === 'none',
+        noVerticalMargin: spacing === 'none',
+        logoSize,
       };
 
-      await updateMutation({
-        active,
-        config: nextConfig,
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig as Record<string, any>, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -189,7 +295,7 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -202,9 +308,25 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
         active,
         jobs: nextConfig.jobs,
         style: nextConfig.style,
+        spacing,
         texts: nextConfig.texts ?? DEFAULT_CAREER_TEXTS,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        desktopColumns,
+        cornerRadius,
+        noBorderRadius: cornerRadius === 'none',
+        noVerticalMargin: spacing === 'none',
+        logoSize,
       }));
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -212,7 +334,7 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -246,183 +368,85 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Career</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Briefcase size={20} />
-              Career
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(event) => { setTitle(event.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={expandedSections.header}
+          onExpandedChange={(value) => setExpandedSections((prev) => ({ ...prev, header: value }))}
+          className="mb-3"
+          sectionTitle="Tiêu đề và mô tả"
+          titleRequired
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() => { setActive(!active); }}
-              >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5',
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Vị trí tuyển dụng</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddJob}
-              className="gap-2"
-            >
-              <Plus size={14} /> Thêm vị trí
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {jobs.map((job, idx) => (
-              <div
-                key={normalizedJobs[idx]?.key ?? `${job.id ?? 'career-job'}-${idx}`}
-                className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <Label>Vị trí {idx + 1}</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="text-red-500 h-8 w-8"
-                    onClick={() => { handleRemoveJob(idx); }}
-                    disabled={jobs.length <= 1}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    placeholder="Vị trí tuyển dụng"
-                    value={job.title}
-                    onChange={(event) => { updateJob(idx, 'title', event.target.value); }}
-                  />
-                  <Input
-                    placeholder="Phòng ban"
-                    value={job.department}
-                    onChange={(event) => { updateJob(idx, 'department', event.target.value); }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <Input
-                    placeholder="Địa điểm"
-                    value={job.location}
-                    onChange={(event) => { updateJob(idx, 'location', event.target.value); }}
-                  />
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={expandedSections.display}
+            onOpenChange={(value) => setExpandedSections((prev) => ({ ...prev, display: value }))}
+            cornerRadius={cornerRadius}
+            onCornerRadiusChange={setCornerRadius}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+          >
+                <div className="space-y-2">
+                  <Label>Kích thước logo</Label>
                   <select
-                    className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                    value={job.type}
-                    onChange={(event) => { updateJob(idx, 'type', event.target.value); }}
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    value={logoSize}
+                    onChange={(event) => setLogoSize(normalizeCareerLogoSize(event.target.value))}
                   >
-                    <option>Full-time</option>
-                    <option>Part-time</option>
-                    <option>Contract</option>
-                    <option>Internship</option>
+                    <option value="small">Nhỏ</option>
+                    <option value="medium">Bình thường</option>
+                    <option value="large">Lớn</option>
                   </select>
-                  <Input
-                    placeholder="Mức lương"
-                    value={job.salary}
-                    onChange={(event) => { updateJob(idx, 'salary', event.target.value); }}
-                  />
                 </div>
 
-                <Input
-                  placeholder="Mô tả ngắn (tuỳ chọn)"
-                  value={job.description}
-                  onChange={(event) => { updateJob(idx, 'description', event.target.value); }}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                <div className="space-y-2">
+                  <Label>Số cột desktop</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    value={desktopColumns}
+                    onChange={(event) => setDesktopColumns(normalizeCareerDesktopColumns(Number(event.target.value)))}
+                  >
+                    <option value={3}>3 cột</option>
+                    <option value={4}>4 cột</option>
+                  </select>
+                </div>
+          </HomeComponentDisplaySettingsSection>
+        </div>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Tùy chỉnh văn bản</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="subtitle">Phụ đề (subtitle)</Label>
-              <Input
-                id="subtitle"
-                placeholder={DEFAULT_CAREER_TEXTS.subtitle}
-                value={texts.subtitle || ''}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, subtitle: e.target.value })); }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="ctaButton">Nút hành động (CTA)</Label>
-              <Input
-                id="ctaButton"
-                placeholder={DEFAULT_CAREER_TEXTS.ctaButton}
-                value={texts.ctaButton || ''}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, ctaButton: e.target.value })); }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="emptyTitle">Tiêu đề trống</Label>
-              <Input
-                id="emptyTitle"
-                placeholder={DEFAULT_CAREER_TEXTS.emptyTitle}
-                value={texts.emptyTitle || ''}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, emptyTitle: e.target.value })); }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="emptyDescription">Mô tả trống</Label>
-              <Input
-                id="emptyDescription"
-                placeholder={DEFAULT_CAREER_TEXTS.emptyDescription}
-                value={texts.emptyDescription || ''}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, emptyDescription: e.target.value })); }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="remainingLabel">Nhãn còn lại</Label>
-              <Input
-                id="remainingLabel"
-                placeholder={DEFAULT_CAREER_TEXTS.remainingLabel}
-                value={texts.remainingLabel || ''}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, remainingLabel: e.target.value })); }}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <CareerForm jobs={jobs} onJobsChange={setJobs} texts={texts} onTextsChange={setTexts} defaultExpanded={false} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Tuyển dụng"
                 enabled={customState.enabled}
@@ -450,7 +474,7 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
               }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Tuyển dụng"
                 enabled={customFontState.enabled}
@@ -470,31 +494,40 @@ export default function CareerEditPage({ params }: { params: Promise<{ id: strin
               selectedStyle={careerStyle}
               onStyleChange={setCareerStyle}
               title={title}
-              texts={texts}
+              texts={mergedTexts}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              spacing={spacing}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={badgeText}
+              desktopColumns={desktopColumns}
+              cornerRadius={cornerRadius}
+              logoSize={logoSize}
             />
           </div>
         </div>
 
-        {warningMessages.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {warningMessages.map((message) => (
-              <div
-                key={message}
-                className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700"
-              >
-                <p>{message}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => { router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndojobs,
+          canRedo: canRedojobs,
+          onUndo: undojobs,
+          onRedo: redojobs,
+        }}
         />
       </form>
     </div>

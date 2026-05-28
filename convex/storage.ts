@@ -1,6 +1,9 @@
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getExtensionFromMime } from "../lib/image/uploadNaming";
+import { extractStorageUrlKey, hasFileReferences, removeFileReferencesForStorage } from "./lib/fileService";
 
 const collectReferencedUrls = (value: unknown, acc: Set<string>) => {
   if (typeof value === "string" && /^https?:\/\//.test(value)) {
@@ -14,6 +17,25 @@ const collectReferencedUrls = (value: unknown, acc: Set<string>) => {
   if (value && typeof value === "object") {
     Object.values(value as Record<string, unknown>).forEach((item) => collectReferencedUrls(item, acc));
   }
+};
+
+const valueMatchesStorage = (
+  value: unknown,
+  storageId: string,
+  storageUrl: string | null
+): boolean => {
+  if (value === null || value === undefined) {return false;}
+  if (typeof value === "string") {
+    return value === storageId || Boolean(storageUrl && (value === storageUrl || value.includes(storageUrl)));
+  }
+  if (typeof value === "number" || typeof value === "boolean") {return false;}
+  if (Array.isArray(value)) {
+    return value.some(item => valueMatchesStorage(item, storageId, storageUrl));
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(item => valueMatchesStorage(item, storageId, storageUrl));
+  }
+  return false;
 };
 
 const getExtensionFromFilename = (filename: string) => {
@@ -36,6 +58,99 @@ const resolveExtension = (filename: string, mimeType: string) => {
   }
   return fallback.replace("+xml", "").replace("jpeg", "jpg");
 };
+
+function getMediaTypeKey(mimeType: string): "image" | "video" | "document" | "other" {
+  if (mimeType.startsWith("image/")) {return "image";}
+  if (mimeType.startsWith("video/")) {return "video";}
+  if (mimeType === "application/pdf" || mimeType.includes("document") || mimeType.includes("spreadsheet")) {
+    return "document";
+  }
+  return "other";
+}
+
+type MediaStatsKey = "total" | "image" | "video" | "document" | "other";
+
+const isStorageNotFoundError = (error: unknown) => (
+  error instanceof Error
+  && /storage id .+ not found/i.test(error.message)
+);
+
+async function updateMediaStats(
+  ctx: MutationCtx,
+  typeKey: MediaStatsKey,
+  countDelta: number,
+  sizeDelta: number
+) {
+  const existing = await ctx.db
+    .query("mediaStats")
+    .withIndex("by_key", q => q.eq("key", typeKey))
+    .first();
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      count: Math.max(0, existing.count + countDelta),
+      totalSize: Math.max(0, existing.totalSize + sizeDelta),
+    });
+  } else if (countDelta > 0) {
+    await ctx.db.insert("mediaStats", {
+      count: countDelta,
+      key: typeKey,
+      totalSize: sizeDelta,
+    });
+  }
+}
+
+async function updateMediaFolder(ctx: MutationCtx, folder: string | undefined, countDelta: number) {
+  if (!folder) {return;}
+  const existing = await ctx.db
+    .query("mediaFolders")
+    .withIndex("by_name", q => q.eq("name", folder))
+    .first();
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      count: Math.max(0, existing.count + countDelta),
+    });
+  } else if (countDelta > 0) {
+    await ctx.db.insert("mediaFolders", {
+      count: countDelta,
+      name: folder,
+    });
+  }
+}
+
+async function updateDeletedMediaCounters(ctx: MutationCtx, images: Doc<"images">[]) {
+  const statsUpdates: Record<MediaStatsKey, { count: number; size: number }> = {
+    document: { count: 0, size: 0 },
+    image: { count: 0, size: 0 },
+    other: { count: 0, size: 0 },
+    total: { count: 0, size: 0 },
+    video: { count: 0, size: 0 },
+  };
+  const folderUpdates: Record<string, number> = {};
+
+  for (const image of images) {
+    const typeKey = getMediaTypeKey(image.mimeType);
+    statsUpdates.total.count += 1;
+    statsUpdates.total.size += image.size;
+    statsUpdates[typeKey].count += 1;
+    statsUpdates[typeKey].size += image.size;
+    if (image.folder) {
+      folderUpdates[image.folder] = (folderUpdates[image.folder] ?? 0) + 1;
+    }
+  }
+
+  for (const key of Object.keys(statsUpdates) as MediaStatsKey[]) {
+    const update = statsUpdates[key];
+    if (update.count > 0) {
+      await updateMediaStats(ctx, key, -update.count, -update.size);
+    }
+  }
+
+  for (const [folder, count] of Object.entries(folderUpdates)) {
+    await updateMediaFolder(ctx, folder, -count);
+  }
+}
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -66,6 +181,8 @@ export const saveImage = mutation({
   },
   handler: async (ctx, args) => {
     const extension = resolveExtension(args.filename, args.mimeType);
+    const url = await ctx.storage.getUrl(args.storageId);
+    const urlStorageKey = extractStorageUrlKey(url);
     const id = await ctx.db.insert("images", {
       storageId: args.storageId,
       filename: args.filename,
@@ -76,8 +193,12 @@ export const saveImage = mutation({
       height: args.height,
       alt: args.alt,
       folder: args.folder,
+      ...(urlStorageKey ? { urlStorageKey } : {}),
     });
-    const url = await ctx.storage.getUrl(args.storageId);
+    const typeKey = getMediaTypeKey(args.mimeType);
+    await updateMediaStats(ctx, "total", 1, args.size);
+    await updateMediaStats(ctx, typeKey, 1, args.size);
+    await updateMediaFolder(ctx, args.folder, 1);
     return { id, url };
   },
   returns: v.object({
@@ -89,17 +210,67 @@ export const saveImage = mutation({
 export const deleteImage = mutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
-    // Delete from storage
+    if (await hasFileReferences(ctx, args.storageId)) {
+      throw new Error("File đang được sử dụng");
+    }
+
+    // Harden delete check giống cleanupStorageIfUnreferenced
+    const maxScan = 1000;
+    const products = await ctx.db.query("products").take(maxScan);
+    const posts = await ctx.db.query("posts").take(maxScan);
+    const services = await ctx.db.query("services").take(maxScan);
+    const settings = await ctx.db.query("settings").take(maxScan);
+    const homeComponents = await ctx.db.query("homeComponents").take(maxScan);
+    const storageUrl = await ctx.storage.getUrl(args.storageId);
+    const storageIdValue = args.storageId as string;
+
+    const isUsedInProducts = products.some((product) =>
+      valueMatchesStorage(product.imageStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.imageStorageIds, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.image, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.images, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.description, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.htmlRender, storageIdValue, storageUrl)
+    );
+    const isUsedInPosts = posts.some((post) =>
+      valueMatchesStorage(post.thumbnailStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.thumbnail, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.content, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.htmlRender, storageIdValue, storageUrl)
+    );
+    const isUsedInServices = services.some((service) =>
+      valueMatchesStorage(service.thumbnailStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.thumbnail, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.content, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.htmlRender, storageIdValue, storageUrl)
+    );
+    const isUsedInSettings = settings.some((setting) => valueMatchesStorage(setting.value, storageIdValue, storageUrl));
+    const isUsedInHomeComponents = homeComponents.some((component) =>
+      valueMatchesStorage(component.config, storageIdValue, storageUrl)
+    );
+
+    if (isUsedInProducts || isUsedInPosts || isUsedInServices || isUsedInSettings || isUsedInHomeComponents) {
+      throw new Error("File đang được sử dụng bởi một thành phần khác");
+    }
+
     await ctx.storage.delete(args.storageId);
     
     // Delete from images table if exists
     const image = await ctx.db
       .query("images")
-      .filter(q => q.eq(q.field("storageId"), args.storageId))
+      .withIndex("by_storageId", q => q.eq("storageId", args.storageId))
       .first();
     if (image) {
       await ctx.db.delete(image._id);
+      const typeKey = getMediaTypeKey(image.mimeType);
+      await updateMediaStats(ctx, "total", -1, -image.size);
+      await updateMediaStats(ctx, typeKey, -1, -image.size);
+      await updateMediaFolder(ctx, image.folder, -1);
     }
+    await removeFileReferencesForStorage(ctx, args.storageId);
     
     return null;
   },
@@ -109,41 +280,87 @@ export const deleteImage = mutation({
 export const cleanupStorageIfUnreferenced = mutation({
   args: { storageId: v.id("_storage"), maxScan: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    if (await hasFileReferences(ctx, args.storageId)) {
+      return { deleted: false, reason: "referenced" as const };
+    }
+
     const maxScan = args.maxScan ?? 1000;
     const products = await ctx.db.query("products").take(maxScan);
     const posts = await ctx.db.query("posts").take(maxScan);
     const services = await ctx.db.query("services").take(maxScan);
+    const settings = await ctx.db.query("settings").take(maxScan);
+    const homeComponents = await ctx.db.query("homeComponents").take(maxScan);
+    const storageUrl = await ctx.storage.getUrl(args.storageId);
+    const storageIdValue = args.storageId as string;
 
-    const hitScanLimit = products.length === maxScan || posts.length === maxScan || services.length === maxScan;
+    const hitScanLimit = products.length === maxScan
+      || posts.length === maxScan
+      || services.length === maxScan
+      || settings.length === maxScan
+      || homeComponents.length === maxScan;
     if (hitScanLimit) {
       return { deleted: false, reason: "scan_limit" as const };
     }
 
     const isUsedInProducts = products.some((product) =>
-      product.imageStorageId === args.storageId
-      || (product.imageStorageIds ?? []).some((storageId) => storageId === args.storageId)
+      valueMatchesStorage(product.imageStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.imageStorageIds, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.image, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.images, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.description, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(product.htmlRender, storageIdValue, storageUrl)
     );
-    const isUsedInPosts = posts.some((post) => post.thumbnailStorageId === args.storageId);
-    const isUsedInServices = services.some((service) => service.thumbnailStorageId === args.storageId);
+    const isUsedInPosts = posts.some((post) =>
+      valueMatchesStorage(post.thumbnailStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.thumbnail, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.content, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(post.htmlRender, storageIdValue, storageUrl)
+    );
+    const isUsedInServices = services.some((service) =>
+      valueMatchesStorage(service.thumbnailStorageId, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.thumbnail, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.content, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.markdownRender, storageIdValue, storageUrl)
+      || valueMatchesStorage(service.htmlRender, storageIdValue, storageUrl)
+    );
+    const isUsedInSettings = settings.some((setting) => valueMatchesStorage(setting.value, storageIdValue, storageUrl));
+    const isUsedInHomeComponents = homeComponents.some((component) =>
+      valueMatchesStorage(component.config, storageIdValue, storageUrl)
+    );
 
-    if (isUsedInProducts || isUsedInPosts || isUsedInServices) {
+    if (isUsedInProducts || isUsedInPosts || isUsedInServices || isUsedInSettings || isUsedInHomeComponents) {
       return { deleted: false, reason: "referenced" as const };
     }
 
-    await ctx.storage.delete(args.storageId);
+    let storageMissing = false;
+    try {
+      await ctx.storage.delete(args.storageId);
+    } catch (error) {
+      if (!isStorageNotFoundError(error)) {
+        throw error;
+      }
+      storageMissing = true;
+    }
     const image = await ctx.db
       .query("images")
-      .filter(q => q.eq(q.field("storageId"), args.storageId))
+      .withIndex("by_storageId", q => q.eq("storageId", args.storageId))
       .first();
     if (image) {
       await ctx.db.delete(image._id);
+      const typeKey = getMediaTypeKey(image.mimeType);
+      await updateMediaStats(ctx, "total", -1, -image.size);
+      await updateMediaStats(ctx, typeKey, -1, -image.size);
+      await updateMediaFolder(ctx, image.folder, -1);
     }
+    await removeFileReferencesForStorage(ctx, args.storageId);
 
-    return { deleted: true, reason: "deleted" as const };
+    return { deleted: true, reason: storageMissing ? "missing_storage" as const : "deleted" as const };
   },
   returns: v.object({
     deleted: v.boolean(),
-    reason: v.union(v.literal("deleted"), v.literal("referenced"), v.literal("scan_limit")),
+    reason: v.union(v.literal("deleted"), v.literal("referenced"), v.literal("scan_limit"), v.literal("missing_storage")),
   }),
 });
 
@@ -243,6 +460,7 @@ export const cleanupOrphanedImages = mutation({
       await ctx.storage.delete(image.storageId);
       await ctx.db.delete(image._id);
     }));
+    await updateDeletedMediaCounters(ctx, toDelete);
     
     // Check if there are more images to process
     const remaining = await ctx.db
@@ -285,6 +503,7 @@ export const cleanupSettingsImages = mutation({
       await ctx.storage.delete(image.storageId);
       await ctx.db.delete(image._id);
     }));
+    await updateDeletedMediaCounters(ctx, toDelete.map(({ image }) => image));
 
     return { deleted: toDelete.length };
   },
@@ -321,44 +540,27 @@ export const cleanupHomeComponentImages = mutation({
     // Extract all used image URLs from configs
     const usedUrls = new Set<string>();
     for (const component of homeComponents) {
-      const config = component.config as Record<string, unknown>;
-      if (!config) continue;
-      
-      // Check common image fields
-      if (typeof config.image === 'string' && config.image) usedUrls.add(config.image);
-      if (typeof config.backgroundImage === 'string' && config.backgroundImage) usedUrls.add(config.backgroundImage);
-      if (typeof config.logo === 'string' && config.logo) usedUrls.add(config.logo);
-      
-      // Check images array
-      if (Array.isArray(config.images)) {
-        for (const img of config.images) {
-          if (typeof img === 'string' && img) usedUrls.add(img);
-          if (typeof img === 'object' && img && typeof (img as { url?: string }).url === 'string') {
-            usedUrls.add((img as { url: string }).url);
-          }
-        }
-      }
-      
-      // Check slides array (for Hero)
-      if (Array.isArray(config.slides)) {
-        for (const slide of config.slides) {
-          if (typeof slide === 'object' && slide) {
-            const s = slide as { image?: string; backgroundImage?: string };
-            if (typeof s.image === 'string' && s.image) usedUrls.add(s.image);
-            if (typeof s.backgroundImage === 'string' && s.backgroundImage) usedUrls.add(s.backgroundImage);
-          }
-        }
-      }
+      collectReferencedUrls(component.config, usedUrls);
     }
 
     // Find orphaned images
-    const toDelete = imageUrls.filter(({ url }) => url && !usedUrls.has(url));
+    const toDelete = imageUrls.filter(({ image, url }) =>
+      url
+      && !usedUrls.has(url)
+      && !homeComponents.some(component => valueMatchesStorage(component.config, image.storageId as string, url))
+    );
 
     // Delete orphaned images
-    await Promise.all(toDelete.map(async ({ image }) => {
+    const deletedImages: Doc<"images">[] = [];
+    for (const { image } of toDelete) {
+      if (await hasFileReferences(ctx, image.storageId)) {
+        continue;
+      }
       await ctx.storage.delete(image.storageId);
       await ctx.db.delete(image._id);
-    }));
+      deletedImages.push(image);
+    }
+    await updateDeletedMediaCounters(ctx, deletedImages);
 
     // Check if there are more images to process
     const remaining = await ctx.db
@@ -366,7 +568,7 @@ export const cleanupHomeComponentImages = mutation({
       .withIndex("by_folder", q => q.eq("folder", "home-components"))
       .first();
 
-    return { deleted: toDelete.length, hasMore: remaining !== null };
+    return { deleted: deletedImages.length, hasMore: remaining !== null };
   },
   returns: v.object({ deleted: v.number(), hasMore: v.boolean() }),
 });
@@ -402,11 +604,21 @@ export const cleanupImportedBinOrphans = mutation({
     settings.forEach((item) => collectReferencedUrls(item.value, referencedUrls));
     homeComponents.forEach((item) => collectReferencedUrls(item.config, referencedUrls));
 
-    const toDelete = urls.filter(({ url }) => url && !referencedUrls.has(url));
+    const toDelete: typeof urls = [];
+    for (const item of urls) {
+      const storageId = item.image.storageId as string;
+      const referencedByConfig = settings.some(setting => valueMatchesStorage(setting.value, storageId, item.url))
+        || homeComponents.some(component => valueMatchesStorage(component.config, storageId, item.url));
+      if (!item.url || referencedUrls.has(item.url) || referencedByConfig || await hasFileReferences(ctx, item.image.storageId)) {
+        continue;
+      }
+      toDelete.push(item);
+    }
     await Promise.all(toDelete.map(async ({ image }) => {
       await ctx.storage.delete(image.storageId);
       await ctx.db.delete(image._id);
     }));
+    await updateDeletedMediaCounters(ctx, toDelete.map(({ image }) => image));
 
     return { deleted: toDelete.length };
   },

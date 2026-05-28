@@ -46,6 +46,7 @@ export function SpeedDialSection({ config, brandColor, secondary, mode, title }:
   const style = normalizeSpeedDialStyle(typeof config.style === 'string' ? config.style : undefined);
   const position = normalizePosition(config.position);
   const defaultOpen = normalizeBoolean(config.defaultOpen, DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
+  const enableShadow = normalizeBoolean(config.enableShadow, DEFAULT_SPEED_DIAL_CONFIG.enableShadow);
 
   return (
     <SpeedDialSectionShared
@@ -58,6 +59,7 @@ export function SpeedDialSection({ config, brandColor, secondary, mode, title }:
       sectionTitle={title}
       context="site"
       defaultOpen={defaultOpen}
+      enableShadow={enableShadow}
     />
   );
 }

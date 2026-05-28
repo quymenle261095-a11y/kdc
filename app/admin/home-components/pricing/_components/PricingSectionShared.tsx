@@ -7,11 +7,24 @@ import { cn } from '../../../components/ui';
 import type { PricingColorTokens } from '../_lib/colors';
 import type {
   PricingBrandMode,
+  PricingCornerRadius,
   PricingPlan,
   PricingStyle,
 } from '../_types';
+import { getPricingCornerRadiusClassName, normalizePricingCornerRadius } from '../_types';
 
 type PricingSharedContext = 'preview' | 'site';
+
+const MAX_PRICING_PLANS = 4;
+
+const PRICING_SECTION_FONT: React.CSSProperties = {
+  fontSize: '0.85em',
+};
+
+/** Price text: giữ gần nguyên gốc (0.85 × 1.15 ≈ 0.98) */
+const PRICING_PRICE_SCALE: React.CSSProperties = {
+  fontSize: '1.15em',
+};
 
 interface PricingSectionSharedProps {
   context: PricingSharedContext;
@@ -28,6 +41,12 @@ interface PricingSectionSharedProps {
   yearlyLabel: string;
   yearlySavingText: string;
   onBillingToggle?: (value: boolean) => void;
+  skipHeader?: boolean;
+  /** When set, responsive grid uses this instead of viewport breakpoints */
+  previewDevice?: 'desktop' | 'tablet' | 'mobile';
+  /** Grid columns: 3 or 4. Affects responsive breakpoints. */
+  gridCols?: 3 | 4;
+  cornerRadius?: PricingCornerRadius;
 }
 
 const formatPriceDisplay = (value?: string) => {
@@ -44,8 +63,8 @@ const normalizePeriod = (value?: string, isYearly = false) => {
   return trimmed;
 };
 
-const sanitizeFeatures = (features: string[]) => (
-  features
+const sanitizeFeatures = (features?: string[]) => (
+  (features || [])
     .map((feature) => String(feature ?? '').trim())
     .filter((feature) => feature.length > 0)
 );
@@ -55,6 +74,15 @@ const getPlanPrice = (plan: PricingPlan, isYearly: boolean) => {
     return formatPriceDisplay(plan.yearlyPrice);
   }
   return formatPriceDisplay(plan.price);
+};
+
+/** Chỉ thêm 'đ' khi giá là số; text như 'Liên hệ' giữ nguyên */
+const formatPriceWithSuffix = (price: string) => {
+  const cleaned = price.replace(/[.,\s]/g, '');
+  if (/^\d+$/.test(cleaned)) {
+    return `${price}đ`;
+  }
+  return price;
 };
 
 const wrapAction = ({
@@ -192,7 +220,13 @@ export function PricingSectionShared({
   yearlyLabel,
   yearlySavingText,
   onBillingToggle,
+  skipHeader = false,
+  previewDevice,
+  gridCols = 3,
+  cornerRadius,
 }: PricingSectionSharedProps) {
+  const cardRadiusClassName = getPricingCornerRadiusClassName(normalizePricingCornerRadius(cornerRadius));
+
   const renderPlanFeatures = (features: string[]) => {
     const list = sanitizeFeatures(features).slice(0, 8);
     if (list.length === 0) {
@@ -201,18 +235,38 @@ export function PricingSectionShared({
     return list;
   };
 
-  const displayPlans = plans.filter((plan) => plan.name.trim() || plan.price.trim() || plan.yearlyPrice?.trim() || sanitizeFeatures(plan.features).length > 0);
+  const displayPlans = plans
+    .filter((plan) => plan.name.trim() || plan.price.trim() || plan.yearlyPrice?.trim() || sanitizeFeatures(plan.features).length > 0)
+    .slice(0, MAX_PRICING_PLANS);
+  const [activeTabbedPlanKey, setActiveTabbedPlanKey] = React.useState<string | null>(null);
 
-  const gridCountClass = displayPlans.length <= 1
-    ? 'grid-cols-1 max-w-md mx-auto'
-    : displayPlans.length === 2
-      ? 'md:grid-cols-2 max-w-3xl mx-auto'
-      : 'md:grid-cols-3';
+  const getPlanKey = (plan: PricingPlan, index: number) => `${String(plan.id ?? index)}-${index}`;
+
+  const getGridCountClass = (gapClass: string) => {
+    if (displayPlans.length <= 1) {
+      return `${gapClass} grid-cols-1 max-w-md mx-auto`;
+    }
+
+    if (previewDevice) {
+      if (gridCols === 4) {
+        return `${gapClass} ${previewDevice === 'desktop' ? 'grid-cols-4' : 'grid-cols-2'}`;
+      }
+
+      return `${gapClass} ${previewDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-3'}`;
+    }
+
+    return gridCols === 4
+      ? `${gapClass} grid-cols-2 @lg:grid-cols-4`
+      : `${gapClass} grid-cols-1 @md:grid-cols-3`;
+  };
+
+  const cardsGridClass = getGridCountClass('gap-5');
+  const compactGridClass = getGridCountClass('gap-3');
 
   const sectionBase = (
-    <section className="bg-white py-10 px-4" data-mode={mode}>
+    <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
       <div className="mx-auto max-w-6xl">
-        {renderSectionHeader({ title, subtitle, tokens })}
+        {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
         <BillingToggle
           showBillingToggle={showBillingToggle}
           isYearly={isYearly}
@@ -233,9 +287,9 @@ export function PricingSectionShared({
 
   if (style === 'cards') {
     return (
-      <section className="bg-white py-10 px-4" data-mode={mode}>
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
         <div className="mx-auto max-w-6xl">
-          {renderSectionHeader({ title, subtitle, tokens })}
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
           <BillingToggle
             showBillingToggle={showBillingToggle}
             isYearly={isYearly}
@@ -246,7 +300,7 @@ export function PricingSectionShared({
             tokens={tokens}
           />
 
-          <div className={cn('grid gap-5', gridCountClass)}>
+          <div className={cn('grid', cardsGridClass)}>
             {displayPlans.map((plan, index) => {
               const isPopular = Boolean(plan.isPopular);
               const actionHref = plan.buttonLink.trim() || '#';
@@ -254,7 +308,7 @@ export function PricingSectionShared({
               return (
                 <article
                   key={`${String(plan.id ?? index)}-${index}`}
-                  className="relative flex h-full flex-col rounded-xl border bg-white p-5"
+                  className={cn('relative flex h-full flex-col border bg-white p-5', cardRadiusClassName)}
                   style={{
                     backgroundColor: tokens.cardBackground,
                     borderColor: isPopular ? tokens.cardPopularBorder : tokens.cardBorder,
@@ -266,7 +320,7 @@ export function PricingSectionShared({
                         className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold"
                         style={{
                           backgroundColor: tokens.badgeSolidBg,
-                          borderColor: tokens.badgeSolidBg,
+                          borderColor: tokens.neutralBorder,
                           color: tokens.badgeSolidText,
                         }}
                       >
@@ -279,8 +333,8 @@ export function PricingSectionShared({
                     {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
                   </h3>
                   <div className="mt-3 text-center">
-                    <span className="text-3xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                      {getPlanPrice(plan, isYearly)}đ
+                    <span className="text-3xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
                     </span>
                     <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
                       {normalizePeriod(plan.period, isYearly)}
@@ -328,9 +382,9 @@ export function PricingSectionShared({
 
   if (style === 'horizontal') {
     return (
-      <section className="bg-white py-10 px-4" data-mode={mode}>
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
         <div className="mx-auto max-w-4xl">
-          {renderSectionHeader({ title, subtitle, tokens })}
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
           <BillingToggle
             showBillingToggle={showBillingToggle}
             isYearly={isYearly}
@@ -348,12 +402,12 @@ export function PricingSectionShared({
               return (
                 <article
                   key={`${String(plan.id ?? index)}-${index}`}
-                  className="rounded-xl border p-4 md:flex md:items-center md:justify-between"
+                  className={cn('border p-4 @md:flex @md:items-center @md:justify-between', cardRadiusClassName)}
                   style={{ backgroundColor: tokens.cardBackground, borderColor: plan.isPopular ? tokens.cardPopularBorder : tokens.cardBorder }}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate text-base font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
+                      <h3 className="min-w-0 break-words text-base font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
                       {plan.isPopular ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase"
@@ -363,12 +417,12 @@ export function PricingSectionShared({
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 truncate text-xs" style={{ color: tokens.mutedText }}>{featureText}</p>
+                    <p className="mt-1 break-words text-xs" style={{ color: tokens.mutedText }}>{featureText}</p>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3 md:mt-0 md:flex-shrink-0">
-                    <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                      {getPlanPrice(plan, isYearly)}đ
+                  <div className="mt-3 flex items-center justify-between gap-3 @md:mt-0 @md:flex-shrink-0">
+                    <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
                       <span className="ml-1 text-sm font-normal" style={{ color: tokens.periodText }}>
                         {normalizePeriod(plan.period, isYearly)}
                       </span>
@@ -392,9 +446,9 @@ export function PricingSectionShared({
 
   if (style === 'minimal') {
     return (
-      <section className="bg-white py-10 px-4" data-mode={mode}>
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
         <div className="mx-auto max-w-4xl">
-          {renderSectionHeader({ title, subtitle, tokens })}
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
           <BillingToggle
             showBillingToggle={showBillingToggle}
             isYearly={isYearly}
@@ -405,14 +459,14 @@ export function PricingSectionShared({
             tokens={tokens}
           />
 
-          <div className="overflow-hidden rounded-xl border" style={{ borderColor: tokens.neutralBorder }}>
+          <div className={cn('overflow-hidden border', cardRadiusClassName)} style={{ borderColor: tokens.neutralBorder }}>
             {displayPlans.map((plan, index) => {
               const actionHref = plan.buttonLink.trim() || '#';
               const featureText = renderPlanFeatures(plan.features).slice(0, 2).join(' • ');
               return (
                 <article
                   key={`${String(plan.id ?? index)}-${index}`}
-                  className={cn('p-5 md:flex md:items-center md:justify-between', index !== displayPlans.length - 1 ? 'border-b' : '')}
+                  className={cn('p-5 @md:flex @md:items-center @md:justify-between', index !== displayPlans.length - 1 ? 'border-b' : '')}
                   style={{
                     backgroundColor: plan.isPopular ? tokens.comparisonPopularColumnBg : tokens.cardBackground,
                     borderColor: tokens.neutralBorder,
@@ -420,7 +474,7 @@ export function PricingSectionShared({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate text-lg font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
+                      <h3 className="min-w-0 break-words text-lg font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
                       {plan.isPopular ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase"
@@ -433,9 +487,9 @@ export function PricingSectionShared({
                     <p className="mt-1 text-xs" style={{ color: tokens.mutedText }}>{featureText}</p>
                   </div>
 
-                  <div className="mt-3 flex items-center gap-4 md:mt-0">
-                    <span className="text-2xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                      {getPlanPrice(plan, isYearly)}đ
+                  <div className="mt-3 flex items-center gap-4 @md:mt-0">
+                    <span className="text-2xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
                       <span className="ml-1 text-sm font-normal" style={{ color: tokens.periodText }}>
                         {normalizePeriod(plan.period, isYearly)}
                       </span>
@@ -470,9 +524,9 @@ export function PricingSectionShared({
     const allFeatures = [...new Set(comparisonPlans.flatMap((plan) => renderPlanFeatures(plan.features)))].slice(0, 12);
 
     return (
-      <section className="bg-white py-10 px-4" data-mode={mode}>
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
         <div className="mx-auto max-w-6xl">
-          {renderSectionHeader({ title, subtitle, tokens })}
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
           <BillingToggle
             showBillingToggle={showBillingToggle}
             isYearly={isYearly}
@@ -483,7 +537,7 @@ export function PricingSectionShared({
             tokens={tokens}
           />
 
-          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: tokens.neutralBorder }}>
+          <div className={cn('overflow-x-auto border', cardRadiusClassName)} style={{ borderColor: tokens.neutralBorder }}>
             <table className="w-full border-collapse" style={{ backgroundColor: tokens.neutralSurface }}>
               <thead>
                 <tr style={{ backgroundColor: tokens.comparisonHeaderBg }}>
@@ -498,8 +552,8 @@ export function PricingSectionShared({
                       }}
                     >
                       <div className="text-sm font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</div>
-                      <div className="mt-1 text-2xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                        {getPlanPrice(plan, isYearly)}đ
+                      <div className="mt-1 text-2xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
                       </div>
                       {plan.isPopular ? (
                         <div className="mt-2">
@@ -589,9 +643,9 @@ export function PricingSectionShared({
     const actionHref = featuredPlan.buttonLink.trim() || '#';
 
     return (
-      <section className="bg-white py-10 px-4" data-mode={mode}>
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
         <div className="mx-auto max-w-6xl">
-          {renderSectionHeader({ title, subtitle, tokens })}
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
           <BillingToggle
             showBillingToggle={showBillingToggle}
             isYearly={isYearly}
@@ -602,15 +656,15 @@ export function PricingSectionShared({
             tokens={tokens}
           />
 
-          <div className="flex flex-col gap-5 lg:flex-row">
+          <div className="flex flex-col gap-5 @lg:flex-row">
             <article
-              className="relative flex flex-1 flex-col rounded-2xl border p-7"
+              className={cn('relative flex flex-1 flex-col border p-7', cardRadiusClassName)}
               style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardPopularBorder }}
             >
               <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                 <span
                   className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold"
-                  style={{ backgroundColor: tokens.badgeSolidBg, borderColor: tokens.badgeSolidBg, color: tokens.badgeSolidText }}
+                  style={{ backgroundColor: tokens.badgeSolidBg, borderColor: tokens.neutralBorder, color: tokens.badgeSolidText }}
                 >
                   {texts.featuredBadge || '★ Phổ biến nhất'}
                 </span>
@@ -621,8 +675,8 @@ export function PricingSectionShared({
               </h3>
 
               <div className="my-6 text-center">
-                <span className="text-4xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                  {getPlanPrice(featuredPlan, isYearly)}đ
+                <span className="text-4xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                  {formatPriceWithSuffix(getPlanPrice(featuredPlan, isYearly))}
                 </span>
                 <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
                   {normalizePeriod(featuredPlan.period, isYearly)}
@@ -648,18 +702,18 @@ export function PricingSectionShared({
             </article>
 
             {sidePlans.length > 0 ? (
-              <div className="flex flex-col gap-4 lg:w-72">
+              <div className="flex flex-col gap-4 @lg:w-72">
                 {sidePlans.map((plan, index) => {
                   const sideHref = plan.buttonLink.trim() || '#';
                   return (
                     <article
                       key={`${String(plan.id ?? index)}-${index}`}
-                      className="flex flex-1 flex-col rounded-xl border p-4"
+                      className={cn('flex flex-1 flex-col border p-4', cardRadiusClassName)}
                       style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}
                     >
                       <h4 className="text-sm font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h4>
-                      <p className="mt-2 text-xl font-bold tabular-nums" style={{ color: tokens.priceText }}>
-                        {getPlanPrice(plan, isYearly)}đ
+                      <p className="mt-2 text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
                         <span className="ml-1 text-xs font-normal" style={{ color: tokens.periodText }}>{normalizePeriod(plan.period, isYearly)}</span>
                       </p>
                       <p className="mt-2 flex-1 text-xs" style={{ color: tokens.mutedText }}>
@@ -685,12 +739,221 @@ export function PricingSectionShared({
     );
   }
 
-  const compactPlans = displayPlans.slice(0, 6);
+  if (style === 'tabbed') {
+    const activeIndex = Math.max(
+      0,
+      displayPlans.findIndex((plan, index) => getPlanKey(plan, index) === activeTabbedPlanKey),
+    );
+    const activePlan = displayPlans[activeIndex] ?? displayPlans[0];
+    const activeFeatures = renderPlanFeatures(activePlan.features).slice(0, 8);
+    const midpoint = Math.ceil(activeFeatures.length / 2);
+    const featureColumns = [
+      activeFeatures.slice(0, midpoint),
+      activeFeatures.slice(midpoint),
+    ].filter((column) => column.length > 0);
+    const actionHref = activePlan.buttonLink.trim() || '#';
+    const isStacked = previewDevice === 'mobile';
+
+    return (
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
+        <div className="mx-auto max-w-6xl">
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
+          <BillingToggle
+            showBillingToggle={showBillingToggle}
+            isYearly={isYearly}
+            monthlyLabel={monthlyLabel}
+            yearlyLabel={yearlyLabel}
+            yearlySavingText={yearlySavingText}
+            onBillingToggle={onBillingToggle}
+            tokens={tokens}
+          />
+
+          <div
+            className={cn('flex gap-5 border p-4 md:p-5', cardRadiusClassName, isStacked ? 'flex-col' : 'flex-col @md:flex-row')}
+            style={{ backgroundColor: tokens.secondary, borderColor: tokens.neutralBorder }}
+          >
+            <div className={cn('flex shrink-0 gap-3.5', isStacked ? 'w-full flex-col' : 'w-full flex-col @md:w-[45%]')}>
+              {displayPlans.map((plan, index) => {
+                const planKey = getPlanKey(plan, index);
+                const isActive = index === activeIndex;
+                return (
+                  <button
+                    key={planKey}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setActiveTabbedPlanKey(planKey)}
+                    className={cn(
+                      'flex items-center justify-between gap-4 border-2 p-4 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 md:p-[18px]',
+                      cardRadiusClassName,
+                    )}
+                    style={{
+                      backgroundColor: isActive ? tokens.primary : tokens.neutralSurface,
+                      borderColor: isActive ? tokens.neutralBorder : 'transparent',
+                      color: isActive ? tokens.ctaSolidText : tokens.neutralText,
+                    }}
+                  >
+                    <span className="min-w-0 break-words text-lg font-semibold leading-tight md:text-xl">
+                      {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-xs opacity-80">từ</span>
+                      <span className="text-2xl font-bold tabular-nums">
+                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div
+              className={cn('relative flex w-full flex-col overflow-hidden bg-white px-5 py-5 shadow-sm md:px-[18px] md:py-[14px]', cardRadiusClassName)}
+              style={{ border: `1px solid ${tokens.neutralBorder}` }}
+            >
+              <div className="mb-6 flex items-start justify-between gap-3 border-b border-dashed pb-3" style={{ borderColor: tokens.neutralBorder }}>
+                <div className="min-w-0">
+                  <h3 className="break-words text-lg font-semibold md:text-xl" style={{ color: tokens.headingText }}>
+                    {activePlan.name.trim() || texts.defaultPlanName || 'Gói dịch vụ'}
+                  </h3>
+                  <div className="mt-1">
+                    <span className="text-3xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                      {formatPriceWithSuffix(getPlanPrice(activePlan, isYearly))}
+                    </span>
+                    <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
+                      {normalizePeriod(activePlan.period, isYearly)}
+                    </span>
+                  </div>
+                </div>
+                {activePlan.isPopular ? (
+                  <span
+                    className="shrink-0 rounded-md border px-3 py-1 text-xs font-semibold uppercase"
+                    style={{
+                      backgroundColor: tokens.badgeSolidBg,
+                      borderColor: tokens.neutralBorder,
+                      color: tokens.badgeSolidText,
+                    }}
+                  >
+                    {texts.popularBadge || 'Phổ biến'}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className={cn('mb-8 flex flex-1 gap-6', isStacked ? 'flex-col' : 'flex-col sm:flex-row')}>
+                {featureColumns.map((column, columnIndex) => (
+                  <ul key={columnIndex} className="flex-1 space-y-3">
+                    {column.map((feature, featureIndex) => (
+                      <li key={`${columnIndex}-${featureIndex}-${feature}`} className="flex items-start gap-2 text-[15px] font-medium" style={{ color: tokens.featureText }}>
+                        <Check size={15} className="mt-0.5 shrink-0" style={{ color: tokens.featureIcon }} />
+                        <span className="break-words">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              </div>
+
+              <div className="mt-auto">
+                {wrapAction({
+                  context,
+                  href: actionHref,
+                  className: 'block w-full rounded-full py-3.5 px-6 text-center text-sm font-semibold transition-colors',
+                  style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
+                  children: activePlan.buttonText.trim() || texts.defaultButtonText || 'Xem chi tiết',
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (style === 'construction') {
+    return (
+      <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
+        <div className="mx-auto max-w-6xl">
+          {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
+          <BillingToggle
+            showBillingToggle={showBillingToggle}
+            isYearly={isYearly}
+            monthlyLabel={monthlyLabel}
+            yearlyLabel={yearlyLabel}
+            yearlySavingText={yearlySavingText}
+            onBillingToggle={onBillingToggle}
+            tokens={tokens}
+          />
+
+          <div className={cn('grid', cardsGridClass)}>
+            {displayPlans.map((plan, index) => {
+              const actionHref = plan.buttonLink.trim() || '#';
+              const features = renderPlanFeatures(plan.features);
+              return (
+                <article
+                  key={`${String(plan.id ?? index)}-${index}`}
+                  className={cn('relative flex h-full flex-col overflow-hidden bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl', cardRadiusClassName)}
+                  style={{ border: `1px solid ${tokens.neutralBorder}` }}
+                >
+                  <div className="absolute left-0 top-0 h-1.5 w-full" style={{ backgroundColor: tokens.primary }} />
+
+                  <div className="px-6 pb-8 pt-10 text-center">
+                    <div className="mb-6 flex justify-center">
+                      <h3
+                        className="m-0 inline-block rounded-full border px-6 py-2 text-sm font-semibold uppercase tracking-wider"
+                        style={{
+                          backgroundColor: tokens.primary,
+                          borderColor: tokens.neutralBorder,
+                          color: tokens.ctaSolidText,
+                        }}
+                      >
+                        {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                      </h3>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="break-words text-4xl font-extrabold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                      </p>
+                      <p className="mt-2 block text-sm font-medium uppercase tracking-widest" style={{ color: tokens.mutedText }}>
+                        {normalizePeriod(plan.period, isYearly)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex-grow px-8">
+                    <div className="mb-8 h-px w-full" style={{ backgroundColor: tokens.neutralBorder }} />
+                    <ul className="space-y-4 text-left">
+                      {features.map((feature, featureIndex) => (
+                        <li key={`${featureIndex}-${feature}`} className="flex items-start">
+                          <Check size={20} className="mr-3 mt-0.5 shrink-0" style={{ color: tokens.featureIcon }} />
+                          <span className="break-words leading-snug" style={{ color: tokens.featureText }}>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-auto flex justify-center px-8 pb-10 pt-8">
+                    {wrapAction({
+                      context,
+                      href: actionHref,
+                      className: 'block h-14 w-full rounded-full px-6 py-4 text-center text-base font-medium transition-all hover:shadow-md',
+                      style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
+                      children: plan.buttonText.trim() || texts.defaultButtonText || 'Đăng ký ngay',
+                    })}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const compactPlans = displayPlans;
 
   return (
-    <section className="bg-white py-10 px-4" data-mode={mode}>
+    <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
       <div className="mx-auto max-w-5xl">
-        {renderSectionHeader({ title, subtitle, tokens })}
+        {!skipHeader && renderSectionHeader({ title, subtitle, tokens })}
         <BillingToggle
           showBillingToggle={showBillingToggle}
           isYearly={isYearly}
@@ -701,13 +964,13 @@ export function PricingSectionShared({
           tokens={tokens}
         />
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className={cn('grid', compactGridClass)}>
           {compactPlans.map((plan, index) => {
             const actionHref = plan.buttonLink.trim() || '#';
             return (
               <article
                 key={`${String(plan.id ?? index)}-${index}`}
-                className="relative flex flex-col rounded-lg border p-3 text-center"
+                className={cn('relative flex flex-col border p-3 text-center', cardRadiusClassName)}
                 style={{
                   backgroundColor: tokens.cardBackground,
                   borderColor: plan.isPopular ? tokens.cardPopularBorder : tokens.cardBorder,
@@ -717,17 +980,17 @@ export function PricingSectionShared({
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2">
                     <span
                       className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                      style={{ backgroundColor: tokens.badgeSolidBg, borderColor: tokens.badgeSolidBg, color: tokens.badgeSolidText }}
+                      style={{ backgroundColor: tokens.badgeSolidBg, borderColor: tokens.neutralBorder, color: tokens.badgeSolidText }}
                     >
                       {texts.hotBadge || 'HOT'}
                     </span>
                   </div>
                 ) : null}
-                <h4 className="mt-1 truncate text-sm font-semibold" style={{ color: tokens.neutralText }}>
+                <h4 className="mt-1 break-words text-sm font-semibold" style={{ color: tokens.neutralText }}>
                   {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
                 </h4>
                 <div className="my-2">
-                  <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText }}>{getPlanPrice(plan, isYearly)}đ</span>
+                  <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>{formatPriceWithSuffix(getPlanPrice(plan, isYearly))}</span>
                   <span className="block text-[10px]" style={{ color: tokens.periodText }}>{normalizePeriod(plan.period, isYearly)}</span>
                 </div>
                 <p className="mb-2 min-h-[2rem] text-[11px]" style={{ color: tokens.mutedText }}>

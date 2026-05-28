@@ -1,17 +1,27 @@
 import type {
+  TeamAvatarType,
   TeamConfig,
   TeamEditorMember,
   TeamMember,
   TeamStyle,
 } from '../_types';
+import {
+  DEFAULT_TEAM_CORNER_RADIUS,
+  DEFAULT_TEAM_DESKTOP_COLUMNS,
+  normalizeTeamCornerRadius,
+  normalizeTeamDesktopColumns,
+} from '../_types';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const TEAM_STYLES: Array<{ id: TeamStyle; label: string }> = [
-  { id: 'grid', label: 'Grid' },
-  { id: 'cards', label: 'Cards' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'bento', label: 'Bento' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'spotlight', label: 'Spotlight' },
+  { id: 'grid', label: 'Layout 1' },
+  { id: 'cards', label: 'Layout 2' },
+  { id: 'carousel', label: 'Layout 3' },
+  { id: 'bento', label: 'Layout 4' },
+  { id: 'timeline', label: 'Layout 5' },
+  { id: 'spotlight', label: 'Layout 6' },
+  { id: 'construction', label: 'Layout 7' },
+  { id: 'layout8', label: 'Layout 8' },
 ];
 
 const TEAM_STYLE_SET = new Set<TeamStyle>(TEAM_STYLES.map((item) => item.id));
@@ -40,15 +50,26 @@ const toMemberRecord = (raw: unknown): Record<string, unknown> => {
 
 const normalizeTeamMember = (raw: unknown): TeamMember => {
   const member = toMemberRecord(raw);
+  const avatarType = (['upload', 'url', 'icon'].includes(member.avatarType as string)
+    ? member.avatarType as TeamAvatarType
+    : 'upload');
+  const avatarStorageId = member.avatarStorageId === null ? null : (member.avatarStorageId ? toText(member.avatarStorageId) : undefined);
 
   return {
     name: toText(member.name),
     role: toText(member.role),
     avatar: toText(member.avatar),
+    avatarType,
+    avatarIcon: toText(member.avatarIcon) || undefined,
+    avatarStorageId,
     bio: toText(member.bio),
     facebook: toText(member.facebook),
     linkedin: toText(member.linkedin),
     twitter: toText(member.twitter),
+    phone: toText(member.phone),
+    zalo: toText(member.zalo),
+    tiktok: toText(member.tiktok),
+    youtube: toText(member.youtube),
     email: toText(member.email),
   };
 };
@@ -96,10 +117,17 @@ export const toTeamPersistMembers = (members: TeamEditorMember[]): TeamMember[] 
     name: member.name,
     role: member.role,
     avatar: member.avatar,
+    avatarType: member.avatarType,
+    avatarIcon: member.avatarIcon,
+    avatarStorageId: member.avatarStorageId,
     bio: member.bio,
     facebook: member.facebook,
     linkedin: member.linkedin,
     twitter: member.twitter,
+    phone: member.phone ?? '',
+    zalo: member.zalo ?? '',
+    tiktok: member.tiktok ?? '',
+    youtube: member.youtube ?? '',
     email: member.email,
   }))
 );
@@ -133,6 +161,22 @@ export const normalizeTeamConfig = (rawConfig: unknown): TeamConfig => {
     members: members.length > 0 ? members : DEFAULT_TEAM_CONFIG.members,
     style: normalizeTeamStyle(config.style),
     texts: normalizeTexts(config.texts),
+    // Shared header config
+    hideHeader: typeof config.hideHeader === 'boolean' ? config.hideHeader : DEFAULT_TEAM_CONFIG.hideHeader,
+    showTitle: typeof config.showTitle === 'boolean' ? config.showTitle : DEFAULT_TEAM_CONFIG.showTitle,
+    showSubtitle: typeof config.showSubtitle === 'boolean' ? config.showSubtitle : DEFAULT_TEAM_CONFIG.showSubtitle,
+    subtitle: typeof config.subtitle === 'string' ? config.subtitle : DEFAULT_TEAM_CONFIG.subtitle,
+    headerAlign: (config.headerAlign === 'left' || config.headerAlign === 'center' || config.headerAlign === 'right')
+      ? config.headerAlign
+      : DEFAULT_TEAM_CONFIG.headerAlign,
+    titleColorPrimary: typeof config.titleColorPrimary === 'boolean' ? config.titleColorPrimary : DEFAULT_TEAM_CONFIG.titleColorPrimary,
+    subtitleAboveTitle: typeof config.subtitleAboveTitle === 'boolean' ? config.subtitleAboveTitle : DEFAULT_TEAM_CONFIG.subtitleAboveTitle,
+    uppercaseText: typeof config.uppercaseText === 'boolean' ? config.uppercaseText : DEFAULT_TEAM_CONFIG.uppercaseText,
+    showBadge: typeof config.showBadge === 'boolean' ? config.showBadge : DEFAULT_TEAM_CONFIG.showBadge,
+    badgeText: typeof config.badgeText === 'string' ? config.badgeText : DEFAULT_TEAM_CONFIG.badgeText,
+    spacing: normalizeSectionSpacing(config.noVerticalMargin === true && config.spacing === undefined ? 'none' : (config.spacing ?? DEFAULT_TEAM_CONFIG.spacing)),
+    desktopColumns: normalizeTeamDesktopColumns(config.desktopColumns ?? DEFAULT_TEAM_CONFIG.desktopColumns),
+    cornerRadius: normalizeTeamCornerRadius(config.cornerRadius, config.noBorderRadius),
   };
 };
 
@@ -150,10 +194,28 @@ export const DEFAULT_TEAM_CONFIG: TeamConfig = {
       facebook: '',
       linkedin: '',
       name: '',
+      phone: '',
       role: '',
+      zalo: '',
+      tiktok: '',
+      youtube: '',
       twitter: '',
     },
   ],
   style: 'grid',
   texts: DEFAULT_TEAM_TEXTS,
+  // Shared header config
+  hideHeader: false,
+  showTitle: true,
+  showSubtitle: true,
+  subtitle: '',
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+  spacing: DEFAULT_SECTION_SPACING,
+  desktopColumns: DEFAULT_TEAM_DESKTOP_COLUMNS,
+  cornerRadius: DEFAULT_TEAM_CORNER_RADIUS,
 };

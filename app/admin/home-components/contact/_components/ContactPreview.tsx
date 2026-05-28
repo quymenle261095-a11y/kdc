@@ -119,7 +119,7 @@ export function ContactPreview({
           <ColorInfoPanel
             brandColor={brandColor}
             secondary={validation.resolvedSecondary}
-            description="Màu phụ áp dụng cho icon tint, badge, CTA phụ và social accents của Contact."
+            description="Contact ưu tiên nền trắng ngà, chữ đen; màu phụ chỉ dùng nhẹ cho trạng thái hover/focus."
           />
 
           {warningMessages.length > 0 && (

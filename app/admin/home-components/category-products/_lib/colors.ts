@@ -122,6 +122,8 @@ export interface CategoryProductsColorTokens {
   iconColor: string;
   buttonBackground: string;
   buttonBorder: string;
+  buttonSolidBackground: string;
+  buttonSolidText: string;
   buttonText: string;
   priceText: string;
   pillBackground: string;
@@ -228,6 +230,8 @@ export const getCategoryProductsColors = (
     iconColor: primaryResolved,
     buttonBackground: neutralSurface,
     buttonBorder: neutralBorder,
+    buttonSolidBackground: secondaryResolved,
+    buttonSolidText: getAPCATextColor(secondaryResolved, 12, 700),
     buttonText: secondaryResolved,
     priceText: secondaryResolved,
     pillBackground: neutralSurface,

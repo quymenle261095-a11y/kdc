@@ -1,8 +1,13 @@
 import {
   createCareerJob,
   DEFAULT_CAREER_CONFIG,
+  DEFAULT_CAREER_TEXTS,
+  normalizeCareerCornerRadius,
+  normalizeCareerDesktopColumns,
   normalizeCareerHarmony,
+  normalizeCareerLogoSize,
 } from './constants';
+import { normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 import type {
   CareerConfig,
   CareerStyle,
@@ -29,6 +34,28 @@ const coerceId = (value: unknown): string | number | undefined => {
     return value;
   }
   return undefined;
+};
+
+const coerceBoolean = (value: unknown, fallback: boolean) => (
+  typeof value === 'boolean' ? value : fallback
+);
+
+const normalizeHeaderAlign = (value: unknown): 'left' | 'center' | 'right' => {
+  if (value === 'left' || value === 'center' || value === 'right') {
+    return value;
+  }
+  return 'center';
+};
+
+const normalizeCareerTexts = (value: unknown) => {
+  const source = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {};
+  return {
+    subtitle: coerceText(source.subtitle) || DEFAULT_CAREER_TEXTS.subtitle,
+    emptyTitle: coerceText(source.emptyTitle) || DEFAULT_CAREER_TEXTS.emptyTitle,
+    emptyDescription: coerceText(source.emptyDescription) || DEFAULT_CAREER_TEXTS.emptyDescription,
+    ctaButton: coerceText(source.ctaButton) || DEFAULT_CAREER_TEXTS.ctaButton,
+    remainingLabel: coerceText(source.remainingLabel) || DEFAULT_CAREER_TEXTS.remainingLabel,
+  };
 };
 
 const toJobRecord = (raw: unknown): Record<string, unknown> => {
@@ -147,5 +174,22 @@ export const normalizeCareerConfig = (rawConfig: unknown): CareerConfig => {
     jobs: jobs.length > 0 ? toCareerJobsForConfig(jobs) : DEFAULT_CAREER_CONFIG.jobs,
     style: normalizeCareerStyle(config.style),
     harmony,
+    spacing: config.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(config.spacing),
+    texts: normalizeCareerTexts(config.texts),
+    hideHeader: coerceBoolean(config.hideHeader, DEFAULT_CAREER_CONFIG.hideHeader ?? false),
+    showTitle: coerceBoolean(config.showTitle, DEFAULT_CAREER_CONFIG.showTitle ?? true),
+    subtitle: coerceText(config.subtitle) || DEFAULT_CAREER_CONFIG.subtitle,
+    showSubtitle: coerceBoolean(config.showSubtitle, DEFAULT_CAREER_CONFIG.showSubtitle ?? true),
+    headerAlign: normalizeHeaderAlign(config.headerAlign),
+    titleColorPrimary: coerceBoolean(config.titleColorPrimary, DEFAULT_CAREER_CONFIG.titleColorPrimary ?? false),
+    subtitleAboveTitle: coerceBoolean(config.subtitleAboveTitle, DEFAULT_CAREER_CONFIG.subtitleAboveTitle ?? false),
+    uppercaseText: coerceBoolean(config.uppercaseText, DEFAULT_CAREER_CONFIG.uppercaseText ?? false),
+    showBadge: coerceBoolean(config.showBadge, DEFAULT_CAREER_CONFIG.showBadge ?? false),
+    badgeText: coerceText(config.badgeText),
+    desktopColumns: normalizeCareerDesktopColumns(config.desktopColumns),
+    cornerRadius: normalizeCareerCornerRadius(config.cornerRadius, config.noBorderRadius),
+    noBorderRadius: config.noBorderRadius === true,
+    noVerticalMargin: config.noVerticalMargin === true,
+    logoSize: normalizeCareerLogoSize(config.logoSize),
   };
 };

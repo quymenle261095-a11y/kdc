@@ -27,6 +27,7 @@ interface FullWidthLayoutProps {
   categoryMap: Map<string, string>;
   viewMode: 'grid' | 'list';
   enabledFields: Set<string>;
+  getDetailHref: (service: Service) => string;
 }
 
 const formatPrice = (price?: number): string => {
@@ -34,7 +35,7 @@ const formatPrice = (price?: number): string => {
   return new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
 };
 
-export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabledFields }: FullWidthLayoutProps): React.ReactElement => {
+export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabledFields, getDetailHref }: FullWidthLayoutProps): React.ReactElement => {
   const showExcerpt = enabledFields.has('excerpt');
   const showPrice = enabledFields.has('price');
   const showDuration = enabledFields.has('duration');
@@ -70,7 +71,7 @@ export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabl
           return (
             <Link
               key={service._id}
-              href={`/services/${service.slug}`}
+              href={getDetailHref(service)}
               className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
               style={{ '--tw-ring-color': tokens.primary } as React.CSSProperties}
               aria-label={`Xem chi tiết dịch vụ ${service.title}`}
@@ -164,7 +165,7 @@ export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabl
       return (
         <Link
           key={service._id}
-          href={`/services/${service.slug}`}
+          href={getDetailHref(service)}
           className="group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           style={{ '--tw-ring-color': tokens.primary } as React.CSSProperties}
           aria-label={`Xem chi tiết dịch vụ ${service.title}`}

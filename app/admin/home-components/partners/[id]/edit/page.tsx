@@ -1,52 +1,125 @@
 "use client";
 
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { LayoutTemplate, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Button } from '@/app/admin/components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { useFormSectionsState } from '../../../_shared/hooks/useFormSectionsState';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { PartnersForm } from '../../_components/PartnersForm';
 import { PartnersPreview } from '../../_components/PartnersPreview';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import type { PartnerItem, PartnersStyle } from '../../_types';
+import { DEFAULT_PARTNERS_CORNER_RADIUS, DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, normalizePartnersCornerRadius, normalizePartnersDisplayMode, normalizePartnersLogoSize, normalizePartnersShowBorder, normalizePartnersSpacing, normalizePartnersStyle, type PartnerItem, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle } from '../../_types';
+import { AiDemoPartnersImport } from '../../../product-list/_components/AiDemoProductsImport';
 
 const COMPONENT_TYPE = 'Partners';
 
-export default function PartnersEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type PartnersEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function PartnersEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: PartnersEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<"homeComponents"> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<"homeComponents"> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
-  const [partnersItems, setPartnersItems] = useState<PartnerItem[]>([]);
+  const {
+    state: partnersItems,
+    set: setPartnersItems,
+    undo: undopartnersItems,
+    redo: redopartnersItems,
+    canUndo: canUndopartnersItems,
+    canRedo: canRedopartnersItems,
+    reset: resetpartnersItems,
+  } = useUndoRedo<PartnerItem[]>([], { maxHistory: 15 });
   const [partnersStyle, setPartnersStyle] = useState<PartnersStyle>('grid');
+  const [displayMode, setDisplayMode] = useState<PartnersDisplayMode>(DEFAULT_PARTNERS_DISPLAY_MODE);
+  const [cornerRadius, setCornerRadius] = useState<PartnersCornerRadius>(DEFAULT_PARTNERS_CORNER_RADIUS);
+  const [logoSize, setLogoSize] = useState<PartnersLogoSize>(DEFAULT_PARTNERS_LOGO_SIZE);
+  const [showBorder, setShowBorder] = useState(DEFAULT_PARTNERS_SHOW_BORDER);
+  const [spacing, setSpacing] = useState<PartnersSpacing>(DEFAULT_PARTNERS_SPACING);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+
+  const DEMO_PARTNERS_ITEMS: PartnerItem[] = [
+    { id: 'demo-1', link: '', name: 'Apex Digital', url: '/demo/partners/partner-1.png' },
+    { id: 'demo-2', link: '', name: 'NexaCore', url: '/demo/partners/partner-2.png' },
+    { id: 'demo-3', link: '', name: 'InfiniLoop', url: '/demo/partners/partner-3.png' },
+    { id: 'demo-4', link: '', name: 'Summit Labs', url: '/demo/partners/partner-4.png' },
+    { id: 'demo-5', link: '', name: 'GreenLeaf', url: '/demo/partners/partner-5.png' },
+    { id: 'demo-6', link: '', name: 'Globex Corp', url: '/demo/partners/partner-6.png' },
+  ];
+
+  const handleUseDemoImages = () => {
+    resetpartnersItems(DEMO_PARTNERS_ITEMS);
+  };
+
+  // Header state
+  const [hideHeader, setHideHeader] = useState(false);
+  const [showTitle, setShowTitle] = useState(true);
+  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [subtitle, setSubtitle] = useState('');
+  const [headerAlign, setHeaderAlign] = useState<'left' | 'center' | 'right'>('center');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(false);
+  const [uppercaseText, setUppercaseText] = useState(false);
+  const [showBadge, setShowBadge] = useState(true);
+  const [badgeText, setBadgeText] = useState('Đối tác');
+  const { openSections: headerOpenSections, toggleSection: toggleHeaderSection } = useFormSectionsState(['header'], false);
 
   const normalizeItemsForCompare = (items: PartnerItem[]) => items.map(item => ({
     link: item.link?.trim() ?? '',
     name: item.name?.trim() ?? '',
     url: item.url?.trim() ?? '',
+    storageId: item.storageId,
   }));
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'Partners') {
+      if (!snapshotComponent && component.type !== 'Partners') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
@@ -55,43 +128,101 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
       setActive(component.active);
 
       const config = component.config ?? {};
-      const nextItems = config.items?.map((item: { url: string; link: string; name?: string }, i: number) => ({
+      const nextItems = config.items?.map((item: { url: string; link: string; name?: string; storageId?: string }, i: number) => ({
         id: `item-${i}`,
         link: item.link || '',
         name: item.name ?? '',
         url: item.url,
+        storageId: item.storageId as Id<'_storage'> | undefined,
       })) ?? [{ id: 'item-1', link: '', name: '', url: '' }];
-      const nextStyle = (config.style as PartnersStyle) || 'grid';
+      const nextStyle = normalizePartnersStyle(config.style);
+      const nextDisplayMode = normalizePartnersDisplayMode(config.displayMode);
+      const nextCornerRadius = normalizePartnersCornerRadius(config.cornerRadius);
+      const nextLogoSize = normalizePartnersLogoSize(config.logoSize);
+      const nextShowBorder = normalizePartnersShowBorder(config.showBorder);
+      const nextSpacing = normalizePartnersSpacing(config.spacing);
 
-      setPartnersItems(nextItems);
+      // Load header config
+      const headerConfig = extractSectionHeaderConfig(config);
+      setHideHeader(headerConfig.hideHeader ?? false);
+      setShowTitle(headerConfig.showTitle ?? true);
+      setShowSubtitle(headerConfig.showSubtitle ?? true);
+      setSubtitle(headerConfig.subtitle ?? '');
+      setHeaderAlign(headerConfig.headerAlign ?? 'center');
+      setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+      setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+      setUppercaseText(headerConfig.uppercaseText ?? false);
+      setShowBadge(headerConfig.showBadge ?? true);
+      setBadgeText(headerConfig.badgeText ?? 'Đối tác');
+
+      resetpartnersItems(nextItems);
       setPartnersStyle(nextStyle);
+      setDisplayMode(nextDisplayMode);
+      setCornerRadius(nextCornerRadius);
+      setLogoSize(nextLogoSize);
+      setShowBorder(nextShowBorder);
+      setSpacing(nextSpacing);
       setInitialSnapshot(JSON.stringify({
+        displayMode: nextDisplayMode,
+        cornerRadius: nextCornerRadius,
+        logoSize: nextLogoSize,
+        showBorder: nextShowBorder,
+        spacing: nextSpacing,
         title: component.title.trim(),
         active: component.active,
         style: nextStyle,
         items: normalizeItemsForCompare(nextItems),
+        // Header fields
+        hideHeader: headerConfig.hideHeader,
+        showTitle: headerConfig.showTitle,
+        showSubtitle: headerConfig.showSubtitle,
+        subtitle: headerConfig.subtitle,
+        headerAlign: headerConfig.headerAlign,
+        titleColorPrimary: headerConfig.titleColorPrimary,
+        subtitleAboveTitle: headerConfig.subtitleAboveTitle,
+        uppercaseText: headerConfig.uppercaseText,
+        showBadge: headerConfig.showBadge,
+        badgeText: headerConfig.badgeText,
       }));
     }
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   const currentSnapshot = JSON.stringify({
+    displayMode,
+    cornerRadius,
+    logoSize,
+    showBorder,
+    spacing,
     title: title.trim(),
     active,
     style: partnersStyle,
     items: normalizeItemsForCompare(partnersItems),
+    // Header fields
+    hideHeader,
+    showTitle,
+    showSubtitle,
+    subtitle,
+    headerAlign,
+    titleColorPrimary,
+    subtitleAboveTitle,
+    uppercaseText,
+    showBadge,
+    badgeText,
   });
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
   const hasChanges = initialSnapshot !== null && (initialSnapshot !== currentSnapshot || customChanged || customFontChanged);
+
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,16 +230,38 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
 
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config: {
-          items: partnersItems.map(item => ({ link: item.link, name: item.name, url: item.url })),
+      const nextConfig = {
+          displayMode,
+          cornerRadius,
+          logoSize,
+          showBorder,
+          spacing,
+          items: partnersItems.map((item: PartnerItem) => ({ link: item.link, name: item.name, url: item.url, storageId: item.storageId })),
           style: partnersStyle,
-        },
-        id: id as Id<"homeComponents">,
-        title,
-      });
-      if (showCustomBlock) {
+          // Header fields
+          hideHeader,
+          showTitle,
+          showSubtitle,
+          subtitle,
+          headerAlign,
+          titleColorPrimary,
+          subtitleAboveTitle,
+          uppercaseText,
+          showBadge,
+          badgeText,
+        };
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<"homeComponents">,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -118,7 +271,7 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -126,7 +279,7 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
         });
       }
       setInitialSnapshot(currentSnapshot);
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -134,7 +287,7 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -167,53 +320,69 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Partners</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500">Snapshot: {snapshotLabel}</p> : null}
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <LayoutTemplate size={20} />
-              Partners
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(e) =>{  setTitle(e.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={headerOpenSections.header}
+          onExpandedChange={(open) => toggleHeaderSection('header', open)}
+          className="mb-3"
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
-                )}
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5'
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <PartnersForm items={partnersItems} setItems={setPartnersItems} />
+        <PartnersForm
+          items={partnersItems}
+          setItems={setPartnersItems}
+          cornerRadius={cornerRadius}
+          setCornerRadius={setCornerRadius}
+          logoSize={logoSize}
+          setLogoSize={setLogoSize}
+          showBorder={showBorder}
+          setShowBorder={setShowBorder}
+          spacing={spacing}
+          setSpacing={setSpacing}
+          defaultExpanded={false}
+          className="mb-4"
+          actions={(
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={handleUseDemoImages}>
+                Dùng ảnh demo
+              </Button>
+              <AiDemoPartnersImport buttonClassName="h-8" onApply={setPartnersItems} />
+            </>
+          )}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Partners"
                 enabled={customState.enabled}
@@ -241,7 +410,7 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Partners"
                 enabled={customFontState.enabled}
@@ -254,15 +423,32 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
               />
             )}
             <PartnersPreview
-              items={partnersItems.map((item, idx) => ({ id: idx + 1, link: item.link, name: item.name, url: item.url }))}
+              items={partnersItems.map((item: PartnerItem, idx: number) => ({ id: idx + 1, link: item.link, name: item.name, url: item.url }))}
               brandColor={effectiveColors.primary}
               secondary={effectiveColors.secondary}
               mode={effectiveColors.mode}
               selectedStyle={partnersStyle}
               onStyleChange={setPartnersStyle}
               title={title}
+              subheading={subtitle}
+              align={headerAlign}
+              displayMode={displayMode}
+              cornerRadius={cornerRadius}
+              logoSize={logoSize}
+              showBorder={showBorder}
+              spacing={spacing}
+              onDisplayModeChange={setDisplayMode}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={badgeText}
             />
           </div>
         </div>
@@ -270,8 +456,16 @@ export default function PartnersEditPage({ params }: { params: Promise<{ id: str
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+          active={active}
+          onActiveChange={setActive}
+          undoRedo={{
+            canUndo: canUndopartnersItems,
+            canRedo: canRedopartnersItems,
+            onUndo: undopartnersItems,
+            onRedo: redopartnersItems,
+          }}
         />
       </form>
     </div>

@@ -68,37 +68,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url,
   });
 
-  const categoryHubs: MetadataRoute.Sitemap = iaSettings.routeMode === 'unified'
-    ? [
-        ...postCategories,
-        ...productCategories,
-        ...serviceCategories,
-      ].map((category) => ({
-        changeFrequency: 'weekly' as const,
-        lastModified: fallbackTimestamp,
-        priority: 0.8,
-        url: `${baseUrl}/${category.slug}`,
-      }))
-    : [
-        {
-          changeFrequency: 'daily' as const,
-          lastModified: latestPostTimestamp ?? latestLandingTimestamp ?? fallbackTimestamp,
-          priority: 0.8,
-          url: `${baseUrl}/posts`,
-        },
-        {
-          changeFrequency: 'daily' as const,
-          lastModified: latestProductTimestamp ?? latestLandingTimestamp ?? fallbackTimestamp,
-          priority: 0.8,
-          url: `${baseUrl}/products`,
-        },
-        {
-          changeFrequency: 'weekly' as const,
-          lastModified: latestServiceTimestamp ?? latestLandingTimestamp ?? fallbackTimestamp,
-          priority: 0.8,
-          url: `${baseUrl}/services`,
-        },
-      ];
+  const categoryHubs: MetadataRoute.Sitemap = [
+    ...postCategories,
+    ...productCategories,
+    ...serviceCategories,
+  ].map((category) => ({
+    changeFrequency: 'weekly' as const,
+    lastModified: fallbackTimestamp,
+    priority: 0.8,
+    url: `${baseUrl}/${category.slug}`,
+  }));
 
   const staticWithFreshness: MetadataRoute.Sitemap = [
     {
@@ -151,7 +130,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
     url: `${baseUrl}${buildDetailPath({
       categorySlug: postCategoryMap.get(post.categoryId),
-      mode: iaSettings.routeMode,
+      mode: 'unified',
       moduleKey: 'posts',
       recordSlug: post.slug,
     })}`,
@@ -165,7 +144,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
       url: `${baseUrl}${buildDetailPath({
         categorySlug: productCategoryMap.get(product.categoryId),
-        mode: iaSettings.routeMode,
+        mode: 'unified',
         moduleKey: 'products',
         recordSlug: product.slug,
       })}`,
@@ -178,7 +157,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
     url: `${baseUrl}${buildDetailPath({
       categorySlug: serviceCategoryMap.get(service.categoryId),
-      mode: iaSettings.routeMode,
+      mode: 'unified',
       moduleKey: 'services',
       recordSlug: service.slug,
     })}`,

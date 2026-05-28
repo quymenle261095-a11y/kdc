@@ -31,10 +31,23 @@ export const isValidHref = (href: string): boolean => {
   }
 };
 
+export const normalizeZaloPhone = (value: string): string => value.replace(/[^\d+]/g, '');
+
+export const isValidZaloLink = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) {return true;}
+  if (isValidUrl(trimmed)) {return true;}
+
+  const normalizedPhone = normalizeZaloPhone(trimmed);
+  if (!normalizedPhone) {return false;}
+
+  return /^\+?\d{9,15}$/.test(normalizedPhone);
+};
+
 export const validateContactConfig = (config: ContactConfigState): ValidationResult => {
   const errors: ValidationResult['errors'] = {};
 
-  if (config.showMap && config.mapEmbed && !isValidUrl(config.mapEmbed)) {
+  if (config.showMap && config.mapEmbed && config.mapEmbed.trim() && !config.mapEmbed.trim().startsWith('<iframe') && !isValidUrl(config.mapEmbed)) {
     errors.mapEmbed = 'URL không hợp lệ';
   }
 
@@ -47,7 +60,9 @@ export const validateContactConfig = (config: ContactConfigState): ValidationRes
 
   const socialErrors: Record<number, { url?: string }> = {};
   config.socialLinks.forEach((link) => {
-    if (link.url && !isValidUrl(link.url)) {
+    const isZalo = link.platform.trim().toLowerCase() === 'zalo';
+    const isValidSocialUrl = isZalo ? isValidZaloLink(link.url) : isValidUrl(link.url);
+    if (link.url && !isValidSocialUrl) {
       socialErrors[link.id] = { url: 'URL không hợp lệ' };
     }
   });

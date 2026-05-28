@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { updateUserStats } from "./users";
 import { hashPassword, verifyPassword } from "./lib/password";
+import { consumeRateLimit, resetRateLimit } from "./lib/rateLimit";
 
 async function resolveSuperAdminRole(ctx: MutationCtx) {
   let superAdminRole = await ctx.db
@@ -121,12 +122,22 @@ function buildTrialStatus(user: Pick<Doc<"users">, "superAdminTrialCreatedAt" | 
 const SYSTEM_EMAIL = process.env.SYSTEM_EMAIL;
 const SYSTEM_PASSWORD = process.env.SYSTEM_PASSWORD;
 
+function normalizeLoginKey(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export const verifySystemLogin = mutation({
   args: {
     email: v.string(),
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    const loginKey = `system:${normalizeLoginKey(args.email)}`;
+    const rateLimit = await consumeRateLimit(ctx, loginKey, "auth");
+    if (!rateLimit.allowed) {
+      return { message: "Bạn thử đăng nhập quá nhanh. Vui lòng thử lại sau.", success: false };
+    }
+
     if (!SYSTEM_EMAIL || !SYSTEM_PASSWORD) {
       return { message: "Chưa cấu hình tài khoản hệ thống", success: false };
     }
@@ -148,6 +159,8 @@ export const verifySystemLogin = mutation({
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
       token, // 24 hours
     });
+
+    await resetRateLimit(ctx, loginKey, "auth");
     
     return { message: "Đăng nhập thành công", success: true, token };
   },
@@ -212,6 +225,12 @@ export const verifyAdminLogin = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    const loginKey = `admin:${normalizeLoginKey(args.email)}`;
+    const rateLimit = await consumeRateLimit(ctx, loginKey, "auth");
+    if (!rateLimit.allowed) {
+      return { message: "Bạn thử đăng nhập quá nhanh. Vui lòng thử lại sau.", success: false };
+    }
+
     const adminUser = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", args.email))
@@ -250,6 +269,7 @@ export const verifyAdminLogin = mutation({
     });
 
     await ctx.db.patch(adminUser._id, { lastLogin: Date.now() });
+    await resetRateLimit(ctx, loginKey, "auth");
 
     return {
       message: "Đăng nhập thành công",
@@ -496,6 +516,12 @@ export const registerCustomer = mutation({
     phone: v.string(),
   },
   handler: async (ctx, args) => {
+    const loginKey = `customer:${normalizeLoginKey(args.email)}`;
+    const rateLimit = await consumeRateLimit(ctx, loginKey, "auth");
+    if (!rateLimit.allowed) {
+      return { message: "Bạn thử đăng ký quá nhanh. Vui lòng thử lại sau.", success: false };
+    }
+
     const existing = await ctx.db
       .query("customers")
       .withIndex("by_email", (q) => q.eq("email", args.email))
@@ -521,6 +547,8 @@ export const registerCustomer = mutation({
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
       token,
     });
+
+    await resetRateLimit(ctx, loginKey, "auth");
 
     return {
       customer: { email: args.email, id: customerId, name: args.name, phone: args.phone },
@@ -548,6 +576,12 @@ export const verifyCustomerLogin = mutation({
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    const loginKey = `customer:${normalizeLoginKey(args.email)}`;
+    const rateLimit = await consumeRateLimit(ctx, loginKey, "auth");
+    if (!rateLimit.allowed) {
+      return { message: "Bạn thử đăng nhập quá nhanh. Vui lòng thử lại sau.", success: false };
+    }
+
     const customer = await ctx.db
       .query("customers")
       .withIndex("by_email", (q) => q.eq("email", args.email))
@@ -571,6 +605,8 @@ export const verifyCustomerLogin = mutation({
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
       token,
     });
+
+    await resetRateLimit(ctx, loginKey, "auth");
 
     return {
       customer: { email: customer.email, id: customer._id, name: customer.name, phone: customer.phone },

@@ -1,7 +1,7 @@
 export type ProductSaleMode = 'cart' | 'contact' | 'affiliate';
 
 const formatVnd = (price: number) =>
-  new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
+  `${price.toLocaleString('vi-VN')} ₫`;
 
 export function getPublicPriceLabel({
   saleMode,

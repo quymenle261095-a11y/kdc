@@ -1,11 +1,25 @@
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { contentStatus } from "./lib/validators";
 import { rankByFuzzyMatches } from "./lib/search";
+import { countPublishedServices, recordServiceAggregates } from "./lib/aggregates/publicContent";
+import { requireAdminPermission } from "./lib/permissions";
 import * as ServicesModel from "./model/services";
 import type { Doc } from "./_generated/dataModel";
+import {
+  isBrokenStorageBackedUrl,
+  removeOwnerFilesAndCleanup,
+  syncOwnerFilesAndCleanup,
+} from "./lib/fileService";
+import {
+  isMultiCategoryEnabled,
+  listServiceAdditionalCategoryIds,
+  mergeServicesByCategoryAssignments,
+  syncServiceCategoryAssignments,
+} from "./lib/multiCategory";
 
 const serviceDoc = v.object({
   _creationTime: v.number(),
@@ -40,6 +54,29 @@ const serviceDoc = v.object({
   title: v.string(),
   views: v.number(),
 });
+
+const SERVICES_AGGREGATES_READY_KEY = "servicesPublishedAggregatesReady";
+const SERVICES_AGGREGATES_BACKFILLED_AT_KEY = "servicesPublishedAggregatesBackfilledAt";
+
+async function isServicesAggregateReady(ctx: QueryCtx) {
+  const setting = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", SERVICES_AGGREGATES_READY_KEY))
+    .unique();
+  return setting?.value === true;
+}
+
+async function upsertServicesAggregateSetting(ctx: MutationCtx, key: string, value: unknown) {
+  const existing = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .unique();
+  if (existing) {
+    await ctx.db.patch(existing._id, { group: "contentAggregates", value });
+    return;
+  }
+  await ctx.db.insert("settings", { group: "contentAggregates", key, value });
+}
 
 const paginatedServices = v.object({
   continueCursor: v.string(),
@@ -210,6 +247,18 @@ export const getBySlug = query({
   returns: v.union(serviceDoc, v.null()),
 });
 
+export const getAdditionalCategoryIds = query({
+  args: { id: v.id("services") },
+  handler: async (ctx, args) => {
+    const service = await ctx.db.get(args.id);
+    if (!service) {
+      return [];
+    }
+    return listServiceAdditionalCategoryIds(ctx, args.id, service.categoryId);
+  },
+  returns: v.array(v.id("serviceCategories")),
+});
+
 export const listByCategory = query({
   args: {
     categoryId: v.id("serviceCategories"),
@@ -311,13 +360,17 @@ export const listPublishedPaginated = query({
     const sortBy = args.sortBy ?? "newest";
 
     if (args.categoryId) {
-      return ctx.db
+      const result = await ctx.db
         .query("services")
         .withIndex("by_category_status", (q) =>
           q.eq("categoryId", args.categoryId!).eq("status", "Published")
         )
         .order(sortBy === "oldest" ? "asc" : "desc")
         .paginate(args.paginationOpts);
+      const page = await isMultiCategoryEnabled(ctx, "services")
+        ? await mergeServicesByCategoryAssignments(ctx, args.categoryId, result.page, args.paginationOpts.numItems)
+        : result.page;
+      return { ...result, page: page.filter((service) => service.status === "Published") };
     }
 
     if (sortBy === "popular") {
@@ -377,6 +430,10 @@ export const listPublishedWithOffset = query({
           q.eq("categoryId", args.categoryId!).eq("status", "Published")
         )
         .take(fetchLimit);
+      if (await isMultiCategoryEnabled(ctx, "services")) {
+        services = await mergeServicesByCategoryAssignments(ctx, args.categoryId, services, fetchLimit);
+        services = services.filter((service) => service.status === "Published");
+      }
     } else if (sortBy === "popular") {
       services = await ctx.db
         .query("services")
@@ -455,6 +512,10 @@ export const searchPublished = query({
           q.eq("categoryId", args.categoryId!).eq("status", "Published")
         )
         .take(limit * 2);
+      if (await isMultiCategoryEnabled(ctx, "services")) {
+        services = await mergeServicesByCategoryAssignments(ctx, args.categoryId, services, limit * 2);
+        services = services.filter((service) => service.status === "Published");
+      }
     } else {
       if (sortBy === "popular") {
         services = await ctx.db
@@ -515,6 +576,9 @@ export const searchPublished = query({
 export const countPublished = query({
   args: { categoryId: v.optional(v.id("serviceCategories")) },
   handler: async (ctx, args) => {
+    if (await isServicesAggregateReady(ctx)) {
+      return countPublishedServices(ctx, { categoryId: args.categoryId });
+    }
     if (args.categoryId) {
       const services = await ctx.db
         .query("services")
@@ -522,7 +586,10 @@ export const countPublished = query({
           q.eq("categoryId", args.categoryId!).eq("status", "Published")
         )
         .take(1000);
-      return services.length;
+      const mergedServices = await isMultiCategoryEnabled(ctx, "services")
+        ? await mergeServicesByCategoryAssignments(ctx, args.categoryId, services, 1000)
+        : services;
+      return mergedServices.filter((service) => service.status === "Published").length;
     }
     const services = await ctx.db
       .query("services")
@@ -536,6 +603,7 @@ export const countPublished = query({
 export const create = mutation({
   args: {
     categoryId: v.id("serviceCategories"),
+    additionalCategoryIds: v.optional(v.array(v.id("serviceCategories"))),
     content: v.string(),
     renderType: v.optional(v.union(
       v.literal("content"),
@@ -565,6 +633,17 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const id = await ServicesModel.create(ctx, args);
+    if (await isMultiCategoryEnabled(ctx, "services")) {
+      await syncServiceCategoryAssignments(ctx, id, args.categoryId, args.additionalCategoryIds);
+    }
+    if (args.thumbnailStorageId) {
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "thumbnail",
+        ownerId: id,
+        ownerTable: "services",
+        purpose: "service-thumbnail",
+      }, [args.thumbnailStorageId]);
+    }
     await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "service" });
     return id;
   },
@@ -574,6 +653,7 @@ export const create = mutation({
 export const update = mutation({
   args: {
     categoryId: v.optional(v.id("serviceCategories")),
+    additionalCategoryIds: v.optional(v.array(v.id("serviceCategories"))),
     content: v.optional(v.string()),
     renderType: v.optional(v.union(
       v.literal("content"),
@@ -604,22 +684,82 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const previous = await ctx.db.get(args.id);
-    await ServicesModel.update(ctx, args);
+    const nextArgs = { ...args };
+    if (
+      Object.prototype.hasOwnProperty.call(args, "thumbnailStorageId")
+      && args.thumbnailStorageId === null
+      && !Object.prototype.hasOwnProperty.call(args, "thumbnail")
+    ) {
+      nextArgs.thumbnail = "";
+    }
+    const modelArgs = { ...nextArgs };
+    delete (modelArgs as { additionalCategoryIds?: unknown }).additionalCategoryIds;
+    await ServicesModel.update(ctx, modelArgs);
+    if (previous && await isMultiCategoryEnabled(ctx, "services")) {
+      await syncServiceCategoryAssignments(ctx, args.id, args.categoryId ?? previous.categoryId, args.additionalCategoryIds);
+    }
     const shouldCheckStorage = Object.prototype.hasOwnProperty.call(args, "thumbnailStorageId");
-    if (shouldCheckStorage && previous?.thumbnailStorageId) {
+    if (shouldCheckStorage && previous) {
       const nextThumbnailStorageId = Object.prototype.hasOwnProperty.call(args, "thumbnailStorageId")
         ? args.thumbnailStorageId ?? null
         : previous.thumbnailStorageId ?? null;
-      if (!nextThumbnailStorageId || nextThumbnailStorageId !== previous.thumbnailStorageId) {
-        await ctx.runMutation(api.storage.cleanupStorageIfUnreferenced, {
-          storageId: previous.thumbnailStorageId,
-        });
-      }
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "thumbnail",
+        ownerId: args.id,
+        ownerTable: "services",
+        purpose: "service-thumbnail",
+      }, [nextThumbnailStorageId], {
+        previousStorageIds: [previous.thumbnailStorageId],
+      });
     }
     await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "service" });
     return null;
   },
   returns: v.null(),
+});
+
+export const bulkClearBrokenMedia = mutation({
+  args: { ids: v.array(v.id("services")) },
+  handler: async (ctx, args) => {
+    let checked = 0;
+    let updated = 0;
+    let cleared = 0;
+    let skipped = 0;
+
+    for (const id of args.ids) {
+      const service = await ctx.db.get(id);
+      if (!service) {
+        skipped += 1;
+        continue;
+      }
+      checked += 1;
+      if (await isBrokenStorageBackedUrl(ctx, service.thumbnail, service.thumbnailStorageId)) {
+        await ctx.db.patch(id, { thumbnail: "", thumbnailStorageId: null });
+        await syncOwnerFilesAndCleanup(ctx, {
+          ownerField: "thumbnail",
+          ownerId: id,
+          ownerTable: "services",
+          purpose: "service-thumbnail",
+        }, [], {
+          previousStorageIds: [service.thumbnailStorageId],
+        });
+        updated += 1;
+        cleared += 1;
+      }
+    }
+
+    if (updated > 0) {
+      await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "service" });
+    }
+
+    return { checked, cleared, skipped, updated };
+  },
+  returns: v.object({
+    checked: v.number(),
+    cleared: v.number(),
+    skipped: v.number(),
+    updated: v.number(),
+  }),
 });
 
 export const incrementViews = mutation({
@@ -634,7 +774,14 @@ export const incrementViews = mutation({
 export const remove = mutation({
   args: { cascade: v.optional(v.boolean()), id: v.id("services") },
   handler: async (ctx, args) => {
+    const service = await ctx.db.get(args.id);
     await ServicesModel.remove(ctx, args);
+    await removeOwnerFilesAndCleanup(ctx, {
+      ownerId: args.id,
+      ownerTable: "services",
+    }, {
+      previousStorageIds: [service?.thumbnailStorageId],
+    });
     await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "service" });
     return null;
   },
@@ -652,5 +799,46 @@ export const getDeleteInfo = query({
       label: v.string(),
       preview: v.array(v.object({ id: v.string(), name: v.string() })),
     })),
+  }),
+});
+
+async function backfillServiceAggregateBatch(
+  ctx: MutationCtx,
+  paginationOpts: {
+    cursor: string | null;
+    numItems: number;
+  }
+) {
+  if (paginationOpts.cursor === null) {
+    await upsertServicesAggregateSetting(ctx, SERVICES_AGGREGATES_READY_KEY, false);
+  }
+  const result = await ctx.db.query("services").paginate(paginationOpts);
+  for (const doc of result.page) {
+    await recordServiceAggregates(ctx, doc);
+  }
+  if (result.isDone) {
+    await upsertServicesAggregateSetting(ctx, SERVICES_AGGREGATES_READY_KEY, true);
+    await upsertServicesAggregateSetting(ctx, SERVICES_AGGREGATES_BACKFILLED_AT_KEY, Date.now());
+  }
+  return {
+    continueCursor: result.continueCursor,
+    isDone: result.isDone,
+    processed: result.page.length,
+  };
+}
+
+export const backfillPublishedAggregatesForAdmin = mutation({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminPermission(ctx, args.token, "services", "edit");
+    return backfillServiceAggregateBatch(ctx, args.paginationOpts);
+  },
+  returns: v.object({
+    continueCursor: v.string(),
+    isDone: v.boolean(),
+    processed: v.number(),
   }),
 });

@@ -14,6 +14,7 @@ description: Tách home component từ file monolithic (edit/page.tsx, previews.
 ### 1) Khảo sát code hiện tại
 - Tìm tất cả logic của component trong `app/admin/home-components/[id]/edit/page.tsx` và `app/admin/home-components/previews.tsx`
 - Ghi lại: types, constants, preview render, form state, save logic, conditional rendering
+- Nếu component có upload, kích hoạt `.factory/skills/file-lifecycle-service/SKILL.md` và ghi lại toàn bộ field file/media + `storageId`
 
 ### 2) Tạo structure module
 ```
@@ -44,11 +45,13 @@ app/admin/home-components/[component]/
 - Tạo `_components/[Component]Form.tsx`
 - Dùng shadcn/ui và pattern form của Hero
 - Conditional fields theo style/type
+- Với upload file, dùng shared uploader đã register draft hoặc `useFileDraftUploads`; không xóa storage trực tiếp cho file đã thuộc record
 
 ### 7) Tạo route edit mới
 - Tạo `app/admin/home-components/[component]/[id]/edit/page.tsx`
 - Load data bằng `useQuery`, save bằng `useMutation`
 - Layout 2 cột: Form trái, Preview phải (sticky)
+- Preserve `storageId` khi load/save config để backend sync `fileReferences`. **CRITICAL**: Khi tách từ legacy editor, bắt buộc phải audit kỹ lưỡng các hàm map (`.map(...)`), normalizer, và serializer để đảm bảo không bị rò rỉ hoặc bị strip/drop mất trường `storageId` của media.
 
 ### 8) Redirect từ route cũ
 - Trong `app/admin/home-components/[id]/edit/page.tsx`, nếu `type === [component]` thì `router.replace()` sang route mới
@@ -66,6 +69,7 @@ app/admin/home-components/[component]/
 - Giữ naming convention: `[Component]Preview`, `[Component]Form`, `[Component]Style`
 - Không thay đổi behaviour ngoài scope
 - Tuân thủ KISS/YAGNI/DRY
+- Upload lifecycle phải qua FLS: draft cleanup, save sync references, replace/remove/delete không orphan file
 
 ## Requirements
 - Shared components đã có sẵn trong `_shared/`

@@ -1,38 +1,41 @@
 'use client';
 
 import React from 'react';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, GripVertical, Plus, Trash2 } from 'lucide-react';
 import {
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Input,
   Label,
   cn,
 } from '../../../components/ui';
-import { IconPickerDialog } from '../../contact/_components/IconPickerDialog';
+import { ToggleSwitch } from '@/components/modules/shared';
+import { SettingsImageUploader } from '@/app/admin/components/SettingsImageUploader';
+import { IconPopoverPicker } from '../../_shared/components/IconPopoverPicker';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
   CONTACT_ICON_OPTIONS,
-  resolveContactIcon,
-} from '../../contact/_lib/iconOptions';
-import {
-  BENEFITS_GRID_COLUMNS_DESKTOP,
-  BENEFITS_GRID_COLUMNS_MOBILE,
-  BENEFITS_HEADER_ALIGN_OPTIONS,
-  BENEFITS_STYLES,
-} from '../_lib/constants';
-import type { BenefitItem, BenefitsEditorState, BenefitsHeaderAlign, BenefitsStyle } from '../_types';
+  } from '../../contact/_lib/iconOptions';
+import type { BenefitItem, BenefitsEditorState } from '../_types';
+import { AiDemoBenefitsImport } from '../../product-list/_components/AiDemoProductsImport';
+import { BENEFITS_GRID_COLUMNS_DESKTOP } from '../_lib/constants';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
 
 interface BenefitsFormProps {
   state: BenefitsEditorState;
   onChange: (updater: (prev: BenefitsEditorState) => BenefitsEditorState) => void;
   mode: 'single' | 'dual';
+  spacing: SectionSpacing;
+  onSpacingChange: (value: SectionSpacing) => void;
+  defaultExpanded?: boolean;
+  className?: string;
 }
 
 const MIN_ITEMS = 1;
-const MAX_ITEMS = 8;
+const MAX_ITEMS = 5;
+const DEMO_BENEFITS_IMAGE = '/demo/brand-banners/banner-1.webp';
 
 const createItem = (seed: number): BenefitItem => ({
   description: '',
@@ -67,10 +70,12 @@ const normalizeBenefitsIconValue = (value?: string) => {
   return trimmed;
 };
 
-export function BenefitsForm({ state, onChange, mode: _mode }: BenefitsFormProps) {
+export function BenefitsForm({ state, onChange, mode: _mode, spacing, onSpacingChange, defaultExpanded = true, className }: BenefitsFormProps) {
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
   const [dragOverId, setDragOverId] = React.useState<string | null>(null);
-  const [iconPickerId, setIconPickerId] = React.useState<string | null>(null);
+
+  const activeSections = React.useMemo(() => ['settings', 'benefits'], []);
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(activeSections, defaultExpanded);
 
   const addItem = () => {
     onChange((prev) => {
@@ -138,112 +143,136 @@ export function BenefitsForm({ state, onChange, mode: _mode }: BenefitsFormProps
     setDragOverId(null);
   };
 
-  const updateStyle = (value: string) => {
+  const updateDesktopColumns = (gridColumnsDesktop: 3 | 4 | 5) => {
     onChange((prev) => ({
       ...prev,
-      style: value as BenefitsStyle,
+      gridColumnsDesktop,
+      gridColumnsMobile: gridColumnsDesktop === 3 ? 1 : 2,
     }));
   };
 
   return (
-    <>
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Cấu hình hiển thị</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Badge text</Label>
-              <Input
-                placeholder="Vì sao chọn chúng tôi?"
-                value={state.subHeading}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  onChange((prev) => ({ ...prev, subHeading: next }));
-                }}
+    <div className={cn('mb-6', className)}>
+      <div className="space-y-3">
+        <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
+
+        <HomeComponentDisplaySettingsSection
+          open={openSections.settings}
+          onOpenChange={(open) => toggleSection('settings', open)}
+          cornerRadius={state.cornerRadius}
+          onCornerRadiusChange={(cornerRadius) => {
+            onChange((prev) => ({ ...prev, cornerRadius }));
+          }}
+          spacing={spacing}
+          onSpacingChange={onSpacingChange}
+        >
+              <div className="space-y-2">
+                <Label>Số cột desktop</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {BENEFITS_GRID_COLUMNS_DESKTOP.map((option) => {
+                    const selected = state.gridColumnsDesktop === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => updateDesktopColumns(option.value)}
+                        className={cn(
+                          'h-9 rounded-md border text-xs transition-colors',
+                          selected
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">
+                  5 cột: tablet/mobile 2-1-2. 4 cột: tablet/mobile 2. 3 cột: tablet 3, mobile 1.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Item nổi bật</Label>
+                <div className="grid grid-cols-5 gap-2">
+                  {Array.from({ length: MAX_ITEMS }, (_, idx) => {
+                    const selected = state.highlightIndex === idx;
+                    const disabled = idx >= state.items.length;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => {
+                          onChange((prev) => ({ ...prev, highlightIndex: idx }));
+                        }}
+                        className={cn(
+                          'h-9 rounded-md border text-xs transition-colors',
+                          selected
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                          disabled && 'cursor-not-allowed opacity-40',
+                        )}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Ảnh minh họa (tùy chọn)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onChange((prev) => ({ ...prev, visualImage: DEMO_BENEFITS_IMAGE }))}
+                  >
+                    Dùng ảnh demo
+                  </Button>
+                </div>
+                <SettingsImageUploader
+                  value={state.visualImage}
+                  onChange={(url) => {
+                    onChange((prev) => ({ ...prev, visualImage: url ?? '' }));
+                  }}
+                  folder="home-components"
+                  label="Ảnh dùng cho layout 3, 4, 5"
+                  previewSize="sm"
+                  cropAspectRatio="square"
+                />
+              </div>
+            </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+              <div className="space-y-0.5">
+                <Label className="text-sm">Hiện số thứ tự</Label>
+                <p className="text-xs text-slate-500">Dùng cho layout 1, 3, 6</p>
+              </div>
+              <ToggleSwitch
+                enabled={state.showItemNumbers}
+                onChange={() => onChange((prev) => ({ ...prev, showItemNumbers: !prev.showItemNumbers }))}
               />
             </div>
 
-            <div>
-              <Label>Tiêu đề chính</Label>
-              <Input
-                placeholder="Giá trị cốt lõi"
-                value={state.heading}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  onChange((prev) => ({ ...prev, heading: next }));
-                }}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+              <div className="space-y-0.5">
+                <Label className="text-sm">Hiện trang trí nền</Label>
+                <p className="text-xs text-slate-500">Arrow, line, shape minh họa</p>
+              </div>
+              <ToggleSwitch
+                enabled={state.showDecorativeVisuals}
+                onChange={() => onChange((prev) => ({ ...prev, showDecorativeVisuals: !prev.showDecorativeVisuals }))}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Style</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800"
-                value={state.style}
-                onChange={(event) => { updateStyle(event.target.value); }}
-              >
-                {BENEFITS_STYLES.map((style) => (
-                  <option key={style.id} value={style.id}>{style.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <Label>Căn badge + tiêu đề</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800"
-                value={state.headerAlign}
-                onChange={(event) => {
-                  const next = event.target.value as BenefitsHeaderAlign;
-                  onChange((prev) => ({ ...prev, headerAlign: next }));
-                }}
-              >
-                {BENEFITS_HEADER_ALIGN_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <Label>Grid desktop</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800"
-                value={state.gridColumnsDesktop}
-                onChange={(event) => {
-                  const next = Number(event.target.value) as 3 | 4;
-                  onChange((prev) => ({ ...prev, gridColumnsDesktop: next }));
-                }}
-              >
-                {BENEFITS_GRID_COLUMNS_DESKTOP.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Grid mobile</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-800"
-                value={state.gridColumnsMobile}
-                onChange={(event) => {
-                  const next = Number(event.target.value) as 1 | 2;
-                  onChange((prev) => ({ ...prev, gridColumnsMobile: next }));
-                }}
-              >
-                {BENEFITS_GRID_COLUMNS_MOBILE.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {state.style === 'timeline' ? (
+          {state.style === '5' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
               <div>
                 <Label>Nút CTA (tùy chọn)</Label>
@@ -270,27 +299,33 @@ export function BenefitsForm({ state, onChange, mode: _mode }: BenefitsFormProps
               </div>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </HomeComponentDisplaySettingsSection>
 
-      <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Lợi ích ({state.items.length}/{MAX_ITEMS})
-          </CardTitle>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addItem}
-            disabled={state.items.length >= MAX_ITEMS}
-            className="gap-2"
-          >
-            <Plus size={14} /> Thêm
-          </Button>
-        </CardHeader>
-
-        <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+        <SubSection
+          icon={CheckCircle2}
+          title={`Lợi ích (${state.items.length}/${MAX_ITEMS})`}
+          open={openSections.benefits}
+          onOpenChange={(open) => toggleSection('benefits', open)}
+          actions={(
+            <>
+              {state.items.length < MAX_ITEMS ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addItem}
+                  className="gap-2"
+                >
+                  <Plus size={14} /> Thêm
+                </Button>
+              ) : null}
+            <AiDemoBenefitsImport onApply={(items) => {
+              onChange((prev) => ({ ...prev, items: items as BenefitItem[] }));
+            }} />
+            </>
+          )}
+        >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
           {state.items.map((item, idx) => (
             <div
               key={item.id}
@@ -324,39 +359,12 @@ export function BenefitsForm({ state, onChange, mode: _mode }: BenefitsFormProps
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-1">
-                  <Label className="text-xs text-slate-500">Icon</Label>
-                  {(() => {
-                    const normalizedValue = normalizeBenefitsIconValue(item.icon);
-                    const iconOption = CONTACT_ICON_OPTIONS.find((option) => option.value === normalizedValue);
-                    const Icon = resolveContactIcon(normalizedValue);
-
-                    return (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-between gap-2 px-3"
-                          onClick={() => { setIconPickerId(item.id); }}
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            <Icon size={16} className="text-slate-600 dark:text-slate-200" />
-                            <span className="text-xs text-slate-700 dark:text-slate-200 truncate">
-                              {iconOption?.label ?? 'Chọn icon'}
-                            </span>
-                          </span>
-                          <span className="text-xs text-slate-400">▼</span>
-                        </Button>
-
-                        <IconPickerDialog
-                          open={iconPickerId === item.id}
-                          onOpenChange={(open) => { setIconPickerId(open ? item.id : null); }}
-                          value={normalizedValue}
-                          options={CONTACT_ICON_OPTIONS}
-                          onSelect={(value) => { updateItem(item.id, { icon: value }); }}
-                        />
-                      </>
-                    );
-                  })()}
+                  <Label className="text-xs text-slate-500">Icon Lucide</Label>
+                  <IconPopoverPicker
+                    value={normalizeBenefitsIconValue(item.icon)}
+                    onChange={(nextValue) => updateItem(item.id, { icon: nextValue })}
+                    options={CONTACT_ICON_OPTIONS}
+                  />
                 </div>
 
                 <div className="md:col-span-2">
@@ -367,22 +375,22 @@ export function BenefitsForm({ state, onChange, mode: _mode }: BenefitsFormProps
                     onChange={(event) => { updateItem(item.id, { title: event.target.value }); }}
                   />
                 </div>
+
               </div>
 
               <div>
-                <Label className="text-xs text-slate-500">Mô tả ngắn</Label>
+                <Label className="text-xs text-slate-500">Nội dung benefit</Label>
                 <Input
-                  placeholder="Mô tả ngắn (max 150 ký tự)"
+                  placeholder="Nội dung benefit"
                   value={item.description}
-                  maxLength={150}
                   onChange={(event) => { updateItem(item.id, { description: event.target.value }); }}
                 />
-                <p className="text-xs text-slate-400 text-right mt-1">{item.description.length}/150</p>
               </div>
             </div>
           ))}
-        </CardContent>
-      </Card>
-    </>
+        </div>
+        </SubSection>
+      </div>
+    </div>
   );
 }

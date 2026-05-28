@@ -20,10 +20,12 @@ import {
   DeviceToggle,
   deviceWidths,
   LayoutTabs,
+  SelectRow,
   ToggleRow,
   type DeviceType,
   type LayoutOption,
 } from '@/components/experiences/editor';
+import type { MenuLayerColorChoice } from '@/components/site/header/colors';
 import { HeaderMenuPreview, type HeaderLayoutStyle, type HeaderMenuConfig } from '@/components/experiences/previews/HeaderMenuPreview';
 import { MESSAGES, useExperienceConfig } from '@/lib/experiences';
 
@@ -40,7 +42,7 @@ const DEFAULT_CONFIG: HeaderMenuConfig = {
   headerStickyMobile: true,
   showBrandAccent: false,
   cart: { show: true },
-  cta: { show: true, text: 'Liên hệ' },
+  cta: { show: true, text: 'Liên hệ', url: '/contact' },
   login: { show: true, text: 'Đăng nhập' },
   search: { placeholder: 'Tìm kiếm...', searchPosts: true, searchProducts: true, searchServices: true, show: true },
   topbar: {
@@ -74,7 +76,7 @@ const HINTS = [
 
 const clampLogoSizeLevel = (level?: number): HeaderMenuConfig['logoSizeLevel'] => {
   const value = Number.isFinite(level) ? Math.round(level as number) : 2;
-  return Math.min(20, Math.max(1, value)) as HeaderMenuConfig['logoSizeLevel'];
+  return Math.min(30, Math.max(1, value)) as HeaderMenuConfig['logoSizeLevel'];
 };
 
 const clampHeaderSpacingLevel = (level?: number): HeaderMenuConfig['headerSpacingLevel'] => {
@@ -161,7 +163,7 @@ export default function HeaderMenuExperiencePage() {
       headerStickyMobile: raw?.headerStickyMobile ?? resolvedHeaderSticky,
       topbar: { ...DEFAULT_CONFIG.topbar, ...raw?.topbar },
       search: { ...DEFAULT_CONFIG.search, ...raw?.search },
-      cta: { ...DEFAULT_CONFIG.cta, ...raw?.cta, text: 'Liên hệ' },
+      cta: { ...DEFAULT_CONFIG.cta, ...raw?.cta },
       cart: { ...DEFAULT_CONFIG.cart, ...raw?.cart },
       wishlist: { ...DEFAULT_CONFIG.wishlist, ...raw?.wishlist },
       login: { ...DEFAULT_CONFIG.login, ...raw?.login, text: 'Đăng nhập' },
@@ -256,10 +258,40 @@ export default function HeaderMenuExperiencePage() {
     setConfig(prev => ({ ...prev, logoBackgroundStyle: value }));
   };
 
+  const updateFlatSubMenus = (value: boolean) => {
+    setConfig(prev => ({ ...prev, flatSubMenus: value }));
+  };
+
+  const updateBorderRadiusStyle = (value: NonNullable<HeaderMenuConfig['borderRadiusStyle']>) => {
+    setConfig(prev => ({ ...prev, borderRadiusStyle: value }));
+  };
+
+  const updateMegaLevel1Color = (value: NonNullable<HeaderMenuConfig['megaLevel1Color']>) => {
+    setConfig(prev => ({ ...prev, megaLevel1Color: value }));
+  };
+
+  const updateLayerColor = (layer: 'topnav' | 'navbar' | 'menu', value: MenuLayerColorChoice) => {
+    setConfig(prev => ({
+      ...prev,
+      layerColors: { ...prev.layerColors, [layer]: value },
+    }));
+  };
+
+  const layerColorOptions = useMemo(() => {
+    const base: { value: string; label: string }[] = [
+      { value: 'white', label: 'Trắng' },
+      { value: 'primary', label: 'Màu chính' },
+    ];
+    if (colorMode === 'dual') {
+      base.push({ value: 'secondary', label: 'Màu phụ' });
+    }
+    return base;
+  }, [colorMode]);
+
   const normalizedConfig = useMemo(() => ({
     ...config,
     brandName: resolvedBrandName,
-    cta: { ...config.cta, text: 'Liên hệ' },
+    cta: { ...DEFAULT_CONFIG.cta, ...config.cta },
     login: { ...config.login, text: 'Đăng nhập' },
   }), [config, resolvedBrandName]);
 
@@ -314,7 +346,7 @@ export default function HeaderMenuExperiencePage() {
   const showLoginToggle = Boolean(config.login?.show);
   const showCtaToggle = Boolean(config.cta?.show);
   const logoSizeOptions = useMemo(
-    () => Array.from({ length: 20 }, (_, index) => ({
+    () => Array.from({ length: 30 }, (_, index) => ({
       value: (index + 1) as HeaderMenuConfig['logoSizeLevel'],
       label: `Nấc ${index + 1}`,
     })),
@@ -438,6 +470,30 @@ export default function HeaderMenuExperiencePage() {
               onSecondaryChange={setSecondaryColor}
               onModeChange={setColorMode}
             />
+            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 space-y-1">
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Phối màu header</p>
+              <SelectRow
+                label="Topbar"
+                value={config.layerColors?.topnav ?? 'primary'}
+                options={layerColorOptions}
+                onChange={(v) => updateLayerColor('topnav', v as MenuLayerColorChoice)}
+              />
+              <SelectRow
+                label="Navbar"
+                value={config.layerColors?.navbar ?? 'white'}
+                options={layerColorOptions}
+                onChange={(v) => updateLayerColor('navbar', v as MenuLayerColorChoice)}
+              />
+              <SelectRow
+                label="Menu bar"
+                value={config.layerColors?.menu ?? 'white'}
+                options={layerColorOptions}
+                onChange={(v) => updateLayerColor('menu', v as MenuLayerColorChoice)}
+              />
+              <p className="text-[11px] leading-4 text-slate-400 pt-1">
+                Màu chữ tự tính theo APCA để đảm bảo dễ đọc.
+              </p>
+            </div>
           </ControlCard>
           <ControlCard title="Hiển thị">
             <ToggleRow
@@ -551,12 +607,88 @@ export default function HeaderMenuExperiencePage() {
                 Outline/Hairline cho cảm giác flat rất nhẹ; Inset/Pill mềm hơn nhưng vẫn tinh tế. Border/Shadow/Soft/Solid giữ phong cách nổi bật hơn khi cần.
               </p>
             </div>
+            <div className="space-y-2 pt-1">
+              <Label className="text-xs">Độ bo góc menu (Radius)</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { id: 'none', label: 'Vuông (None)' },
+                  { id: 'small', label: 'Ít (Small)' },
+                  { id: 'large', label: 'Nhiều (Large)' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => updateBorderRadiusStyle(option.id)}
+                    className={cn(
+                      'h-8 rounded-md border text-xs font-medium transition-colors',
+                      (config.borderRadiusStyle ?? 'large') === option.id
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ToggleRow
+              label="Mega menu phẳng (SaaS layout)"
+              checked={config.flatSubMenus ?? false}
+              onChange={updateFlatSubMenus}
+              accentColor={resolvedBrandColor}
+            />
+            <div className="space-y-2 pt-1">
+              <Label className="text-xs">Màu tiêu đề cấp 1 Mega Menu</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { id: 'default', label: 'Mặc định' },
+                  { id: 'primary', label: 'Màu chính' },
+                  { id: 'secondary', label: 'Màu phụ' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => updateMegaLevel1Color(option.id)}
+                    className={cn(
+                      'h-8 rounded-md border text-xs font-medium transition-colors',
+                      (config.megaLevel1Color ?? 'default') === option.id
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <ToggleRow
               label="CTA"
               checked={showCtaToggle}
               onChange={(v) => updateCta('show', v)}
               accentColor={resolvedBrandColor}
             />
+            {showCtaToggle && (
+              <div className="space-y-2 pt-1">
+                <div className="space-y-1">
+                  <Label className="text-xs">Nhãn CTA</Label>
+                  <Input
+                    value={config.cta.text ?? 'Liên hệ'}
+                    onChange={(event) => updateCta('text', event.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="Liên hệ"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Đường dẫn CTA</Label>
+                  <Input
+                    value={config.cta.url ?? '/contact'}
+                    onChange={(event) => updateCta('url', event.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="/contact"
+                  />
+                </div>
+              </div>
+            )}
           </ControlCard>
           <ControlCard title="Topbar & Search">
             <div className="space-y-2">

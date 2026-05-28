@@ -1,20 +1,47 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Palette, Save } from 'lucide-react';
+import { LayoutTemplate, Loader2, Palette, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQuery } from 'convex/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { revalidateSeoPaths } from '@/app/actions/seo-revalidate';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Label, cn } from '../../components/ui';
 import { ModuleGuard } from '../../components/ModuleGuard';
 import { SettingsImageUploader } from '../../components/SettingsImageUploader';
 import { TagInput } from '../../components/TagInput';
 import MapLocationPicker from '../MapLocationPicker';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiSeoImportDialog } from './AiSeoImportDialog';
+import { SeoBuilderDialog } from './SeoBuilderDialog';
+import { ProductSupplementalContentManager } from './ProductSupplementalContentManager';
 
-type SettingsSection = 'site' | 'contact' | 'seo';
+type SettingsSection = 'site' | 'contact' | 'seo' | 'advanced';
+type SettingsFormValue = string | boolean;
+type AdvancedTab = 'product-placeholder' | 'product-frame' | 'watermark' | 'header' | 'product-supplemental';
+type HeaderConfig = {
+  showBrandName?: boolean;
+  logoSizeLevel?: number;
+  headerSpacingLevel?: number;
+  logoBackgroundStyle?: string;
+  headerSticky?: boolean;
+  headerStickyDesktop?: boolean;
+  headerStickyMobile?: boolean;
+  cta?: {
+    show?: boolean;
+    text?: string;
+    url?: string;
+  };
+  [key: string]: unknown;
+};
+type SettingsToSave = {
+  group: string;
+  key: string;
+  storageId?: Id<'_storage'> | null;
+  value: unknown;
+};
 
 const MODULE_KEY = 'settings';
 
@@ -22,6 +49,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   contact: 'Thông tin liên hệ',
   seo: 'Cài đặt SEO',
   site: 'Thông tin chung',
+  advanced: 'Cài đặt nâng cao',
 };
 
 // Color utilities
@@ -78,6 +106,7 @@ const GROUP_LABELS: Record<string, string> = {
   seo: 'Cài đặt SEO',
   site: 'Thông tin chung',
   social: 'Mạng xã hội',
+  advanced: 'Cài đặt nâng cao',
 };
 
 const SEO_META_LIMITS: Record<string, number> = {
@@ -106,6 +135,65 @@ const REMOVED_CONTACT_KEYS = new Set([
   'social_zalo',
 ]);
 
+const SETTING_STORAGE_ID_SUFFIX = '__storageId';
+const HEADER_MENU_ADVANCED_FEATURE = 'enableHeaderMenuAdvanced';
+const DEFAULT_HEADER_CONFIG: HeaderConfig = {
+  showBrandName: true,
+  logoSizeLevel: 2,
+  headerSpacingLevel: 5,
+  logoBackgroundStyle: 'none',
+  headerSticky: true,
+  headerStickyDesktop: true,
+  headerStickyMobile: true,
+  cta: { show: true, text: 'Liên hệ', url: '/contact' },
+};
+const LOGO_SIZE_OPTIONS = Array.from({ length: 30 }, (_, index) => ({
+  value: index + 1,
+  label: `Nấc ${index + 1}`,
+}));
+const HEADER_SPACING_OPTIONS = [
+  { value: 1, label: 'Siêu gọn' },
+  { value: 2, label: 'Rất gọn' },
+  { value: 3, label: 'Gọn' },
+  { value: 4, label: 'Hơi gọn' },
+  { value: 5, label: 'Cân bằng' },
+  { value: 6, label: 'Hơi thoáng' },
+  { value: 7, label: 'Trung bình' },
+];
+const LOGO_BACKGROUND_OPTIONS = [
+  { id: 'none', label: 'None' },
+  { id: 'border', label: 'Border' },
+  { id: 'outline', label: 'Outline sạch' },
+  { id: 'hairline', label: 'Hairline nhẹ' },
+  { id: 'inset', label: 'Inset panel' },
+  { id: 'pill', label: 'Pill badge' },
+  { id: 'shadow', label: 'Shadow' },
+  { id: 'soft', label: 'Soft card' },
+  { id: 'solid', label: 'Solid contrast' },
+];
+
+const normalizeHeaderConfig = (value: unknown): HeaderConfig => {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as HeaderConfig
+    : {};
+  return {
+    ...raw,
+    showBrandName: raw.showBrandName ?? DEFAULT_HEADER_CONFIG.showBrandName,
+    logoSizeLevel: typeof raw.logoSizeLevel === 'number' ? Math.min(30, Math.max(1, Math.round(raw.logoSizeLevel))) : DEFAULT_HEADER_CONFIG.logoSizeLevel,
+    headerSpacingLevel: typeof raw.headerSpacingLevel === 'number' ? Math.min(7, Math.max(1, Math.round(raw.headerSpacingLevel))) : DEFAULT_HEADER_CONFIG.headerSpacingLevel,
+    logoBackgroundStyle: typeof raw.logoBackgroundStyle === 'string' ? raw.logoBackgroundStyle : DEFAULT_HEADER_CONFIG.logoBackgroundStyle,
+    headerSticky: raw.headerSticky ?? DEFAULT_HEADER_CONFIG.headerSticky,
+    headerStickyDesktop: raw.headerStickyDesktop ?? raw.headerSticky ?? DEFAULT_HEADER_CONFIG.headerStickyDesktop,
+    headerStickyMobile: raw.headerStickyMobile ?? raw.headerSticky ?? DEFAULT_HEADER_CONFIG.headerStickyMobile,
+    cta: {
+      ...DEFAULT_HEADER_CONFIG.cta,
+      ...(raw.cta && typeof raw.cta === 'object' ? raw.cta : {}),
+    },
+  };
+};
+
+const stableStringify = (value: unknown) => JSON.stringify(value ?? null);
+
 export default function SettingsPageShell({ section }: { section: SettingsSection }) {
   return (
     <ModuleGuard moduleKey={MODULE_KEY}>
@@ -116,17 +204,87 @@ export default function SettingsPageShell({ section }: { section: SettingsSectio
 
 function SettingsContent({ section }: { section: SettingsSection }) {
   const router = useRouter();
-  const [form, setForm] = useState<Record<string, string | boolean>>({});
-  const [initialForm, setInitialForm] = useState<Record<string, string | boolean>>({});
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [form, setForm] = useState<Record<string, SettingsFormValue>>({});
+  const [initialForm, setInitialForm] = useState<Record<string, SettingsFormValue>>({});
+  const [mediaStorageIds, setMediaStorageIds] = useState<Record<string, Id<'_storage'> | null>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isSecondaryAuto, setIsSecondaryAuto] = useState(true);
   const [hasCleanedSeoFields, setHasCleanedSeoFields] = useState(false);
   const [hasCleanedContactFields, setHasCleanedContactFields] = useState(false);
+  const [advancedTab, setAdvancedTab] = useState<AdvancedTab>('product-placeholder');
+  const [headerConfigDraft, setHeaderConfigDraft] = useState<HeaderConfig>(DEFAULT_HEADER_CONFIG);
+  const [initialHeaderConfig, setInitialHeaderConfig] = useState<HeaderConfig>(DEFAULT_HEADER_CONFIG);
+  const [activeDrag, setActiveDrag] = useState<'image-move' | 'image-resize' | 'text-move' | null>(null);
+  const previewCanvasRef = React.useRef<HTMLDivElement>(null);
 
   // Queries
   const settingsData = useQuery(api.settings.listAll);
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: MODULE_KEY });
   const fieldsData = useQuery(api.admin.modules.listModuleFields, { moduleKey: MODULE_KEY });
+  const defaultImageAspectRatio = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
+  const productsSettings = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'products' });
+  const [selectedFrameAR, setSelectedFrameAR] = useState<string>('');
+
+  const enableSupplementalContent = useMemo(
+    () => productsSettings?.find(s => s.settingKey === 'enableProductSupplementalContent')?.value === true,
+    [productsSettings]
+  );
+
+  useEffect(() => {
+    if (tabParam === 'product-supplemental' && enableSupplementalContent) {
+      setAdvancedTab('product-supplemental');
+    }
+  }, [tabParam, enableSupplementalContent]);
+
+  const handlePreviewPointerDown = (e: React.PointerEvent<HTMLDivElement>, type: 'image-move' | 'image-resize' | 'text-move') => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {
+      console.warn('setPointerCapture failed', err);
+    }
+    setActiveDrag(type);
+  };
+
+  const handlePreviewPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeDrag) return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const xPx = e.clientX - rect.left;
+    const yPx = e.clientY - rect.top;
+    
+    // Convert to percentage
+    const xPct = Math.min(100, Math.max(0, Math.round((xPx / rect.width) * 100)));
+    const yPct = Math.min(100, Math.max(0, Math.round((yPx / rect.height) * 100)));
+
+    if (activeDrag === 'image-move') {
+      updateField('product_watermark_image_x', String(xPct));
+      updateField('product_watermark_image_y', String(yPct));
+    } else if (activeDrag === 'text-move') {
+      updateField('product_watermark_text_y', String(yPct));
+    } else if (activeDrag === 'image-resize') {
+      const imageX = parseFloat(String(form.product_watermark_image_x || 80));
+      const imageXPx = (imageX / 100) * rect.width;
+      const halfWidthPx = Math.abs(e.clientX - rect.left - imageXPx);
+      const widthPct = Math.min(80, Math.max(5, Math.round((halfWidthPx * 2 / rect.width) * 100)));
+      updateField('product_watermark_image_width', String(widthPct));
+    }
+  };
+
+  const handlePreviewPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeDrag) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      setActiveDrag(null);
+    }
+  };
 
   // Mutations
   const setMultiple = useMutation(api.settings.setMultiple);
@@ -142,12 +300,17 @@ function SettingsContent({ section }: { section: SettingsSection }) {
     featuresData?.forEach(f => { features[f.featureKey] = f.enabled; });
     return features;
   }, [featuresData]);
+  const canEditHeaderMenu = featuresData?.some(feature => feature.featureKey === HEADER_MENU_ADVANCED_FEATURE)
+    ? Boolean(enabledFeatures[HEADER_MENU_ADVANCED_FEATURE])
+    : false;
 
   const isSectionEnabled = section === 'site'
     ? true
     : section === 'contact'
       ? Boolean(enabledFeatures.enableContact)
-      : Boolean(enabledFeatures.enableSEO);
+      : section === 'seo'
+        ? Boolean(enabledFeatures.enableSEO)
+        : true;
 
   const brandMode = form.site_brand_mode === 'single' ? 'single' : 'dual';
   const isSecondaryModeSingle = brandMode === 'single';
@@ -188,8 +351,20 @@ function SettingsContent({ section }: { section: SettingsSection }) {
   // Sync form with settings data
   useEffect(() => {
     if (settingsData) {
-      const values: Record<string, string | boolean> = {};
+      const values: Record<string, SettingsFormValue> = {};
+      const storageIds: Record<string, Id<'_storage'> | null> = {};
       settingsData.forEach(s => {
+        if (s.key.endsWith(SETTING_STORAGE_ID_SUFFIX)) {
+          const ownerKey = s.key.slice(0, -SETTING_STORAGE_ID_SUFFIX.length);
+          storageIds[ownerKey] = typeof s.value === 'string' ? s.value as Id<'_storage'> : null;
+          return;
+        }
+        if (s.key === 'header_config') {
+          const normalized = normalizeHeaderConfig(s.value);
+          setHeaderConfigDraft(normalized);
+          setInitialHeaderConfig(normalized);
+          return;
+        }
         values[s.key] = typeof s.value === 'boolean' ? s.value : (typeof s.value === 'string' ? s.value : String(s.value ?? ''));
       });
       if (!values.site_brand_primary && values.site_brand_color) {
@@ -207,9 +382,83 @@ function SettingsContent({ section }: { section: SettingsSection }) {
       if (!values.contact_google_map_embed_iframe) {
         values.contact_google_map_embed_iframe = '';
       }
+      if (values.product_image_placeholder === undefined) {
+        values.product_image_placeholder = '';
+      }
+      if (values.product_frame_overlay_url === undefined) {
+        values.product_frame_overlay_url = '';
+      }
+      if (values.enable_product_frames === undefined) {
+        values.enable_product_frames = false;
+      }
+      const frameKeys = [
+        'product_frame_overlay_square_url',
+        'product_frame_overlay_portrait916_url',
+        'product_frame_overlay_portrait34_url',
+        'product_frame_overlay_landscape43_url',
+        'product_frame_overlay_wide169_url',
+      ];
+      frameKeys.forEach((key) => {
+        if (values[key] === undefined) {
+          values[key] = '';
+        }
+      });
+      // Tự động chuyển đổi/tương thích ngược: map khung viền cũ sang ô Vuông (1:1) nếu ô Vuông trống
+      if (!values.product_frame_overlay_square_url && values.product_frame_overlay_url) {
+        values.product_frame_overlay_square_url = values.product_frame_overlay_url;
+        if (storageIds.product_frame_overlay_url) {
+          storageIds.product_frame_overlay_square_url = storageIds.product_frame_overlay_url;
+        }
+      }
+      if (values.enable_product_watermark === undefined) {
+        values.enable_product_watermark = false;
+      }
+      // Defaults cho watermark hình
+      if (values.product_watermark_image_enabled === undefined) {
+        values.product_watermark_image_enabled = false;
+      }
+      if (values.product_watermark_image_url === undefined) {
+        values.product_watermark_image_url = '';
+      }
+      if (values.product_watermark_image_x === undefined) {
+        values.product_watermark_image_x = '80';
+      }
+      if (values.product_watermark_image_y === undefined) {
+        values.product_watermark_image_y = '80';
+      }
+      if (values.product_watermark_image_width === undefined) {
+        values.product_watermark_image_width = '28';
+      }
+      if (values.product_watermark_image_opacity === undefined) {
+        values.product_watermark_image_opacity = '40';
+      }
+
+      // Defaults cho watermark chữ
+      if (values.product_watermark_text_enabled === undefined) {
+        values.product_watermark_text_enabled = false;
+      }
+      if (values.product_watermark_text_content === undefined) {
+        values.product_watermark_text_content = '';
+      }
+      if (values.product_watermark_text_y === undefined) {
+        values.product_watermark_text_y = '80';
+      }
+      if (values.product_watermark_text_font_size === undefined) {
+        values.product_watermark_text_font_size = '8';
+      }
+      if (values.product_watermark_text_color === undefined) {
+        values.product_watermark_text_color = '#64748B';
+      }
+      if (values.product_watermark_text_opacity === undefined) {
+        values.product_watermark_text_opacity = '35';
+      }
+      if (values.product_watermark_text_repeat === undefined) {
+        values.product_watermark_text_repeat = false;
+      }
       setIsSecondaryAuto(values.site_brand_mode === 'single' ? true : !values.site_brand_secondary);
       setForm(values);
       setInitialForm(values);
+      setMediaStorageIds(storageIds);
     }
   }, [settingsData]);
 
@@ -248,11 +497,56 @@ function SettingsContent({ section }: { section: SettingsSection }) {
     }
   }, [isLoading, isSectionEnabled, router]);
 
+  useEffect(() => {
+    if (!canEditHeaderMenu && advancedTab === 'header') {
+      setAdvancedTab('product-placeholder');
+    }
+  }, [advancedTab, canEditHeaderMenu]);
+
   // Detect changes
-  const hasChanges = useMemo(() => Object.keys(form).some(key => form[key] !== initialForm[key]), [form, initialForm]);
+  const headerConfigHasChanges = useMemo(
+    () => stableStringify(headerConfigDraft) !== stableStringify(initialHeaderConfig),
+    [headerConfigDraft, initialHeaderConfig]
+  );
+  const hasChanges = useMemo(
+    () => Object.keys(form).some(key => form[key] !== initialForm[key]) || (canEditHeaderMenu && headerConfigHasChanges),
+    [form, initialForm, canEditHeaderMenu, headerConfigHasChanges]
+  );
 
   const updateField = (key: string, value: string | boolean) => {
     setForm(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateImageField = (key: string, url: string | undefined, storageId?: Id<'_storage'> | null) => {
+    updateField(key, url ?? '');
+    if (storageId !== undefined) {
+      setMediaStorageIds(prev => ({ ...prev, [key]: storageId }));
+    }
+  };
+
+  const updateHeaderConfig = <K extends keyof HeaderConfig>(key: K, value: HeaderConfig[K]) => {
+    setHeaderConfigDraft(prev => ({
+      ...prev,
+      [key]: value,
+      ...(key === 'headerStickyDesktop' || key === 'headerStickyMobile'
+        ? {
+            headerSticky: key === 'headerStickyDesktop'
+              ? Boolean(value)
+              : (prev.headerStickyDesktop ?? prev.headerSticky ?? true),
+          }
+        : {}),
+    }));
+  };
+
+  const updateHeaderCta = <K extends keyof NonNullable<HeaderConfig['cta']>>(key: K, value: NonNullable<HeaderConfig['cta']>[K]) => {
+    setHeaderConfigDraft(prev => ({
+      ...prev,
+      cta: {
+        ...DEFAULT_HEADER_CONFIG.cta,
+        ...prev.cta,
+        [key]: value,
+      },
+    }));
   };
 
   // Validate before save
@@ -298,7 +592,7 @@ function SettingsContent({ section }: { section: SettingsSection }) {
     setIsSaving(true);
     try {
       // Get all enabled fields and their groups
-      const settingsToSave = fieldsData
+      const settingsToSave: SettingsToSave[] = fieldsData
         ?.filter(f => {
           if (!f.enabled) {return false;}
           if (hasPrimaryField && f.fieldKey === 'site_brand_color') {return false;}
@@ -320,6 +614,7 @@ function SettingsContent({ section }: { section: SettingsSection }) {
           return {
             group: field.group ?? 'site',
             key: field.fieldKey,
+            ...(field.type === 'image' ? { storageId: mediaStorageIds[field.fieldKey] ?? null } : {}),
             value,
           };
         }) ?? [];
@@ -349,6 +644,82 @@ function SettingsContent({ section }: { section: SettingsSection }) {
           value: form.contact_google_map_embed_iframe || '',
         });
       }
+      if (!settingsToSave.some((item) => item.key === 'product_image_placeholder')) {
+        settingsToSave.push({
+          group: 'advanced',
+          key: 'product_image_placeholder',
+          storageId: mediaStorageIds.product_image_placeholder ?? null,
+          value: form.product_image_placeholder || '',
+        });
+      }
+      if (!settingsToSave.some((item) => item.key === 'product_frame_overlay_url')) {
+        settingsToSave.push({
+          group: 'advanced',
+          key: 'product_frame_overlay_url',
+          storageId: mediaStorageIds.product_frame_overlay_url ?? null,
+          value: form.product_frame_overlay_url || '',
+        });
+      }
+      const frameKeys = [
+        'product_frame_overlay_square_url',
+        'product_frame_overlay_portrait916_url',
+        'product_frame_overlay_portrait34_url',
+        'product_frame_overlay_landscape43_url',
+        'product_frame_overlay_wide169_url',
+      ];
+      frameKeys.forEach((key) => {
+        if (!settingsToSave.some((item) => item.key === key)) {
+          settingsToSave.push({
+            group: 'advanced',
+            key,
+            storageId: mediaStorageIds[key] ?? null,
+            value: form[key] || '',
+          });
+        }
+      });
+      // Save watermark settings
+      const watermarkKeys = [
+        'enable_product_watermark',
+        'product_watermark_image_enabled',
+        'product_watermark_image_url',
+        'product_watermark_image_x',
+        'product_watermark_image_y',
+        'product_watermark_image_width',
+        'product_watermark_image_opacity',
+        'product_watermark_text_enabled',
+        'product_watermark_text_content',
+        'product_watermark_text_y',
+        'product_watermark_text_font_size',
+        'product_watermark_text_color',
+        'product_watermark_text_opacity',
+        'product_watermark_text_repeat',
+      ];
+      watermarkKeys.forEach((key) => {
+        if (!settingsToSave.some((item) => item.key === key)) {
+          let value = form[key] ?? '';
+          if (
+            key === 'enable_product_watermark' ||
+            key === 'product_watermark_image_enabled' ||
+            key === 'product_watermark_text_enabled' ||
+            key === 'product_watermark_text_repeat'
+          ) {
+            value = form[key] === true || form[key] === 'true';
+          }
+          settingsToSave.push({
+            group: 'advanced',
+            key,
+            ...(key === 'product_watermark_image_url' ? { storageId: mediaStorageIds.product_watermark_image_url ?? null } : {}),
+            value: String(value),
+          });
+        }
+      });
+      if (canEditHeaderMenu && !settingsToSave.some((item) => item.key === 'header_config')) {
+        settingsToSave.push({
+          group: 'site',
+          key: 'header_config',
+          value: normalizeHeaderConfig(headerConfigDraft),
+        });
+      }
 
       const hasSiteUrlChanged = form.site_url !== initialForm.site_url;
       await setMultiple({ settings: settingsToSave });
@@ -358,6 +729,7 @@ function SettingsContent({ section }: { section: SettingsSection }) {
         });
       }
       setInitialForm({ ...form });
+      setInitialHeaderConfig(normalizeHeaderConfig(headerConfigDraft));
       toast.success('Đã lưu cài đặt thành công!');
     } catch (error) {
       console.error('Save settings error:', error);
@@ -700,14 +1072,16 @@ function SettingsContent({ section }: { section: SettingsSection }) {
 
       case 'image': {
         const isFaviconField = key === 'site_favicon';
+        const isProductPlaceholderField = key === 'product_image_placeholder';
+        const isSeoImageField = key === 'seo_og_image';
         const logoValue = typeof form.site_logo === 'string' ? form.site_logo : '';
-        const handleUseLogoAsFavicon = () => {
+        const handleUseLogo = (targetKey: 'site_favicon' | 'product_image_placeholder' | 'seo_og_image') => {
           if (!logoValue) {
-            toast.error('Chưa có logo để dùng làm favicon.');
+            toast.error('Chưa có logo để dùng.');
             return;
           }
-          updateField('site_favicon', logoValue);
-          toast.success('Đã dùng logo làm favicon.');
+          updateImageField(targetKey, logoValue, mediaStorageIds.site_logo ?? null);
+          toast.success(targetKey === 'site_favicon' ? 'Đã dùng logo làm favicon.' : targetKey === 'product_image_placeholder' ? 'Đã dùng logo làm placeholder sản phẩm.' : 'Đã dùng logo làm OG Image.');
         };
 
         return (
@@ -715,9 +1089,11 @@ function SettingsContent({ section }: { section: SettingsSection }) {
             <SettingsImageUploader
               label={field.name}
               value={stringValue}
-              onChange={(url) =>{  updateField(key, url ?? ''); }}
+              storageId={mediaStorageIds[key] ?? undefined}
+              onChange={(url, storageId) =>{  updateImageField(key, url, storageId); }}
               folder="settings"
               previewSize={key.includes('favicon') ? 'sm' : 'md'}
+              smartLogoCrop={false}
             />
             {isFaviconField && (
               <div className="flex flex-wrap gap-2">
@@ -725,7 +1101,7 @@ function SettingsContent({ section }: { section: SettingsSection }) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={handleUseLogoAsFavicon}
+                  onClick={() => handleUseLogo('site_favicon')}
                 >
                   Dùng logo hiện tại
                 </Button>
@@ -733,9 +1109,51 @@ function SettingsContent({ section }: { section: SettingsSection }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() =>{  updateField('site_favicon', ''); }}
+                  onClick={() =>{  updateImageField('site_favicon', '', null); }}
                 >
                   Xóa favicon
+                </Button>
+              </div>
+            )}
+            {isProductPlaceholderField && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleUseLogo('product_image_placeholder')}
+                  disabled={!logoValue}
+                >
+                  Dùng logo hiện tại
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>{  updateImageField('product_image_placeholder', '', null); }}
+                >
+                  Xóa placeholder
+                </Button>
+              </div>
+            )}
+            {isSeoImageField && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleUseLogo('seo_og_image')}
+                  disabled={!logoValue}
+                >
+                  Dùng logo hiện tại
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>{  updateImageField('seo_og_image', '', null); }}
+                >
+                  Xóa ảnh
                 </Button>
               </div>
             )}
@@ -821,6 +1239,15 @@ function SettingsContent({ section }: { section: SettingsSection }) {
 
   const currentFields = fieldsByGroup[section] ?? [];
   const socialFields = section === 'contact' ? (fieldsByGroup.social ?? []) : [];
+  const hasAdvancedPlaceholderField = currentFields.some(field => field.fieldKey === 'product_image_placeholder');
+  const headerCta = {
+    ...DEFAULT_HEADER_CONFIG.cta,
+    ...headerConfigDraft.cta,
+  };
+  const logoSizeLevel = typeof headerConfigDraft.logoSizeLevel === 'number' ? headerConfigDraft.logoSizeLevel : 2;
+  const headerSpacingLevel = typeof headerConfigDraft.headerSpacingLevel === 'number' ? headerConfigDraft.headerSpacingLevel : 5;
+  const logoSizeLabel = LOGO_SIZE_OPTIONS[logoSizeLevel - 1]?.label ?? 'Mặc định';
+  const headerSpacingLabel = HEADER_SPACING_OPTIONS[headerSpacingLevel - 1]?.label ?? 'Cân bằng';
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-28">
@@ -829,7 +1256,7 @@ function SettingsContent({ section }: { section: SettingsSection }) {
         <p className="text-slate-500">Quản lý các cấu hình chung cho website của bạn.</p>
       </div>
 
-      {currentFields.length > 0 || socialFields.length > 0 ? (
+      {currentFields.length > 0 || socialFields.length > 0 || section === 'advanced' ? (
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -850,7 +1277,661 @@ function SettingsContent({ section }: { section: SettingsSection }) {
                   </Button>
                 </div>
               )}
-              {currentFields.map(field => renderField(field))}
+              {section === 'advanced' ? (
+                <div className="space-y-5">
+                  <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedTab('product-placeholder')}
+                      className={cn(
+                        'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        advancedTab === 'product-placeholder'
+                          ? 'border-orange-500 text-slate-900 dark:text-slate-100'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      Ảnh sản phẩm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedTab('product-frame')}
+                      className={cn(
+                        'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        advancedTab === 'product-frame'
+                          ? 'border-orange-500 text-slate-900 dark:text-slate-100'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      Khung viền sản phẩm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedTab('watermark')}
+                      className={cn(
+                        'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        advancedTab === 'watermark'
+                          ? 'border-orange-500 text-slate-900 dark:text-slate-100'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      Watermark
+                    </button>
+                    {canEditHeaderMenu && (
+                      <button
+                        type="button"
+                        onClick={() => setAdvancedTab('header')}
+                        className={cn(
+                          'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                          advancedTab === 'header'
+                            ? 'border-orange-500 text-slate-900 dark:text-slate-100'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        )}
+                      >
+                        Header
+                      </button>
+                    )}
+                    {enableSupplementalContent && (
+                      <button
+                        type="button"
+                        onClick={() => setAdvancedTab('product-supplemental')}
+                        className={cn(
+                          'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                          advancedTab === 'product-supplemental'
+                            ? 'border-orange-500 text-slate-900 dark:text-slate-100'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        )}
+                      >
+                        Nội dung mô tả SP
+                      </button>
+                    )}
+                  </div>
+
+                  {advancedTab === 'product-placeholder' && (
+                    <div className="space-y-4">
+                      {currentFields.map(field => renderField(field))}
+                      {!hasAdvancedPlaceholderField && (
+                        <div className="space-y-2">
+                          <SettingsImageUploader
+                            label="Ảnh placeholder sản phẩm"
+                            value={typeof form.product_image_placeholder === 'string' ? form.product_image_placeholder : ''}
+                            storageId={mediaStorageIds.product_image_placeholder ?? undefined}
+                            onChange={(url, storageId) => { updateImageField('product_image_placeholder', url, storageId); }}
+                            folder="settings"
+                            previewSize="md"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const logoValue = typeof form.site_logo === 'string' ? form.site_logo : '';
+                                if (!logoValue) {
+                                  toast.error('Chưa có logo để dùng.');
+                                  return;
+                                }
+                                updateImageField('product_image_placeholder', logoValue, mediaStorageIds.site_logo ?? null);
+                                toast.success('Đã dùng logo làm placeholder sản phẩm.');
+                              }}
+                              disabled={typeof form.site_logo !== 'string' || !form.site_logo}
+                            >
+                              Dùng logo hiện tại
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { updateImageField('product_image_placeholder', '', null); }}
+                            >
+                              Xóa placeholder
+                            </Button>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            Dùng khi ảnh sản phẩm bị thiếu hoặc link ảnh lỗi.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {advancedTab === 'product-frame' && (
+                    <div className="space-y-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            id="enable_product_frames"
+                            checked={form.enable_product_frames === true}
+                            onCheckedChange={(checked) => updateField('enable_product_frames', checked)}
+                          />
+                          <div className="space-y-0.5">
+                            <Label htmlFor="enable_product_frames" className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Bật khung viền sản phẩm</Label>
+                            <p className="text-xs text-slate-500">
+                              Hiển thị khung viền đè lên ảnh sản phẩm ở storefront.
+                            </p>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {form.enable_product_frames !== true && (
+                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300">
+                          Tính năng đang tắt. Hãy bật lên để hiển thị khung trên ảnh sản phẩm ngoài trang chủ và chi tiết sản phẩm.
+                        </div>
+                      )}
+
+                      {(() => {
+                        const frameItems = [
+                          { key: 'product_frame_overlay_square_url', label: 'Vuông (1:1)', value: 'square', aspectClass: 'aspect-square' },
+                          { key: 'product_frame_overlay_portrait916_url', label: 'Dọc (9:16)', value: 'portrait916', aspectClass: 'aspect-[9/16]' },
+                          { key: 'product_frame_overlay_portrait34_url', label: 'Dọc (3:4)', value: 'portrait34', aspectClass: 'aspect-[3/4]' },
+                          { key: 'product_frame_overlay_landscape43_url', label: 'Ngang (4:3)', value: 'landscape43', aspectClass: 'aspect-[4/3]' },
+                          { key: 'product_frame_overlay_wide169_url', label: 'Rộng (16:9)', value: 'wide169', aspectClass: 'aspect-[16/9]' },
+                        ];
+                        const systemAR = (defaultImageAspectRatio?.value as string) || 'square';
+                        const activeAR = selectedFrameAR || systemAR;
+                        const activeItem = frameItems.find(i => i.value === activeAR) || frameItems[0];
+                        const hasValue = typeof form[activeItem.key] === 'string' && form[activeItem.key];
+                        const uploadedCount = frameItems.filter(i => typeof form[i.key] === 'string' && form[i.key]).length;
+
+                        return (
+                          <div className="space-y-4">
+                            {/* Dropdown chọn AR */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                              <div className="flex-1">
+                                <Label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block">Chọn tỷ lệ khung hình</Label>
+                                <select
+                                  value={activeAR}
+                                  onChange={(e) => setSelectedFrameAR(e.target.value)}
+                                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                >
+                                  {frameItems.map((item) => {
+                                    const isSystemDefault = item.value === systemAR;
+                                    const hasFrame = typeof form[item.key] === 'string' && form[item.key];
+                                    return (
+                                      <option key={item.value} value={item.value}>
+                                        {item.label}{isSystemDefault ? ' ★ Mặc định' : ''}{hasFrame ? ' ✓' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                              {uploadedCount > 0 && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 self-end pb-2">
+                                  {uploadedCount}/5 khung đã upload
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Uploader cho AR đang chọn */}
+                            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{activeItem.label}</span>
+                                {activeAR === systemAR && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50">
+                                    Đang dùng mặc định
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="space-y-4">
+                                <SettingsImageUploader
+                                  key={activeItem.key}
+                                  label=""
+                                  value={typeof form[activeItem.key] === 'string' ? (form[activeItem.key] as string) : ''}
+                                  storageId={mediaStorageIds[activeItem.key] ?? undefined}
+                                  onChange={(url, storageId) => { updateImageField(activeItem.key, url, storageId); }}
+                                  folder="settings"
+                                  previewSize="md"
+                                />
+
+                                {hasValue ? (
+                                  <div className="space-y-2">
+                                    <div className="flex justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => { updateImageField(activeItem.key, '', null); }}
+                                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs px-2 py-1 h-auto"
+                                      >
+                                        Xóa khung
+                                      </Button>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                      <div className={cn("relative w-32 max-w-full border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 shadow-inner flex items-center justify-center", activeItem.aspectClass)}>
+                                        <img
+                                          src={typeof form.product_image_placeholder === 'string' && form.product_image_placeholder ? form.product_image_placeholder : undefined}
+                                          alt=""
+                                          className="absolute inset-0 w-full h-full object-cover opacity-45"
+                                        />
+                                        <img
+                                          src={form[activeItem.key] as string}
+                                          alt="Preview khung viền"
+                                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                                        />
+                                        <span className="absolute bottom-1 left-0 right-0 text-center text-[9px] font-bold text-slate-500 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xs py-0.5">Preview</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="py-6 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/50 dark:bg-slate-950/20">
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">Chưa upload khung</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {advancedTab === 'watermark' && (
+                    <div className="space-y-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            id="enable_product_watermark"
+                            checked={form.enable_product_watermark === true || form.enable_product_watermark === 'true'}
+                            onCheckedChange={(checked) => updateField('enable_product_watermark', checked)}
+                          />
+                          <div className="space-y-0.5">
+                            <Label htmlFor="enable_product_watermark" className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Bật watermark sản phẩm</Label>
+                            <p className="text-xs text-slate-500">
+                              Hiển thị watermark (chữ hoặc hình) đè lên ảnh sản phẩm ở storefront.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {form.enable_product_watermark !== true && (
+                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300">
+                          Tính năng đang tắt. Hãy bật lên để hiển thị watermark trên ảnh sản phẩm ngoài trang chủ và chi tiết sản phẩm.
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                        {/* Cấu hình cột trái (7 cols) */}
+                        <div className="lg:col-span-7 space-y-6">
+                          {/* 1. Watermark Hình */}
+                          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  id="product_watermark_image_enabled"
+                                  checked={form.product_watermark_image_enabled === true || form.product_watermark_image_enabled === 'true'}
+                                  onCheckedChange={(checked) => updateField('product_watermark_image_enabled', checked)}
+                                />
+                                <Label htmlFor="product_watermark_image_enabled" className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Bật watermark hình (logo)</Label>
+                              </div>
+                            </div>
+
+                            {(form.product_watermark_image_enabled === true || form.product_watermark_image_enabled === 'true') && (
+                              <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <SettingsImageUploader
+                                  label="Ảnh logo watermark"
+                                  value={typeof form.product_watermark_image_url === 'string' ? form.product_watermark_image_url : ''}
+                                  storageId={mediaStorageIds.product_watermark_image_url ?? undefined}
+                                  onChange={(url, storageId) => { updateImageField('product_watermark_image_url', url, storageId); }}
+                                  folder="settings"
+                                  previewSize="md"
+                                />
+
+                                {typeof form.product_watermark_image_url === 'string' && form.product_watermark_image_url && (
+                                  <div className="space-y-3">
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs text-slate-500">
+                                        <Label>Độ trong suốt logo</Label>
+                                        <span>{form.product_watermark_image_opacity ?? 40}%</span>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={parseFloat(String(form.product_watermark_image_opacity ?? 40))}
+                                        onChange={(e) => updateField('product_watermark_image_opacity', e.target.value)}
+                                        className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-orange-500"
+                                      />
+                                    </div>
+                                    <div className="flex justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => { updateImageField('product_watermark_image_url', '', null); }}
+                                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs px-2 py-1 h-auto"
+                                      >
+                                        Xóa ảnh logo
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 2. Watermark Chữ */}
+                          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  id="product_watermark_text_enabled"
+                                  checked={form.product_watermark_text_enabled === true || form.product_watermark_text_enabled === 'true'}
+                                  onCheckedChange={(checked) => updateField('product_watermark_text_enabled', checked)}
+                                />
+                                <Label htmlFor="product_watermark_text_enabled" className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">Bật watermark chữ</Label>
+                              </div>
+                            </div>
+
+                            {(form.product_watermark_text_enabled === true || form.product_watermark_text_enabled === 'true') && (
+                              <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <div className="space-y-1.5">
+                                  <Label>Nội dung chữ</Label>
+                                  <Input
+                                    value={typeof form.product_watermark_text_content === 'string' ? form.product_watermark_text_content : ''}
+                                    onChange={(e) => updateField('product_watermark_text_content', e.target.value)}
+                                    placeholder="Nhập chữ watermark..."
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <Label>Cỡ chữ (px)</Label>
+                                    <select
+                                      value={String(form.product_watermark_text_font_size ?? '8')}
+                                      onChange={(e) => updateField('product_watermark_text_font_size', e.target.value)}
+                                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    >
+                                      {Array.from({ length: 30 }, (_, i) => i + 1).map((size) => (
+                                        <option key={size} value={size}>{size}px</option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <Label>Màu chữ</Label>
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="color"
+                                        value={typeof form.product_watermark_text_color === 'string' && form.product_watermark_text_color.startsWith('#') ? form.product_watermark_text_color : '#64748B'}
+                                        onChange={(e) => updateField('product_watermark_text_color', e.target.value)}
+                                        className="w-10 h-10 rounded-md cursor-pointer border border-slate-200 dark:border-slate-700"
+                                      />
+                                      <Input
+                                        value={String(form.product_watermark_text_color ?? '#64748B').toUpperCase()}
+                                        onChange={(e) => updateField('product_watermark_text_color', e.target.value)}
+                                        className="font-mono text-sm uppercase flex-1"
+                                        maxLength={7}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-xs text-slate-500">
+                                    <Label>Độ trong suốt chữ</Label>
+                                    <span>{form.product_watermark_text_opacity ?? 35}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={parseFloat(String(form.product_watermark_text_opacity ?? 35))}
+                                    onChange={(e) => updateField('product_watermark_text_opacity', e.target.value)}
+                                    className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-orange-500"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <Checkbox
+                                    id="product_watermark_text_repeat"
+                                    checked={form.product_watermark_text_repeat === true || form.product_watermark_text_repeat === 'true'}
+                                    onCheckedChange={(checked) => updateField('product_watermark_text_repeat', checked)}
+                                  />
+                                  <Label htmlFor="product_watermark_text_repeat" className="cursor-pointer text-xs text-slate-600 dark:text-slate-400">Lặp watermark chữ theo hàng ngang</Label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Preview cột phải (5 cols) */}
+                        <div className="lg:col-span-5 flex flex-col items-center justify-start space-y-4">
+                          <div className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col items-center">
+                            <Label className="font-semibold text-slate-900 dark:text-slate-100 self-start mb-3">Preview trực quan</Label>
+
+                            <div 
+                              ref={previewCanvasRef}
+                              className="relative w-64 aspect-square max-w-full border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 shadow-inner flex items-center justify-center select-none touch-none"
+                              onPointerMove={handlePreviewPointerMove}
+                              onPointerUp={handlePreviewPointerUp}
+                              onPointerLeave={handlePreviewPointerUp}
+                              style={{ cursor: activeDrag ? (activeDrag === 'image-resize' ? 'nwse-resize' : 'move') : 'default' }}
+                            >
+                              {/* Ảnh placeholder sản phẩm */}
+                              <img
+                                src={typeof form.product_image_placeholder === 'string' && form.product_image_placeholder ? form.product_image_placeholder : undefined}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none select-none"
+                              />
+
+                              {/* Watermark hình */}
+                              {(form.product_watermark_image_enabled === true || form.product_watermark_image_enabled === 'true') && typeof form.product_watermark_image_url === 'string' && form.product_watermark_image_url && (
+                                <div
+                                  className="absolute pointer-events-auto transform -translate-x-1/2 -translate-y-1/2 group cursor-move select-none touch-none"
+                                  style={{
+                                    left: `${form.product_watermark_image_x ?? 80}%`,
+                                    top: `${form.product_watermark_image_y ?? 80}%`,
+                                    width: `${form.product_watermark_image_width ?? 28}%`,
+                                    opacity: (parseFloat(String(form.product_watermark_image_opacity ?? 40))) / 100,
+                                  }}
+                                  onPointerDown={(e) => handlePreviewPointerDown(e, 'image-move')}
+                                  onPointerMove={handlePreviewPointerMove}
+                                  onPointerUp={handlePreviewPointerUp}
+                                >
+                                  <img
+                                    src={form.product_watermark_image_url}
+                                    alt="Image Watermark"
+                                    className="w-full h-auto object-contain pointer-events-none select-none border border-dashed border-transparent hover:border-orange-500 rounded-xs"
+                                    draggable="false"
+                                  />
+                                  {/* Resize handle */}
+                                  <div
+                                    className="absolute bottom-[-6px] right-[-6px] w-3.5 h-3.5 bg-orange-500 rounded-full border border-white cursor-se-resize shadow-sm hover:scale-125 transition-transform z-20"
+                                    onPointerDown={(e) => { e.stopPropagation(); handlePreviewPointerDown(e, 'image-resize'); }}
+                                    onPointerMove={handlePreviewPointerMove}
+                                    onPointerUp={handlePreviewPointerUp}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Watermark chữ */}
+                              {(form.product_watermark_text_enabled === true || form.product_watermark_text_enabled === 'true') && typeof form.product_watermark_text_content === 'string' && form.product_watermark_text_content && (
+                                <div
+                                  className="absolute left-0 right-0 transform -translate-y-1/2 whitespace-nowrap text-center select-none pointer-events-auto hover:bg-orange-500/10 border-y border-dashed border-transparent hover:border-orange-500 py-1 touch-none"
+                                  style={{
+                                    top: `${form.product_watermark_text_y ?? 80}%`,
+                                    opacity: (parseFloat(String(form.product_watermark_text_opacity ?? 35))) / 100,
+                                    color: String(form.product_watermark_text_color ?? '#64748B'),
+                                    fontSize: `${form.product_watermark_text_font_size ?? 8}px`,
+                                    fontFamily: '"Be Vietnam Pro", sans-serif',
+                                    cursor: 'ns-resize',
+                                  }}
+                                  onPointerDown={(e) => handlePreviewPointerDown(e, 'text-move')}
+                                  onPointerMove={handlePreviewPointerMove}
+                                  onPointerUp={handlePreviewPointerUp}
+                                >
+                                  {form.product_watermark_text_repeat === true || form.product_watermark_text_repeat === 'true' ? (
+                                    <div className="w-full overflow-hidden inline-flex justify-center gap-4">
+                                      {Array(8).fill(null).map((_, i) => (
+                                        <span key={i}>{form.product_watermark_text_content as string}</span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span>{form.product_watermark_text_content}</span>
+                                  )}
+                                </div>
+                              )}
+
+                              <span className="absolute bottom-1 right-2 text-[9px] font-bold text-slate-500 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xs px-1.5 py-0.5 rounded-sm">Preview</span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-3 text-center space-y-1">
+                              <p>💡 <b>Kéo logo hoặc dòng chữ</b> trực tiếp trong ảnh để đổi vị trí.</p>
+                              <p>💡 <b>Kéo chấm tròn màu cam</b> ở góc logo để điều chỉnh kích thước.</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {advancedTab === 'header' && canEditHeaderMenu && (
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                      <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                        <div className="flex items-start gap-3">
+                          <LayoutTemplate className="mt-0.5 h-5 w-5 text-orange-500" />
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Logo Header</h3>
+                            <p className="text-xs text-slate-500">
+                              Dùng chung với Header Menu ở System Experiences.
+                            </p>
+                          </div>
+                        </div>
+                        <SettingsImageUploader
+                          label="Logo website"
+                          value={typeof form.site_logo === 'string' ? form.site_logo : ''}
+                          storageId={mediaStorageIds.site_logo ?? undefined}
+                          onChange={(url, storageId) =>{  updateImageField('site_logo', url, storageId); }}
+                          folder="settings"
+                          previewSize="md"
+                          smartLogoCrop={false}
+                        />
+                        <div className="flex items-center justify-between gap-3">
+                          <Label>Tên thương hiệu</Label>
+                          <label className="flex items-center gap-2 text-xs text-slate-500">
+                            <input
+                              type="checkbox"
+                              checked={headerConfigDraft.showBrandName !== false}
+                              onChange={(event) => updateHeaderConfig('showBrandName', event.target.checked)}
+                              className="rounded border-slate-300"
+                            />
+                            {headerConfigDraft.showBrandName !== false ? 'Đang bật' : 'Đang tắt'}
+                          </label>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Kích thước logo</Label>
+                          <select
+                            value={logoSizeLevel}
+                            onChange={(event) => updateHeaderConfig('logoSizeLevel', Number(event.target.value))}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            {LOGO_SIZE_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Đang chọn: {logoSizeLabel}</div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Độ thoáng header</Label>
+                          <select
+                            value={headerSpacingLevel}
+                            onChange={(event) => updateHeaderConfig('headerSpacingLevel', Number(event.target.value))}
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            {HEADER_SPACING_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-400">Đang chọn: {headerSpacingLabel}</div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <Label>Sticky desktop</Label>
+                            <input
+                              type="checkbox"
+                              checked={headerConfigDraft.headerStickyDesktop ?? headerConfigDraft.headerSticky ?? true}
+                              onChange={(event) => updateHeaderConfig('headerStickyDesktop', event.target.checked)}
+                              className="rounded border-slate-300"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <Label>Sticky mobile</Label>
+                            <input
+                              type="checkbox"
+                              checked={headerConfigDraft.headerStickyMobile ?? headerConfigDraft.headerSticky ?? true}
+                              onChange={(event) => updateHeaderConfig('headerStickyMobile', event.target.checked)}
+                              className="rounded border-slate-300"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nền logo</Label>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {LOGO_BACKGROUND_OPTIONS.map(option => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => updateHeaderConfig('logoBackgroundStyle', option.id)}
+                                className={cn(
+                                  'h-8 rounded-md border text-xs font-medium transition-colors',
+                                  (headerConfigDraft.logoBackgroundStyle ?? 'none') === option.id
+                                    ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                                )}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">CTA Header</h3>
+                          <p className="text-xs text-slate-500">
+                            Mặc định là “Liên hệ” trỏ về /contact, admin có thể đổi text và đường dẫn.
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <Label>Hiển thị CTA</Label>
+                          <label className="flex items-center gap-2 text-xs text-slate-500">
+                            <input
+                              type="checkbox"
+                              checked={headerCta.show !== false}
+                              onChange={(event) => updateHeaderCta('show', event.target.checked)}
+                              className="rounded border-slate-300"
+                            />
+                            {headerCta.show !== false ? 'Đang bật' : 'Đang tắt'}
+                          </label>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nhãn CTA</Label>
+                          <Input
+                            value={headerCta.text ?? 'Liên hệ'}
+                            onChange={(event) => updateHeaderCta('text', event.target.value)}
+                            placeholder="Liên hệ"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Đường dẫn CTA</Label>
+                          <Input
+                            value={headerCta.url ?? '/contact'}
+                            onChange={(event) => updateHeaderCta('url', event.target.value)}
+                            placeholder="/contact"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {advancedTab === 'product-supplemental' && enableSupplementalContent && (
+                    <ProductSupplementalContentManager />
+                  )}
+                </div>
+              ) : (
+                currentFields.map(field => renderField(field))
+              )}
             </CardContent>
           </Card>
           {section === 'contact' && socialFields.length > 0 && (
@@ -868,21 +1949,40 @@ function SettingsContent({ section }: { section: SettingsSection }) {
         <Card>
           <CardContent className="py-8 text-center text-slate-500">
             Không có trường nào được bật cho nhóm này.
-            <br />
-            <span className="text-sm">Kiểm tra cấu hình tại System → Modules → Settings</span>
           </CardContent>
         </Card>
       )}
 
-      <HomeComponentStickyFooter
-        isSubmitting={isSaving}
-        submitLabel="Lưu thay đổi"
-        hasChanges={hasChanges}
-        submitType="button"
-        onClickSave={handleSave}
-        align="between"
-      >
-        <>
+      {!(section === 'advanced' && advancedTab === 'product-supplemental' && enableSupplementalContent) && (
+        <HomeComponentStickyFooter
+          isSubmitting={isSaving}
+          submitLabel="Lưu thay đổi"
+          hasChanges={hasChanges}
+          submitType="button"
+          onClickSave={handleSave}
+          align="between"
+        >
+        <div className="flex items-center gap-2">
+          {section === 'seo' && (
+            <>
+              <AiSeoImportDialog
+                form={form}
+                onApply={(payload) => {
+                  if (payload.seo_title) updateField('seo_title', payload.seo_title);
+                  if (payload.seo_description) updateField('seo_description', payload.seo_description);
+                  if (payload.seo_keywords) updateField('seo_keywords', payload.seo_keywords);
+                }}
+              />
+              <SeoBuilderDialog
+                form={form}
+                onApply={(payload) => {
+                  if (payload.seo_title) updateField('seo_title', payload.seo_title);
+                  if (payload.seo_description) updateField('seo_description', payload.seo_description);
+                  if (payload.seo_keywords) updateField('seo_keywords', payload.seo_keywords);
+                }}
+              />
+            </>
+          )}
           <span className={cn("text-sm", hasChanges ? "text-amber-600 dark:text-amber-400" : "text-slate-500")}>
             {hasChanges ? 'Có thay đổi chưa lưu' : 'Đã lưu'}
           </span>
@@ -902,8 +2002,9 @@ function SettingsContent({ section }: { section: SettingsSection }) {
             )}
             {isSaving ? 'Đang lưu...' : hasChanges ? 'Lưu thay đổi' : 'Đã lưu'}
           </Button>
-        </>
+        </div>
       </HomeComponentStickyFooter>
+      )}
     </div>
   );
 }

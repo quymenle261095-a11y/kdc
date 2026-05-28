@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { Eye, EyeOff, LayoutTemplate, Type } from 'lucide-react';
+import { Bot, Eye, EyeOff, LayoutTemplate, Type } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
 import { COMPONENT_TYPES, HOME_COMPONENT_TYPE_VALUES } from '@/app/admin/home-components/create/shared';
@@ -26,6 +26,10 @@ type FontOverride = {
   fontKey: string;
 };
 
+type AiImportOverride = {
+  enabled: boolean;
+};
+
 export default function SystemHomeComponentsPage() {
   const systemColors = useBrandColors();
   const config = useQuery(api.homeComponentSystemConfig.getConfig);
@@ -35,11 +39,14 @@ export default function SystemHomeComponentsPage() {
   const bulkSetTypeColorOverride = useMutation(api.homeComponentSystemConfig.bulkSetTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
   const setGlobalFontOverride = useMutation(api.homeComponentSystemConfig.setGlobalFontOverride);
+  const setTypeAiImportOverride = useMutation(api.homeComponentSystemConfig.setTypeAiImportOverride);
+  const bulkSetTypeAiImportOverride = useMutation(api.homeComponentSystemConfig.bulkSetTypeAiImportOverride);
 
   const [hiddenTypes, setHiddenTypes] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [typeOverrides, setTypeOverrides] = useState<Record<string, ColorOverride>>({});
   const [typeFontOverrides, setTypeFontOverrides] = useState<Record<string, FontOverride>>({});
+  const [typeAiImportOverrides, setTypeAiImportOverrides] = useState<Record<string, AiImportOverride>>({});
   const [globalFontOverride, setGlobalFontOverrideState] = useState({ enabled: false, fontKey: DEFAULT_FONT_KEY });
 
   useEffect(() => {
@@ -47,6 +54,7 @@ export default function SystemHomeComponentsPage() {
     setHiddenTypes(config.hiddenTypes);
     setTypeOverrides(config.typeColorOverrides);
     setTypeFontOverrides(config.typeFontOverrides);
+    setTypeAiImportOverrides(config.typeAiImportOverrides);
     setGlobalFontOverrideState(config.globalFontOverride ?? { enabled: false, fontKey: DEFAULT_FONT_KEY });
   }, [config]);
 
@@ -133,6 +141,10 @@ export default function SystemHomeComponentsPage() {
     };
   };
 
+  const getDefaultAiImportOverride = (type: string): AiImportOverride => (
+    typeAiImportOverrides[type] ?? { enabled: true }
+  );
+
   const toggleCustomType = async (type: string) => {
     if (!CUSTOM_SUPPORTED_TYPES.has(type)) {return;}
     const current = getDefaultOverride(type);
@@ -173,6 +185,19 @@ export default function SystemHomeComponentsPage() {
       toast.success(nextEnabled ? 'Đã bật custom font cho component.' : 'Đã chuyển về font hệ thống.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Không thể cập nhật custom font.');
+    }
+  };
+
+  const toggleAiImportType = async (type: string) => {
+    if (!CUSTOM_SUPPORTED_TYPES.has(type)) {return;}
+    const current = getDefaultAiImportOverride(type);
+    const nextEnabled = !current.enabled;
+    setTypeAiImportOverrides((prev) => ({ ...prev, [type]: { enabled: nextEnabled } }));
+    try {
+      await setTypeAiImportOverride({ enabled: nextEnabled, type });
+      toast.success(nextEnabled ? 'Đã bật Import AI cho component.' : 'Đã tắt Import AI cho component.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật Import AI.');
     }
   };
 
@@ -233,6 +258,23 @@ export default function SystemHomeComponentsPage() {
       toast.success('Đã bật custom màu cho các component đã chọn.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Không thể bật custom màu hàng loạt.');
+    }
+  };
+
+  const handleBulkAiImport = async (enabled: boolean) => {
+    if (selectedTypes.length === 0) {return;}
+    const next = selectedTypes.reduce<Record<string, AiImportOverride>>((acc, type) => {
+      if (CUSTOM_SUPPORTED_TYPES.has(type)) {
+        acc[type] = { enabled };
+      }
+      return acc;
+    }, {});
+    setTypeAiImportOverrides((prev) => ({ ...prev, ...next }));
+    try {
+      await bulkSetTypeAiImportOverride({ enabled, types: selectedTypes });
+      toast.success(enabled ? 'Đã bật Import AI cho các component đã chọn.' : 'Đã tắt Import AI cho các component đã chọn.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật Import AI hàng loạt.');
     }
   };
 
@@ -305,6 +347,12 @@ export default function SystemHomeComponentsPage() {
             <Button variant="outline" size="sm" onClick={handleBulkCustom} disabled={selectedTypes.length === 0}>
               Bật custom đã chọn
             </Button>
+            <Button variant="outline" size="sm" onClick={() => handleBulkAiImport(true)} disabled={selectedTypes.length === 0}>
+              Bật AI đã chọn
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleBulkAiImport(false)} disabled={selectedTypes.length === 0}>
+              Tắt AI đã chọn
+            </Button>
             <span className="text-xs text-slate-500">Đã chọn {selectedTypes.length} mục</span>
             <span className="text-xs text-slate-500">
               {stats ? `Chưa dùng ${unusedTypes.length} type` : 'Đang tính số type chưa dùng...'}
@@ -312,7 +360,7 @@ export default function SystemHomeComponentsPage() {
           </div>
 
           <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[44px_60px_1fr_140px_320px] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 bg-slate-50 dark:bg-slate-900">
+            <div className="grid grid-cols-[44px_60px_1fr_140px_420px] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 bg-slate-50 dark:bg-slate-900">
               <div>
                 <input
                   type="checkbox"
@@ -334,10 +382,11 @@ export default function SystemHomeComponentsPage() {
               const count = stats ? (typeCountMap[type.value] ?? 0) : null;
               const isUnused = count === 0;
               const fontOverride = getDefaultFontOverride(type.value);
+              const aiImportOverride = getDefaultAiImportOverride(type.value);
               return (
                 <div
                   key={type.value}
-                  className="grid grid-cols-[44px_60px_1fr_140px_320px] gap-3 px-4 py-3 border-t border-slate-100 dark:border-slate-800 items-center"
+                  className="grid grid-cols-[44px_60px_1fr_140px_420px] gap-3 px-4 py-3 border-t border-slate-100 dark:border-slate-800 items-center"
                 >
                   <input
                     type="checkbox"
@@ -413,6 +462,21 @@ export default function SystemHomeComponentsPage() {
                     >
                       <Type size={12} />
                       {fontOverride.systemEnabled ? 'Font' : 'System Font'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleAiImportType(type.value)}
+                      disabled={!customSupported}
+                      className={cn(
+                        "inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs border",
+                        aiImportOverride.enabled
+                          ? "border-violet-200 text-violet-600 bg-violet-50"
+                          : "border-slate-200 text-slate-500 bg-white",
+                        !customSupported && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Bot size={12} />
+                      {aiImportOverride.enabled ? 'AI bật' : 'AI tắt'}
                     </button>
                   </div>
                 </div>

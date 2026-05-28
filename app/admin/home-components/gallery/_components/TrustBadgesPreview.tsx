@@ -1,118 +1,35 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ArrowUpRight, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Plus, Shield, ZoomIn } from 'lucide-react';
-import { BrandBadge } from '@/components/site/shared/BrandColorHelpers';
+import React, { useCallback, useEffect, useState } from 'react';
+import useEmblaCarousel from 'embla-carousel-react';
+import { ArrowUpRight, ChevronLeft, ChevronRight, Image as ImageIcon, Maximize2, Shield, ZoomIn } from 'lucide-react';
 import { cn } from '../../../components/ui';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
-import type { TrustBadgesStyle } from '../_types';
-import { getGalleryColorTokens } from '../_lib/colors';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
+import { getPreviewDeviceClass } from '../../_shared/lib/previewResponsive';
+import {
+  type TrustBadgesStyle,
+} from '../_types';
+import {
+  DEFAULT_STACK_DESCRIPTION,
+  DEFAULT_STACK_HEADING,
+  DEFAULT_TRUST_CUE_TEXT,
+  TRUST_BADGES_A4_ASPECT_CLASS,
+  getTrustBadgesMaxVisibleItems,
+  TrustBadgesEmptyState,
+  TrustBadgesSectionHeader,
+  TrustBadgesTrustCue,
+  useTrustBadgesSectionState,
+} from './TrustBadgesSectionShared';
 
 // Best Practices: Grayscale-to-color hover, lightbox/zoom indicator, verification links, alt text accessibility
 interface TrustBadgeItem { id: number; url: string; link: string; name?: string }
-export interface TrustBadgesConfig { heading?: string; subHeading?: string; buttonText?: string; buttonLink?: string }
-
-// Auto Scroll Slider cho Marquee style
-const TrustBadgesAutoScroll = ({ children, speed = 0.6 }: { children: React.ReactNode; speed?: number }) => {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const baseTrackRef = React.useRef<HTMLDivElement>(null);
-  const [baseTrackWidth, setBaseTrackWidth] = React.useState(0);
-  const [repeatCount, setRepeatCount] = React.useState(2);
-
-  React.useEffect(() => {
-    const scroller = scrollRef.current;
-    const baseTrack = baseTrackRef.current;
-    if (!scroller || !baseTrack) {return;}
-
-    const updateMetrics = () => {
-      const viewportWidth = scroller.clientWidth;
-      const nextBaseWidth = baseTrack.scrollWidth;
-
-      if (viewportWidth <= 1 || nextBaseWidth <= 1) {
-        setBaseTrackWidth(0);
-        setRepeatCount(2);
-        return;
-      }
-
-      const nextRepeatCount = Math.max(2, Math.ceil(viewportWidth / nextBaseWidth) + 1);
-      setRepeatCount(nextRepeatCount);
-      setBaseTrackWidth(nextBaseWidth);
-    };
-
-    updateMetrics();
-
-    const cleanupHandlers: Array<() => void> = [];
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(updateMetrics);
-      observer.observe(scroller);
-      observer.observe(baseTrack);
-      cleanupHandlers.push(() =>{  observer.disconnect(); });
-    }
-
-    window.addEventListener('resize', updateMetrics);
-    cleanupHandlers.push(() =>{  window.removeEventListener('resize', updateMetrics); });
-
-    return () => {
-      cleanupHandlers.forEach((cleanup) =>{  cleanup(); });
-    };
-  }, [children]);
-
-  React.useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) {return;}
-
-    let animationId: number;
-    let position = scroller.scrollLeft;
-
-    const step = () => {
-      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
-      const resetPoint = Math.min(baseTrackWidth, maxScrollLeft);
-
-      if (resetPoint > 1 && maxScrollLeft > 1) {
-        position += speed;
-        if (position >= resetPoint) {
-          position -= resetPoint;
-        }
-        scroller.scrollLeft = position;
-      } else {
-        position = scroller.scrollLeft;
-      }
-
-      animationId = requestAnimationFrame(step);
-    };
-
-    animationId = requestAnimationFrame(step);
-    return () =>{  cancelAnimationFrame(animationId); };
-  }, [baseTrackWidth, speed]);
-
-  return (
-    <div className="w-full max-w-7xl mx-auto">
-      <div
-        ref={scrollRef}
-        className="flex overflow-hidden select-none w-full cursor-grab active:cursor-grabbing"
-        style={{
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)',
-          maskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)'
-        }}
-      >
-        {Array.from({ length: repeatCount }).map((_, index) => (
-          <div
-            key={`trust-badge-track-${index}`}
-            ref={index === 0 ? baseTrackRef : undefined}
-            className="flex shrink-0 gap-16 md:gap-20 items-center px-4"
-          >
-            {children}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+export interface TrustBadgesConfig { heading?: string; subHeading?: string; badgeText?: string;
+  spacing?: SectionSpacing; cornerRadius?: unknown; noBorderRadius?: unknown; noVerticalMargin?: unknown; showBorder?: unknown; trustCueText?: string; stackHeading?: string; stackDescription?: string; showTitle?: boolean; showSubtitle?: boolean; showBadge?: boolean; headerAlign?: 'left' | 'center' | 'right'; titleColorPrimary?: boolean; subtitleAboveTitle?: boolean; uppercaseText?: boolean; hideHeader?: boolean }
 
 export const TrustBadgesPreview = ({ 
   items, 
@@ -121,6 +38,7 @@ export const TrustBadgesPreview = ({
   mode,
   selectedStyle, 
   onStyleChange,
+  desktopColumns = 4,
   config,
   fontStyle,
   fontClassName,
@@ -131,139 +49,179 @@ export const TrustBadgesPreview = ({
   mode: 'single' | 'dual';
   selectedStyle?: TrustBadgesStyle; 
   onStyleChange?: (style: TrustBadgesStyle) => void;
+  desktopColumns?: 3 | 4;
   config?: TrustBadgesConfig;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
 }) => {
   const { device, setDevice } = usePreviewDevice();
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const colors = getGalleryColorTokens({ primary: brandColor, secondary, mode });
-  const previewStyle = selectedStyle ?? 'cards';
+  const [carouselRef, carouselApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
+  const [cardsRef, cardsApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
+  const [sealRef, sealApi] = useEmblaCarousel({ align: 'start', axis: 'y', containScroll: 'trimSnaps' });
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
+  const [canCardsScrollPrev, setCanCardsScrollPrev] = useState(false);
+  const [canCardsScrollNext, setCanCardsScrollNext] = useState(false);
+  const [canSealScrollPrev, setCanSealScrollPrev] = useState(false);
+  const [canSealScrollNext, setCanSealScrollNext] = useState(false);
+  const [selectedSnap, setSelectedSnap] = useState(0);
+  const {
+    cardBorder,
+    colors,
+    innerRadiusClassName,
+    radiusClassName,
+    renderConfig,
+    sectionSpacingClassName,
+  } = useTrustBadgesSectionState({ brandColor, config, desktopColumns, mode, previewDevice: device, secondary, selectedStyle });
+  const previewStyle = renderConfig.style;
   const setPreviewStyle = (s: string) => onStyleChange?.(s as TrustBadgesStyle);
-  
+  const normalizedDesktopColumns = renderConfig.desktopColumns;
+  const desktopGridClassName = normalizedDesktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
+  const responsiveGridClassName = getPreviewDeviceClass(device, {
+    mobile: normalizedDesktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2',
+    tablet: normalizedDesktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-2',
+    desktop: desktopGridClassName,
+  });
+  const _titleClassName = getPreviewDeviceClass(device, {
+    mobile: 'text-xl',
+    tablet: 'text-2xl',
+    desktop: 'text-3xl',
+  });
+
+  const updateCarouselState = useCallback(() => {
+    if (!carouselApi) { return; }
+    setCanScrollPrev(carouselApi.canScrollPrev());
+    setCanScrollNext(carouselApi.canScrollNext());
+    setSelectedSnap(carouselApi.selectedScrollSnap());
+  }, [carouselApi]);
+
+  const updateCardsState = useCallback(() => {
+    if (!cardsApi) { return; }
+    setCanCardsScrollPrev(cardsApi.canScrollPrev());
+    setCanCardsScrollNext(cardsApi.canScrollNext());
+  }, [cardsApi]);
+
+  const updateSealState = useCallback(() => {
+    if (!sealApi) { return; }
+    setCanSealScrollPrev(sealApi.canScrollPrev());
+    setCanSealScrollNext(sealApi.canScrollNext());
+  }, [sealApi]);
+
+  useEffect(() => {
+    if (!carouselApi) { return; }
+    updateCarouselState();
+    carouselApi.on('select', updateCarouselState);
+    carouselApi.on('reInit', updateCarouselState);
+
+    return () => {
+      carouselApi.off('select', updateCarouselState);
+      carouselApi.off('reInit', updateCarouselState);
+    };
+  }, [carouselApi, updateCarouselState]);
+
+  useEffect(() => {
+    if (!cardsApi) { return; }
+    updateCardsState();
+    cardsApi.on('select', updateCardsState);
+    cardsApi.on('reInit', updateCardsState);
+
+    return () => {
+      cardsApi.off('select', updateCardsState);
+      cardsApi.off('reInit', updateCardsState);
+    };
+  }, [cardsApi, updateCardsState]);
+
+  useEffect(() => {
+    if (!sealApi) { return; }
+    updateSealState();
+    sealApi.on('select', updateSealState);
+    sealApi.on('reInit', updateSealState);
+
+    return () => {
+      sealApi.off('select', updateSealState);
+      sealApi.off('reInit', updateSealState);
+    };
+  }, [sealApi, updateSealState]);
+
+  useEffect(() => {
+    if (!carouselApi) { return; }
+    carouselApi.reInit();
+    updateCarouselState();
+  }, [carouselApi, items.length, normalizedDesktopColumns, previewStyle, device, updateCarouselState]);
+
+  useEffect(() => {
+    if (!cardsApi) { return; }
+    cardsApi.reInit();
+    updateCardsState();
+  }, [cardsApi, items.length, normalizedDesktopColumns, previewStyle, device, updateCardsState]);
+
+  useEffect(() => {
+    if (!sealApi) { return; }
+    sealApi.reInit();
+    updateSealState();
+  }, [sealApi, items.length, normalizedDesktopColumns, previewStyle, device, updateSealState]);
+
   const styles = [
-    { id: 'grid', label: 'Grid' }, 
-    { id: 'cards', label: 'Cards' }, 
-    { id: 'marquee', label: 'Marquee' },
-    { id: 'wall', label: 'Wall' },
-    { id: 'carousel', label: 'Carousel' },
-    { id: 'featured', label: 'Featured' }
+    { id: 'grid', label: 'Lưới' }, 
+    { id: 'cards', label: 'Thẻ' }, 
+    { id: 'stack', label: 'Danh sách' },
+    { id: 'wall', label: 'Khung' },
+    { id: 'carousel', label: 'Trượt' },
+    { id: 'seal', label: 'Con dấu' }
   ];
 
-  // Config values with defaults
-  const heading = config?.heading ?? 'Chứng nhận & Giải thưởng';
-  const subHeading = config?.subHeading ?? 'Được công nhận bởi các tổ chức uy tín';
+  const visibleItems = items.slice(0, getTrustBadgesMaxVisibleItems(normalizedDesktopColumns));
 
-  // Max visible items pattern
-  const MAX_VISIBLE = device === 'mobile' ? 4 : 8;
-  const visibleItems = items.slice(0, MAX_VISIBLE);
-  const remainingCount = items.length - MAX_VISIBLE;
-
-  // Empty State Component
-  const EmptyState = () => (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: colors.placeholderBg }}>
-        <Shield size={36} style={{ color: colors.placeholderIcon }} />
-      </div>
-      <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Chưa có chứng nhận</h3>
-      <p className="text-sm text-slate-500 max-w-xs">Thêm chứng nhận, giải thưởng hoặc badge để tăng độ tin cậy</p>
-    </div>
+  const sharedHeader = (
+    <TrustBadgesSectionHeader
+      brandColor={brandColor}
+      config={config}
+      title={config?.heading ?? 'Chứng nhận & Giải thưởng'}
+    />
   );
 
-  // Section Header Component
-  const SectionHeader = ({ centered = true }: { centered?: boolean }) => (
-    <div className={cn("mb-8 md:mb-10", centered && "text-center")}>
-      {subHeading && (
-        <div className="mb-3">
-          <span
-            className="inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider"
-            style={{
-              backgroundColor: colors.neutralSurface,
-              borderColor: colors.neutralBorder,
-              color: colors.subheading,
-            }}
-          >
-            {subHeading}
-          </span>
-        </div>
-      )}
-      <h2
-        className={cn(
-          "font-bold text-slate-900 dark:text-slate-100",
-          device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl'
-        )}
-        style={{ color: colors.heading }}
-      >
-        <span
-          className="inline-block rounded-md px-2 py-1"
-          style={{ backgroundColor: colors.neutralSurface }}
-        >
-          {heading}
-        </span>
-      </h2>
-      <div className={cn("mt-3 h-1 w-12 rounded-full", centered ? "mx-auto" : "")}
-        style={{ backgroundColor: colors.sectionAccentBar }}
-      />
-    </div>
-  );
+  const EmptyState = () => <TrustBadgesEmptyState colors={colors} />;
+  const TrustCue = ({ compact = false }: { compact?: boolean }) => <TrustBadgesTrustCue colors={colors} compact={compact} text={config?.trustCueText || DEFAULT_TRUST_CUE_TEXT} />;
 
-  // +N More Items Badge
-  const MoreItemsBadge = ({ count }: { count: number }) => count > 0 ? (
-    <div className="flex items-center justify-center py-4 mt-4">
-      <span className="text-sm font-medium px-4 py-2 rounded-full" style={{ backgroundColor: colors.badgeBg, color: colors.badgeText }}>
-        +{count} chứng nhận khác
-      </span>
-    </div>
-  ) : null;
-
-  // Style 1: Square Grid - Full color, with zoom icon
+  // Style 1: Clean trust grid
   const renderGridStyle = () => (
-    <section className={cn("w-full bg-white dark:bg-slate-900", device === 'mobile' ? 'py-8 px-3' : 'py-12 px-6')}>
+    <section className={cn("w-full bg-white dark:bg-slate-950", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')}>
       <div className="container max-w-7xl mx-auto">
-        <SectionHeader />
+        {sharedHeader}
         {items.length === 0 ? <EmptyState /> : (
           <>
             <div className={cn(
-              "grid gap-4 md:gap-5",
-              device === 'mobile' ? 'grid-cols-2' : (device === 'tablet' ? 'grid-cols-3' : 'grid-cols-4')
+              "grid gap-3 md:gap-4",
+              responsiveGridClassName
             )}>
               {visibleItems.map((item) => (
                 <div 
                   key={item.id} 
-                  className="group relative aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-colors duration-200"
+                  className={cn('group relative flex min-h-[164px] flex-col overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-0.5', radiusClassName)}
                   style={{ 
-                    border: `1px solid ${colors.neutralBorder}`,
+                    border: cardBorder,
                     backgroundColor: colors.neutralSurface,
-                    padding: device === 'mobile' ? '16px' : '20px'
+                    boxShadow: '0 16px 40px rgba(15, 23, 42, 0.06)',
                   }}
                 >
-                  {item.url ? (
-                    <PreviewImage src={item.url} className="w-full h-full object-contain transition-transform duration-300" alt={item.name ?? 'Chứng nhận'} />
-                  ) : (
-                    <ImageIcon size={device === 'mobile' ? 32 : 40} className="text-slate-300" />
-                  )}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.badgeBg }}>
+                  <div className="absolute left-3 top-3 z-10"><TrustCue compact /></div>
+                  <div className={cn('flex flex-1 items-center justify-center p-5 pt-10', TRUST_BADGES_A4_ASPECT_CLASS)} style={{ backgroundColor: colors.neutralBackground }}>
+                    {item.url ? (
+                      <PreviewImage src={item.url} className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" alt={item.name ?? 'Chứng nhận'} />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: colors.accentSurface }}>
+                        <Shield size={device === 'mobile' ? 26 : 30} style={{ color: colors.subheading }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex min-h-[54px] items-center justify-between gap-3 border-t px-4 py-3" style={{ borderColor: colors.neutralBorder }}>
+                    <p className="min-w-0 text-sm font-semibold leading-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận tin cậy'}</p>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: colors.badgeBg }}>
                       <Maximize2 size={14} style={{ color: colors.badgeText }} />
                     </div>
                   </div>
-                  {item.name && (
-                    <div className="absolute bottom-2 left-2 right-2 text-center">
-                      <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate block">{item.name}</span>
-                    </div>
-                  )}
                 </div>
               ))}
-              {remainingCount > 0 && (
-                <div 
-                  className="aspect-square rounded-xl flex flex-col items-center justify-center cursor-pointer"
-                  style={{ backgroundColor: colors.accentSurface, border: `1px dashed ${colors.accentBorder}` }}
-                >
-                  <Plus size={28} style={{ color: colors.subheading }} className="mb-1" />
-                  <span className="text-lg font-bold" style={{ color: colors.subheading }}>+{remainingCount}</span>
-                  <span className="text-[10px]" style={{ color: colors.mutedText }}>xem thêm</span>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -271,31 +229,56 @@ export const TrustBadgesPreview = ({
     </section>
   );
 
-  // Style 2: Feature Cards - Large cards with image and title, hover zoom effect
+  // Style 2: SaaS proof cards
   const renderCardsStyle = () => {
-    const cardItems = items.slice(0, device === 'mobile' ? 2 : 3);
-    const cardRemaining = items.length - cardItems.length;
+    const cardItems = visibleItems;
+    const cardWidthClassName = device === 'mobile'
+      ? 'basis-[78%]'
+      : (device === 'tablet' ? 'basis-[42%]' : (normalizedDesktopColumns === 3 ? 'basis-[31%]' : 'basis-[24%]'));
     return (
-      <section className={cn("w-full bg-white dark:bg-slate-900", device === 'mobile' ? 'py-8 px-3' : 'py-12 px-6')}>
+      <section className={cn("w-full bg-slate-50 dark:bg-slate-950", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')}>
         <div className="container max-w-7xl mx-auto">
-          <SectionHeader />
+          {sharedHeader}
           {items.length === 0 ? <EmptyState /> : (
-            <>
-              <div className={cn(
-                "grid gap-5 md:gap-6",
-                device === 'mobile' ? 'grid-cols-1' : (device === 'tablet' ? 'grid-cols-2' : 'grid-cols-3')
-              )}>
+            <div className="relative">
+              {cardItems.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => cardsApi?.scrollPrev()}
+                    disabled={!canCardsScrollPrev}
+                    className={cn('absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-x-2 -translate-y-1/2 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity dark:bg-slate-900', !canCardsScrollPrev && 'cursor-not-allowed opacity-40')}
+                    style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cardsApi?.scrollNext()}
+                    disabled={!canCardsScrollNext}
+                    className={cn('absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 translate-x-2 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity dark:bg-slate-900', !canCardsScrollNext && 'cursor-not-allowed opacity-40')}
+                    style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </>
+              )}
+            <div className="-mx-2 overflow-hidden px-2 pb-2" ref={cardsRef}>
+              <div className="flex snap-x gap-4 md:gap-5">
                 {cardItems.map((item) => (
                   <div 
                     key={item.id} 
-                    className="group relative flex flex-col rounded-2xl overflow-hidden cursor-pointer h-full transition-colors duration-200"
-                    style={{ border: `1px solid ${colors.neutralBorder}`, backgroundColor: colors.neutralSurface }}
+                    className={cn('group relative flex snap-start flex-col overflow-hidden cursor-pointer h-full shrink-0 grow-0 transition-all duration-300 hover:-translate-y-1', radiusClassName, cardWidthClassName)}
+                    style={{ border: cardBorder, backgroundColor: colors.neutralSurface, boxShadow: '0 18px 45px rgba(15, 23, 42, 0.08)' }}
                   >
-                    <div className={cn("flex items-center justify-center relative overflow-hidden", device === 'mobile' ? 'aspect-[4/3] p-6' : 'aspect-[5/4] p-10')} style={{ backgroundColor: colors.neutralBackground }}>
+                    <div className={cn('flex items-center justify-center relative overflow-hidden', TRUST_BADGES_A4_ASPECT_CLASS, device === 'mobile' ? 'p-5' : 'p-6')} style={{ backgroundColor: colors.neutralBackground }}>
+                      <div className="absolute left-4 top-4 z-20"><TrustCue compact /></div>
                       {item.url ? (
-                        <PreviewImage src={item.url} className="w-full h-full object-contain transition-transform duration-500 z-10" alt={item.name ?? 'Chứng nhận'} />
+                        <PreviewImage src={item.url} className="w-full h-full object-contain transition-transform duration-500 z-10 group-hover:scale-[1.04]" alt={item.name ?? 'Chứng nhận'} />
                       ) : (
-                        <ImageIcon size={48} className="text-slate-300" />
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: colors.accentSurface }}>
+                          <Shield size={34} style={{ color: colors.subheading }} />
+                        </div>
                       )}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
                         <span className="px-4 py-2 rounded-full font-medium flex items-center gap-2 text-sm" style={{ color: colors.subheading, backgroundColor: colors.neutralSurface, border: `1px solid ${colors.sectionAccentBar}` }}>
@@ -303,8 +286,8 @@ export const TrustBadgesPreview = ({
                         </span>
                       </div>
                     </div>
-                    <div className={cn("border-t flex items-center justify-between transition-colors", device === 'mobile' ? 'py-3 px-4 min-h-[48px]' : 'py-4 px-5')} style={{ borderColor: colors.neutralBorder, backgroundColor: colors.neutralSurface }}>
-                      <span className="font-semibold truncate text-sm" style={{ color: colors.subheading }}>
+                    <div className={cn("border-t flex items-center justify-between gap-3 transition-colors", device === 'mobile' ? 'py-3 px-4 min-h-[58px]' : 'py-4 px-5')} style={{ borderColor: colors.neutralBorder, backgroundColor: colors.neutralSurface }}>
+                      <span className="font-semibold text-sm leading-tight break-words" style={{ color: colors.subheading }}>
                         {item.name ?? 'Chứng nhận'}
                       </span>
                       <ArrowUpRight size={16} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: colors.subheading }} />
@@ -312,90 +295,114 @@ export const TrustBadgesPreview = ({
                   </div>
                 ))}
               </div>
-              <MoreItemsBadge count={cardRemaining} />
-            </>
+            </div>
+            </div>
           )}
         </div>
       </section>
     );
   };
 
-  // Style 3: Marquee - Auto scroll slider with tooltip
-  const renderMarqueeStyle = () => (
-    <section
-      className={cn("w-full border-y", device === 'mobile' ? 'py-10' : 'py-14')}
-      style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
-    >
-      <div className="container max-w-7xl mx-auto px-4 mb-8 text-center">
-        <SectionHeader />
-      </div>
-      {items.length === 0 ? <EmptyState /> : (
-        <TrustBadgesAutoScroll speed={0.6}>
-          {items.map((item) => (
-            <div 
-              key={item.id} 
-              className={cn("w-auto flex items-center justify-center px-4 transition-colors duration-200 cursor-pointer relative group", device === 'mobile' ? 'h-20' : 'h-24 md:h-28')}
-            >
-              {item.url ? (
-                <PreviewImage src={item.url} className="h-full w-auto object-contain max-w-[200px] transition-transform" alt={item.name ?? 'Chứng nhận'} />
-              ) : (
-                <div className="h-16 w-28 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center">
-                  <ImageIcon size={28} className="text-slate-400" />
+  // Style 3: Stack - trust proof strips with a strong SaaS rhythm
+  const renderStackStyle = () => {
+    const stackItems = visibleItems.filter((item) => item.url || item.name).slice(0, normalizedDesktopColumns);
+    const compactStack = normalizedDesktopColumns === 4;
+    return (
+      <section className={cn("w-full overflow-hidden bg-slate-50 dark:bg-slate-950", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')}>
+        <div className="container max-w-7xl mx-auto">
+          {sharedHeader}
+          {items.length === 0 ? <EmptyState /> : (
+            <div className={cn("grid items-stretch", device === 'mobile' ? 'grid-cols-1 gap-4' : (compactStack ? 'grid-cols-[0.46fr_1.9fr] gap-3' : 'grid-cols-[0.82fr_1.35fr] gap-4'))}>
+              <div className={cn('flex h-full flex-col border bg-white shadow-sm dark:bg-slate-900', compactStack ? 'p-3' : 'p-4 md:p-5', radiusClassName)} style={{ borderColor: renderConfig.showBorder ? colors.neutralBorder : 'transparent', boxShadow: '0 18px 45px rgba(15, 23, 42, 0.06)' }}>
+                <div className={compactStack ? 'mb-3' : 'mb-4'}>
+                  <TrustCue />
+                  <p className={cn('mt-3 font-bold', compactStack ? 'text-sm' : 'text-base')} style={{ color: colors.heading }}>{config?.stackHeading || DEFAULT_STACK_HEADING}</p>
+                  <p className={cn('mt-2 text-xs', compactStack ? 'leading-4' : 'leading-5')} style={{ color: colors.mutedText }}>{config?.stackDescription || DEFAULT_STACK_DESCRIPTION}</p>
                 </div>
-              )}
-              {item.name && (
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <BrandBadge text={item.name} variant="solid" brandColor={brandColor} secondary={secondary} />
+                <div className="space-y-2">
+                  {stackItems.map((item, index) => {
+                    const active = index === 0;
+                    return (
+                    <div
+                      key={item.id}
+                      className={cn('flex items-center border bg-white transition-all duration-300 dark:bg-slate-900', compactStack ? 'min-h-10 gap-2 px-2.5 py-2' : 'min-h-12 gap-3 px-3 py-2', innerRadiusClassName)}
+                      style={{
+                        borderColor: renderConfig.showBorder ? (active ? colors.sectionAccentBar : colors.neutralBorder) : 'transparent',
+                        boxShadow: active ? `0 12px 28px ${colors.sectionAccentBar}18` : '0 8px 20px rgba(15, 23, 42, 0.04)',
+                      }}
+                    >
+                      <span className={cn('shrink-0 font-semibold', compactStack ? 'w-4 text-xs' : 'w-5 text-sm')} style={{ color: active ? colors.sectionAccentBar : colors.subheading }}>{index + 1}</span>
+                      <span className={cn('min-w-0 flex-1 font-extrabold uppercase tracking-tight break-words', compactStack ? 'text-xs' : 'text-sm')} style={{ color: colors.heading }}>{item.name ?? `Chứng nhận ${index + 1}`}</span>
+                      <ArrowUpRight size={compactStack ? 14 : 17} style={{ color: active ? colors.sectionAccentBar : colors.mutedText }} />
+                    </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+              <div className={cn("grid h-full auto-rows-fr gap-3", device === 'mobile' ? 'grid-cols-1' : (normalizedDesktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4'))}>
+                {stackItems.map((item) => (
+                  <div key={item.id} className={cn('group flex h-full min-h-0 flex-col overflow-hidden border bg-white p-3 text-center shadow-sm transition-all duration-300 hover:-translate-y-1 dark:bg-slate-900', radiusClassName)} style={{ borderColor: renderConfig.showBorder ? colors.neutralBorder : 'transparent', boxShadow: '0 18px 45px rgba(15, 23, 42, 0.07)' }}>
+                    <div className={cn('mx-auto flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden', innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground }}>
+                      {item.url ? (
+                        <PreviewImage src={item.url} className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" alt={item.name ?? 'Chứng nhận'} />
+                      ) : (
+                        <Shield size={40} style={{ color: colors.subheading }} />
+                      )}
+                    </div>
+                    <p className="mt-3 min-h-9 text-xs font-extrabold uppercase tracking-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận'}</p>
+                    <div className="mx-auto mt-2 h-0.5 w-7 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </TrustBadgesAutoScroll>
-      )}
-    </section>
-  );
+          )}
+        </div>
+      </section>
+    );
+  };
 
   // Style 4: Framed Wall - Certificate frames hanging on wall
   const renderWallStyle = () => {
-    const wallItems = items.slice(0, device === 'mobile' ? 4 : 6);
-    const wallRemaining = items.length - wallItems.length;
+    const wallItems = visibleItems;
     return (
-      <section className={cn("w-full", device === 'mobile' ? 'py-10 px-3' : 'py-12 px-6')} style={{ backgroundColor: colors.neutralBackground }}>
+      <section className={cn("w-full", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')} style={{ backgroundColor: colors.neutralBackground }}>
         <div className="container max-w-7xl mx-auto">
-          <SectionHeader />
+          {sharedHeader}
           {items.length === 0 ? <EmptyState /> : (
             <>
               <div className={cn(
-                "grid gap-4 md:gap-6 justify-items-center",
-                device === 'mobile' ? 'grid-cols-2' : 'grid-cols-3'
+                "grid gap-4 md:gap-5",
+                responsiveGridClassName
               )}>
                 {wallItems.map((item) => (
                   <div 
                     key={item.id} 
                     className={cn(
-                      "group relative rounded-sm flex flex-col cursor-pointer transition-colors duration-200",
-                      device === 'mobile' ? 'w-[140px] h-[180px] p-2' : 'w-[160px] h-[210px] p-3'
+                      'group relative w-full flex flex-col cursor-pointer transition-all duration-300 hover:-translate-y-0.5',
+                      radiusClassName,
+                      device === 'mobile' ? 'min-h-[170px] p-2' : 'min-h-[210px] p-3'
                     )}
-                    style={{ border: `1px solid ${colors.neutralBorder}`, backgroundColor: colors.neutralSurface }}
+                    style={{ border: cardBorder, backgroundColor: colors.neutralSurface, boxShadow: '0 16px 40px rgba(15, 23, 42, 0.06)' }}
                   >
-                    <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-1 h-10 bg-slate-300"></div>
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }}></div>
-                    <div className="flex-1 flex items-center justify-center p-3 relative overflow-hidden" style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}` }}>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                      <TrustCue compact />
+                    </div>
+                    <div className={cn('flex items-center justify-center p-3 relative overflow-hidden', TRUST_BADGES_A4_ASPECT_CLASS, innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground, border: cardBorder }}>
                       {item.url ? (
                         <PreviewImage src={item.url} className="w-full h-full object-contain" alt={item.name ?? 'Chứng nhận'} />
                       ) : (
-                        <ImageIcon size={28} className="text-slate-300" />
+                        <Shield size={28} className="text-slate-300" />
                       )}
                     </div>
                     <div className={cn("flex items-center justify-center", device === 'mobile' ? 'h-7 mt-1' : 'h-8 mt-1')}>
-                      <span className={cn("font-semibold uppercase tracking-wider text-center truncate px-1", device === 'mobile' ? 'text-[8px]' : 'text-[9px]')} style={{ color: colors.subheading }}>
-                        {item.name ? (item.name.length > 18 ? item.name.slice(0, 16) + '...' : item.name) : 'Certificate'}
+                      <span className={cn("font-semibold text-center leading-tight break-words px-1", device === 'mobile' ? 'text-[10px]' : 'text-xs')} style={{ color: colors.subheading }}>
+                        {item.name ?? 'Chứng nhận'}
                       </span>
                     </div>
                   </div>
                 ))}
               </div>
-              <MoreItemsBadge count={wallRemaining} />
             </>
           )}
         </div>
@@ -405,63 +412,67 @@ export const TrustBadgesPreview = ({
 
   // Style 5: Carousel - Horizontal scroll với navigation arrows
   const renderCarouselStyle = () => {
-    const itemsPerView = device === 'mobile' ? 2 : (device === 'tablet' ? 3 : 4);
-    const maxIndex = Math.max(0, items.length - itemsPerView);
+    const itemsPerView = device === 'mobile'
+      ? (normalizedDesktopColumns === 3 ? 1 : 2)
+      : (device === 'tablet' ? (normalizedDesktopColumns === 3 ? 3 : 2) : normalizedDesktopColumns);
+    const snapCount = carouselApi?.scrollSnapList().length ?? 0;
     return (
-      <section className={cn("w-full bg-white dark:bg-slate-900", device === 'mobile' ? 'py-8 px-3' : 'py-12 px-6')}>
+      <section className={cn("w-full bg-white dark:bg-slate-900", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')}>
         <div className="container max-w-7xl mx-auto">
-          <SectionHeader />
+          {sharedHeader}
           {items.length === 0 ? <EmptyState /> : (
             <div className="relative">
-              {items.length > itemsPerView && (
+              {visibleItems.length > itemsPerView && (
                 <>
                   <button
-                    onClick={() =>{  setCarouselIndex(Math.max(0, carouselIndex - 1)); }}
-                    disabled={carouselIndex === 0}
-                    className={cn("absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors", carouselIndex === 0 ? 'opacity-40 cursor-not-allowed' : '')}
+                    type="button"
+                    onClick={() => carouselApi?.scrollPrev()}
+                    disabled={!canScrollPrev}
+                    className={cn("absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors", !canScrollPrev ? 'opacity-40 cursor-not-allowed' : '')}
                     style={{ border: `1px solid ${colors.sectionAccentBar}`, left: device === 'mobile' ? '-4px' : '-16px', backgroundColor: colors.neutralSurface }}
                   >
                     <ChevronLeft size={20} style={{ color: colors.heading }} />
                   </button>
                   <button
-                    onClick={() =>{  setCarouselIndex(Math.min(maxIndex, carouselIndex + 1)); }}
-                    disabled={carouselIndex >= maxIndex}
-                    className={cn("absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors", carouselIndex >= maxIndex ? 'opacity-40 cursor-not-allowed' : '')}
+                    type="button"
+                    onClick={() => carouselApi?.scrollNext()}
+                    disabled={!canScrollNext}
+                    className={cn("absolute top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center transition-colors", !canScrollNext ? 'opacity-40 cursor-not-allowed' : '')}
                     style={{ border: `1px solid ${colors.sectionAccentBar}`, right: device === 'mobile' ? '-4px' : '-16px', backgroundColor: colors.neutralSurface }}
                   >
                     <ChevronRight size={20} style={{ color: colors.heading }} />
                   </button>
                 </>
               )}
-              <div className={cn("overflow-hidden", device === 'mobile' ? 'mx-2' : 'mx-6')}>
-                <div className="flex transition-transform duration-300 ease-out gap-4" style={{ transform: `translateX(-${carouselIndex * (100 / itemsPerView)}%)` }}>
-                  {items.map((item) => (
+              <div className={cn("overflow-hidden", device === 'mobile' ? 'mx-2' : 'mx-6')} ref={carouselRef}>
+                <div className="flex gap-4">
+                {visibleItems.map((item) => (
                     <div 
                       key={item.id} 
                       className="flex-shrink-0 group cursor-pointer"
                       style={{ width: `calc(${100 / itemsPerView}% - ${(itemsPerView - 1) * 16 / itemsPerView}px)` }}
                     >
                       <div 
-                        className="aspect-square rounded-xl flex items-center justify-center transition-all duration-300"
-                        style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}`, padding: device === 'mobile' ? '12px' : '16px' }}
+                        className={cn(TRUST_BADGES_A4_ASPECT_CLASS, 'flex items-center justify-center transition-all duration-300 hover:-translate-y-0.5', radiusClassName)}
+                        style={{ backgroundColor: colors.neutralBackground, border: cardBorder, padding: device === 'mobile' ? '12px' : '16px' }}
                       >
                         {item.url ? (
                           <PreviewImage src={item.url} className="w-full h-full object-contain transition-transform duration-300" alt={item.name ?? 'Chứng nhận'} />
                         ) : (
-                          <ImageIcon size={32} className="text-slate-300" />
+                          <Shield size={32} className="text-slate-300" />
                         )}
                       </div>
                       {item.name && (
-                        <p className="text-center text-xs font-medium text-slate-500 mt-2 truncate px-1">{item.name}</p>
+                        <p className="text-center text-xs font-semibold leading-tight mt-2 break-words px-1" style={{ color: colors.subheading }}>{item.name}</p>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
-              {items.length > itemsPerView && (
+              {visibleItems.length > itemsPerView && (
                 <div className="flex justify-center gap-2 mt-6">
-                  {Array.from({ length: maxIndex + 1 }).map((_, idx) => (
-                    <button key={idx} onClick={() =>{  setCarouselIndex(idx); }} className={cn("h-2 rounded-full transition-all", carouselIndex === idx ? 'w-6' : 'w-2')} style={{ backgroundColor: carouselIndex === idx ? colors.subheading : colors.neutralBorder }} />
+                  {Array.from({ length: snapCount }).map((_, idx) => (
+                    <button key={idx} type="button" onClick={() => carouselApi?.scrollTo(idx)} className={cn("h-2 rounded-full transition-all", selectedSnap === idx ? 'w-6' : 'w-2')} style={{ backgroundColor: selectedSnap === idx ? colors.subheading : colors.neutralBorder }} />
                   ))}
                 </div>
               )}
@@ -472,67 +483,92 @@ export const TrustBadgesPreview = ({
     );
   };
 
-  // Style 6: Featured - 1 item nổi bật + grid nhỏ bên dưới
-  const renderFeaturedStyle = () => {
-    const featuredItem = items[0];
-    const otherItems = items.slice(1, device === 'mobile' ? 5 : 7);
-    const featuredRemaining = items.length - 1 - otherItems.length;
+  // Style 6: Seal - circular verification hub with satellite badges
+  const renderSealStyle = () => {
+    const sealItems = visibleItems;
+    const hubItems = sealItems.slice(0, 3);
     return (
-      <section className={cn("w-full bg-white dark:bg-slate-900", device === 'mobile' ? 'py-8 px-3' : 'py-12 px-6')}>
+      <section className={cn("relative w-full overflow-hidden bg-slate-50 dark:bg-slate-950", sectionSpacingClassName, device === 'mobile' ? 'px-3' : 'px-6')}>
+        <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full bg-white/70 blur-2xl dark:bg-slate-900/70" />
+        <div className="pointer-events-none absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-white/70 blur-2xl dark:bg-slate-900/70" />
         <div className="container max-w-7xl mx-auto">
-          <SectionHeader />
+          {sharedHeader}
           {items.length === 0 ? <EmptyState /> : (
-            <div className={cn("grid gap-5", device === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2')}>
-              {featuredItem && (
-                <div 
-                  className="group cursor-pointer rounded-2xl overflow-hidden transition-colors duration-200"
-                  style={{ backgroundColor: colors.iconBg, border: `1px solid ${colors.sectionAccentBar}` }}
-                >
-                  <div className={cn("flex items-center justify-center relative", device === 'mobile' ? 'aspect-[4/3] p-6' : 'aspect-[4/3] p-10')}>
-                    {featuredItem.url ? (
-                      <PreviewImage src={featuredItem.url} className="w-full h-full object-contain transition-transform duration-500" alt={featuredItem.name ?? 'Chứng nhận nổi bật'} />
-                    ) : (
-                      <ImageIcon size={64} className="text-slate-300" />
-                    )}
-                    <div className="absolute top-3 left-3">
-                      <BrandBadge text="NỔI BẬT" variant="solid" brandColor={brandColor} secondary={secondary} />
-                    </div>
-                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: colors.subheading, backgroundColor: colors.neutralSurface, border: `1px solid ${colors.neutralBorder}` }}>
-                        <ZoomIn size={20} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className={cn("border-t flex items-center justify-center", device === 'mobile' ? 'py-3 min-h-[48px]' : 'py-4')} style={{ borderColor: colors.neutralBorder }}>
-                    <span className="font-bold text-base" style={{ color: colors.heading }}>
-                      {featuredItem.name ?? 'Chứng nhận nổi bật'}
-                    </span>
-                  </div>
+            <div className={cn("relative grid items-center", device === 'mobile' ? 'grid-cols-1 gap-6' : 'grid-cols-[0.9fr_1.15fr] gap-10')}>
+              <div className="relative mx-auto flex aspect-square w-full max-w-[380px] items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-dashed opacity-60" style={{ borderColor: colors.neutralBorder }} />
+                <div className="absolute inset-8 rounded-full border border-dashed opacity-80" style={{ borderColor: colors.neutralBorder }} />
+                <div className="absolute inset-20 rounded-full border" style={{ borderColor: colors.sectionAccentBar }} />
+                <span className="absolute left-5 top-1/2 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                <span className="absolute right-8 top-1/4 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                <span className="absolute bottom-16 right-14 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                <div className="relative z-10 flex h-44 w-44 flex-col items-center justify-center rounded-full border bg-white text-center shadow-xl dark:bg-slate-900" style={{ borderColor: colors.sectionAccentBar }}>
+                  <Shield size={34} style={{ color: colors.heading }} />
+                  <span className="mt-4 text-xs font-bold uppercase tracking-[0.28em]" style={{ color: colors.mutedText }}>{config?.trustCueText || DEFAULT_TRUST_CUE_TEXT}</span>
+                  <div className="mt-3 h-0.5 w-8 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                  <span className="mt-3 text-5xl font-black leading-none" style={{ color: colors.heading }}>{sealItems.length}</span>
                 </div>
-              )}
-              <div className={cn("grid gap-3", device === 'mobile' ? 'grid-cols-2' : 'grid-cols-3')}>
-                {otherItems.map((item) => (
-                  <div 
-                    key={item.id} 
-                    className="group aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-colors duration-200"
-                    style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}`, padding: device === 'mobile' ? '10px' : '12px' }}
-                  >
-                    {item.url ? (
-                      <PreviewImage src={item.url} className="w-full h-full object-contain transition-transform duration-300" alt={item.name ?? 'Chứng nhận'} />
-                    ) : (
-                      <ImageIcon size={24} className="text-slate-300" />
-                    )}
-                  </div>
-                ))}
-                {featuredRemaining > 0 && (
-                  <div 
-                    className="aspect-square rounded-xl flex flex-col items-center justify-center cursor-pointer"
-                    style={{ backgroundColor: colors.accentSurface, border: `1px dashed ${colors.accentBorder}` }}
-                  >
-                    <Plus size={24} style={{ color: colors.subheading }} />
-                    <span className="text-sm font-bold mt-1" style={{ color: colors.subheading }}>+{featuredRemaining}</span>
+                {hubItems.map((item, index) => {
+                  const positions = [
+                    'left-1/2 top-0 -translate-x-1/2',
+                    'right-0 top-[36%]',
+                    'bottom-2 left-[62%] -translate-x-1/2',
+                  ];
+                  return (
+                    <div key={item.id} className={cn('absolute z-20 flex h-24 w-16 items-center justify-center border bg-white p-2 shadow-lg dark:bg-slate-900', radiusClassName, positions[index])} style={{ borderColor: colors.neutralBorder }}>
+                      {item.url ? (
+                        <PreviewImage src={item.url} className="h-full w-full object-contain" alt={item.name ?? 'Chứng nhận'} />
+                      ) : (
+                        <Shield size={28} style={{ color: colors.subheading }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="relative">
+                {sealItems.length > 3 && (
+                  <div className="absolute -right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => sealApi?.scrollPrev()}
+                      disabled={!canSealScrollPrev}
+                      className={cn('flex h-8 w-8 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity dark:bg-slate-900', !canSealScrollPrev && 'cursor-not-allowed opacity-40')}
+                      style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                    >
+                      <ChevronLeft className="rotate-90" size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => sealApi?.scrollNext()}
+                      disabled={!canSealScrollNext}
+                      className={cn('flex h-8 w-8 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity dark:bg-slate-900', !canSealScrollNext && 'cursor-not-allowed opacity-40')}
+                      style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                    >
+                      <ChevronRight className="rotate-90" size={16} />
+                    </button>
                   </div>
                 )}
+                <div className="h-[360px] overflow-hidden pr-2" ref={sealRef}>
+                  <div className="flex h-full flex-col gap-4">
+                    {sealItems.map((item, index) => (
+                      <div key={item.id} className={cn('group flex min-h-24 items-center gap-4 border bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-x-1 dark:bg-slate-900', radiusClassName)} style={{ borderColor: colors.neutralBorder, boxShadow: '0 18px 45px rgba(15, 23, 42, 0.06)' }}>
+                        <div className={cn('flex h-20 w-14 shrink-0 items-center justify-center overflow-hidden', innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground }}>
+                          {item.url ? (
+                            <PreviewImage src={item.url} className="h-full w-full object-contain" alt={item.name ?? 'Chứng nhận'} />
+                          ) : (
+                            <Shield size={26} style={{ color: colors.subheading }} />
+                          )}
+                        </div>
+                        <div className="h-12 w-px shrink-0" style={{ backgroundColor: colors.neutralBorder }} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-extrabold uppercase tracking-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận'}</p>
+                          <p className="text-xs" style={{ color: colors.mutedText }}>Bằng chứng tin cậy #{index + 1}</p>
+                        </div>
+                        <ArrowUpRight size={18} style={{ color: colors.heading }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -548,22 +584,22 @@ export const TrustBadgesPreview = ({
         <ImageIcon size={14} className="text-slate-400 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-slate-600 dark:text-slate-400">
           {previewStyle === 'grid' && (
-            <p><strong>300×300px</strong> (1:1) • Ảnh vuông, nền trong suốt PNG.</p>
+            <p><strong>A4 dọc</strong> (210:297) • Ảnh chứng nhận/bằng khen dạng giấy đứng.</p>
           )}
           {previewStyle === 'cards' && (
-            <p><strong>400×320px</strong> (5:4) • Ảnh chứng nhận rõ ràng.</p>
+            <p><strong>A4 dọc</strong> (210:297) • Ảnh chứng nhận rõ chữ, ưu tiên nền sáng.</p>
           )}
-          {previewStyle === 'marquee' && (
-            <p><strong>200×120px</strong> (5:3) • Logo/badge nhỏ gọn, auto scroll, hover pause.</p>
+          {previewStyle === 'stack' && (
+            <p><strong>A4 dọc</strong> (210:297) • Danh sách tín hiệu tin cậy dùng ảnh giấy đứng.</p>
           )}
           {previewStyle === 'wall' && (
-            <p><strong>250×300px</strong> (5:6) • Khung ảnh dọc như bằng khen treo tường.</p>
+            <p><strong>A4 dọc</strong> (210:297) • Khung ảnh dọc như bằng khen/chứng nhận treo tường.</p>
           )}
           {previewStyle === 'carousel' && (
-            <p><strong>280×280px</strong> (1:1) • Grid vuông, navigation arrows, responsive.</p>
+            <p><strong>A4 dọc</strong> (210:297) • Trượt nhiều chứng nhận dạng giấy đứng.</p>
           )}
-          {previewStyle === 'featured' && (
-            <p><strong>Featured: 600×450px</strong> (4:3) • <strong>Others: 200×200px</strong> (1:1) • 1 nổi bật + grid nhỏ.</p>
+          {previewStyle === 'seal' && (
+            <p><strong>A4 dọc</strong> (210:297) • Thumbnail chứng nhận giữ đúng tỷ lệ giấy đứng.</p>
           )}
         </div>
       </div>
@@ -587,10 +623,10 @@ export const TrustBadgesPreview = ({
         <BrowserFrame>
           {previewStyle === 'grid' && renderGridStyle()}
           {previewStyle === 'cards' && renderCardsStyle()}
-          {previewStyle === 'marquee' && renderMarqueeStyle()}
+          {previewStyle === 'stack' && renderStackStyle()}
           {previewStyle === 'wall' && renderWallStyle()}
           {previewStyle === 'carousel' && renderCarouselStyle()}
-          {previewStyle === 'featured' && renderFeaturedStyle()}
+          {previewStyle === 'seal' && renderSealStyle()}
         </BrowserFrame>
       </PreviewWrapper>
       {mode === 'dual' ? <ColorInfoPanel brandColor={brandColor} secondary={secondary} /> : null}
@@ -598,3 +634,4 @@ export const TrustBadgesPreview = ({
     </>
   );
 };
+

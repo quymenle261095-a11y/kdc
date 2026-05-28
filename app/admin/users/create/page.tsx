@@ -9,6 +9,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Loader2, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Card, CardContent, Input, Label } from '../../components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { ImageUploader } from '../../components/ImageUploader';
 import { useAdminAuth } from '../../auth/context';
 
@@ -241,14 +242,13 @@ function UserCreateForm({ token }: { token: string | null }) {
               </div>
             </div>
           </CardContent>
-          
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-b-lg flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/users'); }}>Hủy bỏ</Button>
-            <Button type="submit" variant="accent" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-              Tạo User
-            </Button>
-          </div>
+          <HomeComponentStickyFooter
+            isSubmitting={isSubmitting}
+            onCancel={() =>{  router.push('/admin/users'); }}
+            submitLabel="Tạo User"
+            submittingLabel="Đang tạo..."
+            disableSave={isSubmitting}
+          />
         </form>
       </Card>
     </div>

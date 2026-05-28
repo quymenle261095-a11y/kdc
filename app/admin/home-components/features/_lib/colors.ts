@@ -23,13 +23,6 @@ const normalizeHexColor = (value: string, fallback = DEFAULT_PRIMARY) => {
   return fallback;
 };
 
-const withAlpha = (hex: string, alpha: number) => {
-  const normalized = normalizeHexColor(hex, DEFAULT_PRIMARY);
-  const clamped = Math.max(0, Math.min(1, alpha));
-  const channel = Math.round(clamped * 255).toString(16).padStart(2, '0');
-  return `${normalized}${channel}`;
-};
-
 const getAutoSecondary = (primary: string) => {
   const parsed = safeParseOklch(primary);
   if (!parsed) {return DEFAULT_PRIMARY;}
@@ -43,6 +36,30 @@ const getAutoSecondary = (primary: string) => {
   }));
 };
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const getSolidTint = (hex: string, lightnessOffset: number, chromaScale = 0.28) => {
+  const parsed = safeParseOklch(hex);
+  if (!parsed) {return '#f8fafc';}
+
+  return formatHex(oklch({
+    ...parsed,
+    l: clamp(parsed.l + lightnessOffset, 0, 0.98),
+    c: clamp((parsed.c ?? 0) * chromaScale, 0.01, 0.08),
+  }));
+};
+
+const getSolidShade = (hex: string, lightnessOffset: number, chromaScale = 0.85) => {
+  const parsed = safeParseOklch(hex);
+  if (!parsed) {return '#0f172a';}
+
+  return formatHex(oklch({
+    ...parsed,
+    l: clamp(parsed.l - lightnessOffset, 0.18, 0.72),
+    c: clamp((parsed.c ?? 0) * chromaScale, 0.02, 0.18),
+  }));
+};
+
 export const resolveSecondaryForMode = (
   primary: string,
   secondary: string,
@@ -50,7 +67,7 @@ export const resolveSecondaryForMode = (
 ): string => {
   const normalizedPrimary = normalizeHexColor(primary, DEFAULT_PRIMARY);
   if (mode === 'single') {
-    return getAutoSecondary(normalizedPrimary);
+    return normalizedPrimary;
   }
 
   const normalizedSecondary = normalizeHexColor(secondary, '');
@@ -77,6 +94,14 @@ export interface FeaturesColorTokens {
   sectionRule: string;
   actionText: string;
   neutralBorder: string;
+  carouselBackground: string;
+  carouselCardBackground: string;
+  carouselCardBorder: string;
+  carouselText: string;
+  carouselMuted: string;
+  carouselIconBackground: string;
+  carouselIconText: string;
+  carouselNavText: string;
 }
 
 export const getFeaturesColorTokens = ({
@@ -96,20 +121,28 @@ export const getFeaturesColorTokens = ({
     secondary: secondaryResolved,
     sectionBackground: '#ffffff',
     cardBackground: '#ffffff',
-    cardBorder: withAlpha(normalizedPrimary, 0.18),
-    cardBorderHover: withAlpha(normalizedPrimary, 0.34),
+    cardBorder: '#e2e8f0',
+    cardBorderHover: '#cbd5e1',
     heading: normalizedPrimary,
     body: '#0f172a',
     muted: '#64748b',
-    badgeBackground: withAlpha(secondaryResolved, 0.14),
+    badgeBackground: getSolidTint(secondaryResolved, 0.38),
     badgeText: secondaryResolved,
-    iconChipBackground: withAlpha(normalizedPrimary, 0.14),
+    iconChipBackground: getSolidTint(normalizedPrimary, 0.38),
     iconChipText: normalizedPrimary,
-    timelineLine: withAlpha(secondaryResolved, 0.26),
+    timelineLine: getSolidTint(secondaryResolved, 0.28),
     timelineDot: secondaryResolved,
-    sectionRule: withAlpha(normalizedPrimary, 0.2),
+    sectionRule: '#e2e8f0',
     actionText: normalizedPrimary,
     neutralBorder: '#e2e8f0',
+    carouselBackground: getSolidTint(secondaryResolved, 0.36, 0.22),
+    carouselCardBackground: '#ffffff',
+    carouselCardBorder: '#e2e8f0',
+    carouselText: getSolidShade(normalizedPrimary, 0.16),
+    carouselMuted: '#475569',
+    carouselIconBackground: normalizedPrimary,
+    carouselIconText: '#ffffff',
+    carouselNavText: normalizedPrimary,
   };
 };
 

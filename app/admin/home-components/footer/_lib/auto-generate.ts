@@ -192,6 +192,7 @@ export const generateFooterConfigFromData = ({
       columns: columns.slice(0, 4).map((column, index) => ({ ...column, id: index + 1 })),
       copyright: `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`,
       description: siteTagline || `Thông tin minh bạch, chính sách rõ ràng và trải nghiệm đáng tin cậy tại ${siteName}.`,
+      logoName: siteName,
       showBctLogo: true,
     },
     summary: {

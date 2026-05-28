@@ -43,6 +43,7 @@ function ServicesContent() {
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: 'services' });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'services' });
   const deleteService = useMutation(api.services.remove);
+  const bulkClearBrokenMedia = useMutation(api.services.bulkClearBrokenMedia);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -53,6 +54,7 @@ function ServicesContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"services"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [isClearingBrokenMedia, setIsClearingBrokenMedia] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
     if (typeof window === 'undefined') {
       return ['category', 'price', 'status'];
@@ -143,6 +145,12 @@ function ServicesContent() {
   const categoryMap = useMemo(() => {
     const map: Record<string, string> = {};
     categoriesData?.forEach(cat => { map[cat._id] = cat.name; });
+    return map;
+  }, [categoriesData]);
+
+  const categorySlugMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    categoriesData?.forEach(cat => { map[cat._id] = cat.slug; });
     return map;
   }, [categoriesData]);
 
@@ -241,13 +249,31 @@ function ServicesContent() {
     }
   };
 
+  const handleBulkClearBrokenMedia = async () => {
+    setIsClearingBrokenMedia(true);
+    try {
+      const result = await bulkClearBrokenMedia({ ids: selectedIds });
+      applyManualSelection([]);
+      if (result.cleared > 0) {
+        toast.success(`Đã xóa ${result.cleared} ảnh lỗi trong ${result.updated} dịch vụ`);
+      } else {
+        toast.info('Không tìm thấy ảnh lỗi trong dịch vụ đã chọn');
+      }
+    } catch {
+      toast.error('Có lỗi khi xóa ảnh lỗi');
+    } finally {
+      setIsClearingBrokenMedia(false);
+    }
+  };
+
   const formatPrice = (price?: number) => {
     if (!price) {return '-';}
     return new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
   };
 
-  const openFrontend = (slug: string) => {
-    window.open(`/services/${slug}`, '_blank');
+  const openFrontend = (slug: string, categoryId: string) => {
+    const categorySlug = categorySlugMap[categoryId];
+    window.open(categorySlug ? `/${categorySlug}/${slug}` : `/services/${slug}`, '_blank');
   };
 
   return (
@@ -273,6 +299,8 @@ function ServicesContent() {
         onSelectPage={() =>{  applyManualSelection(paginatedServices.map(service => service._id)); }}
         onSelectAllResults={() =>{  setSelectionMode('all'); }}
         isSelectingAllResults={isSelectingAll}
+        onClearBrokenMedia={() =>{  void handleBulkClearBrokenMedia(); }}
+        isClearBrokenMediaLoading={isClearingBrokenMedia}
         onDelete={handleBulkDelete}
         onClearSelection={() =>{  applyManualSelection([]); }}
       />
@@ -378,7 +406,7 @@ function ServicesContent() {
                     )}
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" className="text-teal-600 hover:text-teal-700" title="Xem dịch vụ" onClick={() =>{  openFrontend(service.slug); }}><ExternalLink size={16}/></Button>
+                        <Button variant="ghost" size="icon" className="text-teal-600 hover:text-teal-700" title="Xem dịch vụ" onClick={() =>{  openFrontend(service.slug, service.categoryId); }}><ExternalLink size={16}/></Button>
                         <Link href={`/admin/services/${service._id}/edit`}><Button variant="ghost" size="icon"><Edit size={16}/></Button></Link>
                         <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(service._id)}><Trash2 size={16}/></Button>
                       </div>

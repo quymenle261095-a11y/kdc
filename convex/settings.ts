@@ -1,5 +1,8 @@
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import { removeOwnerFilesAndCleanup, resolveStorageIdsFromLegacyUrls, syncOwnerFilesAndCleanup } from "./lib/fileService";
 
 const settingDoc = v.object({
   _creationTime: v.number(),
@@ -8,6 +11,25 @@ const settingDoc = v.object({
   key: v.string(),
   value: v.any(),
 });
+
+const SETTING_STORAGE_ID_SUFFIX = "__storageId";
+
+const storageIdSettingKey = (key: string) => `${key}${SETTING_STORAGE_ID_SUFFIX}`;
+
+async function upsertSetting(
+  ctx: MutationCtx,
+  setting: { group: string; key: string; value: unknown }
+) {
+  const existing = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", setting.key))
+    .unique();
+  if (existing) {
+    await ctx.db.patch(existing._id, { group: setting.group, value: setting.value });
+    return existing._id;
+  }
+  return await ctx.db.insert("settings", setting);
+}
 
 // CRIT-001 FIX: Thêm limit để tránh memory overflow
 export const listAll = query({
@@ -46,15 +68,24 @@ export const getValue = query({
   returns: v.any(),
 });
 
-// HIGH-001 FIX: Batch load thay vì N+1 queries
+// HIGH-001 FIX: Chỉ đọc đúng key được yêu cầu bằng index by_key
 export const getMultiple = query({
   args: { keys: v.array(v.string()) },
   handler: async (ctx, args) => {
-    // Batch load tất cả settings 1 lần
-    const allSettings = await ctx.db.query("settings").take(500);
-    const settingsMap = new Map(allSettings.map(s => [s.key, s.value]));
-    
-    // Build result từ Map (O(1) lookup)
+    const uniqueKeys = [...new Set(args.keys)];
+    const settings = await Promise.all(uniqueKeys.map((key) =>
+      ctx.db
+        .query("settings")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique()
+    ));
+    const settingsMap = new Map<string, unknown>();
+    for (const setting of settings) {
+      if (setting) {
+        settingsMap.set(setting.key, setting.value);
+      }
+    }
+
     const result: Record<string, unknown> = {};
     args.keys.forEach(key => {
       result[key] = settingsMap.get(key) ?? null;
@@ -65,16 +96,49 @@ export const getMultiple = query({
 });
 
 export const set = mutation({
-  args: { group: v.string(), key: v.string(), value: v.any() },
+  args: {
+    group: v.string(),
+    key: v.string(),
+    storageId: v.optional(v.union(v.id("_storage"), v.null())),
+    value: v.any(),
+  },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("settings")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, { group: args.group, value: args.value });
-    } else {
-      await ctx.db.insert("settings", args);
+    const storageSetting = await ctx.db
+      .query("settings")
+      .withIndex("by_key", (q) => q.eq("key", storageIdSettingKey(args.key)))
+      .unique();
+    const previousStorageIds = [
+      typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
+      ...await resolveStorageIdsFromLegacyUrls(ctx, [
+        typeof existing?.value === "string" ? existing.value : null,
+      ], { folder: "settings", limit: 100 }),
+    ];
+
+    await upsertSetting(ctx, { group: args.group, key: args.key, value: args.value });
+
+    if (Object.prototype.hasOwnProperty.call(args, "storageId")) {
+      const nextStorageId = args.storageId ?? null;
+      if (nextStorageId) {
+        await upsertSetting(ctx, {
+          group: args.group,
+          key: storageIdSettingKey(args.key),
+          value: nextStorageId,
+        });
+      } else if (storageSetting) {
+        await ctx.db.delete(storageSetting._id);
+      }
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "value",
+        ownerId: args.key,
+        ownerTable: "settings",
+        purpose: `settings:${args.group}`,
+      }, [nextStorageId], {
+        previousStorageIds,
+      });
     }
     return null;
   },
@@ -83,7 +147,14 @@ export const set = mutation({
 
 // TICKET #1 FIX: Batch load thay vì N+1 queries
 export const setMultiple = mutation({
-  args: { settings: v.array(v.object({ group: v.string(), key: v.string(), value: v.any() })) },
+  args: {
+    settings: v.array(v.object({
+      group: v.string(),
+      key: v.string(),
+      storageId: v.optional(v.union(v.id("_storage"), v.null())),
+      value: v.any(),
+    })),
+  },
   handler: async (ctx, args) => {
     // Batch load tất cả settings hiện có 1 lần
     const allSettings = await ctx.db.query("settings").take(500);
@@ -95,9 +166,50 @@ export const setMultiple = mutation({
       if (existing) {
         await ctx.db.patch(existing._id, { group: setting.group, value: setting.value });
       } else {
-        await ctx.db.insert("settings", setting);
+        await ctx.db.insert("settings", {
+          group: setting.group,
+          key: setting.key,
+          value: setting.value,
+        });
       }
     }));
+
+    for (const setting of args.settings) {
+      if (!Object.prototype.hasOwnProperty.call(setting, "storageId")) {
+        continue;
+      }
+      const existing = settingsMap.get(setting.key);
+      const storageKey = storageIdSettingKey(setting.key);
+      const storageSetting = settingsMap.get(storageKey);
+      const previousStorageIds = [
+        typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
+        ...await resolveStorageIdsFromLegacyUrls(ctx, [
+          typeof existing?.value === "string" ? existing.value : null,
+        ], { folder: "settings", limit: 100 }),
+      ];
+      const nextStorageId = setting.storageId ?? null;
+      if (nextStorageId) {
+        if (storageSetting) {
+          await ctx.db.patch(storageSetting._id, { group: setting.group, value: nextStorageId });
+        } else {
+          await ctx.db.insert("settings", {
+            group: setting.group,
+            key: storageKey,
+            value: nextStorageId,
+          });
+        }
+      } else if (storageSetting) {
+        await ctx.db.delete(storageSetting._id);
+      }
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "value",
+        ownerId: setting.key,
+        ownerTable: "settings",
+        purpose: `settings:${setting.group}`,
+      }, [nextStorageId], {
+        previousStorageIds,
+      });
+    }
     return null;
   },
   returns: v.null(),
@@ -110,7 +222,23 @@ export const remove = mutation({
       .query("settings")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
+    const storageSetting = await ctx.db
+      .query("settings")
+      .withIndex("by_key", (q) => q.eq("key", storageIdSettingKey(args.key)))
+      .unique();
+    await removeOwnerFilesAndCleanup(ctx, {
+      ownerId: args.key,
+      ownerTable: "settings",
+    }, {
+      previousStorageIds: [
+        typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
+        ...await resolveStorageIdsFromLegacyUrls(ctx, [
+          typeof setting?.value === "string" ? setting.value : null,
+        ], { folder: "settings", limit: 100 }),
+      ],
+    });
     if (setting) {await ctx.db.delete(setting._id);}
+    if (storageSetting) {await ctx.db.delete(storageSetting._id);}
     return null;
   },
   returns: v.null(),
@@ -119,8 +247,26 @@ export const remove = mutation({
 export const removeMultiple = mutation({
   args: { keys: v.array(v.string()) },
   handler: async (ctx, args) => {
-    const keySet = new Set(args.keys);
+    const keySet = new Set([
+      ...args.keys,
+      ...args.keys.map(storageIdSettingKey),
+    ]);
     const settings = await ctx.db.query('settings').take(500);
+    for (const key of args.keys) {
+      const setting = settings.find(item => item.key === key);
+      const storageSetting = settings.find(item => item.key === storageIdSettingKey(key));
+      await removeOwnerFilesAndCleanup(ctx, {
+        ownerId: key,
+        ownerTable: "settings",
+      }, {
+        previousStorageIds: [
+          typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
+          ...await resolveStorageIdsFromLegacyUrls(ctx, [
+            typeof setting?.value === "string" ? setting.value : null,
+          ], { folder: "settings", limit: 100 }),
+        ],
+      });
+    }
     const toDelete = settings.filter(setting => keySet.has(setting.key));
     await Promise.all(toDelete.map(setting => ctx.db.delete(setting._id)));
     return null;
@@ -136,6 +282,23 @@ export const removeByGroup = mutation({
       .query("settings")
       .withIndex("by_group", (q) => q.eq("group", args.group))
       .collect();
+    for (const setting of settings) {
+      if (setting.key.endsWith(SETTING_STORAGE_ID_SUFFIX)) {
+        continue;
+      }
+      const storageSetting = settings.find(item => item.key === storageIdSettingKey(setting.key));
+      await removeOwnerFilesAndCleanup(ctx, {
+        ownerId: setting.key,
+        ownerTable: "settings",
+      }, {
+        previousStorageIds: [
+          typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
+          ...await resolveStorageIdsFromLegacyUrls(ctx, [
+            typeof setting.value === "string" ? setting.value : null,
+          ], { folder: "settings", limit: 100 }),
+        ],
+      });
+    }
     await Promise.all(settings.map( async setting => ctx.db.delete(setting._id)));
     return null;
   },

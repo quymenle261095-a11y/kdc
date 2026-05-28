@@ -33,7 +33,11 @@ export default function FooterCreatePage() {
   const brandMode: 'single' | 'dual' = mode === 'single' ? 'single' : 'dual';
 
   const onSubmit = (e: React.FormEvent) => {
-    void handleSubmit(e, footerConfig as unknown as Record<string, unknown>);
+    void handleSubmit(e, {
+      ...footerConfig,
+      noBorderRadius: footerConfig.cornerRadius === 'none',
+      noVerticalMargin: footerConfig.spacing === 'none',
+    } as unknown as Record<string, unknown>);
   };
 
   return (

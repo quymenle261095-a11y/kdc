@@ -74,7 +74,6 @@ export function OptionForm({
 
   useEffect(() => {
     if (initialValues) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({ ...buildDefaults(), ...initialValues });
     }
   }, [initialValues]);

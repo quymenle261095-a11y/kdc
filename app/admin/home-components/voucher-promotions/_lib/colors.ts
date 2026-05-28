@@ -174,6 +174,7 @@ export const calculateVoucherPromotionsAccentBalance = (
   const balanceByStyle: Record<VoucherPromotionsStyle, VoucherPromotionsAccentBalance> = {
     enterpriseCards: { primary: 28, secondary: 12, neutral: 60 },
     ticketHorizontal: { primary: 22, secondary: 18, neutral: 60 },
+    imageTicket: { primary: 24, secondary: 16, neutral: 60 },
     couponGrid: { primary: 25, secondary: 15, neutral: 60 },
     stackedBanner: { primary: 26, secondary: 14, neutral: 60 },
     carousel: { primary: 30, secondary: 10, neutral: 60 },
@@ -257,7 +258,7 @@ export const getVoucherPromotionsColorTokens = ({
   const badgeText = ensureAPCATextColor(badgeTextCandidate, badgeBg, 12, 700);
 
   const ctaOutlineBg = getSolidTint(primaryNormalized, 0.45, primaryNormalized);
-  const ctaOutlineBorder = getSolidTint(primaryNormalized, 0.35, primaryNormalized);
+  const ctaOutlineBorder = neutralBorder;
 
   const accentSoft = getSolidTint(secondaryResolved, 0.42, primaryNormalized);
   const carouselRing = getSolidTint(secondaryResolved, 0.28, primaryNormalized);
@@ -299,6 +300,7 @@ export const getVoucherPromotionsColorTokens = ({
     sectionAccentByStyle: {
       enterpriseCards: primaryNormalized,
       ticketHorizontal: secondaryResolved,
+      imageTicket: secondaryResolved,
       couponGrid: secondaryResolved,
       stackedBanner: secondaryResolved,
       carousel: primaryNormalized,

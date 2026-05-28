@@ -1,4 +1,5 @@
 export const HOMEPAGE_SNAPSHOT_VERSION = '2026-04-22.v1';
+export const HOMEPAGE_SNAPSHOT_VERSION_V2 = '2026-04-25.v2';
 
 export const SNAPSHOT_REQUIRED_TYPES = [
   'Blog',
@@ -82,6 +83,7 @@ export type HomepageSnapshotPayload = {
     componentOrder: string[];
     dependencies: SnapshotDependencyCapture;
     systemStyle: SnapshotSystemStylePayload;
+    demoBundle?: Record<string, unknown>;
   };
   index: {
     mediaIndex: Array<{

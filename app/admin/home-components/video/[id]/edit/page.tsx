@@ -1,39 +1,73 @@
 'use client';
 
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
-import { Loader2, Video as VideoIcon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { useFormSectionsState } from '../../../_shared/hooks/useFormSectionsState';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { VideoPreview } from '../../_components/VideoPreview';
 import { VideoForm } from '../../_components/VideoForm';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import {
   normalizeVideoConfig,
+  normalizeVideoCornerRadius,
+  normalizeVideoPlayButtonSize,
   normalizeVideoStyle,
 } from '../../_lib/constants';
 import type { VideoConfig } from '../../_types';
 
 const COMPONENT_TYPE = 'Video';
 
-export default function VideoEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type VideoEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function VideoEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: VideoEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
 
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = React.useState('');
@@ -53,20 +87,46 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
   }));
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [snapshot, setSnapshot] = React.useState<string>('');
+  
+  const { openSections: headerOpenSections, toggleSection: toggleHeaderSection } = useFormSectionsState(['header', 'display'], false);
+  const [hideHeader, setHideHeader] = React.useState(false);
+  const [showTitle, setShowTitle] = React.useState(true);
+  const [subtitle, setSubtitle] = React.useState('');
+  const [showSubtitle, setShowSubtitle] = React.useState(true);
+  const [headerAlign, setHeaderAlign] = React.useState<'left' | 'center' | 'right'>('left');
+  const [titleColorPrimary, setTitleColorPrimary] = React.useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = React.useState(false);
+  const [uppercaseText, setUppercaseText] = React.useState(false);
+  const [showBadge, setShowBadge] = React.useState(true);
+  const [badgeText, setBadgeText] = React.useState('');
+  const [spacing, setSpacing] = React.useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
 
   React.useEffect(() => {
     if (!component) {return;}
 
-    if (component.type !== 'Video') {
+    if (!snapshotComponent && component.type !== 'Video') {
       router.replace(`/admin/home-components/${id}/edit`);
       return;
     }
 
     const normalized = normalizeVideoConfig(component.config);
+    const headerConfig = extractSectionHeaderConfig(component.config);
 
     setTitle(component.title);
     setActive(component.active);
     setConfig(normalized);
+    
+    setHideHeader(headerConfig.hideHeader ?? false);
+    setShowTitle(headerConfig.showTitle ?? true);
+    setSubtitle(headerConfig.subtitle ?? '');
+    setShowSubtitle(headerConfig.showSubtitle ?? true);
+    setHeaderAlign(headerConfig.headerAlign ?? 'left');
+    setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+    setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+    setUppercaseText(headerConfig.uppercaseText ?? false);
+    setShowBadge(headerConfig.showBadge ?? true);
+    setBadgeText(headerConfig.badgeText ?? '');
+    setSpacing(normalized.spacing ?? DEFAULT_SECTION_SPACING);
 
     const nextSnapshot = JSON.stringify({
       active: component.active,
@@ -78,27 +138,47 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
   }, [component, id, router]);
 
   const selectedStyle = normalizeVideoStyle(config.style);
+  const cornerRadius = normalizeVideoCornerRadius(config.cornerRadius);
+  const playButtonSize = normalizeVideoPlayButtonSize(config.playButtonSize);
 
   const hasChanges = React.useMemo(() => {
     const current = JSON.stringify({
       active,
-      config: normalizeVideoConfig({ ...config, style: selectedStyle }),
+      config: normalizeVideoConfig({
+        ...config,
+        style: selectedStyle,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+        noVerticalMargin: spacing === 'none',
+        noBorderRadius: cornerRadius === 'none',
+      }),
       title,
     });
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-    const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
       ? customState.enabled !== initialCustom.enabled
         || customState.mode !== initialCustom.mode
         || customState.primary !== initialCustom.primary
         || resolvedCustomSecondary !== initialCustom.secondary
       : false;
-    const customFontChanged = showFontCustomBlock
+    const customFontChanged = enableTypeOverrides && showFontCustomBlock
       ? customFontState.enabled !== initialFontCustom.enabled
         || customFontState.fontKey !== initialFontCustom.fontKey
       : false;
 
     return snapshot !== '' && (current !== snapshot || customChanged || customFontChanged);
-  }, [active, config, selectedStyle, title, snapshot, customState, initialCustom, showCustomBlock]);
+  }, [active, config, selectedStyle, hideHeader, showTitle, subtitle, showSubtitle, headerAlign, titleColorPrimary, subtitleAboveTitle, uppercaseText, showBadge, badgeText, spacing, title, snapshot, customState, initialCustom, enableTypeOverrides, showCustomBlock]);
+
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,15 +188,35 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
     setIsSubmitting(true);
 
     try {
-      const normalized = normalizeVideoConfig({ ...config, style: selectedStyle });
-
-      await updateMutation({
-        id: id as Id<'homeComponents'>,
-        title,
-        active,
-        config: normalized,
+      const normalized = normalizeVideoConfig({ 
+        ...config, 
+        style: selectedStyle,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+        noVerticalMargin: spacing === 'none',
+        noBorderRadius: cornerRadius === 'none',
       });
-      if (showCustomBlock) {
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: normalized as Record<string, any>, title });
+      } else {
+        await updateMutation({
+          id: id as Id<'homeComponents'>,
+          title,
+          active,
+          config: normalized,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -126,7 +226,7 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -136,7 +236,7 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
 
       setConfig(normalized);
       setSnapshot(JSON.stringify({ title, active, config: normalized }));
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -144,7 +244,7 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -177,55 +277,74 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Video</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <VideoIcon size={20} />
-              Video
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={headerOpenSections.header}
+          onExpandedChange={(open) => toggleHeaderSection('header', open)}
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() => setActive(!active)}
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={headerOpenSections.display}
+            onOpenChange={(open) => toggleHeaderSection('display', open)}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+            cornerRadius={cornerRadius}
+            onCornerRadiusChange={(value) => setConfig((prev) => ({ ...prev, cornerRadius: value }))}
+          >
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Kích thước logo play</span>
+              <select
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                value={playButtonSize}
+                onChange={(event) => setConfig((prev) => ({ ...prev, playButtonSize: normalizeVideoPlayButtonSize(event.target.value) }))}
               >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5',
-                )} />
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
+                <option value="small">Nhỏ</option>
+                <option value="medium">Vừa</option>
+                <option value="large">Lớn</option>
+              </select>
+            </label>
+          </HomeComponentDisplaySettingsSection>
+        </div>
 
         <VideoForm
           config={config}
           onChange={setConfig}
           selectedStyle={selectedStyle}
+          defaultExpanded={false}
         />
 
         <div className="space-y-4">
-          {showCustomBlock && (
+          {enableTypeOverrides && showCustomBlock && (
             <TypeColorOverrideCard
               title="Màu custom cho Video"
               enabled={customState.enabled}
@@ -253,7 +372,7 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
               }))}
             />
           )}
-          {showFontCustomBlock && (
+          {enableTypeOverrides && showFontCustomBlock && (
             <TypeFontOverrideCard
               title="Font custom cho Video"
               enabled={customFontState.enabled}
@@ -274,14 +393,28 @@ export default function VideoEditPage({ params }: { params: Promise<{ id: string
             mode={effectiveColors.mode}
             fontStyle={fontStyle}
             fontClassName="font-active"
+            title={title}
+            subtitle={subtitle}
+            hideHeader={hideHeader}
+            showTitle={showTitle}
+            showSubtitle={showSubtitle}
+            headerAlign={headerAlign}
+            titleColorPrimary={titleColorPrimary}
+            subtitleAboveTitle={subtitleAboveTitle}
+            uppercaseText={uppercaseText}
+            showBadge={showBadge}
+            badgeText={badgeText}
+            spacing={spacing}
           />
         </div>
 
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => router.push('/admin/home-components')}
+          onCancel={() => router.push(backHref)}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
         />
       </form>
     </div>

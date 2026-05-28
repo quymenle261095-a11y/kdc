@@ -38,7 +38,7 @@ export const AutoScrollSlider = ({
 
     animationId = requestAnimationFrame(step);
     return () =>{  cancelAnimationFrame(animationId); };
-  }, [isPaused, speed]);
+  }, [isPaused, loopCount, speed]);
 
   return (
     <div

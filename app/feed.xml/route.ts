@@ -2,6 +2,7 @@ import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
 import { getSEOSettings, getSiteSettings } from '@/lib/get-settings';
 import { stripHtml, truncateText } from '@/lib/seo';
+import { buildDetailPath } from '@/lib/ia/route-mode';
 
 const escapeXml = (value: string): string => value
   .replace(/&/g, '&amp;')
@@ -12,10 +13,11 @@ const escapeXml = (value: string): string => value
 
 export async function GET(): Promise<Response> {
   const client = getConvexClient();
-  const [site, seo, posts] = await Promise.all([
+  const [site, seo, posts, categories] = await Promise.all([
     getSiteSettings(),
     getSEOSettings(),
     client.query(api.posts.listPublishedWithOffset, { limit: 50, offset: 0, sortBy: 'newest' }),
+    client.query(api.postCategories.listActive, {}),
   ]);
 
   const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
@@ -26,11 +28,18 @@ export async function GET(): Promise<Response> {
   const title = seo.seo_title || site.site_name || 'Website';
   const description = seo.seo_description || site.site_tagline || '';
 
+  const categoryMap = new Map(categories.map((category) => [category._id, category.slug]));
+
   const items = posts.map((post) => {
     const summary = post.metaDescription
       || post.excerpt
       || truncateText(stripHtml(post.content || ''), 160);
-    const postUrl = `${baseUrl}/posts/${post.slug}`;
+    const postUrl = `${baseUrl}${buildDetailPath({
+      categorySlug: categoryMap.get(post.categoryId),
+      mode: 'unified',
+      moduleKey: 'posts',
+      recordSlug: post.slug,
+    })}`;
     const publishedAt = new Date(post.publishedAt ?? post._creationTime).toUTCString();
 
     return [

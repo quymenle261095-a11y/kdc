@@ -76,7 +76,7 @@ const COMPONENT_TYPES = [
   { icon: Users, label: 'Đội ngũ', value: 'Team' },
   { icon: Zap, label: 'Tính năng', value: 'Features' },
   { icon: LayoutTemplate, label: 'Quy trình', value: 'Process' },
-  { icon: Users, label: 'Khách hàng (Marquee)', value: 'Clients' },
+  { icon: Users, label: 'Banner ảnh thương hiệu', value: 'Clients' },
   { icon: LayoutTemplate, label: 'Video / Media', value: 'Video' },
   { icon: AlertCircle, label: 'Khuyến mãi / Countdown', value: 'Countdown' },
   { icon: Tag, label: 'Voucher khuyến mãi', value: 'VoucherPromotions' },
@@ -89,8 +89,29 @@ interface GalleryItem extends ImageItem {
   name?: string;
 }
 
-export default function HomeComponentEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type LegacyEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type HomeComponentEditPageProps = {
+  backHref?: string;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: LegacyEditableComponent;
+};
+
+export default function HomeComponentEditPage({
+  backHref = '/admin/home-components',
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+}: HomeComponentEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const searchParams = useSearchParams();
   const { primary, secondary, mode } = useBrandColors();
@@ -98,7 +119,8 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
   const brandMode = modeSetting?.value === 'single' ? 'single' : 'dual';
   const brandColor = primary;
   
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<"homeComponents"> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<"homeComponents"> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
   // Query settings for Footer
   const siteLogo = useQuery(api.settings.getByKey, { key: 'site_logo' });
@@ -192,27 +214,27 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
   // Initialize form with component data
   useEffect(() => {
     if (component && !isInitialized) {
-      if (component.type === 'Partners') {
+      if (!snapshotComponent && component.type === 'Partners') {
         router.replace(`/admin/home-components/partners/${component._id}/edit`);
         return;
       }
-      if (component.type === 'CategoryProducts') {
+      if (!snapshotComponent && component.type === 'CategoryProducts') {
         router.replace(`/admin/home-components/category-products/${component._id}/edit`);
         return;
       }
-      if (component.type === 'ProductCategories') {
+      if (!snapshotComponent && component.type === 'ProductCategories') {
         router.replace(`/admin/home-components/product-categories/${component._id}/edit`);
         return;
       }
-      if (component.type === 'ProductList') {
+      if (!snapshotComponent && component.type === 'ProductList') {
         router.replace(`/admin/home-components/product-list/${component._id}/edit`);
         return;
       }
-      if (component.type === 'Gallery') {
+      if (!snapshotComponent && component.type === 'Gallery') {
         router.replace(`/admin/home-components/gallery/${component._id}/edit`);
         return;
       }
-      if (component.type === 'TrustBadges') {
+      if (!snapshotComponent && component.type === 'TrustBadges') {
         router.replace(`/admin/home-components/trust-badges/${component._id}/edit`);
         return;
       }
@@ -223,7 +245,8 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
       
       // Initialize config based on type
       switch (component.type) {
-        case 'Banner': {
+        case 'Banner':
+        case 'Hero': {
           setHeroSlides(config.slides?.map((s: {image: string, link: string}, i: number) => ({ id: `slide-${i}`, link: s.link || '', url: s.image })) ?? [{ id: 'slide-1', link: '', url: '' }]);
           setHeroStyle((config.style as HeroStyle) || 'slider');
           if (config.content) {
@@ -417,9 +440,10 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
       
       setIsInitialized(true);
     }
-  }, [component, isInitialized, brandColor, router]);
+  }, [component, isInitialized, brandColor, router, snapshotComponent]);
 
   useEffect(() => {
+    if (snapshotComponent) {return;}
     const typeParam = searchParams.get('type');
     if (typeParam?.toLowerCase() === 'hero') {
       router.replace(`/admin/home-components/hero/${id}/edit`);
@@ -496,9 +520,10 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
     if (typeParam?.toLowerCase() === 'voucher-promotions') {
       router.replace(`/admin/home-components/voucher-promotions/${id}/edit`);
     }
-  }, [id, router, searchParams]);
+  }, [id, router, searchParams, snapshotComponent]);
 
   useEffect(() => {
+    if (snapshotComponent) {return;}
     if (component?.type === 'Hero') {
       router.replace(`/admin/home-components/hero/${id}/edit`);
     }
@@ -574,7 +599,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
     if (component?.type === 'VoucherPromotions') {
       router.replace(`/admin/home-components/voucher-promotions/${id}/edit`);
     }
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   if (component === undefined) {
     return (
@@ -588,7 +613,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
     return <div className="text-center py-8 text-slate-500">Không tìm thấy component</div>;
   }
 
-  if (
+  if (!snapshotComponent && (
     [
       'hero', 'stats', 'casestudy', 'case-study', 'servicelist', 'productgrid', 'productlist', 'blog',
       'cta', 'faq', 'about', 'footer', 'services', 'benefits', 'testimonials', 'pricing', 'career', 'contact',
@@ -599,7 +624,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
       'CTA', 'FAQ', 'About', 'Footer', 'Services', 'Benefits', 'Testimonials', 'Pricing', 'Career', 'Contact',
       'SpeedDial', 'Team', 'Features', 'Process', 'Clients', 'Video', 'Countdown', 'VoucherPromotions'
     ].includes(component.type)
-  ) {
+  )) {
     return <div className="flex items-center justify-center h-64 text-slate-500">Đang chuyển hướng...</div>;
   }
 
@@ -608,10 +633,10 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
 
   const buildConfig = () => {
     switch (component.type) {
-      case 'Banner': {
-        const needsContent = ['fullscreen', 'split', 'parallax'].includes(heroStyle);
+      case 'Banner':
+      case 'Hero': {
         return { 
-          content: needsContent ? heroContent : undefined, 
+          content: heroContent, 
           slides: heroSlides.map(s => ({ image: s.url, link: s.link })),
           style: heroStyle,
         };
@@ -738,12 +763,17 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
     
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config: buildConfig(),
-        id: id as Id<"homeComponents">,
-        title,
-      });
+      const config = buildConfig();
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config, title });
+      } else {
+        await updateMutation({
+          active,
+          config,
+          id: id as Id<"homeComponents">,
+          title,
+        });
+      }
       toast.success('Đã cập nhật component');
     } catch (error) {
       toast.error('Lỗi khi cập nhật');
@@ -757,7 +787,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Component</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -799,7 +829,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
         </Card>
 
         {/* Banner slides */}
-        {component.type === 'Banner' && (
+        {(component.type === 'Banner' || component.type === 'Hero') && (
           <>
             <Card className="mb-6">
               <CardHeader>
@@ -817,12 +847,13 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
                   aspectRatio="banner"
                   columns={1}
                   showReorder={true}
+                  deleteMode="defer"
                   addButtonText="Thêm Banner"
                 />
               </CardContent>
             </Card>
-            {/* Form nội dung cho styles: fullscreen, split, parallax */}
-            {['fullscreen', 'split', 'parallax'].includes(heroStyle) && (
+            {/* Form nội dung cho styles: fullscreen, conquest, split, parallax */}
+            {['fullscreen', 'conquest', 'split', 'parallax'].includes(heroStyle) && (
               <Card className="mb-6">
                 <CardHeader>
                   <CardTitle className="text-base">Nội dung Hero ({heroStyle})</CardTitle>
@@ -864,7 +895,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
                         placeholder="VD: Khám phá ngay, Mua ngay..."
                       />
                     </div>
-                    {heroStyle === 'fullscreen' && (
+                    {(heroStyle === 'fullscreen' || heroStyle === 'conquest') && (
                       <div className="space-y-2">
                         <Label>Nút phụ</Label>
                         <Input 
@@ -1666,7 +1697,7 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
                     )}
                     <Input 
                       placeholder="Tính năng (phân cách bởi dấu phẩy)" 
-                      value={plan.features.join(', ')} 
+                      value={(plan.features || []).join(', ')} 
                       onChange={(e) =>{  setPricingPlans(pricingPlans.map(p => p.id === plan.id ? {...p, features: e.target.value.split(',').map(s => s.trim()).filter(Boolean)} : p)); }} 
                     />
                     <div className="grid grid-cols-2 gap-3">
@@ -2285,11 +2316,12 @@ export default function HomeComponentEditPage({ params }: { params: Promise<{ id
                   minItems={3}
                   maxItems={20}
                   aspectRatio="video"
-                  columns={4}
+                  columns={3}
                   showReorder={true}
                   addButtonText="Thêm logo"
                   emptyText="Chưa có logo nào (tối thiểu 3)"
-                  layout="horizontal"
+                  layout="vertical"
+                  deleteMode="defer"
                 />
               </CardContent>
             </Card>

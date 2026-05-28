@@ -1,6 +1,6 @@
 'use client';
 
-import type { GalleryItem } from '../_types';
+import type { GalleryItem, GalleryConfig } from '../_types';
 
 export const GALLERY_STYLES = [
   { id: 'spotlight' as const, label: 'Tiêu điểm' },
@@ -14,16 +14,31 @@ export const GALLERY_STYLES = [
 export const TRUST_BADGES_STYLES = [
   { id: 'grid' as const, label: 'Grid' },
   { id: 'cards' as const, label: 'Cards' },
-  { id: 'marquee' as const, label: 'Marquee' },
+  { id: 'stack' as const, label: 'Stack' },
   { id: 'wall' as const, label: 'Wall' },
   { id: 'carousel' as const, label: 'Carousel' },
-  { id: 'featured' as const, label: 'Featured' },
+  { id: 'seal' as const, label: 'Seal' },
 ];
 
 export const DEFAULT_GALLERY_ITEMS: GalleryItem[] = [
   { id: 'item-1', link: '', name: '', url: '' },
   { id: 'item-2', link: '', name: '', url: '' },
 ];
+
+export const DEFAULT_GALLERY_CONFIG: GalleryConfig = {
+  items: DEFAULT_GALLERY_ITEMS,
+  style: 'spotlight',
+  hideHeader: false,
+  showTitle: true,
+  subtitle: '',
+  showSubtitle: true,
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+};
 
 type GalleryMarqueeItemLike = {
   url?: string;

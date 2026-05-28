@@ -143,10 +143,6 @@ export const getPartnersColors = (
   const neutralSubtle = '#f1f5f9';
 
   const primarySoft = shiftLightness(primaryResolved, 0.42, primaryResolved);
-  const _primarySubtle = shiftLightness(primaryResolved, 0.5, primaryResolved);
-  const _secondarySoft = shiftLightness(secondaryResolved, 0.42, primaryResolved);
-  const secondarySubtle = shiftLightness(secondaryResolved, 0.5, primaryResolved);
-  const secondaryStrong = shiftLightness(secondaryResolved, 0.3, primaryResolved);
 
   return {
     primary: primaryResolved,
@@ -159,15 +155,15 @@ export const getPartnersColors = (
     neutralMuted,
     neutralBorder,
     neutralSubtle,
-    itemBorder: secondarySubtle,
+    itemBorder: neutralBorder,
     itemBg: neutralSurface,
     itemBgMuted: neutralSubtle,
     badgeBg: neutralSurface,
     badgeBorder: neutralBorder,
     badgeText: neutralMuted,
-    remainingBg: secondarySubtle,
-    remainingBorder: secondaryStrong,
-    remainingText: getAPCATextColor(secondarySubtle, 12, 700),
+    remainingBg: neutralSubtle,
+    remainingBorder: neutralBorder,
+    remainingText: '#0f172a',
     navBorder: shiftLightness(primaryResolved, 0.35, primaryResolved),
     navText: ensureAPCATextColor(primaryResolved, neutralSurface, 14, 500),
     navBg: neutralSurface,

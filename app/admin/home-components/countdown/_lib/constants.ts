@@ -1,4 +1,6 @@
 import type { CountdownConfigState, CountdownStyle } from '../_types';
+import { DEFAULT_SECTION_SPACING } from '../../_shared/types/sectionSpacing';
+import { DEFAULT_COUNTDOWN_CORNER_RADIUS } from '../_types';
 
 export const COUNTDOWN_STYLES: Array<{ id: CountdownStyle; label: string }> = [
   { id: 'banner', label: 'Banner' },
@@ -24,5 +26,7 @@ export const DEFAULT_COUNTDOWN_CONFIG: CountdownConfigState = {
   showHours: true,
   showMinutes: true,
   showSeconds: true,
+  spacing: DEFAULT_SECTION_SPACING,
+  cornerRadius: DEFAULT_COUNTDOWN_CORNER_RADIUS,
   style: 'banner',
 };

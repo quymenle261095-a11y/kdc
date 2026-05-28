@@ -53,6 +53,64 @@ export const listActive = query({
   returns: v.array(optionDoc),
 });
 
+export const listActiveWithValues = query({
+  args: {},
+  handler: async (ctx) => {
+    const options = await ctx.db
+      .query("productOptions")
+      .withIndex("by_active", (q) => q.eq("active", true))
+      .collect();
+
+    const result = await Promise.all(
+      options.map(async (option) => {
+        const values = await ctx.db
+          .query("productOptionValues")
+          .withIndex("by_option_active", (q) => q.eq("optionId", option._id).eq("active", true))
+          .collect();
+        return {
+          ...option,
+          values: values.sort((a, b) => a.order - b.order),
+        };
+      })
+    );
+
+    return result;
+  },
+  returns: v.array(
+    v.object({
+      _creationTime: v.number(),
+      _id: v.id("productOptions"),
+      active: v.boolean(),
+      compareUnit: v.optional(v.string()),
+      displayType,
+      inputType: v.optional(inputType),
+      isPreset: v.boolean(),
+      name: v.string(),
+      order: v.number(),
+      showPriceCompare: v.optional(v.boolean()),
+      slug: v.string(),
+      unit: v.optional(v.string()),
+      values: v.array(
+        v.object({
+          _creationTime: v.number(),
+          _id: v.id("productOptionValues"),
+          active: v.boolean(),
+          badge: v.optional(v.string()),
+          colorCode: v.optional(v.string()),
+          image: v.optional(v.string()),
+          isLifetime: v.optional(v.boolean()),
+          label: v.optional(v.string()),
+          numericValue: v.optional(v.number()),
+          optionId: v.id("productOptions"),
+          order: v.number(),
+          value: v.string(),
+        })
+      ),
+    })
+  ),
+});
+
+
 export const listByIds = query({
   args: { ids: v.array(v.id("productOptions")) },
   handler: async (ctx, args) => {

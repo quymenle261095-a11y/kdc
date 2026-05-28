@@ -2,9 +2,24 @@
 
 import React from 'react';
 import { AdminImage as Image } from '@/app/admin/components/AdminImage';
-import { Check, GripVertical, Package, Search, X } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../components/ui';
-import type { ProductGridSortBy } from '../_types';
+import { Check, GripVertical, Layers, Package, Plus, RotateCcw, Search, X } from 'lucide-react';
+import { useDemoItemList } from '../../_shared/hooks/useDemoItemList';
+import { DemoItemRowShell } from '../../_shared/components/DemoItemRowShell';
+import { DemoPrimaryFields } from '../../_shared/components/DemoPrimaryFields';
+import { Button, Input, Label, cn } from '../../../components/ui';
+import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
+import type { ProductGridSortBy, ProductGridSelectionMode } from '../_types';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
+import type { DemoProductItem, ProductListCardRadius } from '../../product-list/_types';
+import { AiDemoProductsImport } from '../../product-list/_components/AiDemoProductsImport';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+
+import { DEFAULT_GRID_DEMO_PRODUCTS } from '../_lib/constants';
+
+export const DEFAULT_DEMO_PRODUCTS: DemoProductItem[] = DEFAULT_GRID_DEMO_PRODUCTS;
 
 export interface ProductGridProductItem {
   _id: string;
@@ -13,6 +28,13 @@ export interface ProductGridProductItem {
   price?: number | null;
   salePrice?: number | null;
   hasVariants?: boolean;
+}
+
+export interface CategoryTabItem {
+  _id: string;
+  name: string;
+  image?: string;
+  active: boolean;
 }
 
 export const ProductGridForm = ({
@@ -24,67 +46,216 @@ export const ProductGridForm = ({
   setSelectionMode,
   selectedProductIds,
   setSelectedProductIds,
-  subTitle,
-  setSubTitle,
-  sectionTitle,
-  setSectionTitle,
   productSearchTerm,
   setProductSearchTerm,
   selectedProducts,
   filteredProducts,
   isLoading,
+  demoProducts,
+  setDemoProducts,
+  categoryTabIds,
+  setCategoryTabIds,
+  allCategories,
+  desktopColumns = 4,
+  onDesktopColumnsChange,
+  spacing,
+  setSpacing,
+  cardRadius,
+  setCardRadius,
+  defaultExpanded = true,
+  className,
 }: {
   itemCount: number;
   setItemCount: (value: number) => void;
   sortBy: ProductGridSortBy;
   setSortBy: (value: ProductGridSortBy) => void;
-  selectionMode: 'auto' | 'manual';
-  setSelectionMode: (value: 'auto' | 'manual') => void;
+  selectionMode: ProductGridSelectionMode;
+  setSelectionMode: (value: ProductGridSelectionMode) => void;
   selectedProductIds: string[];
   setSelectedProductIds: React.Dispatch<React.SetStateAction<string[]>>;
-  subTitle: string;
-  setSubTitle: (value: string) => void;
-  sectionTitle: string;
-  setSectionTitle: (value: string) => void;
   productSearchTerm: string;
   setProductSearchTerm: (value: string) => void;
   selectedProducts: ProductGridProductItem[];
   filteredProducts: ProductGridProductItem[];
   isLoading: boolean;
+  demoProducts: DemoProductItem[];
+  setDemoProducts: React.Dispatch<React.SetStateAction<DemoProductItem[]>>;
+  categoryTabIds: string[];
+  setCategoryTabIds: React.Dispatch<React.SetStateAction<string[]>>;
+  allCategories?: CategoryTabItem[];
+  desktopColumns?: 3 | 4 | 5 | 6;
+  onDesktopColumnsChange?: (cols: 3 | 4 | 5 | 6) => void;
+  spacing?: SectionSpacing;
+  setSpacing?: (value: SectionSpacing) => void;
+  cardRadius?: ProductListCardRadius;
+  setCardRadius?: (value: ProductListCardRadius) => void;
+  defaultExpanded?: boolean;
+  className?: string;
 }) => {
-  return (
-    <>
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Cấu hình hiển thị</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề phụ (badge)</Label>
-              <Input
-                value={subTitle}
-                onChange={(e) =>{  setSubTitle(e.target.value); }}
-                placeholder="VD: Bộ sưu tập, Sản phẩm hot..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Tiêu đề chính</Label>
-              <Input
-                value={sectionTitle}
-                onChange={(e) =>{  setSectionTitle(e.target.value); }}
-                placeholder="VD: Sản phẩm nổi bật, Bán chạy nhất..."
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
+    ['settings', 'columns', 'tabs', 'source'],
+    defaultExpanded
+  );
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Nguồn dữ liệu</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+  const selectedCategories = allCategories
+    ? categoryTabIds.map(id => allCategories.find(c => c._id === id)).filter(Boolean) as CategoryTabItem[]
+    : [];
+
+  const { add: addDemoProduct, update: updateDemoProduct, remove: removeDemoProduct, loadDefault: loadDefaultDemo } = useDemoItemList(
+    demoProducts,
+    setDemoProducts,
+    {
+      createEmpty: () => ({ name: '', image: '', price: '', originalPrice: '', description: '', category: '', tag: '' as const, link: '' }),
+      defaults: DEFAULT_DEMO_PRODUCTS,
+    },
+  );
+
+  return (
+    <div className={cn('mb-6', className)}>
+      <AiDemoProductsImport onApply={setDemoProducts} />
+      <FormSectionsToggleAllButton
+        hasClosedSection={hasClosedSection}
+        onToggleAll={handleToggleAll}
+      />
+      <div className="space-y-3">
+      {spacing && setSpacing && cardRadius && setCardRadius ? (
+        <HomeComponentDisplaySettingsSection
+            open={openSections.settings}
+            onOpenChange={(open) => toggleSection('settings', open)}
+            cornerRadius={cardRadius}
+            onCornerRadiusChange={setCardRadius}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+          />
+      ) : null}
+
+      {/* ── Số cột desktop ── */}
+      {onDesktopColumnsChange && (
+        <div>
+          <SubSection
+            icon={Layers}
+            title="Số cột desktop"
+            open={openSections.columns}
+            onOpenChange={(open) => toggleSection('columns', open)}
+          >
+            <div className="grid grid-cols-4 gap-2">
+              {([3, 4, 5, 6] as const).map((option) => {
+                const selected = desktopColumns === option;
+                const info = option === 3 ? 'Tablet 3 · Mobile 1' : option === 4 ? 'Tablet 2 · Mobile 2' : option === 5 ? 'Tablet 3 · Mobile 2' : 'Tablet 3 · Mobile 3';
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => onDesktopColumnsChange(option)}
+                    className={cn(
+                      'py-2 rounded-md border text-xs transition-colors text-center',
+                      selected
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                    )}
+                  >
+                    <div className="font-semibold">{option} cột</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{info}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </SubSection>
+        </div>
+      )}
+
+      {/* ── Tab danh mục ── */}
+      <div>
+        <SubSection
+          icon={Layers}
+          title="Tab danh mục"
+          open={openSections.tabs}
+          onOpenChange={(open) => toggleSection('tabs', open)}
+        >
+        <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Chọn danh mục hiển thị dưới dạng nút lọc phía trên lưới sản phẩm
+            </p>
+            {/* Selected tabs */}
+            {selectedCategories.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Đã chọn ({selectedCategories.length})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategories.map(cat => (
+                    <span
+                      key={cat._id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                    >
+                      {cat.name}
+                      <button
+                        type="button"
+                        onClick={() => setCategoryTabIds(prev => prev.filter(id => id !== cat._id))}
+                        className="hover:text-red-500 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Available categories */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Chọn danh mục hiển thị</Label>
+              {!allCategories ? (
+                <p className="text-xs text-slate-400">Đang tải danh mục...</p>
+              ) : allCategories.length === 0 ? (
+                <p className="text-xs text-slate-400">Chưa có danh mục sản phẩm nào</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {allCategories.filter(cat => cat.active).map(cat => {
+                    const isSelected = categoryTabIds.includes(cat._id);
+                    return (
+                      <button
+                        key={cat._id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setCategoryTabIds(prev => prev.filter(id => id !== cat._id));
+                          } else {
+                            setCategoryTabIds(prev => [...prev, cat._id]);
+                          }
+                        }}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                          isSelected
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:border-blue-600'
+                        )}
+                      >
+                        {isSelected && <Check size={12} />}
+                        {cat.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {selectedCategories.length === 0 && allCategories && allCategories.length > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Chưa chọn danh mục — sẽ hiển thị tất cả danh mục active
+              </p>
+            )}
+        </div>
+        </SubSection>
+      </div>
+
+      {/* ── Nguồn dữ liệu ── */}
+      <div>
+        <SubSection
+          icon={Package}
+          title="Nguồn dữ liệu"
+          open={openSections.source}
+          onOpenChange={(open) => toggleSection('source', open)}
+        >
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label>Chế độ chọn sản phẩm</Label>
             <div className="flex gap-2">
@@ -112,11 +283,25 @@ export const ProductGridForm = ({
               >
                 Chọn thủ công
               </button>
+              <button
+                type="button"
+                onClick={() =>{  setSelectionMode('demo'); }}
+                className={cn(
+                  "flex-1 py-2.5 px-4 rounded-lg border text-sm font-medium transition-all",
+                  selectionMode === 'demo'
+                    ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                    : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                )}
+              >
+                Demo
+              </button>
             </div>
             <p className="text-xs text-slate-500">
               {selectionMode === 'auto'
                 ? 'Hiển thị sản phẩm tự động theo số lượng và sắp xếp'
-                : 'Chọn từng sản phẩm cụ thể để hiển thị'}
+                : selectionMode === 'manual'
+                  ? 'Chọn từng sản phẩm cụ thể để hiển thị'
+                  : 'Nhập dữ liệu demo trực tiếp, không cần sản phẩm thật'}
             </p>
           </div>
 
@@ -239,9 +424,80 @@ export const ProductGridForm = ({
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-    </>
+
+          {/* Demo mode - Inline demo items */}
+          {selectionMode === 'demo' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Sản phẩm demo ({demoProducts.length})</Label>
+                <div className="flex gap-1.5">
+                  <Button type="button" variant="outline" size="sm" onClick={loadDefaultDemo}>
+                    <RotateCcw size={14} className="mr-1" /> Mặc định
+                  </Button>
+                  <AiDemoProductsImport onApply={setDemoProducts} />
+                  <Button type="button" variant="outline" size="sm" onClick={addDemoProduct}>
+                    <Plus size={14} className="mr-1" /> Thêm
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {demoProducts.map((item, index) => (
+                  <DemoItemRowShell
+                    key={item.id}
+                    index={index}
+                    image={item.image}
+                    placeholderIcon={<Package size={12} />}
+                    onRemove={() => removeDemoProduct(item.id)}
+                    footer={
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input placeholder="Giá gốc (tùy chọn)" value={item.originalPrice ?? ''} className="h-7 text-xs"
+                          onChange={(e) => updateDemoProduct(item.id, { originalPrice: e.target.value })} />
+                        <Input placeholder="Danh mục" value={item.category ?? ''} className="h-7 text-xs"
+                          onChange={(e) => updateDemoProduct(item.id, { category: e.target.value })} />
+                        <SettingsImageUploader
+                          label="Ảnh sản phẩm"
+                          value={item.image ?? ''}
+                          onChange={(url) => updateDemoProduct(item.id, { image: url ?? '' })}
+                          folder="home-components/product-grid"
+                          naming={{ entityName: item.name || 'demo-product', field: 'image', index: index + 1 }}
+                          previewSize="sm"
+                        />
+                      </div>
+                    }
+                  >
+                    <DemoPrimaryFields
+                      name={item.name}
+                      namePlaceholder="Tên sản phẩm *"
+                      onNameChange={v => updateDemoProduct(item.id, { name: v })}
+                      link={item.link ?? ''}
+                      onLinkChange={v => updateDemoProduct(item.id, { link: v })}
+                    />
+                    <Input placeholder="Giá (VD: 350.000đ)" value={item.price ?? ''} className="h-8 w-28 text-xs shrink-0"
+                      onChange={(e) => updateDemoProduct(item.id, { price: e.target.value })} />
+                  </DemoItemRowShell>
+                ))}
+              </div>
+              {demoProducts.length === 0 && (
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 py-8 text-center dark:border-slate-700">
+                  <Package size={24} className="mb-2 text-slate-300" />
+                  <p className="text-sm text-slate-500 mb-3">Chưa có sản phẩm demo</p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="gap-1" onClick={loadDefaultDemo}>
+                      <RotateCcw size={12} /> Tải mẫu
+                    </Button>
+                    <AiDemoProductsImport buttonClassName="h-9" onApply={setDemoProducts} />
+                    <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addDemoProduct}>
+                      <Plus size={12} /> Thêm mới
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        </SubSection>
+      </div>
+      </div>
+    </div>
   );
 };
-

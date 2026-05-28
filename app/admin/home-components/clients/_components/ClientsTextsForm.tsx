@@ -10,7 +10,7 @@ interface ClientsTextsFormProps {
   onUpdateText: (key: string, value: string) => void;
 }
 
-const TEXT_FIELDS: Record<ClientsStyle, Array<{ key: string; label: string; placeholder: string }>> = {
+const TEXT_FIELDS: Record<string, Array<{ key: string; label: string; placeholder: string }>> = {
   simpleGrid: [
     { key: 'subtitle', label: 'Subtitle', placeholder: 'Được tin tưởng bởi' },
     { key: 'heading', label: 'Heading', placeholder: 'Khách hàng tin tưởng' },

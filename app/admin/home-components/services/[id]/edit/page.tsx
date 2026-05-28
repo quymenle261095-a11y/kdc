@@ -1,16 +1,24 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { AlertTriangle, Briefcase, Eye, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Label, cn } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
+import { useFormSectionsState } from '../../../_shared/hooks/useFormSectionsState';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
@@ -19,13 +27,15 @@ import { ServicesPreview } from '../../_components/ServicesPreview';
 import { DEFAULT_SERVICES_CONFIG } from '../../_lib/constants';
 import { getServicesValidationResult } from '../../_lib/colors';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import { normalizeServicesItemsForEditor, toServicesPersistItems } from '../../_lib/items';
-import type { ServiceEditorItem, ServicesStyle } from '../../_types';
+import { getServicesDesktopColumns, getServicesMediaAlign, getServicesMediaPlacement, normalizeServicesItemsForEditor, toServicesPersistItems } from '../../_lib/items';
+import { DEFAULT_SERVICES_CORNER_RADIUS, DEFAULT_SERVICES_SPACING, normalizeServicesCornerRadius, normalizeServicesSpacing, type ServiceEditorItem, type ServiceItemMediaAlign, type ServiceItemMediaPlacement, type ServicesCornerRadius, type ServicesSpacing, type ServicesStyle } from '../../_types';
 
 const getDefaultEditorItems = (): ServiceEditorItem[] => {
   return DEFAULT_SERVICES_CONFIG.items.map((item, index) => ({
     id: 1_000_000 + index,
+    mediaType: item.mediaType ?? 'icon',
     icon: item.icon,
+    image: item.image ?? '',
     title: item.title,
     description: item.description,
   }));
@@ -33,44 +43,129 @@ const getDefaultEditorItems = (): ServiceEditorItem[] => {
 
 const COMPONENT_TYPE = 'Services';
 
-export default function ServicesEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type ServicesEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function ServicesEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: ServicesEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
-  const [servicesItems, setServicesItems] = useState<ServiceEditorItem[]>(getDefaultEditorItems);
+  const {
+    state: servicesItems,
+    set: setServicesItems,
+    undo: undoservicesItems,
+    redo: redoservicesItems,
+    canUndo: canUndoservicesItems,
+    canRedo: canRedoservicesItems,
+  } = useUndoRedo<ServiceEditorItem[]>(getDefaultEditorItems, { maxHistory: 15 });
   const [style, setStyle] = useState<ServicesStyle>('elegantGrid');
+  const [mediaPlacement, setMediaPlacement] = useState<ServiceItemMediaPlacement>(DEFAULT_SERVICES_CONFIG.mediaPlacement ?? 'top');
+  const [mediaAlign, setMediaAlign] = useState<ServiceItemMediaAlign>(DEFAULT_SERVICES_CONFIG.mediaAlign ?? 'center');
+  const [desktopColumns, setDesktopColumns] = useState<3 | 4>(DEFAULT_SERVICES_CONFIG.desktopColumns ?? 3);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
 
+  // Header config state
+  const { openSections, toggleSection } = useFormSectionsState(['header', 'display'], false);
+  const [hideHeader, setHideHeader] = useState(DEFAULT_SERVICES_CONFIG.hideHeader ?? false);
+  const [showTitle, setShowTitle] = useState(DEFAULT_SERVICES_CONFIG.showTitle !== false);
+  const [subtitle, setSubtitle] = useState(DEFAULT_SERVICES_CONFIG.subtitle ?? '');
+  const [showSubtitle, setShowSubtitle] = useState(DEFAULT_SERVICES_CONFIG.showSubtitle !== false);
+  const [headerAlign, setHeaderAlign] = useState<ServiceItemMediaAlign>(DEFAULT_SERVICES_CONFIG.headerAlign ?? 'left');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(DEFAULT_SERVICES_CONFIG.titleColorPrimary ?? false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(DEFAULT_SERVICES_CONFIG.subtitleAboveTitle ?? false);
+  const [uppercaseText, setUppercaseText] = useState(DEFAULT_SERVICES_CONFIG.uppercaseText ?? false);
+  const [showBadge, setShowBadge] = useState(DEFAULT_SERVICES_CONFIG.showBadge ?? true);
+  const [badgeText, setBadgeText] = useState(DEFAULT_SERVICES_CONFIG.badgeText ?? '');
+  const [spacing, setSpacing] = useState<ServicesSpacing>(DEFAULT_SERVICES_CONFIG.spacing ?? DEFAULT_SERVICES_SPACING);
+  const [cornerRadius, setCornerRadius] = useState<ServicesCornerRadius>(DEFAULT_SERVICES_CONFIG.cornerRadius ?? DEFAULT_SERVICES_CORNER_RADIUS);
+
   useEffect(() => {
     if (!component) {return;}
-    if (component.type !== 'Services') {
+    if (!snapshotComponent && component.type !== 'Services') {
       router.replace(`/admin/home-components/${id}/edit`);
       return;
     }
 
-    const rawConfig = (component.config ?? {}) as { items?: unknown; style?: ServicesStyle };
+    const rawConfig = (component.config ?? {}) as { items?: unknown; style?: ServicesStyle; showTitle?: unknown; subtitle?: unknown; showSubtitle?: unknown; headerAlign?: unknown; mediaPlacement?: unknown; mediaAlign?: unknown; desktopColumns?: unknown; cornerRadius?: unknown; noBorderRadius?: unknown; noVerticalMargin?: unknown };
     const normalizedItems = normalizeServicesItemsForEditor(rawConfig.items);
-
     setTitle(component.title);
     setActive(component.active);
     setServicesItems(normalizedItems.length > 0 ? normalizedItems : getDefaultEditorItems());
     setStyle(rawConfig.style || DEFAULT_SERVICES_CONFIG.style);
+    setMediaPlacement(getServicesMediaPlacement(rawConfig.mediaPlacement));
+    setMediaAlign(getServicesMediaAlign(rawConfig.mediaAlign));
+    setDesktopColumns(getServicesDesktopColumns(rawConfig.desktopColumns));
+
+    // Load header config
+    const headerConfig = extractSectionHeaderConfig(component.config ?? {});
+    setHideHeader(headerConfig.hideHeader ?? false);
+    setShowTitle(headerConfig.showTitle ?? true);
+    setSubtitle(headerConfig.subtitle ?? '');
+    setShowSubtitle(headerConfig.showSubtitle ?? true);
+    setHeaderAlign((headerConfig.headerAlign ?? 'left') as ServiceItemMediaAlign);
+    setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+    setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+    setUppercaseText(headerConfig.uppercaseText ?? false);
+    setShowBadge(headerConfig.showBadge ?? true);
+    setBadgeText(headerConfig.badgeText ?? '');
+    const resolvedSpacing = normalizeServicesSpacing(headerConfig.spacing, rawConfig.noVerticalMargin);
+    const resolvedCornerRadius = normalizeServicesCornerRadius(rawConfig.cornerRadius, rawConfig.noBorderRadius);
+    setSpacing(resolvedSpacing);
+    setCornerRadius(resolvedCornerRadius);
 
     const snapshot = JSON.stringify({
       title: component.title,
       active: component.active,
       items: toServicesPersistItems(normalizedItems.length > 0 ? normalizedItems : getDefaultEditorItems()),
       style: rawConfig.style || DEFAULT_SERVICES_CONFIG.style,
+      mediaPlacement: getServicesMediaPlacement(rawConfig.mediaPlacement),
+      mediaAlign: getServicesMediaAlign(rawConfig.mediaAlign),
+      desktopColumns: getServicesDesktopColumns(rawConfig.desktopColumns),
+      hideHeader: headerConfig.hideHeader ?? false,
+      showTitle: headerConfig.showTitle ?? true,
+      subtitle: headerConfig.subtitle ?? '',
+      showSubtitle: headerConfig.showSubtitle ?? true,
+      headerAlign: (headerConfig.headerAlign ?? 'left') as ServiceItemMediaAlign,
+      titleColorPrimary: headerConfig.titleColorPrimary ?? false,
+      subtitleAboveTitle: headerConfig.subtitleAboveTitle ?? false,
+      uppercaseText: headerConfig.uppercaseText ?? false,
+      showBadge: headerConfig.showBadge ?? true,
+      badgeText: headerConfig.badgeText ?? '',
+      spacing: resolvedSpacing,
+      cornerRadius: resolvedCornerRadius,
       type: component.type,
     });
 
@@ -79,13 +174,13 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
   }, [component, id, router]);
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
@@ -98,11 +193,26 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
       active,
       items: toServicesPersistItems(servicesItems),
       style,
+      mediaPlacement,
+      mediaAlign,
+      desktopColumns,
+      hideHeader,
+      showTitle,
+      subtitle,
+      showSubtitle,
+      headerAlign,
+      titleColorPrimary,
+      subtitleAboveTitle,
+      uppercaseText,
+      showBadge,
+      badgeText,
+      spacing,
+      cornerRadius,
       type: component.type,
     });
 
     setHasChanges(snapshot !== initialSnapshot || customChanged || customFontChanged);
-  }, [title, active, servicesItems, style, component, initialSnapshot, customChanged, customFontChanged]);
+  }, [title, active, servicesItems, style, mediaPlacement, mediaAlign, desktopColumns, hideHeader, showTitle, subtitle, showSubtitle, headerAlign, titleColorPrimary, subtitleAboveTitle, uppercaseText, showBadge, badgeText, spacing, cornerRadius, component, initialSnapshot, customChanged, customFontChanged]);
 
   const validation = useMemo(() => getServicesValidationResult({
     primary: effectiveColors.primary,
@@ -110,7 +220,7 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
     mode: effectiveColors.mode,
   }), [effectiveColors]);
 
-  const warningMessages = useMemo(() => {
+  const _warningMessages = useMemo(() => {
     const messages: string[] = [];
 
     if (effectiveColors.mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
@@ -124,6 +234,8 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
     return messages;
   }, [effectiveColors.mode, validation]);
 
+  useUnsavedGuard(hasChanges);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSubmitting || !hasChanges) {return;}
@@ -131,17 +243,38 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
     setIsSubmitting(true);
     try {
       const persistItems = toServicesPersistItems(servicesItems);
-      await updateMutation({
-        active,
-        config: {
-          items: persistItems,
-          style,
-        },
-        id: id as Id<'homeComponents'>,
-        title,
-      });
+      const persistConfig = {
+        items: persistItems,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        desktopColumns,
+        mediaPlacement,
+        mediaAlign,
+        style,
+        hideHeader,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+        cornerRadius,
+      };
 
-      if (showCustomBlock) {
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: persistConfig, title });
+      } else {
+        await updateMutation({
+          active,
+          config: persistConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -151,7 +284,7 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -166,10 +299,25 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
         active,
         items: persistItems,
         style,
+        mediaPlacement,
+        mediaAlign,
+        desktopColumns,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+        cornerRadius,
         type: component?.type,
       });
       setInitialSnapshot(snapshot);
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -177,7 +325,7 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -210,66 +358,94 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Services</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Briefcase size={20} />
-              Services
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(e) => { setTitle(e.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={openSections.header}
+          onExpandedChange={(value) => toggleSection('header', value)}
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
-                )}
-                onClick={() => { setActive(!active); }}
-              >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5'
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <ServicesForm items={servicesItems} onChange={setServicesItems} brandColor={validation.colors.primary} />
-
-        {warningMessages.length > 0 && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <div className="space-y-2">
-              {warningMessages.map((message, idx) => (
-                <div key={`${idx}-${message}`} className="flex items-start gap-2">
-                  {message.includes('deltaE') ? <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> : <Eye size={14} className="mt-0.5 flex-shrink-0" />}
-                  <p>{message}</p>
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={openSections.display}
+            onOpenChange={(open) => toggleSection('display', open)}
+            cornerRadius={cornerRadius}
+            onCornerRadiusChange={setCornerRadius}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+          >
+                <div className="space-y-2">
+                  <Label>Số cột desktop</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[3, 4].map((option) => {
+                      const selected = desktopColumns === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setDesktopColumns(option as 3 | 4)}
+                          className={cn(
+                            'h-10 rounded-md border text-xs transition-colors',
+                            selected
+                              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                              : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                          )}
+                        >
+                          {option} cột
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+          </HomeComponentDisplaySettingsSection>
+        </div>
+
+        <ServicesForm
+          items={servicesItems}
+          onChange={setServicesItems}
+          mediaPlacement={mediaPlacement}
+          mediaAlign={mediaAlign}
+          onMediaPlacementChange={setMediaPlacement}
+          onMediaAlignChange={setMediaAlign}
+          brandColor={validation.colors.primary}
+          defaultExpanded={false}
+          onAiImport={setServicesItems}
+        />
+
+
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Services"
                 enabled={customState.enabled}
@@ -277,27 +453,27 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
                 primary={customState.primary}
                 secondary={customState.secondary}
                 onEnabledChange={(next) => setCustomState((prev) => ({ ...prev, enabled: next }))}
-              onModeChange={(next) => setCustomState((prev) => {
-                if (next === 'single') {
-                  return { ...prev, mode: next, secondary: prev.primary };
-                }
-                if (prev.mode === 'single') {
-                  return { ...prev, mode: next, secondary: getSuggestedSecondary(prev.primary) };
-                }
-                return { ...prev, mode: next };
-              })}
-              onPrimaryChange={(value) => setCustomState((prev) => ({
-                ...prev,
-                primary: value,
-                secondary: prev.mode === 'single' ? value : prev.secondary,
-              }))}
-              onSecondaryChange={(value) => setCustomState((prev) => ({
-                ...prev,
-                secondary: prev.mode === 'single' ? prev.primary : value,
-              }))}
+                onModeChange={(next) => setCustomState((prev) => {
+                  if (next === 'single') {
+                    return { ...prev, mode: next, secondary: prev.primary };
+                  }
+                  if (prev.mode === 'single') {
+                    return { ...prev, mode: next, secondary: getSuggestedSecondary(prev.primary) };
+                  }
+                  return { ...prev, mode: next };
+                })}
+                onPrimaryChange={(value) => setCustomState((prev) => ({
+                  ...prev,
+                  primary: value,
+                  secondary: prev.mode === 'single' ? value : prev.secondary,
+                }))}
+                onSecondaryChange={(value) => setCustomState((prev) => ({
+                  ...prev,
+                  secondary: prev.mode === 'single' ? prev.primary : value,
+                }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Services"
                 enabled={customFontState.enabled}
@@ -311,12 +487,27 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
             )}
             <ServicesPreview
               items={toServicesPersistItems(servicesItems)}
+              mediaPlacement={mediaPlacement}
+              mediaAlign={mediaAlign}
+              headerAlign={headerAlign}
+              desktopColumns={desktopColumns}
+              subtitle={subtitle}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              showBadge={showBadge}
+              badgeText={badgeText}
+              hideHeader={hideHeader}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
               brandColor={validation.colors.primary}
               secondary={validation.colors.secondary}
               mode={effectiveColors.mode}
               selectedStyle={style}
               onStyleChange={setStyle}
               title={title}
+              spacing={spacing}
+              cornerRadius={cornerRadius}
               fontStyle={fontStyle}
               fontClassName="font-active"
             />
@@ -326,8 +517,17 @@ export default function ServicesEditPage({ params }: { params: Promise<{ id: str
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => { router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndoservicesItems,
+          canRedo: canRedoservicesItems,
+          onUndo: undoservicesItems,
+          onRedo: redoservicesItems,
+        }}
         />
       </form>
     </div>

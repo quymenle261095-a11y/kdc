@@ -7,7 +7,7 @@ import {
   getAccessibilityScore as getSharedAccessibilityScore,
   getHarmonyStatus as getSharedHarmonyStatus,
 } from '@/lib/home-components/color-system';
-import type { BenefitsBrandMode, BenefitsHarmony, BenefitsStyle } from '../_types';
+import type { BenefitsBrandMode, BenefitsHarmony, BenefitsStyle, LegacyBenefitsStyle } from '../_types';
 
 const DEFAULT_BRAND_COLOR = '#3b82f6';
 const FALLBACK_PRIMARY = '#1d4ed8';
@@ -45,6 +45,27 @@ const getHarmonyColor = (primary: string, harmony: BenefitsHarmony) => {
   }
 
   return rotateHue(normalizedPrimary, 30, normalizedPrimary);
+};
+
+export const normalizeBenefitsStyle = (value: unknown): BenefitsStyle => {
+  if (value === '1' || value === '2' || value === '3' || value === '4' || value === '5' || value === '6') {
+    return value;
+  }
+
+  const legacyToModern: Record<LegacyBenefitsStyle, BenefitsStyle> = {
+    bento: '3',
+    cards: '1',
+    carousel: '5',
+    list: '2',
+    row: '4',
+    timeline: '6',
+  };
+
+  if (typeof value === 'string' && value in legacyToModern) {
+    return legacyToModern[value as LegacyBenefitsStyle];
+  }
+
+  return '1';
 };
 
 export const normalizeBenefitsHarmony = (value: unknown): BenefitsHarmony => {
@@ -163,12 +184,12 @@ export interface BenefitsColorTokens {
 }
 
 const getStyleAccentByStyle = (primaryResolved: string, secondaryResolved: string): Record<BenefitsStyle, string> => ({
-  bento: secondaryResolved,
-  cards: primaryResolved,
-  carousel: secondaryResolved,
-  list: primaryResolved,
-  row: secondaryResolved,
-  timeline: primaryResolved,
+  '1': primaryResolved,
+  '2': secondaryResolved,
+  '3': primaryResolved,
+  '4': secondaryResolved,
+  '5': primaryResolved,
+  '6': secondaryResolved,
 });
 
 export const getBenefitsColorTokens = ({
@@ -300,7 +321,7 @@ export const calculateAccentBalance = ({ mode, style }: { mode: BenefitsBrandMod
     };
   }
 
-  if (style === 'cards' || style === 'timeline') {
+  if (style === '1' || style === '6') {
     return {
       neutral: 58,
       primary: 30,

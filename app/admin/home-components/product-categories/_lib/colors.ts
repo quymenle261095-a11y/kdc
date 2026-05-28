@@ -24,6 +24,8 @@ export interface ProductCategoriesColors {
     border: string;
     text: string;
     muted: string;
+    inverseSurface: string;
+    inverseText: string;
   };
   cardShadow: string;
   cardShadowHover: string;
@@ -39,14 +41,23 @@ export interface ProductCategoriesColors {
   cardAccentBar: string;
   pillBg: string;
   pillBorder: string;
+  secondaryMuted: string;
   ctaMoreBg: string;
   ctaMoreBorder: string;
   ctaMoreText: string;
   circularBg: string;
   circularBorder: string;
+  showcaseBackground: string;
+  showcaseBorder: string;
   paginationDotActive: string;
   paginationDotInactive: string;
   arrowIcon: string;
+  buttonText: string;
+  secondaryButtonText: string;
+  secondaryAccent: string;
+  darkSurface: string;
+  darkBorder: string;
+  darkText: string;
   emptyState: {
     background: string;
     iconBg: string;
@@ -99,12 +110,9 @@ const getAPCATextColor = (bg: string, fontSize = 16, fontWeight = 500) => {
   return whiteLc > blackLc ? '#ffffff' : '#0f172a';
 };
 
-const toOklchString = (hex: string, alpha = 1, fallback = DEFAULT_BRAND_COLOR) => {
+const getSolidTint = (hex: string, deltaL: number, fallback = DEFAULT_BRAND_COLOR) => {
   const color = safeParseOklch(hex, fallback);
-  const l = Math.max(0, Math.min(color.l ?? 0, 1));
-  const c = Math.max(0, Math.min(color.c ?? 0, 0.4));
-  const h = Number.isFinite(color.h) ? color.h : 0;
-  return `oklch(${(l * 100).toFixed(2)}% ${c.toFixed(3)} ${h.toFixed(2)} / ${alpha})`;
+  return formatHex(oklch({ ...color, l: Math.max(0.08, Math.min((color.l ?? 0) + deltaL, 0.98)) }));
 };
 
 const generatePalette = (hex: string, fallback = DEFAULT_BRAND_COLOR): BrandPalette => {
@@ -155,41 +163,71 @@ export const getProductCategoriesColors = (
   const neutral = {
     background: '#f8fafc',
     surface: '#ffffff',
-    border: '#e2e8f0',
+    border: '#0f172a',
     text: '#0f172a',
     muted: '#64748b',
+    inverseSurface: '#0f172a',
+    inverseText: '#ffffff',
   };
+
+  // Smart accent picker: primary → secondary → neutral
+  // Checks APCA contrast against white background (Lc >= 40 for UI accents)
+  const ACCENT_THRESHOLD = 40;
+  const pickReadableAccent = (preferred: string, fallback: string, neutralFallback: string): string => {
+    if (getAPCALc(preferred, '#ffffff') >= ACCENT_THRESHOLD) return preferred;
+    if (getAPCALc(fallback, '#ffffff') >= ACCENT_THRESHOLD) return fallback;
+    return neutralFallback;
+  };
+
+  const dualAccent = mode === 'dual'
+    ? pickReadableAccent(secondaryPalette.solid, primaryPalette.solid, neutral.muted)
+    : pickReadableAccent(primaryPalette.solid, secondaryPalette.solid, neutral.muted);
+
+  const primaryAccent = pickReadableAccent(primaryPalette.solid, secondaryPalette.solid, neutral.muted);
+
+  const primaryStrongBorder = getSolidTint(primaryPalette.solid, -0.12, primaryPalette.solid);
+  const secondaryStrongBorder = getSolidTint(secondaryPalette.solid, -0.12, secondaryPalette.solid);
+  const darkSurface = '#111111';
 
   return {
     primary: primaryPalette,
     secondary: secondaryPalette,
     neutral,
-    cardShadow: `0 2px 8px ${toOklchString(secondaryPalette.solid, 0.15)}`,
-    cardShadowHover: `0 8px 24px ${toOklchString(secondaryPalette.solid, 0.25)}`,
-    cardBorder: secondaryPalette.border,
+    cardShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+    cardShadowHover: '0 10px 24px rgba(15, 23, 42, 0.14)',
+    cardBorder: mode === 'dual' ? secondaryStrongBorder : primaryStrongBorder,
     cardBorderHover: primaryPalette.solid,
-    sectionBg: neutral.background,
+    sectionBg: neutral.surface,
     sectionAccent: primaryPalette.solid,
-    linkText: secondaryPalette.textInteractive,
-    productCountText: secondaryPalette.textInteractive,
-    iconContainerBg: toOklchString(primaryPalette.solid, 0.15),
-    overlayText: getAPCATextColor('#0f172a', 16, 600),
-    categoryNameText: primaryPalette.textInteractive,
+    linkText: dualAccent,
+    productCountText: dualAccent,
+    iconContainerBg: neutral.surface,
+    overlayText: '#ffffff',
+    categoryNameText: neutral.text,
     cardAccentBar: primaryPalette.solid,
-    pillBg: toOklchString(primaryPalette.solid, 0.08),
-    pillBorder: toOklchString(primaryPalette.solid, 0.2),
-    ctaMoreBg: primaryPalette.surface,
-    ctaMoreBorder: primaryPalette.border,
-    ctaMoreText: ensureAPCATextColor(primaryPalette.solid, primaryPalette.surface, 14, 600),
-    circularBg: toOklchString(primaryPalette.solid, 0.06),
-    circularBorder: toOklchString(primaryPalette.solid, 0.2),
-    paginationDotActive: secondaryPalette.solid,
-    paginationDotInactive: toOklchString(secondaryPalette.solid, 0.4),
-    arrowIcon: ensureAPCATextColor(primaryPalette.solid, neutral.surface, 14, 500),
+    pillBg: neutral.surface,
+    pillBorder: dualAccent,
+    secondaryMuted: dualAccent,
+    ctaMoreBg: neutral.surface,
+    ctaMoreBorder: primaryAccent,
+    ctaMoreText: primaryAccent,
+    circularBg: neutral.surface,
+    circularBorder: primaryAccent,
+    showcaseBackground: neutral.surface,
+    showcaseBorder: dualAccent,
+    paginationDotActive: dualAccent,
+    paginationDotInactive: mode === 'dual' ? secondaryStrongBorder : primaryStrongBorder,
+    arrowIcon: dualAccent,
+    buttonText: primaryPalette.textOnSolid,
+    secondaryButtonText: secondaryPalette.textOnSolid,
+    secondaryAccent: dualAccent,
+    darkSurface,
+    darkBorder: '#000000',
+    darkText: ensureAPCATextColor('#ffffff', darkSurface, 16, 600),
     emptyState: {
-      background: neutral.background,
+      background: neutral.surface,
       iconBg: neutral.surface,
-      icon: primaryPalette.solid,
+      icon: primaryAccent,
       text: neutral.muted,
     },
   };

@@ -1,21 +1,22 @@
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { HOUR, MINUTE, RateLimiter } from "@convex-dev/rate-limiter";
+import { components } from "../_generated/api";
 
-// Rate limit configs - thoải mái nhưng vẫn bảo vệ
 export const RATE_LIMITS = {
-  // Dangerous mutations - stricter
-  dangerous: { refillInterval: 60_000, refillRate: 1, tokens: 10 }, // 10 per minute, refill 1/min
-  
-  // Normal mutations - relaxed
-  mutation: { refillInterval: 60_000, refillRate: 10, tokens: 100 }, // 100 per minute, refill 10/min
-  
-  // Queries - very relaxed
-  query: { refillInterval: 60_000, refillRate: 50, tokens: 500 }, // 500 per minute
-  
-  // Auth attempts - moderate
-  auth: { refillInterval: 60_000, refillRate: 1, tokens: 5 }, // 5 per minute
+  contactSubmit: { kind: "token bucket", rate: 3, period: MINUTE, capacity: 5 },
+  dangerous: { kind: "token bucket", rate: 1, period: MINUTE, capacity: 10 },
+  mutation: { kind: "token bucket", rate: 10, period: MINUTE, capacity: 100 },
+  query: { kind: "token bucket", rate: 50, period: MINUTE, capacity: 500 },
+  auth: { kind: "token bucket", rate: 5, period: HOUR, capacity: 5 },
+  pageViewTrack: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 120 },
+  publicBooking: { kind: "token bucket", rate: 3, period: MINUTE, capacity: 10 },
+  usageTrack: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 60 },
 } as const;
 
 type RateLimitType = keyof typeof RATE_LIMITS;
+type RateLimitResult = { allowed: boolean; remaining: number; resetIn: number };
+
+const rateLimiter = new RateLimiter(components.rateLimiter, RATE_LIMITS);
 
 // Dangerous mutations list
 const DANGEROUS_MUTATIONS = [
@@ -38,38 +39,12 @@ export async function checkRateLimit(
   ctx: MutationCtx | QueryCtx,
   identifier: string,
   type: RateLimitType = "mutation"
-): Promise<{ allowed: boolean; remaining: number; resetIn: number }> {
-  const config = RATE_LIMITS[type];
-  const key = `${type}:${identifier}`;
-  const now = Date.now();
-  
-  const bucket = await ctx.db
-    .query("rateLimitBuckets")
-    .withIndex("by_key", (q) => q.eq("key", key))
-    .unique();
-  
-  if (!bucket) {
-    // New bucket - allow and create
-    return { allowed: true, remaining: config.tokens - 1, resetIn: config.refillInterval };
-  }
-  
-  // Calculate refilled tokens
-  const timePassed = now - bucket.lastRefill;
-  const refillCount = Math.floor(timePassed / config.refillInterval);
-  const refilledTokens = Math.min(
-    config.tokens,
-    bucket.tokens + refillCount * config.refillRate
-  );
-  
-  if (refilledTokens <= 0) {
-    const resetIn = config.refillInterval - (timePassed % config.refillInterval);
-    return { allowed: false, remaining: 0, resetIn };
-  }
-  
-  return { 
-    allowed: true, 
-    remaining: refilledTokens - 1, 
-    resetIn: config.refillInterval 
+): Promise<RateLimitResult> {
+  const status = await rateLimiter.check(ctx, type, { key: identifier });
+  return {
+    allowed: status.ok,
+    remaining: status.ok ? 1 : 0,
+    resetIn: status.retryAfter ?? 0,
   };
 }
 
@@ -77,56 +52,23 @@ export async function consumeRateLimit(
   ctx: MutationCtx,
   identifier: string,
   type: RateLimitType = "mutation"
-): Promise<{ allowed: boolean; remaining: number; resetIn: number }> {
-  const config = RATE_LIMITS[type];
-  const key = `${type}:${identifier}`;
-  const now = Date.now();
-  
-  const bucket = await ctx.db
-    .query("rateLimitBuckets")
-    .withIndex("by_key", (q) => q.eq("key", key))
-    .unique();
-  
-  if (!bucket) {
-    // Create new bucket
-    await ctx.db.insert("rateLimitBuckets", {
-      key,
-      lastRefill: now,
-      tokens: config.tokens - 1,
-    });
-    return { allowed: true, remaining: config.tokens - 1, resetIn: config.refillInterval };
-  }
-  
-  // Calculate refilled tokens
-  const timePassed = now - bucket.lastRefill;
-  const refillCount = Math.floor(timePassed / config.refillInterval);
-  let currentTokens = Math.min(
-    config.tokens,
-    bucket.tokens + refillCount * config.refillRate
-  );
-  
-  if (currentTokens <= 0) {
-    const resetIn = config.refillInterval - (timePassed % config.refillInterval);
-    return { allowed: false, remaining: 0, resetIn };
-  }
-  
-  // Consume token
-  currentTokens -= 1;
-  await ctx.db.patch(bucket._id, {
-    lastRefill: refillCount > 0 ? now : bucket.lastRefill,
-    tokens: currentTokens,
-  });
-  
-  return { 
-    allowed: true, 
-    remaining: currentTokens, 
-    resetIn: config.refillInterval 
+): Promise<RateLimitResult> {
+  const status = await rateLimiter.limit(ctx, type, { key: identifier });
+  return {
+    allowed: status.ok,
+    remaining: status.ok ? 1 : 0,
+    resetIn: status.retryAfter ?? 0,
   };
 }
 
-// Helper to get client identifier (for future use with actual client IP)
+export async function resetRateLimit(
+  ctx: MutationCtx,
+  identifier: string,
+  type: RateLimitType = "mutation"
+) {
+  await rateLimiter.reset(ctx, type, { key: identifier });
+}
+
 export function getClientIdentifier(): string {
-  // In real implementation, this would get client IP or user ID
-  // For now, use a global identifier
   return "global";
 }

@@ -97,8 +97,7 @@ function ProductVariantCreateContent({ params }: { params: Promise<{ id: string 
   if (!variantEnabled) {
     return (
       <div className="text-center py-10 text-slate-500 space-y-2">
-        <p>Tính năng phiên bản đang tắt.</p>
-        <Link href="/system/modules/products" className="text-orange-600 hover:underline">Bật trong hệ thống</Link>
+        <p>Tính năng phiên bản đang tắt. Vui lòng liên hệ quản trị viên để bật tính năng này.</p>
       </div>
     );
   }

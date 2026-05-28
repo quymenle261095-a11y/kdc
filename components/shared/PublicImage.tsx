@@ -3,6 +3,7 @@ import Image, { type ImageProps } from 'next/image';
 type PublicImageMode = 'hero' | 'primary' | 'thumb' | 'logo' | 'decorative';
 
 type PublicImageProps = ImageProps & {
+  alt?: string;
   mode?: PublicImageMode;
   unoptimized?: boolean;
 };
@@ -15,12 +16,13 @@ const UNOPTIMIZED_MODES: Record<PublicImageMode, boolean> = {
   decorative: true,
 };
 
-export function PublicImage({ mode = 'primary', unoptimized, ...props }: PublicImageProps) {
-  const resolvedUnoptimized = unoptimized ?? UNOPTIMIZED_MODES[mode];
+export function PublicImage({ alt = '', mode = 'primary', unoptimized, ...props }: PublicImageProps) {
+  const isExternalUrl = typeof props.src === 'string' && /^https?:\/\//.test(props.src);
+  const resolvedUnoptimized = unoptimized ?? (isExternalUrl || UNOPTIMIZED_MODES[mode]);
   const resolvedSrc = typeof props.src === 'string'
     ? normalizeLocalNextImageUrl(props.src)
     : props.src;
-  return <Image unoptimized={resolvedUnoptimized} {...props} src={resolvedSrc} />;
+  return <Image alt={alt} unoptimized={resolvedUnoptimized} {...props} src={resolvedSrc} />;
 }
 
 const normalizeLocalNextImageUrl = (value: string) => {

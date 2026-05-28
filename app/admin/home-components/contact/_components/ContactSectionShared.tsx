@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import {
   Building2,
   Facebook,
@@ -16,8 +17,11 @@ import { cn } from '../../../components/ui';
 import { ContactInquiryForm } from '@/components/contact/ContactInquiryForm';
 import OpenStreetMapDisplay from '@/components/maps/OpenStreetMapDisplay';
 import { sanitizeGoogleMapIframe, type ContactMapData } from '@/lib/contact/getContactMapData';
+import { getSectionSpacingClassName } from '../../_shared/types/sectionSpacing';
 import { renderContactIcon } from '../_lib/iconOptions';
+import { getContactCornerRadiusClassName } from '../_lib/constants';
 import type { PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import { isValidUrl, normalizeZaloPhone } from '../_lib/validation';
 import type {
   ContactBrandMode,
   ContactConfigState,
@@ -73,6 +77,22 @@ const iconMap: Record<string, React.ComponentType<{ size?: number; className?: s
 
 const getSocialIconComponent = (platform: string) => iconMap[platform.toLowerCase()] ?? Globe;
 
+const resolveSocialHref = (social: ContactSocialLink) => {
+  const trimmed = social.url.trim();
+  if (!trimmed) {return '#';}
+
+  if (social.platform.trim().toLowerCase() !== 'zalo') {
+    return trimmed;
+  }
+
+  if (isValidUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const normalizedPhone = normalizeZaloPhone(trimmed);
+  return normalizedPhone ? `https://zalo.me/${normalizedPhone}` : '#';
+};
+
 const SOCIAL_ORIGINAL_COLORS: Record<string, { bg: string; icon: string }> = {
   facebook: { bg: '#1877f2', icon: '#ffffff' },
   instagram: { bg: '#e1306c', icon: '#ffffff' },
@@ -90,9 +110,9 @@ const getDisplayDevice = (context: ContactSectionContext, device?: PreviewDevice
   return device ?? 'desktop';
 };
 
-const getSectionPadding = (context: ContactSectionContext, currentDevice: PreviewDevice) => {
-  if (context === 'site') {return 'py-12 md:py-16 px-4';}
-  return currentDevice === 'mobile' ? 'py-6 px-3' : 'py-8 px-4';
+const getSectionInlinePadding = (context: ContactSectionContext, currentDevice: PreviewDevice) => {
+  if (context === 'site') {return 'px-4';}
+  return currentDevice === 'mobile' ? 'px-3' : 'px-4';
 };
 
 const getRootContainerClass = (context: ContactSectionContext, currentDevice: PreviewDevice) => {
@@ -104,6 +124,24 @@ const getRootContainerClass = (context: ContactSectionContext, currentDevice: Pr
 
 const MAP_HEIGHT_HERO = 'min-h-[320px] md:min-h-[360px]';
 const MAP_HEIGHT_STANDARD = 'min-h-[240px] md:min-h-[280px]';
+
+const getContactItemGridClassName = (
+  columns: ContactConfigState['desktopColumns'],
+  currentDevice: PreviewDevice,
+  context: ContactSectionContext,
+) => {
+  const desktopColumns = columns === 3 ? 3 : 4;
+
+  if (context === 'site') {
+    return desktopColumns === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
+  }
+
+  if (desktopColumns === 3) {
+    return currentDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-3';
+  }
+
+  return currentDevice === 'desktop' ? 'grid-cols-4' : 'grid-cols-2';
+};
 
 const getInfo = (config: ContactConfigState, title?: string) => {
   const texts = config.texts ?? {};
@@ -180,13 +218,13 @@ const renderMapOrPlaceholder = ({
       <MapPin size={32} />
       <span className="text-xs">Chưa có bản đồ</span>
       {isPreview && (
-        <a
+        <Link
           href="/admin/settings"
           className="text-xs font-medium underline"
           style={{ color: tokens.primary }}
         >
           Cấu hình trong Settings
-        </a>
+        </Link>
       )}
     </div>
   );
@@ -227,7 +265,8 @@ const getDisplayItems = (config: ContactConfigState, isPreview: boolean) => {
 const renderItemValue = (item: ContactConfigState['contactItems'][number], tokens: ContactColorTokens, isPreview: boolean, className = 'text-sm') => {
   const displayValue = item.value?.trim() || item.href?.trim() || (isPreview ? 'Chưa có nội dung' : '');
   if (!displayValue) {return null;}
-  const content = <span className={className} style={{ color: tokens.valueText }}>{displayValue}</span>;
+  const textClassName = cn('min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]', className);
+  const content = <span className={textClassName} style={{ color: tokens.valueText }}>{displayValue}</span>;
 
   if (!item.href) {return content;}
   const isExternal = item.href.startsWith('http');
@@ -236,7 +275,7 @@ const renderItemValue = (item: ContactConfigState['contactItems'][number], token
       href={item.href}
       target={isExternal ? '_blank' : undefined}
       rel={isExternal ? 'noopener noreferrer' : undefined}
-      className={className}
+      className={textClassName}
       style={{ color: tokens.valueText }}
     >
       {displayValue}
@@ -260,7 +299,7 @@ const ContactItemRow = ({
   return (
     <div className="flex items-start gap-3">
       <IconBadge icon={renderContactIcon(item.icon, iconSize)} tokens={tokens} className="mt-0.5" />
-      <div>
+      <div className="min-w-0">
         <h4 className="font-semibold text-sm mb-0.5" style={{ color: tokens.labelText }}>{item.label}</h4>
         {renderItemValue(item, tokens, isPreview, valueClassName ?? 'text-sm')}
       </div>
@@ -273,14 +312,16 @@ const ContactItemCard = ({
   tokens,
   iconSize = 18,
   isPreview,
+  radiusClassName,
 }: {
   item: ContactConfigState['contactItems'][number];
   tokens: ContactColorTokens;
   iconSize?: number;
   isPreview: boolean;
+  radiusClassName?: string;
 }) => {
   return (
-    <div className="p-5 rounded-lg border flex flex-col items-center text-center" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+    <div className={cn('flex min-w-0 flex-col items-center border p-5 text-center', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
       <IconBadge icon={renderContactIcon(item.icon, iconSize)} tokens={tokens} className="mb-3" />
       <h3 className="font-medium text-sm mb-1" style={{ color: tokens.labelText }}>{item.label}</h3>
       {renderItemValue(item, tokens, isPreview, 'text-sm font-semibold')}
@@ -336,7 +377,7 @@ const ContactSocialLinks = ({
         return (
           <a
             key={`${social.id}-${social.platform}-${idx}`}
-            href={social.url || '#'}
+            href={resolveSocialHref(social)}
             target="_blank"
             rel="noopener noreferrer"
             className="w-10 h-10 rounded-full border flex items-center justify-center transition-colors"
@@ -351,6 +392,88 @@ const ContactSocialLinks = ({
           </a>
         );
       })}
+    </div>
+  );
+};
+
+const ContactSectionHeader = ({
+  title,
+  config,
+  tokens,
+}: {
+  title?: string;
+  config: ContactConfigState;
+  tokens: ContactColorTokens;
+}) => {
+  const resolvedTitle = typeof title === 'string' ? title.trim() : '';
+  const resolvedSubtitle = typeof config.subtitle === 'string' ? config.subtitle.trim() : '';
+  const resolvedBadgeText = typeof config.badgeText === 'string' ? config.badgeText.trim() : '';
+  const hasTitle = config.showTitle !== false && resolvedTitle.length > 0;
+  const hasSubtitle = config.showSubtitle !== false && resolvedSubtitle.length > 0;
+  const hasBadge = config.showBadge !== false && resolvedBadgeText.length > 0;
+
+  if (config.hideHeader || (!hasTitle && !hasSubtitle && !hasBadge)) {
+    return null;
+  }
+
+  const headerAlign = config.headerAlign ?? 'left';
+  const alignClass = headerAlign === 'center' ? 'text-center' : headerAlign === 'right' ? 'text-right' : 'text-left';
+  const widthClass = headerAlign === 'center' ? 'mx-auto max-w-3xl' : headerAlign === 'right' ? 'ml-auto max-w-3xl' : 'mr-auto max-w-3xl';
+  const titleColor = config.titleColorPrimary ? tokens.primary : tokens.heading;
+
+  const badgeElement = hasBadge && (
+    <div className={cn('mb-3 md:mb-4', alignClass)}>
+      <span
+        className="inline-block rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-wider"
+        style={{
+          backgroundColor: tokens.sectionBadgeBg,
+          borderColor: tokens.sectionBadgeBorder,
+          color: tokens.sectionBadgeText,
+        }}
+      >
+        {resolvedBadgeText}
+      </span>
+    </div>
+  );
+
+  const titleElement = hasTitle && (
+    <h2
+      className={cn(
+        'mb-2 text-2xl font-bold leading-tight tracking-tight text-balance md:text-3xl',
+        config.uppercaseText && 'uppercase',
+      )}
+      style={{ color: titleColor }}
+    >
+      {resolvedTitle}
+    </h2>
+  );
+
+  const subtitleElement = hasSubtitle && (
+    <p
+      className={cn(
+        'text-sm leading-relaxed md:text-base',
+        config.uppercaseText ? 'font-medium uppercase tracking-wide' : 'font-normal',
+      )}
+      style={{ color: tokens.helperText }}
+    >
+      {resolvedSubtitle}
+    </p>
+  );
+
+  return (
+    <div className={cn('mb-4 md:mb-6', widthClass, alignClass)}>
+      {badgeElement}
+      {config.subtitleAboveTitle ? (
+        <>
+          {subtitleElement}
+          {titleElement}
+        </>
+      ) : (
+        <>
+          {titleElement}
+          {subtitleElement}
+        </>
+      )}
     </div>
   );
 };
@@ -378,17 +501,24 @@ const renderModern = ({
   const hasMap = Boolean(config.showMap);
   const contactItems = getDisplayItems(config, isPreview);
   const useOriginalSocialIconColors = config.useOriginalSocialIconColors !== false;
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+  const contentWidthClass = isPreview
+    ? currentDevice === 'mobile' ? 'w-full' : hasMap ? 'lg:w-1/2' : 'lg:w-full'
+    : hasMap ? 'w-full lg:w-1/2' : 'w-full';
+  const mapWidthClass = isPreview
+    ? currentDevice === 'mobile' ? `w-full ${MAP_HEIGHT_STANDARD}` : `lg:w-1/2 ${MAP_HEIGHT_HERO}`
+    : 'w-full lg:w-1/2 min-h-[240px] md:min-h-[280px] lg:min-h-[360px]';
 
   return (
     <div
-      className="rounded-xl overflow-hidden border shadow-sm"
+      className={cn('overflow-hidden border shadow-sm', radiusClassName)}
       style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}
     >
       <div className={cn('flex min-h-[380px]', currentDevice === 'mobile' ? 'flex-col' : 'flex-col lg:flex-row')}>
         <div
           className={cn(
             'p-6 lg:p-10 flex flex-col justify-center gap-6',
-            currentDevice === 'mobile' ? 'w-full' : hasMap ? 'lg:w-1/2' : 'lg:w-full',
+            contentWidthClass,
           )}
         >
         <div className="max-w-md mx-auto w-full">
@@ -442,7 +572,7 @@ const renderModern = ({
         <div
           className={cn(
             'relative border-t lg:border-t-0 lg:border-l',
-            currentDevice === 'mobile' ? `w-full ${MAP_HEIGHT_STANDARD}` : `lg:w-1/2 ${MAP_HEIGHT_HERO}`,
+            mapWidthClass,
           )}
           style={{ borderColor: tokens.neutralBorder, backgroundColor: tokens.mapPlaceholderBg }}
         >
@@ -478,15 +608,18 @@ const renderFloating = ({
   const contactItems = getDisplayItems(config, isPreview);
   const hasAux = hasForm || hasMap;
   const useOriginalSocialIconColors = config.useOriginalSocialIconColors !== false;
-  const gridClass = currentDevice === 'mobile'
-    ? 'grid-cols-1'
-    : hasAux
-      ? 'grid-cols-[1fr,1fr]'
-      : 'grid-cols-1';
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+  const gridClass = isPreview
+    ? currentDevice === 'mobile'
+      ? 'grid-cols-1'
+      : hasAux
+        ? 'grid-cols-[1fr,1fr]'
+        : 'grid-cols-1'
+    : hasAux ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1';
 
   return (
     <div
-      className={cn('w-full rounded-xl overflow-hidden border shadow-sm', currentDevice === 'mobile' ? 'min-h-[520px]' : 'min-h-[460px]')}
+      className={cn('w-full overflow-hidden border shadow-sm', radiusClassName, currentDevice === 'mobile' ? 'min-h-[520px]' : 'min-h-[460px]')}
       style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}
     >
       <div className={cn('grid gap-6 p-6 lg:p-8', gridClass)}>
@@ -528,7 +661,7 @@ const renderFloating = ({
         )}
         {hasMap && (
           <div
-            className={cn('relative rounded-lg overflow-hidden border', currentDevice === 'mobile' ? MAP_HEIGHT_STANDARD : MAP_HEIGHT_STANDARD)}
+            className={cn('relative overflow-hidden border', radiusClassName, currentDevice === 'mobile' ? MAP_HEIGHT_STANDARD : MAP_HEIGHT_STANDARD)}
             style={{ borderColor: tokens.neutralBorder }}
           >
             {renderMapOrPlaceholder({ mapData, fallbackEmbed: config.mapEmbed, tokens, className: 'absolute inset-0', isPreview })}
@@ -561,23 +694,26 @@ const renderGrid = ({
   const hasForm = Boolean(config.showForm);
   const hasMap = Boolean(config.showMap);
   const contactItems = getDisplayItems(config, isPreview);
-  const gridColumns = currentDevice === 'mobile'
-    ? 'grid-cols-1'
-    : hasForm && hasMap
-      ? 'grid-cols-2'
-      : 'grid-cols-1';
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+  const gridColumns = isPreview
+    ? currentDevice === 'mobile'
+      ? 'grid-cols-1'
+      : hasForm && hasMap
+        ? 'grid-cols-2'
+        : 'grid-cols-1'
+    : hasForm && hasMap ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1';
 
   return (
-    <div className="w-full p-6 rounded-xl border" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.neutralBackground }}>
-    <div className={cn('grid gap-3 mb-6', currentDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-3')}>
+    <div className={cn('w-full border p-6', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.neutralBackground }}>
+    <div className={cn('mb-6 grid gap-3', getContactItemGridClassName(config.desktopColumns, currentDevice, isPreview ? 'preview' : 'site'))}>
       {contactItems.map((item) => (
-        <ContactItemCard key={item.id} item={item} tokens={tokens} isPreview={isPreview} />
+        <ContactItemCard key={item.id} item={item} tokens={tokens} isPreview={isPreview} radiusClassName={radiusClassName} />
       ))}
     </div>
 
     <div className={cn('grid gap-4 items-stretch', gridColumns)}>
       {hasForm && (
-        <div className="rounded-lg border p-4 h-full" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+        <div className={cn('h-full border p-4', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
           <ContactInquiryForm
             brandColor={tokens.primary}
             secondaryColor={tokens.secondary}
@@ -595,17 +731,18 @@ const renderGrid = ({
         </div>
       )}
       {hasMap && (
-        <div className="rounded-lg border p-4 h-full flex flex-col" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+        <div className={cn('flex h-full flex-col border p-4', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
           <div className="flex items-start gap-3">
             <MapPin size={20} className="shrink-0 mt-0.5" style={{ color: tokens.secondary }} />
-            <div>
+            <div className="min-w-0">
               <h3 className="font-bold text-base mb-1.5" style={{ color: tokens.heading }}>Vị trí bản đồ</h3>
               <p className="text-sm leading-relaxed" style={{ color: tokens.valueText }}>{mapData?.address || 'Địa chỉ đang cập nhật'}</p>
             </div>
           </div>
           <div
             className={cn(
-              'relative rounded-md overflow-hidden mt-4 flex-1',
+              'relative mt-4 flex-1 overflow-hidden',
+              radiusClassName,
               currentDevice === 'mobile' ? MAP_HEIGHT_STANDARD : 'min-h-[240px]',
             )}
           >
@@ -638,9 +775,19 @@ const renderElegant = ({
   const hasForm = Boolean(config.showForm);
   const hasMap = Boolean(config.showMap);
   const contactItems = getDisplayItems(config, isPreview);
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+  const layoutClass = isPreview
+    ? currentDevice === 'mobile' ? 'flex-col' : 'flex-row'
+    : 'flex-col lg:flex-row';
+  const infoWidthClass = isPreview
+    ? currentDevice === 'mobile' ? 'w-full' : hasMap ? 'w-5/12' : 'w-full'
+    : hasMap ? 'w-full lg:w-5/12' : 'w-full';
+  const mapWidthClass = isPreview
+    ? currentDevice === 'mobile' ? `w-full ${MAP_HEIGHT_STANDARD}` : `w-7/12 ${MAP_HEIGHT_HERO}`
+    : 'w-full lg:w-7/12 min-h-[240px] md:min-h-[280px] lg:min-h-[360px]';
 
   return (
-    <div className="w-full border rounded-xl shadow-sm overflow-hidden" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+    <div className={cn('w-full overflow-hidden border shadow-sm', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
     <div className="p-6 border-b text-center" style={{ borderColor: tokens.neutralBorder, backgroundColor: tokens.neutralBackground }}>
       <div className="flex justify-center mb-3">
         <IconBadge icon={<Building2 size={22} />} tokens={tokens} size={24} />
@@ -653,9 +800,9 @@ const renderElegant = ({
       </p>
     </div>
 
-    <div className={cn('flex', currentDevice === 'mobile' ? 'flex-col' : 'flex-row')}>
+    <div className={cn('flex', layoutClass)}>
       <div
-        className={cn('p-6 space-y-0 divide-y', currentDevice === 'mobile' ? 'w-full' : hasMap ? 'w-5/12' : 'w-full')}
+        className={cn('p-6 space-y-0 divide-y', infoWidthClass)}
         style={{ borderColor: tokens.neutralBorder }}
       >
         {contactItems.map((item) => (
@@ -692,8 +839,8 @@ const renderElegant = ({
       {hasMap && (
         <div
           className={cn(
-            'relative border-t md:border-t-0 md:border-l',
-            currentDevice === 'mobile' ? `w-full ${MAP_HEIGHT_STANDARD}` : `w-7/12 ${MAP_HEIGHT_HERO}`,
+            'relative border-t lg:border-t-0 lg:border-l',
+            mapWidthClass,
           )}
           style={{ borderColor: tokens.neutralBorder, backgroundColor: tokens.mapPlaceholderBg }}
         >
@@ -723,16 +870,19 @@ const renderMinimal = ({
   mapData?: ContactMapData;
   sourcePath?: string;
   isPreview: boolean;
-}) => (
-  <div className="w-full border rounded-xl overflow-hidden shadow-sm" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+}) => {
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+
+  return (
+  <div className={cn('w-full overflow-hidden border shadow-sm', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
     <div className="p-6 lg:p-10">
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', currentDevice === 'mobile' ? 'text-xl' : 'text-2xl')} style={{ color: tokens.heading }}>{info.heading}</h2>
         <p className="text-sm mt-2" style={{ color: tokens.helperText }}>{info.description}</p>
       </div>
-      <div className={cn('grid gap-4', currentDevice === 'mobile' ? 'grid-cols-1' : 'grid-cols-2 lg:grid-cols-4')}>
+      <div className={cn('grid gap-4', getContactItemGridClassName(config.desktopColumns, currentDevice, isPreview ? 'preview' : 'site'))}>
         {getDisplayItems(config, isPreview).map((item) => (
-          <ContactItemCard key={item.id} item={item} tokens={tokens} isPreview={isPreview} iconSize={20} />
+          <ContactItemCard key={item.id} item={item} tokens={tokens} isPreview={isPreview} iconSize={20} radiusClassName={radiusClassName} />
         ))}
       </div>
       {config.showForm && (
@@ -763,7 +913,7 @@ const renderMinimal = ({
             />
           )}
           {config.showMap && (
-            <div className={cn('relative rounded-lg overflow-hidden w-full', MAP_HEIGHT_STANDARD)}>
+            <div className={cn('relative w-full overflow-hidden', radiusClassName, MAP_HEIGHT_STANDARD)}>
               {renderMapOrPlaceholder({ mapData, fallbackEmbed: config.mapEmbed, tokens, className: 'absolute inset-0', isPreview })}
             </div>
           )}
@@ -771,7 +921,8 @@ const renderMinimal = ({
       )}
     </div>
   </div>
-);
+  );
+};
 
 const renderCentered = ({
   info,
@@ -795,32 +946,35 @@ const renderCentered = ({
   const hasForm = Boolean(config.showForm);
   const hasMap = Boolean(config.showMap);
   const contactItems = getDisplayItems(config, isPreview);
-  const gridColumns = currentDevice === 'mobile'
-    ? 'grid-cols-1'
-    : hasForm
-      ? 'grid-cols-2'
-      : 'grid-cols-1';
+  const radiusClassName = getContactCornerRadiusClassName(config.cornerRadius);
+  const gridColumns = isPreview
+    ? currentDevice === 'mobile'
+      ? 'grid-cols-1'
+      : hasForm
+        ? 'grid-cols-2'
+        : 'grid-cols-1'
+    : hasForm ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1';
 
   return (
-    <div className="w-full border rounded-xl overflow-hidden shadow-sm" style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
-    <div className="text-center p-6 lg:p-10" style={{ backgroundColor: tokens.centeredHeaderBg }}>
-      <div className="flex justify-center mb-5">
+    <div className={cn('w-full overflow-hidden border shadow-sm', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
+    <div className="text-center p-4 lg:p-6" style={{ backgroundColor: tokens.centeredHeaderBg }}>
+      <div className="mb-3 flex justify-center">
         <IconBadge icon={renderContactIcon('phone', 28)} tokens={tokens} size={24} />
       </div>
-      <h2 className={cn('font-bold tracking-tight mb-2', currentDevice === 'mobile' ? 'text-xl' : 'text-2xl')} style={{ color: tokens.heading }}>{info.heading}</h2>
+      <h2 className={cn('mb-1.5 font-bold tracking-tight', currentDevice === 'mobile' ? 'text-lg' : 'text-xl')} style={{ color: tokens.heading }}>{info.heading}</h2>
       <p className="text-sm max-w-md mx-auto" style={{ color: tokens.helperText }}>{info.description}</p>
       <p className="text-xs mt-2" style={{ color: tokens.labelText }}>{info.responseText}</p>
-      <span className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold" style={{ backgroundColor: tokens.sectionBadgeBg, color: tokens.sectionBadgeText }}>
+      <span className="mt-3 inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-semibold" style={{ backgroundColor: tokens.sectionBadgeBg, borderColor: tokens.sectionBadgeBorder, color: tokens.sectionBadgeText }}>
         {info.submitLabel}
       </span>
     </div>
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className={cn('grid gap-6', gridColumns)}>
+    <div className="space-y-4 p-4 lg:p-5">
+      <div className={cn('grid gap-4', gridColumns)}>
         <div className="space-y-3">
           {contactItems.map((item) => (
-            <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl" style={{ backgroundColor: tokens.centeredSurface }}>
+            <div key={item.id} className={cn('flex min-w-0 items-center gap-3 p-3', radiusClassName)} style={{ backgroundColor: tokens.centeredSurface }}>
               <IconBadge icon={renderContactIcon(item.icon, 18)} tokens={tokens} size={18} />
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs mb-0.5" style={{ color: tokens.labelText }}>{item.label}</p>
                 {renderItemValue(item, tokens, isPreview, 'text-sm font-bold')}
               </div>
@@ -857,7 +1011,7 @@ const renderCentered = ({
       </div>
 
       {hasMap && (
-        <div className={cn('relative rounded-lg overflow-hidden w-full', currentDevice === 'mobile' ? MAP_HEIGHT_STANDARD : MAP_HEIGHT_STANDARD)}>
+        <div className={cn('relative w-full overflow-hidden', radiusClassName, currentDevice === 'mobile' ? MAP_HEIGHT_STANDARD : MAP_HEIGHT_STANDARD)}>
           {renderMapOrPlaceholder({ mapData, fallbackEmbed: config.mapEmbed, tokens, className: 'absolute inset-0', isPreview })}
         </div>
       )}
@@ -870,7 +1024,6 @@ export function ContactSectionShared({
   config,
   style,
   tokens,
-  mode,
   context,
   device,
   title,
@@ -908,14 +1061,14 @@ export function ContactSectionShared({
   })();
 
   return (
-    <section className={getSectionPadding(context, currentDevice)}>
-      <div className={containerClass}>
+    <section className={cn(getSectionSpacingClassName(config.spacing), getSectionInlinePadding(context, currentDevice))}>
+      <div className={cn(containerClass, 'space-y-6')}>
+        <ContactSectionHeader
+          title={title}
+          config={config}
+          tokens={tokens}
+        />
         {content}
-        {mode === 'dual' && (
-          <div className="mt-4 text-[11px]" style={{ color: tokens.labelText }}>
-            Accent màu phụ đang áp dụng cho icon tint, badge, CTA phụ và social controls.
-          </div>
-        )}
       </div>
     </section>
   );

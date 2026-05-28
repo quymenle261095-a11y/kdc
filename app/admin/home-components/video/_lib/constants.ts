@@ -1,4 +1,5 @@
-import type { VideoBrandMode, VideoConfig, VideoStyle } from '../_types';
+import type { VideoAspect, VideoBrandMode, VideoConfig, VideoCornerRadius, VideoPlayButtonSize, VideoStyle } from '../_types';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const VIDEO_STYLES: Array<{ id: VideoStyle; label: string }> = [
   { id: 'centered', label: 'Centered' },
@@ -92,8 +93,22 @@ export const DEFAULT_VIDEO_CONFIG: VideoConfig = {
   autoplay: false,
   loop: false,
   muted: true,
+  videoAspect: 'landscape',
+  cornerRadius: 'lg',
+  playButtonSize: 'large',
   style: 'centered',
   texts: {},
+  hideHeader: false,
+  showTitle: true,
+  subtitle: '',
+  showSubtitle: true,
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+  spacing: DEFAULT_SECTION_SPACING,
 };
 
 export const VIDEO_STYLES_WITH_CTA: VideoStyle[] = ['split', 'fullwidth', 'cinema', 'minimal', 'parallax'];
@@ -113,8 +128,48 @@ const toBoolean = (value: unknown, fallback = false) => (typeof value === 'boole
 
 const ensureText = (value: string, max = 300) => value.trim().slice(0, max);
 
+const normalizeHeaderAlign = (value: unknown): 'left' | 'center' | 'right' => {
+  if (value === 'left' || value === 'center' || value === 'right') {
+    return value;
+  }
+  return 'left';
+};
+
+export const normalizeVideoAspect = (value: unknown): VideoAspect => (
+  value === 'portrait' ? 'portrait' : 'landscape'
+);
+
+export const normalizeVideoCornerRadius = (value: unknown, noBorderRadius?: unknown): VideoCornerRadius => {
+  if (noBorderRadius === true) {
+    return 'none';
+  }
+
+  if (value === 'none' || value === 'sm' || value === 'lg') {
+    return value;
+  }
+
+  if (value === 'small') {
+    return 'sm';
+  }
+
+  if (value === 'medium' || value === 'large') {
+    return 'lg';
+  }
+
+  return 'lg';
+};
+
+export const normalizeVideoPlayButtonSize = (value: unknown): VideoPlayButtonSize => {
+  if (value === 'small' || value === 'medium' || value === 'large') {
+    return value;
+  }
+  return 'large';
+};
+
 export const normalizeVideoConfig = (raw: unknown): VideoConfig => {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<VideoConfig>;
+  const cornerRadius = normalizeVideoCornerRadius(source.cornerRadius, source.noBorderRadius);
+  const spacing = source.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(source.spacing);
 
   return {
     videoUrl: ensureText(toText(source.videoUrl, ''), 2048),
@@ -127,8 +182,24 @@ export const normalizeVideoConfig = (raw: unknown): VideoConfig => {
     autoplay: toBoolean(source.autoplay, false),
     loop: toBoolean(source.loop, false),
     muted: toBoolean(source.muted, true),
+    videoAspect: normalizeVideoAspect(source.videoAspect),
+    cornerRadius,
+    playButtonSize: normalizeVideoPlayButtonSize(source.playButtonSize),
     style: normalizeVideoStyle(source.style),
     texts: source.texts && typeof source.texts === 'object' ? source.texts : {},
+    hideHeader: toBoolean(source.hideHeader, false),
+    showTitle: toBoolean(source.showTitle, true),
+    subtitle: ensureText(toText(source.subtitle, ''), 300),
+    showSubtitle: toBoolean(source.showSubtitle, true),
+    headerAlign: normalizeHeaderAlign(source.headerAlign),
+    titleColorPrimary: toBoolean(source.titleColorPrimary, false),
+    subtitleAboveTitle: toBoolean(source.subtitleAboveTitle, false),
+    uppercaseText: toBoolean(source.uppercaseText, false),
+    showBadge: toBoolean(source.showBadge, true),
+    badgeText: ensureText(toText(source.badgeText, ''), 120),
+    spacing,
+    noBorderRadius: cornerRadius === 'none',
+    noVerticalMargin: spacing === 'none',
   };
 };
 

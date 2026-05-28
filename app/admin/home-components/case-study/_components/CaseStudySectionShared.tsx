@@ -1,11 +1,20 @@
 'use client';
 
 import React from 'react';
+import useEmblaCarousel from 'embla-carousel-react';
 import { ArrowRight, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Plus } from 'lucide-react';
 import { cn } from '../../../components/ui';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import type { CaseStudyColorTokens } from '../_lib/colors';
-import type { CaseStudyBrandMode, CaseStudyProject, CaseStudyStyle } from '../_types';
+import type { CaseStudyBrandMode, CaseStudyCornerRadius, CaseStudyDesktopColumns, CaseStudyProject, CaseStudySpacing, CaseStudyStyle } from '../_types';
+import {
+  DEFAULT_CASE_STUDY_CORNER_RADIUS,
+  DEFAULT_CASE_STUDY_DESKTOP_COLUMNS,
+  DEFAULT_CASE_STUDY_SPACING,
+  getCaseStudyCornerRadiusClassName,
+  getCaseStudySectionSpacingClassName,
+} from '../_types';
 
 type CaseStudySharedContext = 'preview' | 'site';
 type CaseStudyPreviewDevice = 'mobile' | 'tablet' | 'desktop';
@@ -17,6 +26,19 @@ interface CaseStudySectionSharedProps {
   tokens: CaseStudyColorTokens;
   context: CaseStudySharedContext;
   title?: string;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  subtitle?: string;
+  showSubtitle?: boolean;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  cornerRadius?: CaseStudyCornerRadius;
+  desktopColumns?: CaseStudyDesktopColumns;
+  spacing?: CaseStudySpacing;
   device?: CaseStudyPreviewDevice;
 }
 
@@ -64,10 +86,27 @@ export function CaseStudySectionShared({
   tokens,
   context,
   title,
+  hideHeader = false,
+  showTitle = true,
+  subtitle = '',
+  showSubtitle = true,
+  headerAlign = 'center',
+  titleColorPrimary = false,
+  subtitleAboveTitle = false,
+  uppercaseText = false,
+  showBadge = true,
+  badgeText = '',
+  cornerRadius = DEFAULT_CASE_STUDY_CORNER_RADIUS,
+  desktopColumns = DEFAULT_CASE_STUDY_DESKTOP_COLUMNS,
+  spacing = DEFAULT_CASE_STUDY_SPACING,
   device = 'desktop',
 }: CaseStudySectionSharedProps) {
   const [carouselIndex, setCarouselIndex] = React.useState(0);
   const [siteViewport, setSiteViewport] = React.useState<CaseStudyPreviewDevice>('desktop');
+  const [carouselRef, carouselApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps', dragFree: true });
+  const [canScrollPrev, setCanScrollPrev] = React.useState(false);
+  const [canScrollNext, setCanScrollNext] = React.useState(false);
+  const [scrollSnaps, setScrollSnaps] = React.useState<number[]>([]);
 
   React.useEffect(() => {
     if (context === 'preview') {return;}
@@ -88,14 +127,64 @@ export function CaseStudySectionShared({
 
   React.useEffect(() => {
     setCarouselIndex(0);
-  }, [style, viewport, projects.length]);
+    carouselApi?.scrollTo(0);
+  }, [carouselApi, style, viewport, projects.length]);
+
+  React.useEffect(() => {
+    if (!carouselApi) {return;}
+
+    const updateCarouselState = () => {
+      setCarouselIndex(carouselApi.selectedScrollSnap());
+      setCanScrollPrev(carouselApi.canScrollPrev());
+      setCanScrollNext(carouselApi.canScrollNext());
+      setScrollSnaps(carouselApi.scrollSnapList());
+    };
+
+    updateCarouselState();
+    carouselApi.on('select', updateCarouselState);
+    carouselApi.on('reInit', updateCarouselState);
+
+    return () => {
+      carouselApi.off('select', updateCarouselState);
+      carouselApi.off('reInit', updateCarouselState);
+    };
+  }, [carouselApi]);
 
   const headingText = (title ?? '').trim() || toStyleTitle(style);
   const HeadingTag: React.ElementType = context === 'site' ? 'h2' : 'h3';
 
-  const sectionClassName = context === 'preview'
-    ? cn('px-4', viewport === 'mobile' ? 'py-4' : 'py-8')
-    : 'py-12 md:py-16 px-4';
+  const sectionClassName = cn('px-4', context === 'preview' && viewport === 'mobile' ? 'py-4' : getCaseStudySectionSpacingClassName(spacing));
+  const radiusClassName = getCaseStudyCornerRadiusClassName(cornerRadius);
+  const cardBorderStyle = { borderColor: tokens.cardBorder };
+
+  const getGridClassName = () => {
+    if (viewport === 'mobile') {
+      return desktopColumns === 4 ? 'grid-cols-2 gap-3' : 'grid-cols-1 gap-3';
+    }
+
+    if (viewport === 'tablet') {
+      return desktopColumns === 4 ? 'grid-cols-2 gap-4' : 'grid-cols-3 gap-4';
+    }
+
+    return desktopColumns === 4 ? 'grid-cols-4 gap-5' : 'grid-cols-3 gap-6';
+  };
+
+  const renderHeaderText = () => (
+    <SectionHeader
+      title={headingText}
+      subtitle={subtitle}
+      badgeText={badgeText}
+      hideHeader={hideHeader}
+      showTitle={showTitle}
+      showSubtitle={showSubtitle}
+      showBadge={showBadge}
+      headerAlign={headerAlign}
+      titleColorPrimary={titleColorPrimary}
+      subtitleAboveTitle={subtitleAboveTitle}
+      uppercaseText={uppercaseText}
+      brandColor={tokens.primary}
+    />
+  );
 
   const renderProjectImage = (project: CaseStudyProject, size = 32) => (
     <div
@@ -185,41 +274,30 @@ export function CaseStudySectionShared({
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-6xl mx-auto">
-            <div className={cn(
-              'grid',
-              viewport === 'mobile'
-                ? 'grid-cols-1 gap-3'
-                : (viewport === 'tablet' ? 'grid-cols-2 gap-4' : 'grid-cols-3 gap-6'),
-            )}
+        <div className="max-w-6xl mx-auto">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <div className={cn('grid', getGridClassName())}
             >
               {visibleProjects.map((project, idx) => wrapProject({
                 project,
                 idx,
-                className: 'rounded-xl overflow-hidden border block',
-                style: { borderColor: tokens.cardBorder },
+                className: cn(radiusClassName, 'overflow-hidden border block'),
+                style: cardBorderStyle,
                 children: (
                   <article
                     className="h-full"
-                    style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}
+                    style={{ backgroundColor: tokens.neutralSurface }}
                   >
                     <div className="aspect-[3/2]">
                       {renderProjectImage(project, 32)}
                     </div>
                     <div className={cn('flex flex-col h-full', viewport === 'mobile' ? 'p-3' : 'p-4')}>
                       {renderBadge(project.category)}
-                      <h3 className="font-semibold mt-2 mb-1 line-clamp-2 min-h-[3rem]" style={{ color: tokens.neutralText }}>
+                      <h3 className="font-semibold mt-2 mb-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
                         {project.title || 'Tên dự án'}
                       </h3>
-                      <p className="text-xs line-clamp-2 min-h-[2.5rem]" style={{ color: tokens.mutedText }}>
+                      <p className="text-xs leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                         {project.description || 'Mô tả dự án...'}
                       </p>
                       <div className="mt-3 flex items-center gap-1 text-sm font-medium" style={{ color: tokens.actionText }}>
@@ -232,7 +310,7 @@ export function CaseStudySectionShared({
 
               {context === 'preview' && remainingCount > 0 ? (
                 <div
-                  className="flex items-center justify-center rounded-xl aspect-square border"
+                  className={cn(radiusClassName, 'flex items-center justify-center aspect-square border')}
                   style={{ backgroundColor: tokens.neutralBackground, borderColor: tokens.neutralBorder }}
                 >
                   <div className="text-center">
@@ -243,44 +321,43 @@ export function CaseStudySectionShared({
                 </div>
               ) : null}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
     );
   };
 
   const renderFeaturedStyle = () => {
     const featured = projects[0];
-    const others = projects.slice(1, 3);
+    const maxVisible = context === 'preview'
+      ? (viewport === 'mobile' ? 4 : 6)
+      : projects.length;
+    const visibleProjects = projects.slice(0, maxVisible);
+    const otherProjects = visibleProjects.slice(1);
+    const remainingCount = projects.length - visibleProjects.length;
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-6xl mx-auto">
-            <div className={cn('grid gap-4', viewport === 'mobile' ? 'grid-cols-1' : 'grid-cols-2')}>
+        <div className="max-w-6xl mx-auto">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <div className={cn('grid gap-4', viewport === 'mobile' ? 'grid-cols-1' : 'grid-cols-[1.1fr_0.9fr] items-stretch')}>
               {featured ? wrapProject({
                 project: featured,
                 idx: 0,
-                className: cn('rounded-xl overflow-hidden border block', viewport === 'mobile' ? '' : 'row-span-2'),
-                style: { borderColor: tokens.cardBorder },
+                className: cn(radiusClassName, 'overflow-hidden border block', viewport === 'mobile' ? '' : 'row-span-2'),
+                style: cardBorderStyle,
                 children: (
-                  <article style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}>
-                    <div className="aspect-[3/2]">
+                  <article className="flex h-full flex-col" style={{ backgroundColor: tokens.neutralSurface }}>
+                    <div className={cn(viewport === 'mobile' ? 'aspect-[3/2]' : 'min-h-[260px] flex-1')}>
                       {renderProjectImage(featured, 48)}
                     </div>
                     <div className="p-5">
                       {renderBadge(featured.category)}
-                      <h3 className={cn('font-bold mt-2 mb-2', viewport === 'mobile' ? 'text-lg' : 'text-xl')} style={{ color: tokens.heading }}>
+                      <h3 className={cn('font-bold mt-2 mb-2 break-words leading-snug', viewport === 'mobile' ? 'text-lg' : 'text-xl')} style={{ color: tokens.heading }}>
                         {featured.title || 'Dự án chính'}
                       </h3>
-                      <p className="text-sm leading-relaxed" style={{ color: tokens.mutedText }}>
+                      <p className="text-sm leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                         {featured.description || 'Mô tả dự án...'}
                       </p>
                     </div>
@@ -288,33 +365,45 @@ export function CaseStudySectionShared({
                 ),
               }) : null}
 
-              <div className="space-y-4">
-                {others.map((project, idx) => wrapProject({
+              <div className={cn('grid gap-4', viewport === 'tablet' ? 'grid-cols-1' : 'grid-cols-1')}>
+                {otherProjects.map((project, idx) => wrapProject({
                   project,
                   idx: idx + 1,
-                  className: 'rounded-xl p-4 border flex items-center gap-4 block',
-                  style: { borderColor: tokens.cardBorder },
+                  className: cn(radiusClassName, 'min-h-[112px] border p-4 flex items-center gap-4 block'),
+                  style: cardBorderStyle,
                   children: (
-                    <article className="w-full flex items-center gap-4" style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}>
-                      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                    <article className="w-full flex items-center gap-4" style={{ backgroundColor: tokens.neutralSurface }}>
+                      <div className={cn(cornerRadius === 'none' ? 'rounded-none' : 'rounded-lg', 'w-20 h-20 overflow-hidden flex-shrink-0')}>
                         {renderProjectImage(project, 24)}
                       </div>
                       <div className="flex-1 min-w-0">
                         {renderBadge(project.category)}
-                        <h4 className="font-semibold text-sm mt-1 truncate" style={{ color: tokens.neutralText }}>
+                        <h4 className="font-semibold text-sm mt-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
                           {project.title || 'Tên dự án'}
                         </h4>
-                        <p className="text-xs mt-1 line-clamp-1" style={{ color: tokens.mutedText }}>
-                          {project.description}
+                        <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
+                          {project.description || 'Mô tả dự án...'}
                         </p>
                       </div>
                     </article>
                   ),
                 }))}
+
+                {context === 'preview' && remainingCount > 0 ? (
+                  <div
+                    className={cn(radiusClassName, 'flex min-h-[96px] items-center justify-center border p-4 text-center')}
+                    style={{ backgroundColor: tokens.neutralBackground, borderColor: tokens.neutralBorder }}
+                  >
+                    <div>
+                      <Plus size={24} className="mx-auto mb-1" style={{ color: tokens.mutedText }} />
+                      <span className="text-sm font-bold" style={{ color: tokens.neutralText }}>+{remainingCount} dự án khác</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
     );
   };
@@ -328,28 +417,25 @@ export function CaseStudySectionShared({
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <>
             <div className="space-y-3">
               {visibleProjects.map((project, idx) => wrapProject({
                 project,
                 idx,
                 className: cn(
-                  'rounded-xl overflow-hidden border flex block',
+                  radiusClassName,
+                  'border',
+                  'overflow-hidden flex block',
                   viewport === 'mobile' ? 'flex-col' : 'items-center',
                 ),
-                style: { borderColor: tokens.cardBorder },
+                style: cardBorderStyle,
                 children: (
                   <article
                     className={cn('w-full flex', viewport === 'mobile' ? 'flex-col' : 'items-center')}
-                    style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}
+                    style={{ backgroundColor: tokens.neutralSurface }}
                   >
                     <div className={cn(viewport === 'mobile' ? 'aspect-video w-full' : 'w-40 h-24 flex-shrink-0')}>
                       {renderProjectImage(project, 24)}
@@ -358,10 +444,10 @@ export function CaseStudySectionShared({
                       <div className="flex items-center gap-2 mb-1">
                         {renderBadge(project.category)}
                       </div>
-                      <h3 className="font-semibold truncate" style={{ color: tokens.neutralText }}>
+                      <h3 className="font-semibold break-words leading-snug" style={{ color: tokens.neutralText }}>
                         {project.title || 'Tên dự án'}
                       </h3>
-                      <p className="text-xs mt-1 line-clamp-2" style={{ color: tokens.mutedText }}>
+                      <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                         {project.description || 'Mô tả...'}
                       </p>
                     </div>
@@ -375,8 +461,9 @@ export function CaseStudySectionShared({
                 <span className="text-sm font-medium" style={{ color: tokens.actionText }}>+{remainingCount} dự án khác</span>
               </div>
             ) : null}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </section>
     );
   };
@@ -390,16 +477,11 @@ export function CaseStudySectionShared({
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-6xl mx-auto">
-            <div className={cn('columns-1 gap-4', viewport === 'tablet' && 'columns-2', viewport === 'desktop' && 'columns-3')}>
+        <div className="max-w-6xl mx-auto">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <>
+            <div className={cn('columns-1 gap-4', viewport === 'tablet' && (desktopColumns === 3 ? 'columns-3' : 'columns-2'), viewport === 'desktop' && (desktopColumns === 4 ? 'columns-4' : 'columns-3'))}>
               {visibleProjects.map((project, idx) => {
                 const heights = ['aspect-[4/5]', 'aspect-[4/3]', 'aspect-square'];
                 const height = heights[idx % 3];
@@ -407,17 +489,17 @@ export function CaseStudySectionShared({
                 return wrapProject({
                   project,
                   idx,
-                  className: 'break-inside-avoid mb-4 rounded-xl overflow-hidden border block',
-                  style: { borderColor: tokens.cardBorder },
+                  className: cn(radiusClassName, 'break-inside-avoid mb-4 overflow-hidden border block'),
+                  style: cardBorderStyle,
                   children: (
-                    <article style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}>
+                    <article style={{ backgroundColor: tokens.neutralSurface }}>
                       <div className={height}>{renderProjectImage(project, 32)}</div>
                       <div className="p-3">
                         {renderBadge(project.category)}
-                        <h3 className="font-semibold text-sm mt-2 line-clamp-2" style={{ color: tokens.neutralText }}>
+                        <h3 className="font-semibold text-sm mt-2 break-words leading-snug" style={{ color: tokens.neutralText }}>
                           {project.title || 'Tên dự án'}
                         </h3>
-                        <p className="text-xs mt-1 line-clamp-2" style={{ color: tokens.mutedText }}>
+                        <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                           {project.description || 'Mô tả...'}
                         </p>
                       </div>
@@ -432,33 +514,33 @@ export function CaseStudySectionShared({
                 <span className="text-sm font-medium" style={{ color: tokens.actionText }}>+{remainingCount} dự án khác</span>
               </div>
             ) : null}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </section>
     );
   };
 
   const renderCarouselStyle = () => {
-    const itemsPerView = viewport === 'mobile' ? 1 : (viewport === 'tablet' ? 2 : 3);
-    const maxIndex = Math.max(0, projects.length - itemsPerView);
+    const itemsPerView = viewport === 'mobile'
+      ? (desktopColumns === 4 ? 2 : 1)
+      : (viewport === 'tablet' ? (desktopColumns === 4 ? 2 : 3) : desktopColumns);
+    const slideClassName = viewport === 'mobile'
+      ? (desktopColumns === 4 ? 'basis-1/2' : 'basis-full')
+      : (viewport === 'tablet' ? (desktopColumns === 4 ? 'basis-1/2' : 'basis-1/3') : (desktopColumns === 4 ? 'basis-1/4' : 'basis-1/3'));
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-6xl mx-auto relative">
+        <div className="max-w-6xl mx-auto relative">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <>
             {projects.length > itemsPerView ? (
               <>
                 <button
                   type="button"
-                  onClick={() => { setCarouselIndex(Math.max(0, carouselIndex - 1)); }}
-                  disabled={carouselIndex === 0}
+                  onClick={() => { carouselApi?.scrollPrev(); }}
+                  disabled={!canScrollPrev}
                   className="absolute -left-2 md:-left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white border flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ borderColor: tokens.carouselArrowBorder }}
                   aria-label="Dự án trước"
@@ -467,8 +549,8 @@ export function CaseStudySectionShared({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setCarouselIndex(Math.min(maxIndex, carouselIndex + 1)); }}
-                  disabled={carouselIndex >= maxIndex}
+                  onClick={() => { carouselApi?.scrollNext(); }}
+                  disabled={!canScrollNext}
                   className="absolute -right-2 md:-right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white border flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ borderColor: tokens.carouselArrowBorder }}
                   aria-label="Dự án sau"
@@ -478,28 +560,21 @@ export function CaseStudySectionShared({
               </>
             ) : null}
 
-            <div className="overflow-hidden mx-4 md:mx-8">
-              <div
-                className="flex transition-transform duration-300 ease-out gap-4"
-                style={{ transform: `translateX(-${carouselIndex * (100 / itemsPerView)}%)` }}
-              >
+            <div className="overflow-hidden mx-4 md:mx-8" ref={carouselRef}>
+              <div className="-ml-4 flex touch-pan-y">
                 {projects.map((project, idx) => wrapProject({
                   project,
                   idx,
-                  className: 'flex-shrink-0 rounded-xl overflow-hidden border block',
-                  style: {
-                    borderColor: tokens.cardBorder,
-                    width: `calc(${100 / itemsPerView}% - ${(itemsPerView - 1) * 16 / itemsPerView}px)`,
-                  },
+                  className: cn(slideClassName, 'min-w-0 shrink-0 pl-4'),
                   children: (
-                    <article style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}>
+                    <article className={cn(radiusClassName, 'h-full overflow-hidden border')} style={{ backgroundColor: tokens.neutralSurface, ...cardBorderStyle }}>
                       <div className="aspect-[4/3]">{renderProjectImage(project, 32)}</div>
                       <div className="p-4">
                         {renderBadge(project.category)}
-                        <h3 className="font-semibold mt-2 line-clamp-2 min-h-[3rem]" style={{ color: tokens.neutralText }}>
+                        <h3 className="font-semibold mt-2 break-words leading-snug" style={{ color: tokens.neutralText }}>
                           {project.title || 'Tên dự án'}
                         </h3>
-                        <p className="text-xs mt-1 line-clamp-2 min-h-[2.5rem]" style={{ color: tokens.mutedText }}>
+                        <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                           {project.description || 'Mô tả...'}
                         </p>
                       </div>
@@ -511,11 +586,11 @@ export function CaseStudySectionShared({
 
             {projects.length > itemsPerView ? (
               <div className="flex justify-center gap-2 mt-4">
-                {Array.from({ length: maxIndex + 1 }).map((_, idx) => (
+                {scrollSnaps.map((_, idx) => (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => { setCarouselIndex(idx); }}
+                    onClick={() => { carouselApi?.scrollTo(idx); }}
                     className={cn('h-2 rounded-full transition-all', carouselIndex === idx ? 'w-6' : 'w-2')}
                     style={{ backgroundColor: carouselIndex === idx ? tokens.secondary : tokens.neutralBorder }}
                     aria-label={`Đi tới trang ${idx + 1}`}
@@ -523,8 +598,9 @@ export function CaseStudySectionShared({
                 ))}
               </div>
             ) : null}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </section>
     );
   };
@@ -538,15 +614,10 @@ export function CaseStudySectionShared({
 
     return (
       <section className={sectionClassName} data-mode={mode}>
-        <HeadingTag
-          className={cn('font-bold text-center mb-6', viewport === 'mobile' ? 'text-lg' : 'text-xl')}
-          style={{ color: tokens.heading }}
-        >
-          {headingText}
-        </HeadingTag>
-
-        {projects.length === 0 ? renderEmptyState() : (
-          <div className="max-w-4xl mx-auto relative">
+        <div className="max-w-4xl mx-auto relative">
+          {renderHeaderText()}
+          {projects.length === 0 ? renderEmptyState() : (
+            <>
             <div
               className={cn('absolute top-0 bottom-0 w-0.5', viewport === 'mobile' ? 'left-4' : 'left-1/2 -translate-x-px')}
               style={{ backgroundColor: tokens.timelineLine }}
@@ -574,17 +645,17 @@ export function CaseStudySectionShared({
                   {wrapProject({
                     project,
                     idx,
-                    className: cn('rounded-xl overflow-hidden border block', viewport === 'mobile' ? 'w-full' : 'w-5/12'),
-                    style: { borderColor: tokens.cardBorder },
+                    className: cn(radiusClassName, 'overflow-hidden border block', viewport === 'mobile' ? 'w-full' : 'w-5/12'),
+                    style: cardBorderStyle,
                     children: (
-                      <article style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.cardBorder }}>
+                      <article style={{ backgroundColor: tokens.neutralSurface }}>
                         <div className="aspect-[4/3]">{renderProjectImage(project, 32)}</div>
                         <div className="p-4">
                           {renderBadge(project.category)}
-                          <h3 className="font-bold mt-2 mb-1 line-clamp-2" style={{ color: tokens.neutralText }}>
+                          <h3 className="font-bold mt-2 mb-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
                             {project.title || 'Tên dự án'}
                           </h3>
-                          <p className="text-sm leading-relaxed line-clamp-3" style={{ color: tokens.mutedText }}>
+                          <p className="text-sm leading-relaxed break-words" style={{ color: tokens.mutedText }}>
                             {project.description || 'Mô tả...'}
                           </p>
                         </div>
@@ -600,8 +671,9 @@ export function CaseStudySectionShared({
                 <span className="text-sm font-medium" style={{ color: tokens.actionText }}>+{remainingCount} dự án khác</span>
               </div>
             ) : null}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </section>
     );
   };

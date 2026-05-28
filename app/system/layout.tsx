@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { 
   BarChart3, 
   Blocks, 
+  BookOpen,
   ChevronRight, 
   Database, 
   Globe,
@@ -163,6 +164,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
 
   const getPageName = () => {
     if (pathname === '/system') {return t.pages.dashboard;}
+    if (pathname.includes('huong-dan')) {return t.pages.guides;}
     if (pathname.includes('modules')) {return t.pages.moduleManagement;}
     if (pathname.includes('home-components')) {return t.pages.homeComponents;}
     if (pathname.includes('data')) {return 'Data Manager';}
@@ -198,6 +200,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
           <SidebarItem href="/system" icon={LayoutDashboard} label={t.sidebar.overview} collapsed={collapsed} />
           
           <SidebarGroup label={t.sidebar.control} collapsed={collapsed} />
+          <SidebarItem href="/system/huong-dan" icon={BookOpen} label={t.sidebar.guides} collapsed={collapsed} />
           <SidebarItem href="/system/modules" icon={Blocks} label={t.sidebar.modules} collapsed={collapsed} />
           <SidebarItem href="/system/experiences" icon={LayoutTemplate} label={t.sidebar.experiences} collapsed={collapsed} />
           <SidebarItem href="/system/home-components" icon={LayoutGrid} label={t.sidebar.homeComponents} collapsed={collapsed} />

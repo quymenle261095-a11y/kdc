@@ -40,7 +40,7 @@ export class AdminModulesSeeder extends BaseSeeder<AdminModuleData> {
       { category: 'commerce', dependencies: ['products', 'customers'], dependencyType: 'all', description: 'Quản lý đơn hàng, vận chuyển', enabled: true, icon: 'ShoppingBag', isCore: false, key: 'orders', name: 'Đơn hàng', order: 5 },
       { category: 'commerce', dependencies: ['products'], dependencyType: 'all', description: 'Chức năng giỏ hàng cho khách đã đăng nhập', enabled: true, icon: 'ShoppingCart', isCore: false, key: 'cart', name: 'Giỏ hàng', order: 6 },
       { category: 'commerce', dependencies: ['products', 'customers'], dependencyType: 'all', description: 'Danh sách sản phẩm yêu thích của khách', enabled: false, icon: 'Heart', isCore: false, key: 'wishlist', name: 'Sản phẩm yêu thích', order: 7 },
-      { category: 'user', description: 'Quản lý thông tin khách hàng', enabled: true, icon: 'Users', isCore: true, key: 'customers', name: 'Khách hàng', order: 8 },
+      { category: 'user', description: 'Quản lý thông tin khách hàng', enabled: true, icon: 'Users', isCore: false, key: 'customers', name: 'Khách hàng', order: 8 },
       { category: 'user', description: 'Quản lý tài khoản admin', enabled: true, icon: 'UserCog', isCore: true, key: 'users', name: 'Người dùng Admin', order: 9 },
       { category: 'user', description: 'Phân quyền và quản lý vai trò', enabled: true, icon: 'Shield', isCore: false, key: 'roles', name: 'Vai trò & Quyền', order: 10 },
       { category: 'system', description: 'Cấu hình website và hệ thống', enabled: true, icon: 'Settings', isCore: true, key: 'settings', name: 'Cài đặt hệ thống', order: 11 },

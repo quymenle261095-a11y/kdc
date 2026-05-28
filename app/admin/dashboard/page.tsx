@@ -2,16 +2,23 @@
 
 import React, { useMemo, useState } from 'react';
 import { AdminImage as Image } from '@/app/admin/components/AdminImage';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui';
+import Link from 'next/link';
+import { Button, Card, CardContent, CardHeader, CardTitle } from '../components/ui';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AlertTriangle, Eye, Globe, Loader2, Mail, Package, TrendingUp, Users } from 'lucide-react';
+import { AlertTriangle, Eye, Globe, HardDrive, Loader2, Mail, Package, RefreshCw, TrendingUp, Users } from 'lucide-react';
 import { Badge } from '../components/ui';
+import { toast } from 'sonner';
 
 type TimeRange = '7d' | '30d' | '90d' | '1y';
 type ChartGroupBy = 'day' | 'month' | 'year';
+type MediaStats = {
+  totalCount: number;
+  totalSize: number;
+};
+const STORAGE_QUOTA_BYTES = 6 * 1024 * 1024 * 1024;
 
 function formatNumber(num: number): string {
   if (num >= 1_000_000) {return (num / 1_000_000).toFixed(1) + 'M';}
@@ -31,6 +38,59 @@ function formatCurrency(value: number): string {
   if (value >= 1_000_000) {return `${(value / 1_000_000).toFixed(1)}M`;}
   if (value >= 1000) {return `${(value / 1000).toFixed(1)}K`;}
   return value.toLocaleString('vi-VN');
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) {return '0 B';}
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, unitIndex);
+  return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function StorageUsageCard({
+  isResyncing,
+  mediaStats,
+  onResync,
+}: {
+  isResyncing: boolean;
+  mediaStats: MediaStats | undefined;
+  onResync: () => void;
+}) {
+  const usedBytes = mediaStats?.totalSize ?? 0;
+  const usagePercent = Math.min(100, (usedBytes / STORAGE_QUOTA_BYTES) * 100);
+
+  return (
+    <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-indigo-500/10 rounded-lg">
+          <HardDrive size={20} className="text-indigo-600 dark:text-indigo-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-slate-500 truncate">Dung lượng media</p>
+          <p className="text-xl font-bold text-slate-900 dark:text-slate-100">
+            {mediaStats ? `${formatBytes(usedBytes)} / 6 GB` : '...'}
+          </p>
+          <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div className="h-full rounded-full bg-indigo-500" style={{ width: `${usagePercent}%` }} />
+          </div>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {mediaStats ? `${mediaStats.totalCount.toLocaleString('vi-VN')} file · ${usagePercent.toFixed(1)}%` : 'Đang tải thống kê'}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 h-7 gap-1.5 px-2 text-xs"
+            onClick={onResync}
+            disabled={isResyncing}
+          >
+            <RefreshCw size={12} className={isResyncing ? 'animate-spin' : ''} />
+            {isResyncing ? 'Đang tính lại' : 'Tính lại'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export default function DashboardPage() {
@@ -64,6 +124,9 @@ function DashboardContent() {
   const chartData = useQuery(api.analytics.getRevenueChartData, { period: timeRange });
   const topProducts = useQuery(api.analytics.getTopProducts, { limit: 5 });
   const lowStockProducts = useQuery(api.analytics.getLowStockProducts, { limit: 5, threshold: 10 });
+  const mediaStats = useQuery(api.media.getStats);
+  const resyncMediaCounters = useMutation(api.seed.syncMediaCounters);
+  const [isResyncingMedia, setIsResyncingMedia] = useState(false);
   
   // Traffic data queries
   const trafficStats = useQuery(api.pageViews.getTrafficStats, { period: timeRange });
@@ -87,6 +150,21 @@ function DashboardContent() {
   const recentInbox = useQuery(api.contactInbox.listRecentInbox, showContactInboxWidget ? { limit: 5 } : 'skip');
   const hasInboxData = showContactInboxWidget && (inboxStats?.total ?? 0) > 0 && (recentInbox?.length ?? 0) > 0;
 
+  const handleResyncMediaCounters = async () => {
+    if (!confirm('Hệ thống sẽ quét lại toàn bộ media để tính đúng số file và dung lượng đã dùng. Tiếp tục?')) {return;}
+
+    setIsResyncingMedia(true);
+    try {
+      const result = await resyncMediaCounters();
+      const total = result.stats.total;
+      toast.success(`Đã tính lại: ${total.count} file · ${formatBytes(total.totalSize)}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi khi tính lại dung lượng media');
+    } finally {
+      setIsResyncingMedia(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -108,11 +186,13 @@ function DashboardContent() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Tổng quan</h1>
           <p className="text-slate-500 dark:text-slate-400">Chào mừng trở lại, Admin User!</p>
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StorageUsageCard isResyncing={isResyncingMedia} mediaStats={mediaStats} onResync={() => void handleResyncMediaCounters()} />
+        </div>
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
           <CardContent className="p-12 text-center">
             <p className="text-slate-500 dark:text-slate-400">
-              Chưa có báo cáo nào được bật. Vui lòng cấu hình tại{' '}
-              <a href="/system/modules/analytics" className="text-cyan-600 hover:underline">/system/modules/analytics</a>
+              Chưa có báo cáo nào được bật. Vui lòng liên hệ quản trị viên hệ thống để kích hoạt.
             </p>
           </CardContent>
         </Card>
@@ -143,6 +223,12 @@ function DashboardContent() {
           ))}
         </div>
       </div>
+
+      {!showTraffic && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StorageUsageCard isResyncing={isResyncingMedia} mediaStats={mediaStats} onResync={() => void handleResyncMediaCounters()} />
+        </div>
+      )}
 
       {/* Summary Stats Cards */}
       {(showSales || showCustomers || showProducts) && (
@@ -374,7 +460,7 @@ function DashboardContent() {
             <div className="flex items-center gap-3 mb-4">
               <Badge variant="warning">Mới: {inboxStats?.new ?? 0}</Badge>
               <Badge variant="secondary">Tổng: {inboxStats?.total ?? 0}</Badge>
-              <a href="/admin/contact-inbox" className="text-sm text-cyan-600 hover:underline">Xem tất cả</a>
+              <Link href="/admin/contact-inbox" className="text-sm text-cyan-600 hover:underline">Xem tất cả</Link>
             </div>
             <div className="space-y-3">
               {(recentInbox ?? []).map((item) => (
@@ -396,6 +482,7 @@ function DashboardContent() {
         <>
           {/* Traffic Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StorageUsageCard isResyncing={isResyncingMedia} mediaStats={mediaStats} onResync={() => void handleResyncMediaCounters()} />
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-500/10 rounded-lg">

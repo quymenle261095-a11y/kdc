@@ -5,6 +5,7 @@
 
 import { getConvexClient } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
+import { buildDetailPath } from '@/lib/ia/route-mode';
 
 export type RelatedPageItem = {
   title: string;
@@ -96,12 +97,22 @@ export const getRelatedPosts = async (params: {
   const { limit = 3 } = params;
   const client = getConvexClient();
 
-  const result = await client.query(api.posts.listPublished, {
-    paginationOpts: { cursor: null, numItems: limit },
-  });
+  const [result, categories] = await Promise.all([
+    client.query(api.posts.listPublished, {
+      paginationOpts: { cursor: null, numItems: limit },
+    }),
+    client.query(api.postCategories.listActive, { limit: 200 }),
+  ]);
+
+  const categorySlugMap = new Map(categories.map((category) => [category._id, category.slug]));
 
   return result.page.map((post) => ({
-    href: `/posts/${post.slug}`,
+    href: buildDetailPath({
+      categorySlug: categorySlugMap.get(post.categoryId),
+      mode: 'unified',
+      moduleKey: 'posts',
+      recordSlug: post.slug,
+    }),
     slug: post.slug,
     summary: post.excerpt || '',
     title: post.title,

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import Link from 'next/link';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, cn } from '../components/ui';
@@ -40,9 +39,9 @@ export function SimpleMenuPreview({ items }: { items: MenuItem[] }) {
           <CardTitle className="text-base flex items-center gap-2">
             <Eye size={16} /> Preview Menu
           </CardTitle>
-          <Link href="/system/experiences/menu" className="text-sm text-orange-600 hover:underline">
-            Cấu hình header →
-          </Link>
+          <span className="text-sm text-slate-500">
+            Xem trước menu website
+          </span>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">

@@ -62,10 +62,12 @@ export function useContactPageData(): {
   const experienceSetting = useQuery(api.settings.getByKey, { key: CONTACT_EXPERIENCE_KEY });
   const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
   const socialSettings = useQuery(api.settings.listByGroup, { group: 'social' });
+  const enabledFields = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: 'settings' });
 
   const isLoading = experienceSetting === undefined
     || contactSettings === undefined
-    || socialSettings === undefined;
+    || socialSettings === undefined
+    || enabledFields === undefined;
 
   const config = useMemo(
     () => parseContactExperienceConfig(experienceSetting?.value),
@@ -105,16 +107,22 @@ export function useContactPageData(): {
       settingsMap[setting.key] = typeof setting.value === 'string' ? setting.value : '';
     });
 
-    return [
-      { label: 'Facebook', href: settingsMap.social_facebook || '', color: '#1877f2', icon: Facebook },
-      { label: 'Twitter', href: settingsMap.social_twitter || '', color: '#1da1f2', icon: Twitter },
-      { label: 'Instagram', href: settingsMap.social_instagram || '', color: '#e1306c', icon: Instagram },
-      { label: 'LinkedIn', href: settingsMap.social_linkedin || '', color: '#0a66c2', icon: Linkedin },
-      { label: 'YouTube', href: settingsMap.social_youtube || '', color: '#ff0000', icon: Youtube },
-      { label: 'TikTok', href: settingsMap.social_tiktok || '', color: '#000000', icon: TikTokIcon },
-      { label: 'Zalo', href: zaloLink, color: '#0084ff', icon: ZaloIcon },
-    ].filter((item) => item.href);
-  }, [socialSettings, zaloLink]);
+    const enabledKeys = new Set(enabledFields?.map(f => f.fieldKey) ?? []);
+
+    const candidates = [
+      { label: 'Facebook', fieldKey: 'social_facebook', href: settingsMap.social_facebook || '', color: '#1877f2', icon: Facebook },
+      { label: 'Twitter', fieldKey: 'social_twitter', href: settingsMap.social_twitter || '', color: '#1da1f2', icon: Twitter },
+      { label: 'Instagram', fieldKey: 'social_instagram', href: settingsMap.social_instagram || '', color: '#e1306c', icon: Instagram },
+      { label: 'LinkedIn', fieldKey: 'social_linkedin', href: settingsMap.social_linkedin || '', color: '#0a66c2', icon: Linkedin },
+      { label: 'YouTube', fieldKey: 'social_youtube', href: settingsMap.social_youtube || '', color: '#ff0000', icon: Youtube },
+      { label: 'TikTok', fieldKey: 'social_tiktok', href: settingsMap.social_tiktok || '', color: '#000000', icon: TikTokIcon },
+      { label: 'Zalo', fieldKey: 'contact_zalo', href: zaloLink, color: '#0084ff', icon: ZaloIcon },
+    ];
+
+    return candidates
+      .filter((item) => item.href && enabledKeys.has(item.fieldKey))
+      .map(({ label, href, color, icon }) => ({ label, href, color, icon }));
+  }, [socialSettings, zaloLink, enabledFields]);
 
   return {
     brandColor,

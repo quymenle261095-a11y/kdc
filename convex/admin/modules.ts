@@ -5,7 +5,6 @@ import { api } from "../_generated/api";
 import { v } from "convex/values";
 import { dependencyType, fieldType, moduleCategory } from "../lib/validators";
 import { syncModuleRuntimeConfig } from "../lib/moduleConfigSync";
-import { cleanupProductFramesByAspectRatio } from "../productImageFrames";
 import { resolveMenuMaxDepthLevel } from "../../lib/utils/menu-tree";
 import { TRUST_PAGE_SLOTS } from "../../lib/ia/trust-pages";
 
@@ -48,7 +47,7 @@ const createToggleResult = (result: ToggleModuleResult): ToggleModuleResult => r
 const createToggleBasicResult = (result: ToggleModuleBasicResult): ToggleModuleBasicResult => result;
 
 function normalizeRolesModule<T extends ModuleRecord>(moduleItem: T): T {
-  if (moduleItem.key !== "roles") {
+  if (moduleItem.key !== "roles" && moduleItem.key !== "customers") {
     return moduleItem;
   }
   if (!moduleItem.isCore) {
@@ -61,7 +60,7 @@ async function normalizeRolesModuleWithPatch<T extends ModuleRecord>(
   ctx: MutationCtx,
   moduleItem: T
 ): Promise<T> {
-  if (moduleItem.key !== "roles") {
+  if (moduleItem.key !== "roles" && moduleItem.key !== "customers") {
     return moduleItem;
   }
   if (!moduleItem.isCore) {
@@ -71,19 +70,17 @@ async function normalizeRolesModuleWithPatch<T extends ModuleRecord>(
   return { ...moduleItem, isCore: false } as T;
 }
 
-async function repairRolesCoreFlag(ctx: MutationCtx) {
-  const rolesRecord = await ctx.db
-    .query("adminModules")
-    .withIndex("by_key", (q) => q.eq("key", "roles"))
-    .unique();
-  if (!rolesRecord) {
-    return null;
+async function repairSystemCoreFlags(ctx: MutationCtx) {
+  const keysToRepair = ["roles", "customers"];
+  for (const key of keysToRepair) {
+    const record = await ctx.db
+      .query("adminModules")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (record && record.isCore) {
+      await ctx.db.patch(record._id, { isCore: false });
+    }
   }
-  if (rolesRecord.isCore) {
-    await ctx.db.patch(rolesRecord._id, { isCore: false });
-    return { ...rolesRecord, isCore: false };
-  }
-  return rolesRecord;
 }
 
 async function upsertAdminPermissionMode(ctx: MutationCtx, value: "simple_full_admin" | "rbac") {
@@ -386,7 +383,7 @@ export const getDependentModules = query({
 export const toggleModule = mutation({
   args: { enabled: v.boolean(), key: v.string(), updatedBy: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    await repairRolesCoreFlag(ctx);
+    await repairSystemCoreFlags(ctx);
     const allModules = await ctx.db.query("adminModules").collect();
     const modulesByKey = new Map(allModules.map((module) => [module.key, module]));
     const moduleRecord = modulesByKey.get(args.key) ?? null;
@@ -468,7 +465,7 @@ export const toggleModuleWithCascade = mutation({
     updatedBy: v.optional(v.id("users")), // Modules con cần disable cùng
   },
   handler: async (ctx, args) => {
-    await repairRolesCoreFlag(ctx);
+    await repairSystemCoreFlags(ctx);
     const allModules = await ctx.db.query("adminModules").collect();
     const modulesByKey = new Map(allModules.map((module) => [module.key, module]));
     const moduleRecord = modulesByKey.get(args.key) ?? null;
@@ -867,6 +864,7 @@ export const toggleModuleFeature = mutation({
         enabled: args.enabled,
         name: derivedName || args.featureKey,
       });
+
       if (args.moduleKey === "settings" && args.featureKey === "enableTrustPages") {
         if (args.enabled) {
           await ensureTrustPagesPolicyCategory(ctx);
@@ -883,6 +881,7 @@ export const toggleModuleFeature = mutation({
           await cleanupTrustPagesData(ctx);
         }
       }
+
       if (args.moduleKey === 'products' && args.featureKey === 'enableCategoryHierarchy' && !args.enabled) {
         const categories = await ctx.db
           .query('productCategories')
@@ -903,6 +902,7 @@ export const toggleModuleFeature = mutation({
         await ctx.db.patch(linkedField._id, { enabled: args.enabled });
       }
     }
+
     if (args.moduleKey === "settings" && args.featureKey === "enableTrustPages") {
       if (args.enabled) {
         await ensureTrustPagesPolicyCategory(ctx);
@@ -919,6 +919,7 @@ export const toggleModuleFeature = mutation({
         await cleanupTrustPagesData(ctx);
       }
     }
+
     if (args.moduleKey === 'products' && args.featureKey === 'enableCategoryHierarchy' && !args.enabled) {
       const categories = await ctx.db
         .query('productCategories')
@@ -987,47 +988,6 @@ export const setModuleSetting = mutation({
 
     if (args.moduleKey === "menus" && args.settingKey === "maxDepth") {
       await normalizeMenuItemsToMaxLevel(ctx, args.value);
-    }
-
-    if (args.moduleKey === "products" && args.settingKey === "defaultImageAspectRatio") {
-      const cleanupSetting = await ctx.db
-        .query("moduleSettings")
-        .withIndex("by_module_setting", (q) =>
-          q.eq("moduleKey", "products").eq("settingKey", "productFrameCleanupOnArChange")
-        )
-        .unique();
-      const shouldCleanup = cleanupSetting?.value !== false;
-      if (shouldCleanup && typeof args.value === "string") {
-        await cleanupProductFramesByAspectRatio(ctx, args.value);
-      }
-
-      const activeFrameSetting = await ctx.db
-        .query("moduleSettings")
-        .withIndex("by_module_setting", (q) =>
-          q.eq("moduleKey", "products").eq("settingKey", "activeProductFrameId")
-        )
-        .unique();
-      const activeFrameId = typeof activeFrameSetting?.value === "string"
-        ? (activeFrameSetting.value as Id<"productImageFrames">)
-        : null;
-      if (activeFrameSetting && activeFrameId) {
-        const activeFrame = await ctx.db.get(activeFrameId);
-        if (!activeFrame || activeFrame.aspectRatio !== args.value) {
-          await ctx.db.patch(activeFrameSetting._id, { value: null });
-        }
-      }
-    }
-
-    if (args.moduleKey === "products" && args.settingKey === "enableProductFrames" && args.value === false) {
-      const activeFrameSetting = await ctx.db
-        .query("moduleSettings")
-        .withIndex("by_module_setting", (q) =>
-          q.eq("moduleKey", "products").eq("settingKey", "activeProductFrameId")
-        )
-        .unique();
-      if (activeFrameSetting) {
-        await ctx.db.patch(activeFrameSetting._id, { value: null });
-      }
     }
 
     if (args.moduleKey === "settings" && args.settingKey === "site_brand_mode") {

@@ -19,7 +19,14 @@ export const homepageModule = defineModuleWithRuntime({
    
    settings: [
      { key: 'maxSections', label: 'Số section tối đa', type: 'number', default: 10 },
-    { key: 'enableSmartWizard', label: 'Hiện Smart Wizard ở Admin', type: 'toggle', default: true },
+    { key: 'enableSmartWizard', label: 'Hiện nút Tạo nhanh ở Admin', type: 'toggle', default: true },
+    {
+      key: 'enableLegacySnapshotQuickCreate',
+      label: 'Cho phép tạo nhanh từ snapshot cũ',
+      type: 'toggle',
+      default: false,
+      dependsOn: 'enableSmartWizard',
+    },
      { 
        key: 'defaultSectionType', 
        label: 'Loại section mặc định', 

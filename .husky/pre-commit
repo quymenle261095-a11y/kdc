@@ -1,0 +1,10 @@
+echo "🚀 [Harness Engine] Đang quét chất lượng code trước khi commit..."
+
+# 1. Chạy linter siêu tốc cục bộ trên các file staged
+bunx lint-staged || exit 1
+
+# 2. Chạy kiểm tra kiểu dữ liệu toàn cục (Invariant check)
+echo "🔍 [TypeScript] Đang typecheck toàn bộ dự án..."
+bun tsc --noEmit || exit 1
+
+echo "✅ [Harness Engine] Đạt tiêu chuẩn! Cho phép commit."

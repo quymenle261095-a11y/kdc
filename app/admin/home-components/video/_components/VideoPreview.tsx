@@ -5,6 +5,7 @@ import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
   getVideoColorTokens,
   type VideoColorTokens,
@@ -26,6 +27,19 @@ interface VideoPreviewProps {
   mode?: VideoBrandMode;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  // Header config props
+  title?: string;
+  subtitle?: string;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing;
 }
 
 const getPreviewInfo = (style: VideoStyle, videoUrl: string) => {
@@ -55,6 +69,19 @@ export const VideoPreview = ({
   mode = 'dual',
   fontStyle,
   fontClassName,
+  // Header config
+  title,
+  subtitle,
+  hideHeader,
+  showTitle,
+  showSubtitle,
+  headerAlign,
+  titleColorPrimary,
+  subtitleAboveTitle,
+  uppercaseText,
+  showBadge,
+  badgeText,
+  spacing,
 }: VideoPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
 
@@ -91,8 +118,20 @@ export const VideoPreview = ({
             device={device}
             config={{ ...config, style: previewStyle }}
             style={previewStyle}
-            title={config.heading}
+            title={title ?? config.heading}
             tokens={tokens}
+            brandColor={brandColor}
+            hideHeader={hideHeader}
+            showTitle={showTitle}
+            showSubtitle={showSubtitle}
+            subtitle={subtitle}
+            headerAlign={headerAlign}
+            titleColorPrimary={titleColorPrimary}
+            subtitleAboveTitle={subtitleAboveTitle}
+            uppercaseText={uppercaseText}
+            showBadge={showBadge}
+            badgeText={badgeText}
+            spacing={spacing}
           />
         </BrowserFrame>
       </PreviewWrapper>

@@ -45,7 +45,8 @@ export function TypeColorOverrideCard({
       <CardContent className={cn(compact ? 'space-y-3 pt-0' : 'space-y-4')}>
         <div className="flex items-center justify-between gap-3">
           <div className={cn('font-medium text-slate-700 dark:text-slate-200', compact ? 'text-xs' : 'text-sm')}>{toggleLabel}</div>
-          <div
+          <button
+            type="button"
             className={cn(
               'cursor-pointer inline-flex items-center justify-center rounded-full w-10 h-5 transition-colors',
               enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
@@ -55,9 +56,11 @@ export function TypeColorOverrideCard({
               if (disabled) {return;}
               onEnabledChange(!enabled);
             }}
+            aria-pressed={enabled}
+            disabled={disabled}
           >
             <div className={cn('w-4 h-4 bg-white rounded-full transition-transform', enabled ? 'translate-x-2' : '-translate-x-2')} />
-          </div>
+          </button>
         </div>
 
         <div className="flex gap-2">

@@ -1,5 +1,7 @@
 'use client';
 
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -11,6 +13,8 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
+import { normalizeSectionSpacing } from '../../../_shared/types/sectionSpacing';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
@@ -20,20 +24,53 @@ import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/c
 import { getCTAValidationResult } from '../../_lib/colors';
 import {
   DEFAULT_CTA_CONFIG,
+  normalizeCTAContainerWidth,
+  normalizeCTACornerRadius,
   normalizeCTAStyle,
 } from '../../_lib/constants';
-import type { CTAConfig, CTAStyle } from '../../_types';
+import type { CTAConfig, CTAContainerWidth, CTAStyle } from '../../_types';
 
 const COMPONENT_TYPE = 'CTA';
 
-export default function CtaEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type CtaEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+const CONTAINER_WIDTH_OPTIONS: Array<{ value: CTAContainerWidth; label: string; description: string }> = [
+  { value: 'max-7xl', label: 'Max-w-7xl', description: 'Giới hạn chiều rộng gọn gàng' },
+  { value: 'full', label: 'Full width', description: 'Mở rộng toàn chiều ngang' },
+];
+
+export default function CtaEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: CtaEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
@@ -42,6 +79,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
   const [ctaStyle, setCtaStyle] = useState<CTAStyle>('banner');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const [initialData, setInitialData] = useState<{
     title: string;
     active: boolean;
@@ -51,7 +89,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'CTA') {
+      if (!snapshotComponent && component.type !== 'CTA') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
@@ -68,6 +106,9 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
         secondaryButtonLink: (config.secondaryButtonLink as string | undefined) ?? '',
         secondaryButtonText: (config.secondaryButtonText as string | undefined) ?? '',
         title: (config.title as string | undefined) ?? '',
+        spacing: config.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(config.spacing),
+        cornerRadius: normalizeCTACornerRadius(config.cornerRadius, config.noBorderRadius),
+        containerWidth: normalizeCTAContainerWidth(config.containerWidth),
       };
       const nextStyle = normalizeCTAStyle(config.style);
 
@@ -81,16 +122,16 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
       });
       setHasChanges(false);
     }
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
@@ -105,6 +146,8 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
 
     setHasChanges(changed || customChanged || customFontChanged);
   }, [title, active, ctaConfig, ctaStyle, initialData, customChanged, customFontChanged]);
+
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,13 +168,24 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
 
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config: { ...ctaConfig, style: ctaStyle },
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      const nextConfig = {
+          ...ctaConfig,
+          noBorderRadius: ctaConfig.cornerRadius === 'none',
+          noVerticalMargin: ctaConfig.spacing === 'none',
+          style: ctaStyle,
+        };
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig as Record<string, any>, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         await setTypeColorOverride({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -140,7 +194,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -154,7 +208,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
         config: ctaConfig,
         style: ctaStyle,
       });
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -162,7 +216,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
           secondary: resolvedCustomSecondary,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -195,7 +249,8 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa CTA</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -216,35 +271,55 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
                 placeholder="Nhập tiêu đề component..."
               />
             </div>
-
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5',
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
+</CardContent>
         </Card>
+
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={displayOpen}
+            onOpenChange={setDisplayOpen}
+            cornerRadius={ctaConfig.cornerRadius ?? 'lg'}
+            onCornerRadiusChange={(cornerRadius) => setCtaConfig((prev) => ({ ...prev, cornerRadius }))}
+            spacing={ctaConfig.spacing ?? 'normal'}
+            onSpacingChange={(spacing) => setCtaConfig((prev) => ({ ...prev, spacing }))}
+          >
+              <div className="space-y-2">
+                <Label>Chiều rộng</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {CONTAINER_WIDTH_OPTIONS.map((option) => {
+                    const selected = (ctaConfig.containerWidth ?? 'max-7xl') === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setCtaConfig((prev) => ({ ...prev, containerWidth: option.value }))}
+                        className={cn(
+                          'rounded-md border px-3 py-2 text-left transition-colors',
+                          selected
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        <span className="block text-xs font-semibold">{option.label}</span>
+                        <span className="mt-0.5 block text-[11px] opacity-75">{option.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+          </HomeComponentDisplaySettingsSection>
+        </div>
 
         <CTAForm
           config={ctaConfig}
           onChange={setCtaConfig}
+          defaultExpanded={false}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho CTA"
                 enabled={customState.enabled}
@@ -273,7 +348,7 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho CTA"
                 enabled={customFontState.enabled}
@@ -301,8 +376,10 @@ export default function CtaEditPage({ params }: { params: Promise<{ id: string }
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() =>{  router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
         />
       </form>
     </div>

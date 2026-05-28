@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { getConvexClient } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings } from '@/lib/get-settings';
 import { JsonLd, generateBreadcrumbSchema, generateServiceSchema } from '@/components/seo/JsonLd';
 import { buildSeoMetadata } from '@/lib/seo/metadata';
+import { buildDetailPath } from '@/lib/ia/route-mode';
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -58,6 +59,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     });
   }
 
+  const category = await client.query(api.serviceCategories.getById, { id: service.categoryId });
+  const canonicalPath = buildDetailPath({
+    categorySlug: category?.slug,
+    mode: 'unified',
+    moduleKey: 'services',
+    recordSlug: service.slug,
+  });
+
   return buildSeoMetadata({
     contact,
     entity: {
@@ -68,7 +77,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: service.title,
     },
     entityExists: true,
-    pathname: `/services/${service.slug}`,
+    pathname: canonicalPath,
     routeType: 'detail',
     seo,
     site,
@@ -93,8 +102,24 @@ export default async function ServiceLayout({ params, children }: Props) {
 
   if (!service) {return children;}
 
+  const category = await client.query(api.serviceCategories.getById, { id: service.categoryId });
+  if (category?.slug) {
+    permanentRedirect(buildDetailPath({
+      categorySlug: category.slug,
+      mode: 'unified',
+      moduleKey: 'services',
+      recordSlug: service.slug,
+    }));
+  }
+
   const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL) ?? '';
-  const serviceUrl = `${baseUrl}/services/${service.slug}`;
+  const servicePath = buildDetailPath({
+    categorySlug: category?.slug,
+    mode: 'unified',
+    moduleKey: 'services',
+    recordSlug: service.slug,
+  });
+  const serviceUrl = `${baseUrl}${servicePath}`;
   const image = service.thumbnail ?? seo.seo_og_image;
 
   const ratingSummary = await client.query(api.comments.getRatingSummary, {
@@ -117,7 +142,12 @@ export default async function ServiceLayout({ params, children }: Props) {
 
   const breadcrumbSchema = generateBreadcrumbSchema([
     { name: 'Trang chủ', url: baseUrl },
-    { name: 'Dịch vụ', url: `${baseUrl}/services` },
+    {
+      name: category?.name ?? 'Dịch vụ',
+      url: category?.slug
+        ? `${baseUrl}/${category.slug}`
+        : `${baseUrl}/services`,
+    },
     { name: service.title, url: serviceUrl },
   ]);
 

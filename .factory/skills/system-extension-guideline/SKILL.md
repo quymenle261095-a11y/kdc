@@ -39,6 +39,8 @@ Khi skill này được gọi, **phải** trả về đúng khung:
 6) Gate Check (critical/non-critical).
 7) Final Report (output protocol ở trên).
 
+Nếu scope có upload file/media, thêm FLS pass vào bước 2/5/6 bằng `.factory/skills/file-lifecycle-service/SKILL.md`.
+
 ## Risk Policy (Critical vs Non-Critical)
 
 - **Critical fail ⇒ block completion.**
@@ -109,10 +111,12 @@ Khi skill này được gọi, **phải** trả về đúng khung:
 - Đúng 6 styles, preview = renderer.
 - Fallback style nằm cuối function.
 - Không hardcode nội dung đặc thù; dùng config fields.
+- Nếu có upload file/media: draft upload được cleanup, config preserve `storageId`, `homeComponents` sync `fileReferences`, delete/bulk delete không orphan storage.
 
 **Common failure modes:**
 - Preview button thiếu `type="button"`.
 - Style fallback return trước các case khác.
+- Upload trước save bị orphan, hoặc xóa/đổi file bypass FLS.
 
 ### 4) Seed/Wizard (ở `/system/data`)
 

@@ -1,14 +1,22 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ListChecks, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { useFormSectionsState } from '../../../_shared/hooks/useFormSectionsState';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
@@ -24,83 +32,209 @@ import {
   serializeProcessFormSteps,
   type ProcessFormStep,
 } from '../../_lib/normalize';
-import type { ProcessBrandMode, ProcessStep, ProcessStyle } from '../../_types';
+import {
+  DEFAULT_PROCESS_CORNER_RADIUS,
+  type ProcessBrandMode,
+  type ProcessCornerRadius,
+  type ProcessStep,
+  type ProcessStyle,
+} from '../../_types';
+import { Label, cn } from '@/app/admin/components/ui';
 
 const COMPONENT_TYPE = 'Process';
 
-export default function ProcessEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type ProcessEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function ProcessEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: ProcessEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
-  const [steps, setSteps] = useState<ProcessFormStep[]>([]);
+  const {
+    state: steps,
+    set: setSteps,
+    undo: undosteps,
+    redo: redosteps,
+    canUndo: canUndosteps,
+    canRedo: canRedosteps,
+    reset: resetsteps,
+  } = useUndoRedo<ProcessFormStep[]>([], { maxHistory: 15 });
   const [processStyle, setProcessStyle] = useState<ProcessStyle>('horizontal');
+  const [desktopColumns, setDesktopColumns] = useState<3 | 4>(4);
+  const [cornerRadius, setCornerRadius] = useState<ProcessCornerRadius>(DEFAULT_PROCESS_CORNER_RADIUS);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [initialData, setInitialData] = useState<{
-    title: string;
-    active: boolean;
-    steps: ProcessStep[];
-    style: ProcessStyle;
-  } | null>(null);
+
+  // Header config states
+  const [hideHeader, setHideHeader] = useState(false);
+  const [showTitle, setShowTitle] = useState(true);
+  const [subtitle, setSubtitle] = useState('');
+  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [headerAlign, setHeaderAlign] = useState<'left' | 'center' | 'right'>('center');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(false);
+  const [uppercaseText, setUppercaseText] = useState(false);
+  const [showBadge, setShowBadge] = useState(true);
+  const [badgeText, setBadgeText] = useState('');
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
+  const { openSections, toggleSection } = useFormSectionsState(['header', 'display'], false);
+
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'Process') {
+      if (!snapshotComponent && component.type !== 'Process') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
 
       const normalizedConfig = normalizeProcessConfig(component.config);
       const normalizedFormSteps = normalizeProcessFormSteps(normalizedConfig.steps);
-      const serializedSteps = serializeProcessFormSteps(normalizedFormSteps);
 
       setTitle(component.title);
       setActive(component.active);
-      setSteps(normalizedFormSteps);
+      resetsteps(normalizedFormSteps);
       setProcessStyle(normalizedConfig.style);
-      setInitialData({
-        title: component.title,
-        active: component.active,
-        steps: serializedSteps,
-        style: normalizedConfig.style,
-      });
-      setHasChanges(false);
+      setDesktopColumns(normalizedConfig.desktopColumns ?? 4);
+      setCornerRadius(normalizedConfig.cornerRadius);
+
+      // Load header config via shared extractor
+      const config = component.config ?? {};
+      const hc = extractSectionHeaderConfig(config);
+      setHideHeader(hc.hideHeader ?? false);
+      setShowTitle(hc.showTitle ?? true);
+      setSubtitle(hc.subtitle ?? '');
+      setShowSubtitle(hc.showSubtitle ?? true);
+      setHeaderAlign(hc.headerAlign ?? 'center');
+      setTitleColorPrimary(hc.titleColorPrimary ?? false);
+      setSubtitleAboveTitle(hc.subtitleAboveTitle ?? false);
+      setUppercaseText(hc.uppercaseText ?? false);
+      setShowBadge(hc.showBadge ?? true);
+      setBadgeText(hc.badgeText ?? '');
+      setSpacing(normalizedConfig.spacing);
     }
   }, [component, id, router]);
 
+  const toSnapshot = (payload: {
+    title: string;
+    active: boolean;
+    steps: ProcessStep[];
+    style: ProcessStyle;
+    desktopColumns: 3 | 4;
+    cornerRadius: ProcessCornerRadius;
+    noBorderRadius: boolean;
+    hideHeader: boolean;
+    showTitle: boolean;
+    subtitle: string;
+    showSubtitle: boolean;
+    headerAlign: 'left' | 'center' | 'right';
+    titleColorPrimary: boolean;
+    subtitleAboveTitle: boolean;
+    uppercaseText: boolean;
+    showBadge: boolean;
+    badgeText: string;
+    spacing: SectionSpacing;
+    noVerticalMargin: boolean;
+  }) => JSON.stringify(payload);
+
+  useEffect(() => {
+    if (!component) {return;}
+    const config = component.config ?? {};
+    const hc = extractSectionHeaderConfig(config);
+    const normalizedConfig = normalizeProcessConfig(component.config);
+    const normalizedFormSteps = normalizeProcessFormSteps(normalizedConfig.steps);
+    const serializedSteps = serializeProcessFormSteps(normalizedFormSteps);
+
+    setInitialSnapshot(toSnapshot({
+      title: component.title,
+      active: component.active,
+      steps: serializedSteps,
+      style: normalizedConfig.style,
+      desktopColumns: normalizedConfig.desktopColumns ?? 4,
+      cornerRadius: normalizedConfig.cornerRadius,
+      noBorderRadius: normalizedConfig.cornerRadius === 'none',
+      hideHeader: hc.hideHeader ?? false,
+      showTitle: hc.showTitle ?? true,
+      subtitle: hc.subtitle ?? '',
+      showSubtitle: hc.showSubtitle ?? true,
+      headerAlign: hc.headerAlign ?? 'center',
+      titleColorPrimary: hc.titleColorPrimary ?? false,
+      subtitleAboveTitle: hc.subtitleAboveTitle ?? false,
+      uppercaseText: hc.uppercaseText ?? false,
+      showBadge: hc.showBadge ?? true,
+      badgeText: hc.badgeText ?? '',
+      spacing: normalizedConfig.spacing,
+      noVerticalMargin: normalizedConfig.spacing === 'none',
+    }));
+  }, [component]);
+
+  const currentSnapshot = toSnapshot({
+    title,
+    active,
+    steps: serializeProcessFormSteps(steps),
+    style: processStyle,
+    desktopColumns,
+    cornerRadius,
+    noBorderRadius: cornerRadius === 'none',
+    hideHeader,
+    showTitle,
+    subtitle,
+    showSubtitle,
+    headerAlign,
+    titleColorPrimary,
+    subtitleAboveTitle,
+    uppercaseText,
+    showBadge,
+    badgeText,
+    spacing,
+    noVerticalMargin: spacing === 'none',
+  });
+
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
 
-  useEffect(() => {
-    if (!initialData) {return;}
+  const hasChanges = initialSnapshot !== null && (currentSnapshot !== initialSnapshot || customChanged || customFontChanged);
 
-    const currentSteps = JSON.stringify(serializeProcessFormSteps(steps));
-    const initialSteps = JSON.stringify(initialData.steps);
-
-    const changed = title !== initialData.title
-      || active !== initialData.active
-      || processStyle !== initialData.style
-      || currentSteps !== initialSteps;
-
-    setHasChanges(changed || customChanged || customFontChanged);
-  }, [title, active, steps, processStyle, initialData, customChanged, customFontChanged]);
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -110,16 +244,38 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
     try {
       const serializedSteps = serializeProcessFormSteps(steps);
 
-      await updateMutation({
-        active,
-        config: {
-          steps: serializedSteps,
-          style: processStyle,
-        },
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      const persistConfig = {
+        steps: serializedSteps,
+        style: processStyle,
+        desktopColumns,
+        cornerRadius,
+        noBorderRadius: cornerRadius === 'none',
+        spacing,
+        noVerticalMargin: spacing === 'none',
+        // Header config
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+      };
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: persistConfig, title });
+      } else {
+        await updateMutation({
+          active,
+          config: persistConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -129,7 +285,7 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -138,13 +294,8 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
       }
 
       toast.success('Đã cập nhật Process');
-      setInitialData({
-        title,
-        active,
-        steps: serializedSteps,
-        style: processStyle,
-      });
-      if (showCustomBlock) {
+      setInitialSnapshot(currentSnapshot);
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -152,13 +303,12 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
         });
       }
-      setHasChanges(false);
     } catch (error) {
       toast.error('Lỗi khi cập nhật');
       console.error(error);
@@ -187,55 +337,82 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Process</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <ListChecks size={20} />
-              Process
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(event) => { setTitle(event.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={openSections.header}
+          onExpandedChange={(open) => toggleSection('header', open)}
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() => { setActive(!active); }}
-              >
-                <div
-                  className={cn(
-                    'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                    active ? 'translate-x-2.5' : '-translate-x-2.5',
-                  )}
-                ></div>
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={openSections.display}
+            onOpenChange={(open) => toggleSection('display', open)}
+            cornerRadius={cornerRadius}
+            onCornerRadiusChange={setCornerRadius}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+          >
+              <div className="space-y-2">
+                <Label>Số cột desktop</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([3, 4] as const).map((option) => {
+                    const selected = desktopColumns === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setDesktopColumns(option)}
+                        className={cn(
+                          'h-9 rounded-md border text-xs transition-colors',
+                          selected
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        {option} cột
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
+          </HomeComponentDisplaySettingsSection>
+        </div>
 
-        <ProcessForm steps={steps} onChange={setSteps} secondary={effectiveColors.secondary} />
+        <ProcessForm steps={steps} onChange={setSteps} secondary={effectiveColors.secondary} defaultExpanded={false} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Process"
                 enabled={customState.enabled}
@@ -263,7 +440,7 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
               }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Process"
                 enabled={customFontState.enabled}
@@ -282,8 +459,22 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
               mode={effectiveColors.mode as ProcessBrandMode}
               selectedStyle={processStyle}
               onStyleChange={setProcessStyle}
+              title={title}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              subtitle={subtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={badgeText}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              desktopColumns={desktopColumns}
+              spacing={spacing}
+              cornerRadius={cornerRadius}
             />
           </div>
         </div>
@@ -291,8 +482,17 @@ export default function ProcessEditPage({ params }: { params: Promise<{ id: stri
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => { router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndosteps,
+          canRedo: canRedosteps,
+          onUndo: undosteps,
+          onRedo: redosteps,
+        }}
         />
       </form>
     </div>

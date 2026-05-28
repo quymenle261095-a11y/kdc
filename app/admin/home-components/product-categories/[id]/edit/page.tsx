@@ -1,41 +1,91 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Package, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { ProductCategoriesForm } from '../../_components/ProductCategoriesForm';
 import { ProductCategoriesPreview } from '../../_components/ProductCategoriesPreview';
+import { sanitizeDemoCategories } from '../../_lib/imageSrc';
+import { useProductCategoriesAutoGenerate } from '../../_lib/useProductCategoriesAutoGenerate';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import type {
-  CategoryConfigItem,
-  ProductCategoriesBrandMode,
-  ProductCategoriesStyle,
+import {
+  DEFAULT_PRODUCT_CATEGORIES_SPACING,
+  DEFAULT_PRODUCT_CATEGORIES_CORNER_RADIUS,
+  normalizeProductCategoriesCornerRadius,
+  normalizeProductCategoriesSpacing,
+  type CategoryConfigItem,
+  type DemoProductCategoryItem,
+  type ProductCategoriesAlign,
+  type ProductCategoriesBrandMode,
+  type ProductCategoriesCornerRadius,
+  type ProductCategoriesSelectionMode,
+  type ProductCategoriesSpacing,
+  type ProductCategoriesStyle,
+  type ProductCategoriesDesktopColumns,
+  DEFAULT_PRODUCT_CATEGORIES_DESKTOP_COLUMNS,
+  normalizeProductCategoriesDesktopColumns,
 } from '../../_types';
 
 const COMPONENT_TYPE = 'ProductCategories';
 
-export default function ProductCategoriesEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type ProductCategoriesEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function ProductCategoriesEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: ProductCategoriesEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const brandMode: ProductCategoriesBrandMode = effectiveColors.mode === 'single' ? 'single' : 'dual';
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<"homeComponents"> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<"homeComponents"> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
   const productCategoriesData = useQuery(api.productCategories.listActive);
+  const {
+    isAutoGenerateLoading,
+    isAutoGenerateReady,
+    generateFromRealData,
+  } = useProductCategoriesAutoGenerate();
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
@@ -47,19 +97,54 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
     categories: CategoryConfigItem[];
     style: ProductCategoriesStyle;
     showProductCount: boolean;
-    columnsDesktop: number;
-    columnsMobile: number;
+    subheading: string;
+    align: ProductCategoriesAlign;
+    hideHeader: boolean;
+    showTitle: boolean;
+    showSubtitle: boolean;
+    titleColorPrimary: boolean;
+    subtitleAboveTitle: boolean;
+    uppercaseText: boolean;
+    showBadge: boolean;
+    badgeText: string;
+    selectionMode: ProductCategoriesSelectionMode;
+    demoCategories: DemoProductCategoryItem[];
+    spacing: ProductCategoriesSpacing;
+    cornerRadius: ProductCategoriesCornerRadius;
+    desktopColumns: ProductCategoriesDesktopColumns;
   } | null>(null);
 
-  const [productCategoriesItems, setProductCategoriesItems] = useState<CategoryConfigItem[]>([]);
-  const [productCategoriesStyle, setProductCategoriesStyle] = useState<ProductCategoriesStyle>('grid');
+  const {
+    state: productCategoriesItems,
+    set: setProductCategoriesItems,
+    undo: undoproductCategoriesItems,
+    redo: redoproductCategoriesItems,
+    canUndo: canUndoproductCategoriesItems,
+    canRedo: canRedoproductCategoriesItems,
+    reset: resetproductCategoriesItems,
+  } = useUndoRedo<CategoryConfigItem[]>([], { maxHistory: 15 });
+  const [productCategoriesStyle, setProductCategoriesStyle] = useState<ProductCategoriesStyle>('image-strip');
   const [productCategoriesShowCount, setProductCategoriesShowCount] = useState(true);
-  const [productCategoriesColsDesktop, setProductCategoriesColsDesktop] = useState(4);
-  const [productCategoriesColsMobile, setProductCategoriesColsMobile] = useState(2);
+  const [productCategoriesSubheading, setProductCategoriesSubheading] = useState('');
+  const [productCategoriesAlign, setProductCategoriesAlign] = useState<ProductCategoriesAlign>('center');
+  const [expandedSections, setExpandedSections] = useState({ header: false });
+  const [hideHeader, setHideHeader] = useState(false);
+  const [showTitle, setShowTitle] = useState(true);
+  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [titleColorPrimary, setTitleColorPrimary] = useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(false);
+  const [uppercaseText, setUppercaseText] = useState(false);
+  const [showBadge, setShowBadge] = useState(true);
+  const [badgeText, setBadgeText] = useState('');
+  const [selectionMode, setSelectionMode] = useState<ProductCategoriesSelectionMode>('real');
+  const [demoCategories, setDemoCategories] = useState<DemoProductCategoryItem[]>([]);
+  const [spacing, setSpacing] = useState<ProductCategoriesSpacing>(DEFAULT_PRODUCT_CATEGORIES_SPACING);
+  const [cornerRadius, setCornerRadius] = useState<ProductCategoriesCornerRadius>(DEFAULT_PRODUCT_CATEGORIES_CORNER_RADIUS);
+  const [desktopColumns, setDesktopColumns] = useState<ProductCategoriesDesktopColumns>(DEFAULT_PRODUCT_CATEGORIES_DESKTOP_COLUMNS);
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'ProductCategories') {
+      if (!snapshotComponent && component.type !== 'ProductCategories') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
@@ -68,34 +153,71 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
       setActive(component.active);
 
       const config = component.config ?? {};
-      const categories = config.categories?.map((c: { categoryId: string; customImage?: string; imageMode?: string }, i: number) => ({
+      const categories = config.categories?.map((c: { categoryId: string; customImage?: string; imageMode?: string; storageId?: string | null }, i: number) => ({
         categoryId: c.categoryId,
         customImage: c.customImage ?? '',
         id: i,
-        imageMode: (c.imageMode as 'product-image' | 'default' | 'icon' | 'upload' | 'url') || 'default'
+        imageMode: (c.imageMode as 'product-image' | 'default' | 'icon' | 'upload' | 'url') || 'default',
+        storageId: c.storageId ?? null,
       })) ?? [];
-      const style = (config.style as ProductCategoriesStyle) || 'grid';
+      const style = (config.style as ProductCategoriesStyle) || 'image-strip';
       const showProductCount = config.showProductCount ?? true;
-      const columnsDesktop = config.columnsDesktop ?? 4;
-      const columnsMobile = config.columnsMobile ?? 2;
+      const headerConfig = extractSectionHeaderConfig({
+        ...config,
+        subtitle: typeof config.subtitle === 'string' ? config.subtitle : typeof config.subheading === 'string' ? config.subheading : '',
+        headerAlign: config.headerAlign ?? config.align,
+      });
+      const subheading = headerConfig.subtitle ?? '';
+      const align = (headerConfig.headerAlign as ProductCategoriesAlign) ?? 'center';
+      const loadedSelectionMode = (config.selectionMode as ProductCategoriesSelectionMode) || 'real';
+      const loadedDemoCategories = Array.isArray(config.demoCategories) ? sanitizeDemoCategories(config.demoCategories as DemoProductCategoryItem[]) : [];
+      const loadedSpacing = normalizeProductCategoriesSpacing(config.spacing, config.noVerticalMargin);
+      const loadedCornerRadius = normalizeProductCategoriesCornerRadius(config.cornerRadius, config.noBorderRadius);
+      const loadedDesktopColumns = normalizeProductCategoriesDesktopColumns(config.desktopColumns);
 
-      setProductCategoriesItems(categories);
+      resetproductCategoriesItems(categories);
       setProductCategoriesStyle(style);
       setProductCategoriesShowCount(showProductCount);
-      setProductCategoriesColsDesktop(columnsDesktop);
-      setProductCategoriesColsMobile(columnsMobile);
+      setProductCategoriesSubheading(subheading);
+      setProductCategoriesAlign(align);
+      setHideHeader(headerConfig.hideHeader ?? false);
+      setShowTitle(headerConfig.showTitle ?? true);
+      setShowSubtitle(headerConfig.showSubtitle ?? true);
+      setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+      setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+      setUppercaseText(headerConfig.uppercaseText ?? false);
+      setShowBadge(headerConfig.showBadge ?? true);
+      setBadgeText(headerConfig.badgeText ?? '');
+      setSelectionMode(loadedSelectionMode);
+      setDemoCategories(loadedDemoCategories);
+      setSpacing(loadedSpacing);
+      setCornerRadius(loadedCornerRadius);
+      setDesktopColumns(loadedDesktopColumns);
       setInitialData({
         title: component.title,
         active: component.active,
         categories,
         style,
         showProductCount,
-        columnsDesktop,
-        columnsMobile,
+        subheading,
+        align,
+        hideHeader: headerConfig.hideHeader ?? false,
+        showTitle: headerConfig.showTitle ?? true,
+        showSubtitle: headerConfig.showSubtitle ?? true,
+        titleColorPrimary: headerConfig.titleColorPrimary ?? false,
+        subtitleAboveTitle: headerConfig.subtitleAboveTitle ?? false,
+        uppercaseText: headerConfig.uppercaseText ?? false,
+        showBadge: headerConfig.showBadge ?? true,
+        badgeText: headerConfig.badgeText ?? '',
+        selectionMode: loadedSelectionMode,
+        demoCategories: loadedDemoCategories,
+        spacing: loadedSpacing,
+        cornerRadius: loadedCornerRadius,
+        desktopColumns: loadedDesktopColumns,
       });
       setHasChanges(false);
     }
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   useEffect(() => {
     if (!initialData) {return;}
@@ -103,13 +225,13 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
     const currentCategories = JSON.stringify(productCategoriesItems);
     const initialCategories = JSON.stringify(initialData.categories);
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-    const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
       ? customState.enabled !== initialCustom.enabled
         || customState.mode !== initialCustom.mode
         || customState.primary !== initialCustom.primary
         || resolvedCustomSecondary !== initialCustom.secondary
       : false;
-    const customFontChanged = showFontCustomBlock
+    const customFontChanged = enableTypeOverrides && showFontCustomBlock
       ? customFontState.enabled !== initialFontCustom.enabled
         || customFontState.fontKey !== initialFontCustom.fontKey
       : false;
@@ -118,8 +240,21 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
       || currentCategories !== initialCategories
       || productCategoriesStyle !== initialData.style
       || productCategoriesShowCount !== initialData.showProductCount
-      || productCategoriesColsDesktop !== initialData.columnsDesktop
-      || productCategoriesColsMobile !== initialData.columnsMobile
+      || productCategoriesSubheading !== initialData.subheading
+      || productCategoriesAlign !== initialData.align
+      || hideHeader !== initialData.hideHeader
+      || showTitle !== initialData.showTitle
+      || showSubtitle !== initialData.showSubtitle
+      || titleColorPrimary !== initialData.titleColorPrimary
+      || subtitleAboveTitle !== initialData.subtitleAboveTitle
+      || uppercaseText !== initialData.uppercaseText
+      || showBadge !== initialData.showBadge
+      || badgeText !== initialData.badgeText
+      || selectionMode !== initialData.selectionMode
+      || JSON.stringify(demoCategories) !== JSON.stringify(initialData.demoCategories)
+      || spacing !== initialData.spacing
+      || cornerRadius !== initialData.cornerRadius
+      || desktopColumns !== initialData.desktopColumns
       || customChanged
       || customFontChanged;
 
@@ -130,8 +265,20 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
     productCategoriesItems,
     productCategoriesStyle,
     productCategoriesShowCount,
-    productCategoriesColsDesktop,
-    productCategoriesColsMobile,
+    productCategoriesSubheading,
+    productCategoriesAlign,
+    hideHeader,
+    showTitle,
+    showSubtitle,
+    titleColorPrimary,
+    subtitleAboveTitle,
+    uppercaseText,
+    showBadge,
+    badgeText,
+    selectionMode,
+    demoCategories,
+    spacing,
+    cornerRadius,
     initialData,
     customState,
     initialCustom,
@@ -139,7 +286,10 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
     customFontState,
     initialFontCustom,
     showFontCustomBlock,
+    enableTypeOverrides,
   ]);
+
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,23 +297,49 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
 
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config: {
-          categories: productCategoriesItems.map(c => ({
+      const sanitizedDemoCategories = sanitizeDemoCategories(demoCategories);
+      const sanitizedSubtitle = productCategoriesSubheading.trim();
+      const sanitizedBadgeText = badgeText.trim();
+
+      const nextConfig = {
+          selectionMode,
+          categories: selectionMode === 'real' ? productCategoriesItems.map(c => ({
             categoryId: c.categoryId,
             customImage: c.customImage || undefined,
             imageMode: c.imageMode ?? 'default',
-          })),
-          columnsDesktop: productCategoriesColsDesktop,
-          columnsMobile: productCategoriesColsMobile,
+            storageId: c.storageId ?? null,
+          })) : [],
+          demoCategories: selectionMode === 'demo' ? sanitizedDemoCategories : [],
           showProductCount: productCategoriesShowCount,
           style: productCategoriesStyle,
-        },
-        id: id as Id<"homeComponents">,
-        title,
-      });
-      if (showCustomBlock) {
+          hideHeader,
+          showTitle,
+          subtitle: sanitizedSubtitle,
+          showSubtitle,
+          headerAlign: productCategoriesAlign,
+          titleColorPrimary,
+          subtitleAboveTitle,
+          uppercaseText,
+          showBadge,
+          badgeText: sanitizedBadgeText,
+          subheading: sanitizedSubtitle,
+          align: productCategoriesAlign,
+          spacing,
+          cornerRadius,
+          desktopColumns,
+        };
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<"homeComponents">,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -173,7 +349,7 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -187,10 +363,26 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
         categories: productCategoriesItems,
         style: productCategoriesStyle,
         showProductCount: productCategoriesShowCount,
-        columnsDesktop: productCategoriesColsDesktop,
-        columnsMobile: productCategoriesColsMobile,
+        subheading: sanitizedSubtitle,
+        align: productCategoriesAlign,
+        hideHeader,
+        showTitle,
+        showSubtitle,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText: sanitizedBadgeText,
+        selectionMode,
+        demoCategories: sanitizedDemoCategories,
+        spacing,
+        cornerRadius,
+        desktopColumns,
       });
-      if (showCustomBlock) {
+      setDemoCategories(sanitizedDemoCategories);
+      setProductCategoriesSubheading(sanitizedSubtitle);
+      setBadgeText(sanitizedBadgeText);
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -198,7 +390,7 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -210,6 +402,13 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAutoGenerate = () => {
+    const result = generateFromRealData();
+    if (result.status === 'success') {
+      setProductCategoriesItems(result.items);
     }
   };
 
@@ -231,64 +430,69 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Danh mục sản phẩm</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500">Snapshot: {snapshotLabel}</p> : null}
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Package size={20} />
-              Danh mục sản phẩm
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input 
-                value={title} 
-                onChange={(e) =>{  setTitle(e.target.value); }} 
-                required 
-                placeholder="Nhập tiêu đề component..." 
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div 
-                className={cn(
-                  "cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors",
-                  active ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
-                )}
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  "w-5 h-5 bg-white rounded-full transition-transform shadow",
-                  active ? "translate-x-2.5" : "-translate-x-2.5"
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={productCategoriesSubheading}
+          showSubtitle={showSubtitle}
+          headerAlign={productCategoriesAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setProductCategoriesSubheading}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setProductCategoriesAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={expandedSections.header}
+          onExpandedChange={(value) => setExpandedSections({ header: value })}
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
         <ProductCategoriesForm
           productCategoriesItems={productCategoriesItems}
           setProductCategoriesItems={setProductCategoriesItems}
-          productCategoriesColsDesktop={productCategoriesColsDesktop}
-          setProductCategoriesColsDesktop={setProductCategoriesColsDesktop}
-          productCategoriesColsMobile={productCategoriesColsMobile}
-          setProductCategoriesColsMobile={setProductCategoriesColsMobile}
           productCategoriesShowCount={productCategoriesShowCount}
           setProductCategoriesShowCount={setProductCategoriesShowCount}
+          onAutoGenerate={handleAutoGenerate}
+          autoGenerateReady={isAutoGenerateReady}
+          autoGenerateLoading={isAutoGenerateLoading}
           productCategoriesData={productCategoriesData ?? []}
           brandColor={effectiveColors.primary}
+          selectionMode={selectionMode}
+          onSelectionModeChange={setSelectionMode}
+          demoCategories={demoCategories}
+          setDemoCategories={setDemoCategories}
+          productCategoriesStyle={productCategoriesStyle}
+          spacing={spacing}
+          setSpacing={setSpacing}
+          cornerRadius={cornerRadius}
+          setCornerRadius={setCornerRadius}
+          desktopColumns={desktopColumns}
+          setDesktopColumns={setDesktopColumns}
+          defaultExpanded={false}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Danh mục sản phẩm"
                 enabled={customState.enabled}
@@ -313,7 +517,7 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Danh mục"
                 enabled={customFontState.enabled}
@@ -328,11 +532,25 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
             <ProductCategoriesPreview
               config={{
               categories: productCategoriesItems,
-              columnsDesktop: productCategoriesColsDesktop,
-              columnsMobile: productCategoriesColsMobile,
               showProductCount: productCategoriesShowCount,
               style: productCategoriesStyle,
+              hideHeader,
+              showTitle,
+              subtitle: productCategoriesSubheading,
+              showSubtitle,
+              headerAlign: productCategoriesAlign,
+              titleColorPrimary,
+              subtitleAboveTitle,
+              uppercaseText,
+              showBadge,
+              badgeText,
+              subheading: productCategoriesSubheading,
+              align: productCategoriesAlign,
+              spacing,
+              cornerRadius,
+              desktopColumns,
               }}
+            title={title}
               brandColor={effectiveColors.primary}
               secondary={effectiveColors.secondary}
               mode={brandMode}
@@ -341,6 +559,8 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
               categoriesData={productCategoriesData ?? []}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              selectionMode={selectionMode}
+              demoCategories={demoCategories}
             />
           </div>
         </div>
@@ -348,8 +568,17 @@ export default function ProductCategoriesEditPage({ params }: { params: Promise<
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() =>{  router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndoproductCategoriesItems,
+          canRedo: canRedoproductCategoriesItems,
+          onUndo: undoproductCategoriesItems,
+          onRedo: redoproductCategoriesItems,
+        }}
         />
       </form>
     </div>

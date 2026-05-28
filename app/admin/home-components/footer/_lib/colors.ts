@@ -151,6 +151,15 @@ export interface FooterLayoutColors {
   stackedSocialBg: string;
   stackedSocialHoverBg: string;
   stackedSocialText: string;
+  stackedTextOnBg: string;
+  classicBg: string;
+  magazineBg: string;
+  magazineHeading: string;
+  magazineText: string;
+  magazineTextMuted: string;
+  magazineTextSubtle: string;
+  magazineLink: string;
+  magazineLinkHover: string;
 }
 
 export const getFooterLayoutColors = (
@@ -161,18 +170,46 @@ export const getFooterLayoutColors = (
 ): FooterLayoutColors => {
   const primaryResolved = normalizeHex(primary);
   const secondaryResolved = resolveSecondaryForMode(primaryResolved, secondary, mode);
-  const bg = oklchShift(primaryResolved, primaryResolved, { c: -0.05, l: -0.45 });
-  const surface = oklchShift(primaryResolved, primaryResolved, { c: -0.04, l: -0.32 });
-  const border = oklchShift(primaryResolved, primaryResolved, { c: -0.03, l: -0.2 });
-  const borderSoft = oklchShift(primaryResolved, primaryResolved, { c: -0.02, l: -0.12 });
+  // bg = primary color directly — text contrast system auto-picks white/black
+  const bg = primaryResolved;
+  const classicBg = primaryResolved;
+  const surface = oklchShift(primaryResolved, primaryResolved, { c: -0.02, l: -0.08 });
+  const border = oklchShift(primaryResolved, primaryResolved, { c: -0.02, l: -0.12 });
+  const borderSoft = oklchShift(primaryResolved, primaryResolved, { c: -0.01, l: -0.06 });
 
   const textPrimary = getAPCATextColor(bg, 14, 700);
   const textVariants = getTextVariants(bg, 12, 500);
   const textOnPrimary = getAPCATextColor(primaryResolved, 12, 700);
   const textOnAccent = getAPCATextColor(secondaryResolved, 12, 700);
-  const heading = ensureTextContrast(primaryResolved, bg, 14, 700, textPrimary);
+
+  // Heading color priority: secondary (vibrant) > primary > textPrimary (w/b)
+  // Secondary often has better contrast on primary-derived dark bg
+  const headingFromSecondary = ensureTextContrast(secondaryResolved, bg, 14, 700, '');
+  const headingFromPrimary = ensureTextContrast(primaryResolved, bg, 14, 700, '');
+  const heading = headingFromSecondary || headingFromPrimary || textPrimary;
+
+  // Link color priority: secondary > muted variant
   const link = ensureTextContrast(secondaryResolved, bg, 12, 600, textVariants.muted);
-  const linkHover = ensureTextContrast(secondaryResolved, bg, 12, 600, textPrimary);
+  // LinkHover: dual → secondary (adjusted for contrast); single → brightened primary
+  const linkHover = (() => {
+    if (mode !== 'dual') {
+      const shifted = oklchShift(secondaryResolved, primaryResolved, { l: 0.12 });
+      return ensureTextContrast(shifted, bg, 12, 600, textPrimary);
+    }
+    // Dual: try secondary as-is, then progressively adjust lightness to meet contrast
+    const threshold = 60;
+    if (getAPCALevel(secondaryResolved, bg) >= threshold) return secondaryResolved;
+    // Determine direction: if bg is dark → lighten secondary, else → darken
+    const bgParsed = safeParseOklch(bg, bg);
+    const isDarkBg = (bgParsed.l ?? 0.5) < 0.55;
+    const steps = [0.1, 0.2, 0.3, 0.4, 0.5];
+    for (const delta of steps) {
+      const adjusted = oklchShift(secondaryResolved, secondaryResolved, { l: isDarkBg ? delta : -delta });
+      if (getAPCALevel(adjusted, bg) >= threshold) return adjusted;
+    }
+    return textPrimary;
+  })();
+
   const socialBg = oklchShift(secondaryResolved, primaryResolved, { c: -0.06, l: 0.48 });
   const socialText = getAPCATextColor(socialBg, 12, 600);
   const socialIconFallback = getAPCATextColor(socialBg, 12, 600);
@@ -187,6 +224,18 @@ export const getFooterLayoutColors = (
   const centeredSocialText = getAPCATextColor(centeredSocialBg, 12, 600);
   const stackedSocialBg = oklchShift(secondaryResolved, primaryResolved, { c: -0.05, l: stackedStrength });
   const stackedSocialText = getAPCATextColor(stackedSocialBg, 12, 600);
+  // Wave layout uses primaryResolved as bg — text must contrast against primary, not secondary
+  const stackedTextOnBg = getAPCATextColor(primaryResolved, 12, 700);
+
+  // Magazine: light neutral bg, auto dark text
+  // Links: dark by default, secondary only on hover
+  const magazineBg = '#f5f5f5';
+  const magazineText = getAPCATextColor(magazineBg, 14, 700);
+  const magazineTextVariants = getTextVariants(magazineBg, 12, 500);
+  const magazineHeadingFromPrimary = ensureTextContrast(primaryResolved, magazineBg, 14, 700, '');
+  const magazineHeading = magazineHeadingFromPrimary || magazineText;
+  const magazineLink = magazineTextVariants.muted; // dark text, not secondary
+  const magazineLinkHover = ensureTextContrast(secondaryResolved, magazineBg, 12, 600, primaryResolved); // secondary on hover
 
   return {
     primary: primaryResolved,
@@ -222,5 +271,14 @@ export const getFooterLayoutColors = (
     stackedSocialBg,
     stackedSocialHoverBg: secondaryResolved,
     stackedSocialText,
+    stackedTextOnBg,
+    classicBg,
+    magazineBg,
+    magazineHeading,
+    magazineText,
+    magazineTextMuted: magazineTextVariants.muted,
+    magazineTextSubtle: magazineTextVariants.subtle,
+    magazineLink,
+    magazineLinkHover,
   };
 };

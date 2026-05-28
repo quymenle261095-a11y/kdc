@@ -1,13 +1,16 @@
 'use client';
+'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
+import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Label } from '@/app/admin/components/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from '@/app/admin/components/ui';
 import { IA_SETTINGS_KEYS } from '@/lib/ia/settings';
 import { TRUST_PAGE_SLOTS } from '@/lib/ia/trust-pages';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { cn } from '@/app/admin/components/ui';
 
 type TrustPageMappingState = Record<string, string | null>;
@@ -38,7 +41,7 @@ const actionBadge = (action: PreviewSlot['action']) => {
     case 'mapped':
       return { label: 'Giữ nguyên', variant: 'success' as const };
     case 'suggested':
-      return { label: 'Gợi ý gắn', variant: 'info' as const };
+      return { label: 'Sẽ tạo mới', variant: 'info' as const };
     case 'draft':
       return { label: 'Tạo nháp', variant: 'warning' as const };
     default:
@@ -145,13 +148,18 @@ export default function TrustPagesAdminPage() {
   const [pageMappings, setPageMappings] = useState<TrustPageMappingState>({});
   const [isSaving, setIsSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [pendingAutoGenerateMode, setPendingAutoGenerateMode] = useState<'apply' | 'overwrite'>('apply');
+  const [publishStatus, setPublishStatus] = useState<'Draft' | 'Published'>('Published');
 
   const settings = useQuery(api.settings.getMultiple, { keys: [...IA_SETTINGS_KEYS] });
   const posts = useQuery(api.posts.listAll, { limit: 200 });
   const categories = useQuery(api.postCategories.listAll, { limit: 200 });
+  const trustPagesFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'settings', featureKey: 'enableTrustPages' });
   const autoGenerateFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'settings', featureKey: 'enableTrustPagesAutoGenerate' });
-  const canAutoGenerate = autoGenerateFeature?.enabled ?? false;
+  const canUseTrustPages = trustPagesFeature?.enabled ?? true;
+  const canAutoGenerate = canUseTrustPages && (autoGenerateFeature?.enabled ?? false);
   const autoGeneratePreview = useQuery(api.trustPages.previewAutoGenerate, showPreview && canAutoGenerate ? {} : 'skip');
   const saveSettings = useMutation(api.settings.setMultiple);
   const applyAutoGenerate = useMutation(api.trustPages.applyAutoGenerate);
@@ -214,10 +222,26 @@ export default function TrustPagesAdminPage() {
     }
   };
 
-  const handleApplyAutoGenerate = async (overwrite = false) => {
+  const handleEnableAllDisabled = () => {
+    setPageToggles((prev) => {
+      const next = { ...prev };
+      TRUST_PAGE_SLOTS.forEach((slot) => {
+        next[slot.iaKey] = true;
+      });
+      return next;
+    });
+  };
+
+  const openPublishConfirm = (mode: 'apply' | 'overwrite') => {
+    setPendingAutoGenerateMode(mode);
+    setShowPublishConfirm(true);
+  };
+
+  const handleApplyAutoGenerate = async () => {
     setIsApplying(true);
     try {
-      const result = await applyAutoGenerate({ overwrite });
+      const overwrite = pendingAutoGenerateMode === 'overwrite';
+      const result = await applyAutoGenerate({ overwrite, status: publishStatus });
       const nextMappings: TrustPageMappingState = { ...pageMappings };
       TRUST_PAGE_SLOTS.forEach((slot) => {
         if (Object.prototype.hasOwnProperty.call(result.updatedSettings, slot.mappingKey)) {
@@ -226,13 +250,39 @@ export default function TrustPagesAdminPage() {
         }
       });
       setPageMappings(nextMappings);
+      setShowPublishConfirm(false);
       setShowPreview(false);
+      const { createdCount, deletedCount, disabledCount, keptCount } = result.summary;
+      if (result.mode === 'overwrite') {
+        toast.success(`Đã xóa ${deletedCount} bài và tạo ${createdCount} bài ${publishStatus === 'Published' ? 'đã xuất bản' : 'bản nháp'}${disabledCount > 0 ? `, bỏ qua ${disabledCount} mục đang tắt` : ''}.`);
+      } else {
+        toast.success(`Đã tạo ${createdCount} bài ${publishStatus === 'Published' ? 'đã xuất bản' : 'bản nháp'} mới${keptCount > 0 ? `, giữ ${keptCount} mapping hợp lệ` : ''}${disabledCount > 0 ? `, bỏ qua ${disabledCount} mục đang tắt` : ''}.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     } finally {
       setIsApplying(false);
     }
   };
 
   const previewSlots = (autoGeneratePreview?.slots ?? []) as PreviewSlot[];
+
+  if (!canUseTrustPages) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 pb-16">
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="text-base text-amber-800">Trang tin cậy đang tắt</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-amber-700">
+            <p>
+              Tính năng Trang tin cậy đang bị tắt trong cấu hình. Vui lòng liên hệ quản trị viên hệ thống để kích hoạt.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-16">
@@ -243,7 +293,10 @@ export default function TrustPagesAdminPage() {
             Gắn bài viết chính sách vào các đường dẫn tin cậy cố định để đảm bảo URL ổn định và dễ quản trị.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={handleEnableAllDisabled}>
+            Bật tất cả mục đang tắt
+          </Button>
           <Button variant="outline" onClick={() => router.push('/admin/posts/create')}>
             Tạo bài chính sách
           </Button>
@@ -317,12 +370,6 @@ export default function TrustPagesAdminPage() {
         })}
       </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-          {isSaving ? 'Đang lưu...' : hasChanges ? 'Lưu thay đổi' : 'Đã lưu'}
-        </Button>
-      </div>
-
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -330,8 +377,7 @@ export default function TrustPagesAdminPage() {
           </DialogHeader>
           <div className="space-y-3 text-sm text-slate-600">
             <p>
-              Hệ thống sẽ dùng dữ liệu thật (thiết lập + bài viết chính sách) để gợi ý gắn hoặc tạo bản nháp. Bạn có thể áp dụng để
-              lưu thiết lập.
+              Hệ thống sẽ dùng dữ liệu thật (thiết lập + bài viết chính sách) để giữ mapping hợp lệ và tạo bài mới cho các trang còn thiếu.
             </p>
             <div className="space-y-2">
               {autoGeneratePreview === undefined && (
@@ -361,15 +407,74 @@ export default function TrustPagesAdminPage() {
             <Button variant="outline" onClick={() => setShowPreview(false)}>
               Đóng
             </Button>
-            <Button variant="outline" onClick={() => { void handleApplyAutoGenerate(true); }} disabled={isApplying}>
-              {isApplying ? 'Đang ghi đè...' : 'Ghi đè'}
+            <Button variant="outline" onClick={() => openPublishConfirm('overwrite')} disabled={isApplying}>
+              Ghi đè
             </Button>
-            <Button onClick={() => { void handleApplyAutoGenerate(false); }} disabled={isApplying}>
-              {isApplying ? 'Đang áp dụng...' : 'Áp dụng'}
+            <Button onClick={() => openPublishConfirm('apply')} disabled={isApplying}>
+              Áp dụng
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showPublishConfirm} onOpenChange={setShowPublishConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pendingAutoGenerateMode === 'overwrite' ? 'Xác nhận ghi đè Trust Pages' : 'Xác nhận áp dụng Trust Pages'}</DialogTitle>
+            <DialogDescription>
+              Chọn trạng thái cho tất cả bài chính sách được tạo trong lần {pendingAutoGenerateMode === 'overwrite' ? 'ghi đè' : 'áp dụng'} này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <input
+                type="radio"
+                name="trust-page-publish-status"
+                value="Published"
+                checked={publishStatus === 'Published'}
+                onChange={() => setPublishStatus('Published')}
+                className="mt-0.5"
+              />
+              <div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">Đã xuất bản</div>
+                <div className="text-xs text-slate-500">Public toàn bộ bài mới tạo ngay sau khi chạy.</div>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 rounded-md border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <input
+                type="radio"
+                name="trust-page-publish-status"
+                value="Draft"
+                checked={publishStatus === 'Draft'}
+                onChange={() => setPublishStatus('Draft')}
+                className="mt-0.5"
+              />
+              <div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">Bản nháp</div>
+                <div className="text-xs text-slate-500">Tạo bài trước rồi kiểm tra nội dung sau.</div>
+              </div>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPublishConfirm(false)} disabled={isApplying}>
+              Hủy
+            </Button>
+            <Button onClick={() => { void handleApplyAutoGenerate(); }} disabled={isApplying}>
+              {isApplying
+                ? pendingAutoGenerateMode === 'overwrite' ? 'Đang ghi đè...' : 'Đang áp dụng...'
+                : pendingAutoGenerateMode === 'overwrite' ? 'Xác nhận ghi đè' : 'Xác nhận áp dụng'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <HomeComponentStickyFooter
+        isSubmitting={isSaving}
+        hasChanges={hasChanges}
+        onClickSave={handleSave}
+        submitType="button"
+        submitLabel="Lưu thay đổi"
+      />
     </div>
   );
 }

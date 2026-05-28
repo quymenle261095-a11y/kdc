@@ -1,34 +1,37 @@
 'use client';
-
+ 
 import React from 'react';
-import { AlertTriangle, Eye } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { AlertTriangle, Eye, Settings2 } from 'lucide-react';
+import { Input, Label } from '../../../components/ui';
 import { ImageFieldWithUpload } from '../../../components/ImageFieldWithUpload';
 import { getCountdownValidationResult } from '../_lib/colors';
-import { normalizeCountdownStyle } from '../_lib/normalize';
-import { COUNTDOWN_STYLES } from '../_lib/constants';
 import type {
   CountdownBrandMode,
   CountdownConfigState,
-  CountdownStyle,
 } from '../_types';
-
+import { AiCountdownImport } from './AiCountdownImport';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+ 
 interface CountdownFormProps {
   value: CountdownConfigState;
   onChange: (next: CountdownConfigState) => void;
   brandColor: string;
   secondary: string;
   mode: CountdownBrandMode;
+  defaultExpanded?: boolean;
 }
-
+ 
 const toggleBoolean = (value: boolean) => !value;
-
+ 
 export const CountdownForm = ({
   value,
   onChange,
   brandColor,
   secondary,
   mode,
+  defaultExpanded = true,
 }: CountdownFormProps) => {
   const validation = React.useMemo(
     () => getCountdownValidationResult({
@@ -38,33 +41,45 @@ export const CountdownForm = ({
     }),
     [brandColor, secondary, mode],
   );
-
+ 
   const warnings = React.useMemo(() => {
     const messages: string[] = [];
-
+ 
     if (mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
       messages.push(`Màu phụ đang khá gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}).`);
     }
-
+ 
     return messages;
   }, [mode, validation]);
-
+ 
   const update = <K extends keyof CountdownConfigState>(key: K, nextValue: CountdownConfigState[K]) => {
     onChange({
       ...value,
       [key]: nextValue,
     });
   };
-
-  const selectedStyle = normalizeCountdownStyle(value.style);
-
+ 
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
+    ['content'],
+    defaultExpanded
+  );
+ 
   return (
     <>
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Nội dung Countdown</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <FormSectionsToggleAllButton
+        hasClosedSection={hasClosedSection}
+        onToggleAll={handleToggleAll}
+      />
+ 
+      <SubSection
+        icon={Settings2}
+        title="Nội dung Countdown"
+        open={openSections.content}
+        onOpenChange={(open) => toggleSection('content', open)}
+        actions={<AiCountdownImport onApply={(patch) => onChange({ ...value, ...patch })} />}
+        className="mb-6"
+      >
+        <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Tiêu đề chính</Label>
@@ -83,7 +98,7 @@ export const CountdownForm = ({
               />
             </div>
           </div>
-
+ 
           <div className="space-y-2">
             <Label>Mô tả</Label>
             <textarea
@@ -93,7 +108,7 @@ export const CountdownForm = ({
               className="w-full min-h-[72px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
             />
           </div>
-
+ 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Thời gian kết thúc <span className="text-red-500">*</span></Label>
@@ -113,7 +128,7 @@ export const CountdownForm = ({
               />
             </div>
           </div>
-
+ 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Text nút bấm</Label>
@@ -132,7 +147,7 @@ export const CountdownForm = ({
               />
             </div>
           </div>
-
+ 
           <ImageFieldWithUpload
             label="Ảnh nền (tùy chọn)"
             value={value.backgroundImage}
@@ -142,7 +157,7 @@ export const CountdownForm = ({
             quality={0.85}
             placeholder="https://example.com/banner.jpg"
           />
-
+ 
           <div className="space-y-2">
             <Label>Hiển thị đơn vị thời gian</Label>
             <div className="flex flex-wrap gap-4 mt-2">
@@ -184,29 +199,8 @@ export const CountdownForm = ({
               </label>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Layout Countdown</CardTitle>
-          <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 flex-wrap gap-1">
-            {COUNTDOWN_STYLES.map((item) => (
-              <Button
-                key={item.id}
-                type="button"
-                variant={selectedStyle === item.id ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => { update('style', item.id as CountdownStyle); }}
-                className="h-8 px-2 text-xs"
-              >
-                {item.label}
-              </Button>
-            ))}
-          </div>
-        </CardHeader>
-      </Card>
-
+        </div>
+      </SubSection>
       {warnings.length > 0 ? (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           <div className="space-y-2">

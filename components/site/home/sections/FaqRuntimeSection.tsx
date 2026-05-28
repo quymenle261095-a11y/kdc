@@ -1,9 +1,20 @@
 'use client';
 
 import React from 'react';
+import { cn } from '@/app/admin/components/ui';
+import { SectionHeader } from '@/app/admin/home-components/_shared/components/SectionHeader';
+import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
 import { FaqSectionShared } from '@/app/admin/home-components/faq/_components/FaqSectionShared';
 import { getFaqColors } from '@/app/admin/home-components/faq/_lib/colors';
-import type { FaqConfig, FaqItem, FaqStyle } from '@/app/admin/home-components/faq/_types';
+import {
+  getFaqSectionSpacingClassName,
+  normalizeFaqDesktopColumns,
+  normalizeFaqRounded,
+  normalizeFaqSpacing,
+  type FaqConfig,
+  type FaqItem,
+  type FaqStyle,
+} from '@/app/admin/home-components/faq/_types';
 import type { HomeComponentSectionProps } from '../types';
 
 export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
@@ -13,8 +24,17 @@ export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }
     id: idx,
     question: item.question ?? '',
   }));
-  const style: FaqStyle = faqConfig.style ?? 'accordion';
+  const style: FaqStyle = faqConfig.style ?? 'wine-list';
   const tokens = getFaqColors({ primary: brandColor, secondary, mode, style });
+  const headerConfig = extractSectionHeaderConfig(config);
+  const spacingClassName = getFaqSectionSpacingClassName(normalizeFaqSpacing(faqConfig.spacing, faqConfig.noVerticalMargin));
+  const rounded = normalizeFaqRounded(faqConfig.cornerRadius ?? faqConfig.rounded, faqConfig.noBorderRadius);
+  const desktopColumns = normalizeFaqDesktopColumns(faqConfig.desktopColumns);
+  const hasSharedHeader = !headerConfig.hideHeader && (
+    (headerConfig.showTitle && title.trim().length > 0)
+    || (headerConfig.showSubtitle && (headerConfig.subtitle?.trim().length ?? 0) > 0)
+    || (headerConfig.showBadge && (headerConfig.badgeText?.trim().length ?? 0) > 0)
+  );
   const faqSchema = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -31,18 +51,44 @@ export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <FaqSectionShared
-        items={items}
-        title={title}
-        style={style}
-        config={{
-          buttonLink: faqConfig.buttonLink,
-          buttonText: faqConfig.buttonText,
-          description: faqConfig.description,
-        }}
-        tokens={tokens}
-        context="site"
-      />
+      <section className={cn(style === 'cards' ? 'px-1 sm:px-3' : 'px-3', spacingClassName)}>
+        <div className="mx-auto max-w-7xl space-y-6">
+          <SectionHeader
+            title={title}
+            subtitle={headerConfig.subtitle}
+            badgeText={headerConfig.badgeText}
+            hideHeader={headerConfig.hideHeader}
+            showTitle={headerConfig.showTitle}
+            showSubtitle={headerConfig.showSubtitle}
+            showBadge={headerConfig.showBadge}
+            headerAlign={headerConfig.headerAlign}
+            titleColorPrimary={headerConfig.titleColorPrimary}
+            subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+            uppercaseText={headerConfig.uppercaseText}
+            brandColor={brandColor}
+          />
+          <FaqSectionShared
+            items={items}
+            title={title}
+            style={style}
+            config={{
+              buttonLink: faqConfig.buttonLink,
+              buttonText: faqConfig.buttonText,
+              description: faqConfig.description,
+              desktopColumns,
+              cornerRadius: rounded,
+              rounded,
+              spacing: normalizeFaqSpacing(faqConfig.spacing, faqConfig.noVerticalMargin),
+            }}
+            tokens={tokens}
+            context="site"
+            suppressInternalHeader={hasSharedHeader}
+            spacingClassName="py-0"
+            rounded={rounded}
+            desktopColumns={desktopColumns}
+          />
+        </div>
+      </section>
     </>
   );
 }

@@ -22,7 +22,7 @@ interface SidebarItemProps {
   label: string;
   href: string;
   active: boolean;
-  subItems?: { label: string, href: string, moduleKey?: string }[];
+  subItems?: { label: string, href: string, moduleKey?: string, visible?: boolean }[];
   isCollapsed: boolean;
   isExpanded: boolean;
   onToggle: () => void;
@@ -44,7 +44,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
 }) => {
   const filteredSubItems = useMemo(() => {
     if (!subItems) {return [];}
-    return subItems.filter(sub => !sub.moduleKey || isModuleEnabled(sub.moduleKey));
+    return subItems.filter((sub) => (sub.visible ?? true) && (!sub.moduleKey || isModuleEnabled(sub.moduleKey)));
   }, [subItems, isModuleEnabled]);
 
   const hasSub = filteredSubItems.length > 0;
@@ -144,6 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
   const productSettings = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'products' });
   const userFeatures = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: 'users' });
   const siteSettings = useQuery(api.settings.getMultiple, { keys: ['site_logo', 'site_name'] });
+  const trustPagesFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'settings', featureKey: 'enableTrustPages' });
 
   const isActive = (route: string) => pathname.startsWith(route);
 
@@ -209,8 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
   const showNotificationsSection = isModuleEnabled('notifications');
   const showPromotionsSection = isModuleEnabled('promotions');
   const variantEnabled = Boolean(productSettings?.find(setting => setting.settingKey === 'variantEnabled')?.value);
-  const productFramesEnabled = Boolean(productSettings?.find(setting => setting.settingKey === 'enableProductFrames')?.value);
-  const productSupplementalContentEnabled = Boolean(productSettings?.find(setting => setting.settingKey === 'enableProductSupplementalContent')?.value);
+  const productTypesEnabled = Boolean(productSettings?.find(setting => setting.settingKey === 'enableProductTypes')?.value);
 
   const analyticsSectionItemCount = showAnalyticsSection ? 1 : 0;
   const contentSectionItemCount = Number(showPostsSection) + Number(showServicesSection);
@@ -401,6 +401,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                   subItems={[
                     { href: '/admin/products', label: 'Sản phẩm', moduleKey: 'products' },
                     { href: '/admin/categories', label: 'Danh mục sản phẩm', moduleKey: 'products' },
+                    ...(productTypesEnabled ? [{ href: '/admin/product-types', label: 'Loại sản phẩm', moduleKey: 'products' }] : []),
+                    ...(productTypesEnabled ? [{ href: '/admin/attribute-groups', label: 'Thuộc tính lọc', moduleKey: 'products' }] : []),
                     ...(variantEnabled ? [{ href: '/admin/product-options', label: 'Loại tùy chọn', moduleKey: 'products' }] : []),
                     { href: '/admin/orders', label: 'Đơn hàng', moduleKey: 'orders' },
                     { href: '/admin/cart', label: 'Giỏ hàng', moduleKey: 'cart' },
@@ -500,7 +502,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                     subItems={[
                       { href: '/admin/menus', label: 'Menu', moduleKey: 'menus' },
                       { href: '/admin/home-components', label: 'Giao diện trang chủ', moduleKey: 'homepage' },
-{ href: '/admin/trust-pages', label: 'Trang tin cậy', moduleKey: 'settings' },
+                      { href: '/admin/trust-pages', label: 'Trang tin cậy', moduleKey: 'settings', visible: trustPagesFeature?.enabled ?? true },
                     ]}
                   />
                 )}
@@ -562,8 +564,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileMenuOpen, setMobileMenuO
                       { href: '/admin/settings/general', label: 'Thông tin chung', moduleKey: 'settings' },
                       { href: '/admin/settings/contact', label: 'Liên hệ', moduleKey: 'settings' },
                       { href: '/admin/settings/seo', label: 'SEO', moduleKey: 'settings' },
-                      ...(productFramesEnabled ? [{ href: '/admin/settings/product-frames', label: 'Khung sản phẩm', moduleKey: 'settings' }] : []),
-                      ...(productSupplementalContentEnabled ? [{ href: '/admin/settings/product-supplemental-content', label: 'Nội dung bổ sung SP', moduleKey: 'settings' }] : []),
+                      { href: '/admin/settings/advanced', label: 'Nâng cao', moduleKey: 'settings' },
                     ]}
                   />
                 )}

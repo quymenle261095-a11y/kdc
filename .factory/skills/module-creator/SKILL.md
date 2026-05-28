@@ -327,6 +327,27 @@ export async function update(ctx: MutationCtx, args: { id: Id<"[moduleName]">; /
   await ctx.db.patch(id, patchData);
 }
 
+// ⚠️ FLS WARNING & REQUIRED CHECK: Nếu module có chứa trường upload ảnh/media (như `thumbnailStorageId` hoặc `imageStorageIds`):
+// 1. TUYỆT ĐỐI KHÔNG sử dụng `ctx.storage.delete` trực tiếp trong mutation logic hay Model layer (ngoại trừ seed/clear data cô lập là exception).
+// 2. Khi create/update bắt buộc phải gọi syncOwnerFileReferences và dọn dẹp qua safe cleanup gateway:
+//    const { removedStorageIds } = await syncOwnerFileReferences(ctx, {
+//      ownerTable: "[moduleName]",
+//      ownerId: id,
+//      ownerField: "thumbnail",
+//      purpose: "[moduleName]-thumbnail",
+//    }, nextStorageIds, { previousStorageIds });
+//    for (const storageId of removedStorageIds) {
+//      await ctx.runMutation(api.storage.cleanupStorageIfUnreferenced, { storageId });
+//    }
+// 3. Khi remove/delete bắt buộc phải giải phóng references và cleanup trước khi db.delete:
+//    const { removedStorageIds } = await removeOwnerFileReferences(ctx, {
+//      ownerTable: "[moduleName]",
+//      ownerId: id,
+//    }, { previousStorageIds });
+//    for (const storageId of removedStorageIds) {
+//      await ctx.runMutation(api.storage.cleanupStorageIfUnreferenced, { storageId });
+//    }
+
 // ⚠️ CRITICAL: Cascade delete related entities
 export async function remove(ctx: MutationCtx, { id }: { id: Id<"[moduleName]"> }): Promise<void> {
   const comments = await ctx.db.query("comments")

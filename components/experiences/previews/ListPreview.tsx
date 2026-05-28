@@ -7,6 +7,7 @@ type ListLayoutStyle = 'fullwidth' | 'sidebar' | 'magazine' | 'grid' | 'list' | 
 type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 type PaginationType = 'pagination' | 'infiniteScroll';
 type ProductsListLayoutStyle = 'grid' | 'sidebar' | 'list';
+type ProductListCornerRadius = 'none' | 'sm' | 'lg';
 
 type PostsListPreviewProps = {
   layoutStyle: ListLayoutStyle;
@@ -643,6 +644,7 @@ type ProductsListPreviewProps = {
   paginationType?: PaginationType;
   showSearch?: boolean;
   showCategories?: boolean;
+  cornerRadius?: ProductListCornerRadius;
   brandColor?: string;
   secondaryColor?: string;
   colorMode?: ProductsListColorMode;
@@ -651,6 +653,12 @@ type ProductsListPreviewProps = {
   showAddToCartButton?: boolean;
   showBuyNowButton?: boolean;
   showPromotionBadge?: boolean;
+};
+
+const getProductListRadiusClass = (cornerRadius: ProductListCornerRadius) => {
+  if (cornerRadius === 'none') return 'rounded-none';
+  if (cornerRadius === 'sm') return 'rounded-md';
+  return 'rounded-xl';
 };
 
 const mockProducts = [
@@ -667,11 +675,13 @@ function PreviewMobileProductsFilters({
   showSearch,
   showCategories,
   tokens,
+  radiusClass,
 }: {
   categories: string[];
   showSearch: boolean;
   showCategories: boolean;
   tokens: ReturnType<typeof getProductsListColors>;
+  radiusClass: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -680,7 +690,7 @@ function PreviewMobileProductsFilters({
   }
 
   return (
-    <div className="mb-4 lg:hidden rounded-lg border p-3" style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
+    <div className={`mb-3 lg:hidden ${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
       <button
         type="button"
         onClick={() => { setOpen((prev) => !prev); }}
@@ -767,6 +777,7 @@ export function ProductsListPreview({
   paginationType = 'pagination',
   showSearch = true,
   showCategories = true,
+  cornerRadius = 'lg',
   brandColor = '#10b981',
   secondaryColor,
   colorMode = 'single',
@@ -782,10 +793,11 @@ export function ProductsListPreview({
   const visibleProducts = isMobile ? 2 : 4;
   const gridClass = isMobile ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3';
   const tokens = getProductsListColors(brandColor, secondaryColor, colorMode);
+  const radiusClass = getProductListRadiusClass(cornerRadius);
 
   const ProductCard = ({ product }: { product: typeof mockProducts[0] }) => (
     <div
-      className="rounded-lg overflow-hidden border h-full flex flex-col group"
+      className={`${radiusClass} overflow-hidden border h-full flex flex-col group`}
       style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}
     >
       <div
@@ -890,10 +902,11 @@ export function ProductsListPreview({
                   showSearch={showSearch}
                   showCategories={showCategories}
                   tokens={tokens}
+                  radiusClass={radiusClass}
                 />
               )}
               <div
-                className="hidden md:block rounded-lg border p-3"
+                className={`hidden md:block ${radiusClass} border p-3`}
                 style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}
               >
                 <div className="flex items-center gap-2">
@@ -980,10 +993,11 @@ export function ProductsListPreview({
                   showSearch={showSearch}
                   showCategories={showCategories}
                   tokens={tokens}
+                  radiusClass={radiusClass}
                 />
               )}
               <div
-                className="hidden md:block rounded-lg border p-3 mb-4"
+                className={`hidden md:block ${radiusClass} border p-3 mb-3`}
                 style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}
               >
                 <div className="flex flex-col md:flex-row gap-3">
@@ -1045,7 +1059,7 @@ export function ProductsListPreview({
             {mockProducts.slice(0, visibleProducts).map((product) => (
               <div
                 key={product.id}
-                className="rounded-lg border overflow-hidden flex flex-col sm:flex-row gap-3 p-3"
+                className={`${radiusClass} border overflow-hidden flex flex-col sm:flex-row gap-3 p-3`}
                 style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}
               >
                 <div
@@ -1127,12 +1141,13 @@ export function ProductsListPreview({
               showSearch={showSearch}
               showCategories={showCategories}
               tokens={tokens}
+              radiusClass={radiusClass}
             />
           )}
           <aside className={`${sidebarWidth} hidden lg:block flex-shrink-0 ${sidebarOrder}`}>
             <div className="space-y-3">
               {showSearch && (
-                <div className="rounded-lg border p-3" style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
+                <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
                   <h3 className="font-semibold text-sm mb-2 flex items-center gap-2" style={{ color: tokens.bodyText }}>
                     <Search size={14} style={{ color: tokens.secondary }} />
                     Tìm kiếm
@@ -1152,7 +1167,7 @@ export function ProductsListPreview({
                 </div>
               )}
               {showCategories && (
-                <div className="rounded-lg border p-3" style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
+                <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
                   <h3 className="font-semibold text-sm mb-2 flex items-center gap-2" style={{ color: tokens.bodyText }}>
                     <FileText size={14} style={{ color: tokens.secondary }} />
                     Danh mục
@@ -1175,7 +1190,7 @@ export function ProductsListPreview({
                   </ul>
                 </div>
               )}
-              <div className="rounded-lg border p-3" style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
+              <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
                 <h3 className="font-semibold text-sm mb-2" style={{ color: tokens.bodyText }}>Khoảng giá</h3>
                 <div className="flex gap-2">
                   <input

@@ -1,19 +1,25 @@
 'use client';
 
 import React from 'react';
+import useEmblaCarousel from 'embla-carousel-react';
 import { PublicImage as Image } from '@/components/shared/PublicImage';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useBrandColors } from './hooks';
+import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 import { cn } from '@/app/admin/components/ui';
 import { resolveTypeOverrideColors } from '@/app/admin/home-components/_shared/lib/typeColorOverride';
 import { resolveTypeOverrideFont } from '@/app/admin/home-components/_shared/lib/typeFontOverride';
 import { getHomeComponentPriceLabel, resolveSaleMode } from '@/app/admin/home-components/_shared/lib/productPrice';
+import { getSectionSpacingClassName, normalizeSectionSpacing } from '@/app/admin/home-components/_shared/types/sectionSpacing';
 import { getProductImageAspectRatioCssValue, resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import { buildCategoryPath, buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import { parseHighlightedHeading } from '@/lib/utils/heroText';
 import {
   getBentoColors,
+  getConquestColors,
+  getAPCATextColor,
   getFadeColors,
   getFullscreenColors,
   getParallaxColors,
@@ -29,44 +35,74 @@ import {
   getMinimalColors,
 } from '@/app/admin/home-components/stats/_lib/colors';
 import { getCategoryProductsColors } from '@/app/admin/home-components/category-products/_lib/colors';
+import { getCategoryProductsCardRadiusClassName, getCategoryProductsImageRadiusClassName, getCategoryProductsResponsiveGridClassName, normalizeCategoryProductsCornerRadius } from '@/app/admin/home-components/category-products/_types';
 import { getProductCategoriesColors } from '@/app/admin/home-components/product-categories/_lib/colors';
 import { getCTAColors } from '@/app/admin/home-components/cta/_lib/colors';
 import { CTASectionShared } from '@/app/admin/home-components/cta/_components/CTASectionShared';
 import { BenefitsSectionShared } from '@/app/admin/home-components/benefits/_components/BenefitsSectionShared';
-import { getBenefitsSectionColors, normalizeBenefitsHarmony } from '@/app/admin/home-components/benefits/_lib/colors';
+import { getBenefitsSectionColors, normalizeBenefitsHarmony, normalizeBenefitsStyle } from '@/app/admin/home-components/benefits/_lib/colors';
 import { FaqSectionShared } from '@/app/admin/home-components/faq/_components/FaqSectionShared';
 import { getFaqColors } from '@/app/admin/home-components/faq/_lib/colors';
 import { getTestimonialsSectionColors } from '@/app/admin/home-components/testimonials/_lib/colors';
+import { TestimonialsSectionShared } from '@/app/admin/home-components/testimonials/_components/TestimonialsSectionShared';
+import { getTestimonialsSectionSpacingClassName, normalizeTestimonialsCornerRadius, normalizeTestimonialsDesktopColumns, normalizeTestimonialsSpacing, normalizeTestimonialsStyle } from '@/app/admin/home-components/testimonials/_types';
+import { getMarqueeSectionColors } from '@/app/admin/home-components/marquee/_lib/colors';
+import { MarqueeSectionShared } from '@/app/admin/home-components/marquee/_components/MarqueeSectionShared';
+import { normalizeMarqueeCornerRadius, normalizeMarqueeStyle, normalizeMarqueeDirection, normalizeMarqueeSpeed, normalizeMarqueeScale, normalizeMarqueeItem, normalizeMarqueeSpacing } from '@/app/admin/home-components/marquee/_types';
+import type { MarqueeBrandMode } from '@/app/admin/home-components/marquee/_types';
 import { getGalleryColorTokens, normalizeGalleryHarmony, type GalleryColorTokens } from '@/app/admin/home-components/gallery/_lib/colors';
+import type { TrustBadgesStyle } from '@/app/admin/home-components/gallery/_types';
+import {
+  DEFAULT_STACK_DESCRIPTION,
+  DEFAULT_STACK_HEADING,
+  DEFAULT_TRUST_CUE_TEXT,
+  TRUST_BADGES_A4_ASPECT_CLASS,
+  getTrustBadgesMaxVisibleItems,
+  TrustBadgesSectionHeader,
+  TrustBadgesTrustCue,
+  useTrustBadgesSectionState,
+} from '@/app/admin/home-components/gallery/_components/TrustBadgesSectionShared';
 import { getFooterLayoutColors, type FooterLayoutColors } from '@/app/admin/home-components/footer/_lib/colors';
+import { getFooterCornerRadiusClassName, getFooterLogoBackgroundClassName, getFooterLogoBackgroundStyle, getFooterLogoSize, getFooterMaxWidthClass, getFooterSectionSpacingClassName } from '@/app/admin/home-components/footer/_lib/constants';
 import type { ProcessBrandMode } from '@/app/admin/home-components/process/_types';
-import { normalizeProcessRenderSteps, normalizeProcessStyle } from '@/app/admin/home-components/process/_lib/normalize';
+import { normalizeProcessConfig, normalizeProcessRenderSteps, normalizeProcessStyle } from '@/app/admin/home-components/process/_lib/normalize';
 import { ProcessSectionShared } from '@/app/admin/home-components/process/_components/ProcessSectionShared';
 import { FeaturesSectionShared } from '@/app/admin/home-components/features/_components/FeaturesSectionShared';
 import { ClientsSectionShared, normalizeClientItems, normalizeClientsStyleSafe } from '@/app/admin/home-components/clients/_components/ClientsSectionShared';
 import { getClientsColorTokens } from '@/app/admin/home-components/clients/_lib/colors';
 import { getGalleryMarqueeBaseItems } from '@/app/admin/home-components/gallery/_lib/constants';
 import { ServicesSectionCore } from './ServicesSectionCore';
-import type { ServiceItem, ServicesStyle } from '@/app/admin/home-components/services/_types';
+import { normalizeServicesCornerRadius, normalizeServicesSpacing, type ServiceItem, type ServiceItemMediaAlign, type ServiceItemMediaPlacement, type ServicesStyle } from '@/app/admin/home-components/services/_types';
+import { getServicesDesktopColumns, getServicesMediaAlign, getServicesMediaPlacement } from '@/app/admin/home-components/services/_lib/items';
 import { getServicesColors } from '@/app/admin/home-components/services/_lib/colors';
+import { SectionHeader } from '@/app/admin/home-components/_shared/components/SectionHeader';
+import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
 import type { BenefitsStyle as BenefitsSharedStyle } from '@/app/admin/home-components/benefits/_types';
 import { PartnersMarqueeShared } from '@/app/admin/home-components/partners/_components/PartnersMarqueeShared';
 import { PartnersBadgeShared } from '@/app/admin/home-components/partners/_components/PartnersBadgeShared';
 import { PartnersCarouselShared } from '@/app/admin/home-components/partners/_components/PartnersCarouselShared';
-import { PartnersFeaturedShared } from '@/app/admin/home-components/partners/_components/PartnersFeaturedShared';
+import { PartnersCleanShared } from '@/app/admin/home-components/partners/_components/PartnersCleanShared';
+import { PartnersDividerShared } from '@/app/admin/home-components/partners/_components/PartnersDividerShared';
 import { PartnersGridShared } from '@/app/admin/home-components/partners/_components/PartnersGridShared';
-import type { FooterBrandMode, FooterStyle } from '@/app/admin/home-components/footer/_types';
-import type { ClientsBrandMode } from '@/app/admin/home-components/clients/_types';
-import type { CTAStyle } from '@/app/admin/home-components/cta/_types';
+import { PartnersLogoCloudShared } from '@/app/admin/home-components/partners/_components/PartnersLogoCloudShared';
+import { getPartnersSectionSpacingClassName, normalizePartnersAlign, normalizePartnersCornerRadius, normalizePartnersDisplayMode, normalizePartnersLogoSize, normalizePartnersShowBorder, normalizePartnersSpacing, normalizePartnersStyle } from '@/app/admin/home-components/partners/_types';
+import type { FooterBrandMode, FooterConfig, FooterCornerRadius, FooterLogoBackgroundStyle, FooterStyle } from '@/app/admin/home-components/footer/_types';
+import type { ClientsBrandMode, ClientsHeaderAlign } from '@/app/admin/home-components/clients/_types';
+import { normalizeClientsCornerRadius } from '@/app/admin/home-components/clients/_types';
+import type { CTAConfig, CTAStyle } from '@/app/admin/home-components/cta/_types';
 import type { BenefitItem, BenefitsBrandMode, BenefitsConfig } from '@/app/admin/home-components/benefits/_types';
 import type { FaqConfig, FaqItem, FaqStyle } from '@/app/admin/home-components/faq/_types';
-import { BrandBadge } from './shared/BrandColorHelpers';
+import * as LucideIcons from 'lucide-react';
 const BlogSection = dynamic(
   () => import('./BlogSection').then((mod) => ({ default: mod.BlogSection })),
   { ssr: false, loading: () => null }
 );
 const ProductListSection = dynamic(
   () => import('./ProductListSection').then((mod) => ({ default: mod.ProductListSection })),
+  { ssr: false, loading: () => null }
+);
+const ProductGridSection = dynamic(
+  () => import('./ProductGridSection').then((mod) => ({ default: mod.ProductGridSection })),
   { ssr: false, loading: () => null }
 );
 const ServiceListSection = dynamic(
@@ -78,6 +114,7 @@ import { getHomepageCategoryHeroColors } from '@/app/admin/home-components/homep
 import { PricingSection as PricingSectionRuntime } from './PricingSection';
 import { CareerSection as CareerSectionRuntime } from './CareerSection';
 import { VoucherPromotionsSection as VoucherPromotionsSectionRuntime } from './VoucherPromotionsSection';
+import { PopupSection as PopupSectionRuntime } from './PopupSection';
 import { AboutSection } from './AboutSection';
 import { TeamSection as TeamSectionRuntime } from './TeamSection';
 import { VideoSectionShared } from '@/app/admin/home-components/video/_components/VideoSectionShared';
@@ -92,12 +129,13 @@ import { CaseStudySection } from './CaseStudySection';
 import { SpeedDialSection } from './SpeedDialSection';
 import { CountdownSectionWrapper } from './CountdownSectionWrapper';
 import type { HomepageCategoryHeroConfig } from '@/app/admin/home-components/homepage-category-hero/_types';
-import { ProductImageFrameOverlay, useProductFrameConfig } from '@/components/shared/ProductImageFrameBox';
+import { ProductImageWithOverlay, useProductImageOverlayConfigs } from '@/components/shared/ProductImageWithOverlay';
 import {
-  ArrowRight, ArrowUpRight,
+  ArrowUpRight,
+  ArrowRight,
   ChevronLeft, ChevronRight, Globe,
-  Image as ImageIcon, LayoutTemplate, Maximize2, Package, Plus,
-  Star, X, ZoomIn
+  Image as ImageIcon, LayoutTemplate, Maximize2, Package, Shield,
+  X, ZoomIn
 } from 'lucide-react';
 
 type SiteImageProps = Omit<React.ComponentProps<typeof Image>, 'width' | 'height' | 'src'> & {
@@ -127,11 +165,6 @@ const SiteImage = ({ src, alt = '', width = 1200, height = 800, sizes = '100vw',
   );
 };
 
-const useSafeId = (prefix: string) => {
-  const id = React.useId();
-  return `${prefix}-${id.replaceAll(':', '')}`;
-};
-
 const DEFAULT_COUNTDOWN_END_DATE = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 interface HomeComponent {
@@ -149,7 +182,8 @@ interface ComponentRendererProps {
 
 export function ComponentRenderer({ component }: ComponentRendererProps) {
   const systemColors = useBrandColors();
-  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isSnapshotMode = Boolean(useSnapshotDemoContext());
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig, isSnapshotMode ? 'skip' : undefined);
   const { type, title, config } = component;
   const resolvedColors = resolveTypeOverrideColors({
     type,
@@ -191,7 +225,13 @@ export function ComponentRenderer({ component }: ComponentRendererProps) {
     }
     case 'Stats': {
       return wrapWithFont(
-        <StatsSection config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} title={title} />
+        <StatsSection 
+          config={config} 
+          brandColor={resolvedColors.primary} 
+          secondary={resolvedColors.secondary} 
+          mode={resolvedColors.mode} 
+          title={title} 
+        />
       );
     }
     case 'About': {
@@ -251,6 +291,12 @@ export function ComponentRenderer({ component }: ComponentRendererProps) {
       );
     }
     case 'ProductGrid': {
+      const gridStyle = (config.style as string) || '';
+      if (gridStyle === 'tabbed' || gridStyle === 'storefront') {
+        return wrapWithFont(
+          <ProductGridSection config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} title={title} />
+        );
+      }
       return wrapWithFont(
         <ProductListSection config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} title={title} />
       );
@@ -331,6 +377,16 @@ export function ComponentRenderer({ component }: ComponentRendererProps) {
         <VoucherPromotionsSectionRuntime config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} title={title} />
       );
     }
+    case 'Popup': {
+      return wrapWithFont(
+        <PopupSectionRuntime config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} title={title} />
+      );
+    }
+    case 'Marquee': {
+      return wrapWithFont(
+        <MarqueeSection config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} title={title} />
+      );
+    }
     case 'Footer': {
       return wrapWithFont(
         <FooterSection config={config} brandColor={resolvedColors.primary} secondary={resolvedColors.secondary} mode={resolvedColors.mode} />
@@ -344,8 +400,8 @@ export function ComponentRenderer({ component }: ComponentRendererProps) {
 
 // ============ HERO SECTION ============
 // Best Practice: Blurred Background Fill - fills letterbox gaps with blurred version of same image
-// Supports 6 styles: slider, fade, bento, fullscreen, split, parallax
-type HeroStyle = 'slider' | 'fade' | 'bento' | 'fullscreen' | 'split' | 'parallax';
+// Supports Hero styles across admin preview and runtime renderer.
+type HeroStyle = 'slider' | 'fade' | 'builderCoffee' | 'bento' | 'triple' | 'triple2' | 'fullscreen' | 'conquest' | 'split' | 'parallax';
 
 interface HeroContent {
   badge?: string;
@@ -357,6 +413,9 @@ interface HeroContent {
   secondaryButtonLink?: string;
   countdownText?: string;
   showFullscreenContent?: boolean;
+  highlightColor?: string;
+  primaryButtonColor?: string;
+  secondaryButtonColor?: string;
 }
 
 function HeroSection({
@@ -380,17 +439,72 @@ function HeroSection({
   const sliderColors = getSliderColors(brandColor, secondary, mode);
   const fadeColors = getFadeColors(brandColor, secondary, mode);
   const bentoColors = getBentoColors(brandColor, secondary, mode);
+  const conquestColors = getConquestColors(brandColor, secondary, mode);
   const fullscreenColors = getFullscreenColors(brandColor, secondary, mode);
   const splitColors = getSplitColors(brandColor, secondary, mode);
   const parallaxColors = getParallaxColors(brandColor, secondary, mode);
 
+  const activeSlideCount = style === 'bento'
+    ? Math.min(slides.length, 4)
+    : (style === 'triple' || style === 'triple2' ? Math.min(slides.length, 3) : slides.length);
+  const [heroEmblaRef, heroEmblaApi] = useEmblaCarousel({ align: 'start', loop: activeSlideCount > 1 });
+  const [canScrollPrev, setCanScrollPrev] = React.useState(false);
+  const [canScrollNext, setCanScrollNext] = React.useState(false);
+  const emblaCurrentSlide = activeSlideCount > 0 ? currentSlide % activeSlideCount : 0;
+
+  const updateEmblaState = React.useCallback(() => {
+    if (!heroEmblaApi) {return;}
+    setCurrentSlide(heroEmblaApi.selectedScrollSnap());
+    setCanScrollPrev(heroEmblaApi.canScrollPrev());
+    setCanScrollNext(heroEmblaApi.canScrollNext());
+  }, [heroEmblaApi]);
+
   React.useEffect(() => {
-    if (slides.length <= 1 || style === 'bento') {return;}
+    if (!heroEmblaApi) {return;}
+    updateEmblaState();
+    heroEmblaApi.on('select', updateEmblaState);
+    heroEmblaApi.on('reInit', updateEmblaState);
+    return () => {
+      heroEmblaApi.off('select', updateEmblaState);
+      heroEmblaApi.off('reInit', updateEmblaState);
+    };
+  }, [heroEmblaApi, updateEmblaState]);
+
+  const scrollHeroPrev = React.useCallback(() => {
+    if (heroEmblaApi) {
+      heroEmblaApi.scrollPrev();
+      return;
+    }
+    setCurrentSlide(prev => prev === 0 ? activeSlideCount - 1 : prev - 1);
+  }, [activeSlideCount, heroEmblaApi]);
+
+  const scrollHeroNext = React.useCallback(() => {
+    if (heroEmblaApi) {
+      heroEmblaApi.scrollNext();
+      return;
+    }
+    setCurrentSlide(prev => (prev + 1) % activeSlideCount);
+  }, [activeSlideCount, heroEmblaApi]);
+
+  const scrollHeroTo = React.useCallback((index: number) => {
+    if (heroEmblaApi) {
+      heroEmblaApi.scrollTo(index);
+      return;
+    }
+    setCurrentSlide(index);
+  }, [heroEmblaApi]);
+
+  React.useEffect(() => {
+    if (activeSlideCount <= 1) {return;}
     const timer = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % slides.length);
+      if (style === 'slider' || style === 'bento' || style === 'fullscreen' || style === 'conquest' || style === 'split' || style === 'parallax') {
+        scrollHeroNext();
+        return;
+      }
+      setCurrentSlide(prev => (prev + 1) % activeSlideCount);
     }, 5000);
     return () =>{  clearInterval(timer); };
-  }, [slides.length, style]);
+  }, [activeSlideCount, scrollHeroNext, style]);
 
   if (slides.length === 0) {
     return (
@@ -408,7 +522,7 @@ function HeroSection({
     <a href={slide.link || '#'} className="block w-full h-full relative">
       <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
       <div className="absolute inset-0 bg-black/20" />
-      <SiteImage src={slide.image} alt="" className="relative w-full h-full object-contain z-10" priority={options?.priority} />
+      <SiteImage src={slide.image} alt="" className="relative w-full h-full object-contain z-10" priority={options?.priority} sizes="100vw" />
     </a>
   );
 
@@ -427,7 +541,7 @@ function HeroSection({
     const endX = event.changedTouches[0]?.clientX;
     touchStartX.current = null;
 
-    if (slides.length <= 1 || startX == null || endX == null) {
+    if (activeSlideCount <= 1 || startX == null || endX == null) {
       return;
     }
 
@@ -437,42 +551,40 @@ function HeroSection({
     }
 
     if (deltaX < 0) {
-      setCurrentSlide(prev => (prev + 1) % slides.length);
+      setCurrentSlide(prev => (prev + 1) % activeSlideCount);
       return;
     }
 
-    setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1);
+    setCurrentSlide(prev => prev === 0 ? activeSlideCount - 1 : prev - 1);
   };
 
   // Style 1: Slider
   if (style === 'slider') {
     return (
       <section className="relative w-full bg-slate-900 overflow-hidden">
-        <div
-          className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[400px] md:max-h-[550px]"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
-          {slides.map((slide, idx) => (
-            <div
-              key={idx}
-              className={`absolute inset-0 transition-opacity duration-700 hover:ring-2 hover:ring-offset-2 hover:ring-offset-slate-900 ${idx === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-              style={{ '--tw-ring-color': sliderColors.hoverRingColor } as React.CSSProperties}
-            >
-              {slide.image ? renderSlideWithBlur(slide, { priority: idx === 0 }) : renderPlaceholder(sliderColors.placeholderBg, sliderColors.placeholderIconColor)}
-            </div>
-          ))}
+        <div className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[400px] md:max-h-[550px] overflow-hidden" ref={heroEmblaRef}>
+          <div className="flex h-full">
+            {slides.map((slide, idx) => (
+              <div
+                key={idx}
+                className="relative h-full min-w-0 flex-[0_0_100%] hover:ring-2 hover:ring-offset-2 hover:ring-offset-slate-900"
+                style={{ '--tw-ring-color': sliderColors.hoverRingColor } as React.CSSProperties}
+              >
+                {slide.image ? renderSlideWithBlur(slide, { priority: idx === 0 }) : renderPlaceholder(sliderColors.placeholderBg, sliderColors.placeholderIconColor)}
+              </div>
+            ))}
+          </div>
           {slides.length > 1 && (
             <>
-              <button onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg hidden md:flex items-center justify-center transition-all z-20 border-2" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}` }}>
+              <button type="button" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg hidden md:flex items-center justify-center transition-all z-20 border-2 disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}` }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: sliderColors.navButtonIconColor }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
-              <button onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg hidden md:flex items-center justify-center transition-all z-20 border-2" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}` }}>
+              <button type="button" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg hidden md:flex items-center justify-center transition-all z-20 border-2 disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}` }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: sliderColors.navButtonIconColor }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
                 {slides.map((_, idx) => (
-                  <button key={idx} onClick={() =>{  setCurrentSlide(idx); }} className={`w-3 h-3 rounded-full transition-all ${idx === currentSlide ? 'w-8' : ''}`} style={{ backgroundColor: idx === currentSlide ? sliderColors.dotActive : sliderColors.dotInactive }} />
+                  <button key={idx} type="button" onClick={() =>{  scrollHeroTo(idx); }} className={`w-3 h-3 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-8' : ''}`} style={{ backgroundColor: idx === emblaCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive }} />
                 ))}
               </div>
               <div className="absolute bottom-2 left-0 right-0 h-0.5 z-20" style={{ backgroundColor: sliderColors.progressBarInactive }}>
@@ -480,7 +592,7 @@ function HeroSection({
                   className="h-full transition-all duration-700"
                   style={{
                     backgroundColor: sliderColors.progressBarActive,
-                    width: `${((currentSlide + 1) / slides.length) * 100}%`,
+                    width: `${((emblaCurrentSlide + 1) / slides.length) * 100}%`,
                   }}
                 />
               </div>
@@ -515,37 +627,113 @@ function HeroSection({
     );
   }
 
+  if (style === 'builderCoffee') {
+    return (
+      <section className="relative w-full overflow-hidden bg-white pb-[50px]">
+        <div className="mx-auto w-full max-w-7xl px-3">
+          <div className="mt-5 flex flex-wrap -mx-3">
+            <div className="grid w-full max-w-full grid-cols-3 gap-[10px] px-3">
+              <div className="col-span-3 overflow-hidden">
+                <div className="relative">
+                  <div
+                    className="relative flex w-full touch-pan-y select-none items-center overflow-hidden rounded-[10px] bg-white"
+                    role="toolbar"
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                  >
+                    <div className="relative w-full overflow-hidden">
+                      {slides.map((slide, idx) => (
+                        <div key={idx} className={`absolute inset-0 text-center transition-opacity duration-700 ${idx === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                          <a href={slide.link || '#'} className="inline h-full w-full cursor-pointer text-center">
+                            {slide.image ? (
+                              <div className="relative h-full w-full overflow-hidden">
+                                <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
+                                <div className="absolute inset-0 bg-black/10" />
+                                <SiteImage src={slide.image} alt="Sản phẩm nổi bật" className="relative z-10 mx-auto h-full w-full max-w-full object-contain align-middle" width={1500} height={560} priority={idx === 0} sizes="100vw" />
+                              </div>
+                            ) : renderPlaceholder('#f8fafc', sliderColors.placeholderIconColor)}
+                          </a>
+                        </div>
+                      ))}
+                      <div className="relative w-full aspect-[16/9]" aria-hidden />
+                    </div>
+                    {slides.length > 1 && (
+                      <>
+                        <button type="button" aria-label="Previous" onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="absolute -left-0.5 top-1/2 z-20 block h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px]" style={{ backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-left.png?1778581786863")', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundSize: 'contain' }}>
+                          <span className="absolute inset-0 z-30 flex items-center justify-start pl-0.5 text-black md:pl-1">
+                            <svg className="h-2.5 w-2.5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M15 19l-7-7 7-7" /></svg>
+                          </span>
+                        </button>
+                        <button type="button" aria-label="Next" onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="absolute -right-0.5 top-1/2 z-20 block h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px]" style={{ backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-right.png?1778581786863")', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundSize: 'contain' }}>
+                          <span className="absolute inset-0 z-30 flex items-center justify-end pr-0.5 text-black md:pr-1">
+                            <svg className="h-2.5 w-2.5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M9 5l7 7-7 7" /></svg>
+                          </span>
+                        </button>
+                        <div className="absolute bottom-0 left-1/2 z-20 mb-4 flex h-6 w-[100px] -translate-x-1/2 items-center justify-center rounded-[15px]">
+                          {slides.map((_, idx) => (
+                            <button key={idx} type="button" aria-label={`Đi tới slide ${idx + 1}`} onClick={() =>{  setCurrentSlide(idx); }} className="mx-[3px] h-0.5 w-4 border transition-opacity" style={{ backgroundColor: idx === currentSlide ? '#8b7046' : '#cccccc', borderColor: idx === currentSlide ? '#8b7046' : '#cccccc', opacity: idx === currentSlide ? 1 : 0.7 }} />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   // Style 3: Bento Grid
   if (style === 'bento') {
     const bentoSlides = slides.slice(0, 4);
+    const bentoCurrentSlide = bentoSlides.length > 0 ? currentSlide % bentoSlides.length : 0;
     const bentoPlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9', '#e2e8f0'];
     return (
       <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
-        <div className="max-h-[400px] md:max-h-[550px]">
-          {/* Mobile: 2x2 grid */}
-          <div className="grid grid-cols-2 gap-2 md:hidden" style={{ height: '320px' }}>
-            {bentoSlides.slice(0, 4).map((slide, idx) => (
-              <a key={idx} href={slide.link || '#'} className="relative rounded-xl overflow-hidden">
-                {slide.image ? (
-                  <div className="w-full h-full relative">
-                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(20px)' }} />
-                    <div className="absolute inset-0 bg-black/20" />
-                    <SiteImage src={slide.image} alt="" className="relative w-full h-full object-contain z-10" priority={idx === 0} />
-                  </div>
-                ) : (
-                  renderPlaceholder(bentoPlaceholders[idx] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, 20)
-                )}
-              </a>
-            ))}
+        <div className="mx-auto w-full max-w-7xl">
+          {/* Mobile: slider-like carousel */}
+          <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
+            <div className="flex h-full">
+              {bentoSlides.map((slide, idx) => (
+                <a key={idx} href={slide.link || '#'} className="relative h-full min-w-0 flex-[0_0_100%] overflow-hidden rounded-xl">
+                  {slide.image ? (
+                    <SiteImage src={slide.image} alt="" className="h-full w-full object-cover" priority={idx === 0} sizes="100vw" />
+                  ) : (
+                    renderPlaceholder(bentoPlaceholders[idx] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, 20)
+                  )}
+                </a>
+              ))}
+            </div>
+            {bentoSlides.length > 1 && (
+              <>
+                <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                  {bentoSlides.map((_, idx) => (
+                    <button key={idx} type="button" onClick={() =>{  scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === bentoCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === bentoCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive }} />
+                  ))}
+                </div>
+                <div className="absolute bottom-2 left-0 right-0 z-20 h-0.5" style={{ backgroundColor: sliderColors.progressBarInactive }}>
+                  <div className="h-full transition-all duration-700" style={{ backgroundColor: sliderColors.progressBarActive, width: `${((bentoCurrentSlide + 1) / bentoSlides.length) * 100}%` }} />
+                </div>
+              </>
+            )}
           </div>
           {/* Desktop: Bento layout */}
-          <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-3" style={{ height: '500px' }}>
+          <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-3 aspect-[5/2] max-h-[550px]">
             <a href={bentoSlides[0]?.link || '#'} className="col-span-2 row-span-2 relative rounded-2xl overflow-hidden ring-2 ring-offset-1 ring-offset-slate-900" style={{ '--tw-ring-color': bentoColors.mainImageRing } as React.CSSProperties}>
               {bentoSlides[0]?.image ? (
                 <div className="w-full h-full relative">
                   <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[0].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
-                  <SiteImage src={bentoSlides[0].image} alt="" className="relative w-full h-full object-contain z-10" priority />
+                  <SiteImage src={bentoSlides[0].image} alt="" className="relative w-full h-full object-cover z-10" priority sizes="50vw" />
                 </div>
               ) : renderPlaceholder(bentoPlaceholders[0], bentoColors.placeholderIcon, 24)}
             </a>
@@ -554,7 +742,7 @@ function HeroSection({
                 <div className="w-full h-full relative">
                   <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[1].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(20px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
-                  <SiteImage src={bentoSlides[1].image} alt="" className="relative w-full h-full object-contain z-10" />
+                  <SiteImage src={bentoSlides[1].image} alt="" className="relative w-full h-full object-cover z-10" sizes="25vw" />
                 </div>
               ) : renderPlaceholder(bentoPlaceholders[1], bentoColors.placeholderIcon, 22)}
             </a>
@@ -563,7 +751,7 @@ function HeroSection({
                 <div className="w-full h-full relative">
                   <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[2].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
-                  <SiteImage src={bentoSlides[2].image} alt="" className="relative w-full h-full object-contain z-10" />
+                  <SiteImage src={bentoSlides[2].image} alt="" className="relative w-full h-full object-cover z-10" sizes="25vw" />
                 </div>
               ) : renderPlaceholder(bentoPlaceholders[2], bentoColors.placeholderIcon, 20)}
             </a>
@@ -572,10 +760,131 @@ function HeroSection({
                 <div className="w-full h-full relative">
                   <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[3].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
-                  <SiteImage src={bentoSlides[3].image} alt="" className="relative w-full h-full object-contain z-10" />
+                  <SiteImage src={bentoSlides[3].image} alt="" className="relative w-full h-full object-cover z-10" sizes="25vw" />
                 </div>
               ) : renderPlaceholder(bentoPlaceholders[3], bentoColors.placeholderIcon, 20)}
             </a>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Style: Triple - 3 ảnh 16:9 ngang bằng nhau
+  if (style === 'triple') {
+    const tripleSlides = slides.slice(0, 3);
+    const triplePlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
+    return (
+      <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
+        <div className="mx-auto w-full max-w-7xl">
+          <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
+            <div className="flex h-full">
+              {tripleSlides.map((slide, idx) => (
+                <a key={idx} href={slide.link || '#'} className="relative h-full min-w-0 flex-[0_0_100%] overflow-hidden rounded-xl">
+                  {slide.image ? (
+                    <SiteImage src={slide.image} alt="" className="h-full w-full object-cover" priority={idx === 0} sizes="100vw" />
+                  ) : (
+                    renderPlaceholder(triplePlaceholders[idx] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, 20)
+                  )}
+                </a>
+              ))}
+            </div>
+            {tripleSlides.length > 1 && (
+              <>
+                <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                  {tripleSlides.map((_, idx) => (
+                    <button key={idx} type="button" onClick={() =>{  scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive }} />
+                  ))}
+                </div>
+                <div className="absolute bottom-2 left-0 right-0 z-20 h-0.5" style={{ backgroundColor: sliderColors.progressBarInactive }}>
+                  <div className="h-full transition-all duration-700" style={{ backgroundColor: sliderColors.progressBarActive, width: `${((emblaCurrentSlide + 1) / tripleSlides.length) * 100}%` }} />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="hidden aspect-[16/3] max-h-[550px] grid-cols-3 gap-3 md:grid">
+            {tripleSlides.map((slide, idx) => (
+              <a key={idx} href={slide.link || '#'} className={`relative rounded-2xl overflow-hidden ${idx === 0 ? 'ring-2 ring-offset-1 ring-offset-slate-900' : ''}`} style={idx === 0 ? { '--tw-ring-color': bentoColors.mainImageRing } as React.CSSProperties : undefined}>
+                {slide.image ? (
+                  <div className="w-full h-full relative">
+                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${25 - idx * 5}px)` }} />
+                    <div className="absolute inset-0 bg-black/20" />
+                    <SiteImage src={slide.image} alt="" className="relative w-full h-full object-cover z-10" priority={idx === 0} sizes="33vw" />
+                  </div>
+                ) : renderPlaceholder(triplePlaceholders[idx] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, idx === 0 ? 24 : 20)}
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Style: Triple 2 - Ảnh chính 2/3, 2 ảnh phụ xếp dọc 1/3
+  if (style === 'triple2') {
+    const tripleSlides = slides.slice(0, 3);
+    const triplePlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
+    return (
+      <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
+        <div className="mx-auto w-full max-w-7xl">
+          <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
+            <div className="flex h-full">
+              {tripleSlides.map((slide, idx) => (
+                <a key={idx} href={slide.link || '#'} className="relative h-full min-w-0 flex-[0_0_100%] overflow-hidden rounded-xl">
+                  {slide.image ? (
+                    <SiteImage src={slide.image} alt="" className="h-full w-full object-cover" priority={idx === 0} sizes="100vw" />
+                  ) : (
+                    renderPlaceholder(triplePlaceholders[idx] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, 20)
+                  )}
+                </a>
+              ))}
+            </div>
+            {tripleSlides.length > 1 && (
+              <>
+                <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                  {tripleSlides.map((_, idx) => (
+                    <button key={idx} type="button" onClick={() =>{  scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive }} />
+                  ))}
+                </div>
+                <div className="absolute bottom-2 left-0 right-0 z-20 h-0.5" style={{ backgroundColor: sliderColors.progressBarInactive }}>
+                  <div className="h-full transition-all duration-700" style={{ backgroundColor: sliderColors.progressBarActive, width: `${((emblaCurrentSlide + 1) / tripleSlides.length) * 100}%` }} />
+                </div>
+              </>
+            )}
+          </div>
+          <div className="hidden aspect-[8/3] max-h-[550px] grid-cols-3 grid-rows-2 gap-3 md:grid">
+            <a href={tripleSlides[0]?.link || '#'} className="col-span-2 row-span-2 relative rounded-2xl overflow-hidden ring-2 ring-offset-1 ring-offset-slate-900" style={{ '--tw-ring-color': bentoColors.mainImageRing } as React.CSSProperties}>
+              {tripleSlides[0]?.image ? (
+                <div className="w-full h-full relative">
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${tripleSlides[0].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
+                  <div className="absolute inset-0 bg-black/20" />
+                  <SiteImage src={tripleSlides[0].image} alt="" className="relative w-full h-full object-cover z-10" priority sizes="66vw" />
+                </div>
+              ) : renderPlaceholder(triplePlaceholders[0], bentoColors.placeholderIcon, 24)}
+            </a>
+            {tripleSlides.slice(1, 3).map((slide, idx) => (
+              <a key={idx} href={slide.link || '#'} className="relative rounded-2xl overflow-hidden">
+                {slide.image ? (
+                  <div className="w-full h-full relative">
+                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${20 - idx * 5}px)` }} />
+                    <div className="absolute inset-0 bg-black/20" />
+                    <SiteImage src={slide.image} alt="" className="relative w-full h-full object-cover z-10" sizes="33vw" />
+                  </div>
+                ) : renderPlaceholder(triplePlaceholders[idx + 1] ?? bentoColors.gridTint1, bentoColors.placeholderIcon, 20)}
+              </a>
+            ))}
           </div>
         </div>
       </section>
@@ -604,6 +913,7 @@ function HeroSection({
           options?.fit === 'cover' ? 'object-cover' : 'object-contain'
         )}
         priority={options?.priority}
+        sizes="100vw"
       />
       {options?.overlay}
     </div>
@@ -614,16 +924,48 @@ function HeroSection({
     const showFullscreenContent = content.showFullscreenContent !== false;
     return (
       <section className="relative w-full bg-slate-900 overflow-hidden">
-        <div className="relative w-full h-[400px] md:h-[550px] lg:h-[650px]">
-          {slides.map((slide, idx) => (
+        <div className="relative w-full aspect-[16/9] overflow-hidden">
+          {!showFullscreenContent ? (
+            <>
+              <div className="absolute inset-0 overflow-hidden md:hidden" ref={heroEmblaRef}>
+                <div className="flex h-full">
+                  {slides.map((slide, idx) => (
+                    <div key={idx} className="relative h-full min-w-0 flex-[0_0_100%]">
+                      {slide.image ? renderHeroSlideContain(slide, { fit: 'contain', priority: idx === 0 }) : renderPlaceholder(fullscreenColors.placeholderBg, fullscreenColors.placeholderIcon)}
+                    </div>
+                  ))}
+                </div>
+                {slides.length > 1 && (
+                  <>
+                    <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBg, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: sliderColors.navButtonBgHover, borderColor: sliderColors.navButtonBorderColor, boxShadow: `0 0 0 2px ${sliderColors.navButtonOuterRing}`, color: sliderColors.navButtonIconColor }}>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                      {slides.map((_, idx) => (
+                        <button key={idx} type="button" onClick={() => { scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? fullscreenColors.dotActive : fullscreenColors.dotInactive }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="absolute inset-0 hidden md:block">
+                {slides.map((slide, idx) => (
+                  <div key={idx} className={`absolute inset-0 transition-opacity duration-1000 ${idx === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                    {slide.image ? renderHeroSlideContain(slide, { fit: 'contain', priority: idx === 0 }) : renderPlaceholder(fullscreenColors.placeholderBg, fullscreenColors.placeholderIcon)}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : slides.map((slide, idx) => (
             <div key={idx} className={`absolute inset-0 transition-opacity duration-1000 ${idx === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
               {slide.image ? (
                 renderHeroSlideContain(slide, {
-                  fit: 'cover',
+                  fit: 'contain',
                   priority: idx === 0,
-                  overlay: showFullscreenContent ? (
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent z-20" />
-                  ) : null,
+                  overlay: <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent z-20" />,
                 })
               ) : renderPlaceholder(fullscreenColors.placeholderBg, fullscreenColors.placeholderIcon)}
             </div>
@@ -662,13 +1004,75 @@ function HeroSection({
             </div>
           )}
           {/* Navigation dots */}
-          {slides.length > 1 && (
+          {showFullscreenContent && slides.length > 1 && (
             <div className="absolute bottom-6 right-6 flex gap-2 z-40">
               {slides.map((_, idx) => (
                 <button key={idx} onClick={() =>{  setCurrentSlide(idx); }} className={`w-3 h-3 rounded-full transition-all ${idx === currentSlide ? 'w-8' : ''}`} style={{ backgroundColor: idx === currentSlide ? fullscreenColors.dotActive : fullscreenColors.dotInactive }} />
               ))}
             </div>
           )}
+        </div>
+      </section>
+    );
+  }
+
+  if (style === 'conquest') {
+    const primaryButtonBg = content.primaryButtonColor || conquestColors.primaryCTA;
+    const primaryButtonText = getAPCATextColor(primaryButtonBg, 16, 600);
+    const secondaryButtonStyle = content.secondaryButtonColor
+      ? {
+        backgroundColor: content.secondaryButtonColor,
+        borderColor: content.secondaryButtonColor,
+        color: conquestColors.primaryCTAText,
+      }
+      : {
+        backgroundColor: 'transparent',
+        borderColor: conquestColors.sectionText,
+        color: conquestColors.secondaryCTAText,
+      };
+
+    return (
+      <section className="relative w-full overflow-hidden" style={{ backgroundColor: conquestColors.sectionBg, color: conquestColors.sectionText }}>
+        <div className="relative mx-auto flex min-h-[520px] w-full max-w-7xl flex-col overflow-hidden px-4 pt-8 md:min-h-[560px] md:flex-row md:items-stretch md:justify-between md:px-8 md:pt-0">
+          <div className="relative z-20 flex max-w-full flex-col justify-center gap-4 pb-4 text-center md:min-w-[420px] md:max-w-[540px] md:gap-6 md:py-20 md:text-left">
+            {content.badge && (
+              <span className="inline-flex w-fit items-center gap-2 self-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide md:self-start" style={{ backgroundColor: conquestColors.badgeBg, color: conquestColors.badgeText }}>
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: conquestColors.accentSolid }} />
+                {content.badge}
+              </span>
+            )}
+            <h1 className="text-3xl font-bold uppercase leading-[1.05] md:text-5xl lg:text-6xl">
+              {parseHighlightedHeading(content.heading ?? 'Chinh phục tầm cao mới', content.highlightColor || conquestColors.accentSolid)}
+            </h1>
+            {content.description && (
+              <p className="mx-auto max-w-xl text-sm md:mx-0 md:text-lg" style={{ color: conquestColors.descriptionText }}>
+                {content.description}
+              </p>
+            )}
+            <div className="flex flex-wrap justify-center gap-3 md:justify-start">
+              {content.primaryButtonText && <a href={primaryHref} className="rounded-full px-6 py-3 text-sm font-semibold shadow-lg" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>{content.primaryButtonText}</a>}
+              {content.secondaryButtonText && <a href={secondaryHref} className="rounded-full border px-6 py-3 text-sm font-semibold" style={secondaryButtonStyle}>{content.secondaryButtonText}</a>}
+            </div>
+          </div>
+          <div className="relative flex min-h-[270px] flex-1 items-end justify-center md:min-h-[560px]">
+            <div className="absolute inset-y-0 right-0 hidden w-full max-w-[640px] md:block" aria-hidden>
+              {[0, 1, 2].map((idx) => <span key={idx} className="absolute top-0 w-16 rounded-b-sm opacity-80" style={{ right: `${90 + idx * 150}px`, height: '60%', backgroundImage: conquestColors.pillarGradient }} />)}
+              <span className="absolute bottom-0 right-[360px] h-[34%] w-44 skew-x-[-14deg] opacity-80" style={{ backgroundImage: conquestColors.baseGradient }} />
+              <span className="absolute bottom-0 right-[205px] h-[34%] w-36 skew-x-[10deg] opacity-80" style={{ backgroundImage: conquestColors.baseGradient }} />
+              <span className="absolute bottom-0 right-6 h-[34%] w-44 skew-x-[14deg] opacity-80" style={{ backgroundImage: conquestColors.baseGradient }} />
+            </div>
+            <div className="relative z-10 h-[260px] w-full overflow-hidden md:h-[500px] md:max-w-[620px]" ref={heroEmblaRef}>
+              <div className="flex h-full">
+                {slides.map((slide, idx) => (
+                  <div key={idx} className="relative h-full min-w-0 flex-[0_0_100%]">
+                    {slide.image ? renderHeroSlideContain(slide, { fit: 'contain', priority: idx === 0, blur: 18 }) : renderPlaceholder(conquestColors.placeholderBg, conquestColors.placeholderIcon)}
+                  </div>
+                ))}
+              </div>
+              {slides.length > 1 && <><button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: conquestColors.primaryCTA, borderColor: conquestColors.sectionText, color: conquestColors.primaryCTAText }}><svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button><button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: conquestColors.primaryCTA, borderColor: conquestColors.sectionText, color: conquestColors.primaryCTAText }}><svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button></>}
+            </div>
+          </div>
+          {slides.length > 1 && <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 gap-2">{slides.map((_, idx) => <button key={idx} type="button" onClick={() => { scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? conquestColors.dotActive : conquestColors.dotInactive }} />)}</div>}
         </div>
       </section>
     );
@@ -703,15 +1107,45 @@ function HeroSection({
             </div>
             {/* Slide indicators */}
             {slides.length > 1 && (
-              <div className="flex gap-2 mt-8">
+              <div className="mt-8 hidden gap-2 md:flex">
                 {slides.map((_, idx) => (
-                  <button key={idx} onClick={() =>{  setCurrentSlide(idx); }} className={`h-1.5 rounded-full transition-all ${idx === currentSlide ? 'w-10' : 'w-6'}`} style={{ backgroundColor: idx === currentSlide ? splitColors.progressDotActive : splitColors.progressDotInactive }} />
+                  <button key={idx} type="button" onClick={() =>{  setCurrentSlide(idx); }} className={`h-1.5 rounded-full transition-all ${idx === currentSlide ? 'w-10' : 'w-6'}`} style={{ backgroundColor: idx === currentSlide ? splitColors.progressDotActive : splitColors.progressDotInactive }} />
                 ))}
               </div>
             )}
           </div>
           {/* Image Side */}
-          <div className="w-full md:w-1/2 h-[280px] md:h-full relative overflow-hidden order-1 md:order-2">
+          <div className="relative order-1 h-[280px] w-full overflow-hidden md:hidden" ref={heroEmblaRef}>
+            <div className="flex h-full">
+              {slides.map((slide, idx) => (
+                <div key={idx} className="relative h-full min-w-0 flex-[0_0_100%]">
+                  {slide.image ? (
+                    <SiteImage src={slide.image} alt="" className="w-full h-full object-cover" priority={idx === 0} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-slate-200">
+                      <LayoutTemplate size={48} className="text-slate-400" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {slides.length > 1 && (
+              <>
+                <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
+                  <svg className="h-4 w-4" style={{ color: splitColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
+                  <svg className="h-4 w-4" style={{ color: splitColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+                  {slides.map((_, idx) => (
+                    <button key={idx} type="button" onClick={() => { scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? splitColors.progressDotActive : splitColors.progressDotInactive }} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="relative order-2 hidden overflow-hidden md:block md:h-full md:w-1/2">
             {slides.map((slide, idx) => (
               <div key={idx} className={`absolute inset-0 transition-all duration-700 ${idx === currentSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-105 pointer-events-none'}`}>
                 {slide.image ? (
@@ -726,10 +1160,10 @@ function HeroSection({
             {/* Navigation arrows */}
             {slides.length > 1 && (
               <>
-                <button onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center z-10" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
+                <button type="button" onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center z-10" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
                   <svg className="w-5 h-5" style={{ color: splitColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <button onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center z-10" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
+                <button type="button" onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full shadow-lg flex items-center justify-center z-10" style={{ backgroundColor: splitColors.navButtonBg, boxShadow: `0 0 0 2px ${splitColors.navButtonOuterRing}` }}>
                   <svg className="w-5 h-5" style={{ color: splitColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
               </>
@@ -744,7 +1178,66 @@ function HeroSection({
   if (style === 'parallax') {
     return (
       <section className="relative w-full bg-slate-900 overflow-hidden">
-        <div className="relative w-full h-[350px] md:h-[450px] lg:h-[550px]">
+        <div className="md:hidden" style={{ backgroundColor: parallaxColors.cardBg }}>
+          <div className="relative h-[280px] w-full overflow-hidden" ref={heroEmblaRef}>
+            <div className="flex h-full">
+              {slides.map((slide, idx) => (
+                <div key={idx} className="relative h-full min-w-0 flex-[0_0_100%]">
+                  {slide.image ? (
+                    renderHeroSlideContain(slide, {
+                      priority: idx === 0,
+                      overlay: (
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent z-20" />
+                      ),
+                    })
+                  ) : renderPlaceholder(parallaxColors.placeholderBg, parallaxColors.placeholderIcon)}
+                </div>
+              ))}
+            </div>
+            {slides.length > 1 && (
+              <>
+                <button type="button" aria-label="Ảnh trước" onClick={scrollHeroPrev} disabled={!canScrollPrev} className="absolute left-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
+                  <svg className="h-4 w-4" style={{ color: parallaxColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button type="button" aria-label="Ảnh tiếp" onClick={scrollHeroNext} disabled={!canScrollNext} className="absolute right-3 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
+                  <svg className="h-4 w-4" style={{ color: parallaxColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </button>
+                <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                  {slides.map((_, idx) => (
+                    <button key={idx} type="button" onClick={() => { scrollHeroTo(idx); }} className={`h-2 rounded-full transition-all ${idx === emblaCurrentSlide ? 'w-6' : 'w-2'}`} style={{ backgroundColor: idx === emblaCurrentSlide ? parallaxColors.cardBadgeDot : 'rgba(255,255,255,0.55)' }} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="p-6">
+            {content.badge && (
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: parallaxColors.cardBadgeDot }} />
+                <span className="text-xs font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full" style={{ backgroundColor: parallaxColors.cardBadgeBg, color: parallaxColors.cardBadgeText }}>{content.badge}</span>
+              </div>
+            )}
+            <h3 className="text-lg font-bold" style={{ color: parallaxColors.headingText }}>
+              {content.heading ?? 'Tiêu đề nổi bật'}
+            </h3>
+            {content.description && (
+              <p className="text-sm mt-1" style={{ color: parallaxColors.descriptionText }}>
+                {content.description}
+              </p>
+            )}
+            <div className="flex items-center gap-3 mt-4">
+              {content.primaryButtonText && (
+                <a href={primaryHref} className="px-5 py-2 font-medium rounded-lg text-sm" style={{ backgroundColor: parallaxColors.primaryCTA, color: parallaxColors.primaryCTAText }}>
+                  {content.primaryButtonText}
+                </a>
+              )}
+              {content.countdownText && (
+                <span className="text-sm" style={{ color: parallaxColors.countdownText }}>{content.countdownText}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="relative hidden w-full md:block md:h-[450px] lg:h-[550px]">
           {slides.map((slide, idx) => (
             <div key={idx} className={`absolute inset-0 transition-opacity duration-700 ${idx === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
               {slide.image ? (
@@ -789,11 +1282,11 @@ function HeroSection({
           {/* Top navigation bar */}
           {slides.length > 1 && (
             <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
-              <button onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
+              <button type="button" onClick={() =>{  setCurrentSlide(prev => prev === 0 ? slides.length - 1 : prev - 1); }} className="w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
                 <svg className="w-4 h-4" style={{ color: parallaxColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
               <span className="text-white/80 text-xs font-medium px-2">{currentSlide + 1} / {slides.length}</span>
-              <button onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
+              <button type="button" onClick={() =>{  setCurrentSlide(prev => (prev + 1) % slides.length); }} className="w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors" style={{ backgroundColor: parallaxColors.navButtonBg, boxShadow: `0 0 0 2px ${parallaxColors.navButtonOuterRing}` }}>
                 <svg className="w-4 h-4" style={{ color: parallaxColors.navButtonIcon }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
             </div>
@@ -809,11 +1302,40 @@ function HeroSection({
 // ============ STATS SECTION ============
 // Professional Stats UI/UX - 6 Variants
 type StatsStyle = 'horizontal' | 'cards' | 'icons' | 'gradient' | 'minimal' | 'counter';
+
+interface StatsItemWithIcon {
+  value: string;
+  label: string;
+  iconType?: 'lucide' | 'url' | 'upload';
+  iconName?: string;
+  iconUrl?: string;
+}
+
+const resolveStatsIconComponent = (iconName?: string) => {
+  if (!iconName) {return null;}
+  const iconMap = LucideIcons as unknown as Record<string, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>>;
+  return iconMap[iconName] ?? null;
+};
+
 function StatsSection({ config, brandColor, secondary, mode, title: _title }: { config: Record<string, unknown>; brandColor: string;
   secondary: string; mode: 'single' | 'dual'; title: string }) {
   void _title;
-  const items = (config.items as { value: string; label: string }[]) || [];
+  const items = (config.items as StatsItemWithIcon[]) || [];
   const style = (config.style as StatsStyle) || 'horizontal';
+  const mediaPlacement = (config.mediaPlacement as 'top' | 'left') || 'top';
+  const mediaAlign = (config.mediaAlign as 'left' | 'center' | 'right') || 'center';
+
+  // Debug log
+  console.log('StatsSection config:', { mediaPlacement, mediaAlign, style, configKeys: Object.keys(config) });
+
+  // Helper for left placement
+  const getItemContainerClass = (placement?: 'top' | 'left', align?: 'left' | 'center' | 'right') => {
+    if (placement === 'left') {
+      return 'flex items-center gap-3 text-left';
+    }
+    const alignClass = align === 'left' ? 'items-start text-left' : align === 'right' ? 'items-end text-right' : 'items-center text-center';
+    return `flex flex-col ${alignClass}`;
+  };
 
   // Style 1: Thanh ngang - Full width bar với dividers
   if (style === 'horizontal') {
@@ -826,19 +1348,37 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
             style={{ backgroundColor: 'white', borderColor: colors.border }}
           >
             <div className="flex flex-col md:flex-row items-center justify-between divide-y md:divide-y-0 md:divide-x divide-slate-200">
-              {items.map((item, idx) => (
+              {items.map((item, idx) => {
+                const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+                const iconElement = item.iconType === 'lucide' && IconCmp ? (
+                  <IconCmp size={32} style={{ color: brandColor }} />
+                ) : item.iconType === 'upload' && item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-8 h-8 md:w-11 md:h-11 object-contain" />
+                ) : item.iconType === 'url' && item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-8 h-8 object-contain" />
+                ) : null;
+
+                return (
                 <div 
                   key={idx} 
-                  className="flex-1 w-full py-6 px-4 flex flex-col items-center justify-center text-center cursor-default"
+                  className={`flex-1 w-full py-6 px-4 justify-center cursor-default ${getItemContainerClass(mediaPlacement, mediaAlign)}`}
                 >
-                  <span className="text-3xl md:text-4xl font-bold tracking-tight tabular-nums leading-none mb-1" style={{ color: brandColor }}>
-                    {item.value}
-                  </span>
-                  <h3 className="text-xs font-medium uppercase tracking-wider text-slate-600">
-                    {item.label}
-                  </h3>
+                  {iconElement && (
+                    <div className={mediaPlacement === 'left' ? 'mb-0 flex shrink-0 items-center justify-center self-center' : 'mb-2'}>
+                      {iconElement}
+                    </div>
+                  )}
+                  <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                    <span className="text-3xl md:text-4xl font-bold tracking-tight tabular-nums leading-none mb-1" style={{ color: brandColor }}>
+                      {item.value}
+                    </span>
+                    <h3 className="text-xs font-medium uppercase tracking-wider text-slate-600">
+                      {item.label}
+                    </h3>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -853,28 +1393,47 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
       <section className="py-12 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {items.map((item, idx) => (
+            {items.map((item, idx) => {
+              const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+              const iconElement = item.iconType === 'lucide' && IconCmp ? (
+                <IconCmp size={28} style={{ color: brandColor }} />
+              ) : item.iconType === 'upload' && item.iconUrl ? (
+                <img src={item.iconUrl} alt="" className="w-12 h-12 md:w-16 md:h-16 object-cover" />
+              ) : item.iconType === 'url' && item.iconUrl ? (
+                <img src={item.iconUrl} alt="" className="w-7 h-7 object-contain" />
+              ) : null;
+
+              return (
               <div 
                 key={idx}
-                className="bg-white border rounded-xl p-5 flex flex-col items-center text-center shadow-sm"
+                className={`bg-white border rounded-xl p-5 shadow-sm ${getItemContainerClass(mediaPlacement, mediaAlign)}`}
                 style={{ borderColor: colors.border }}
               >
-                <span 
-                  className="text-3xl font-bold mb-1 tracking-tight tabular-nums"
-                  style={{ color: brandColor }}
-                >
-                  {item.value}
-                </span>
-                <h3 className="text-sm font-semibold text-slate-700">
-                  {item.label}
-                </h3>
-                {/* Minimal accent line */}
-                <div 
-                  className="w-8 h-0.5 rounded-full mt-3"
-                  style={{ backgroundColor: colors.accent }}
-                />
+                {iconElement && (
+                  <div className={mediaPlacement === 'left' ? 'mb-0 flex shrink-0 items-center justify-center self-center' : 'mb-2'}>
+                    {iconElement}
+                  </div>
+                )}
+                <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                  <span 
+                    className="text-3xl font-bold mb-1 tracking-tight tabular-nums"
+                    style={{ color: brandColor }}
+                  >
+                    {item.value}
+                  </span>
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    {item.label}
+                  </h3>
+                  {mediaPlacement !== 'left' && (
+                    <div 
+                      className="w-8 h-0.5 rounded-full mt-3"
+                      style={{ backgroundColor: colors.accent }}
+                    />
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -888,25 +1447,48 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
       <section className="py-12 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {items.map((item, idx) => (
-              <div key={idx} className="flex flex-col items-center">
-                {/* Circle Container with shadow and border */}
+            {items.map((item, idx) => {
+              const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+              const hasIcon = item.iconType === 'lucide' || item.iconType === 'url' || item.iconType === 'upload';
+              
+              const circleElement = (
                 <div
-                  className="relative w-24 h-24 md:w-28 md:h-28 rounded-full flex items-center justify-center mb-3 border shadow-sm"
+                  className={`relative w-24 h-24 md:w-28 md:h-28 rounded-full flex items-center justify-center border shadow-sm shrink-0 ${mediaPlacement === 'left' ? 'mb-0' : 'mb-3'}`}
                   style={{
                     backgroundColor: colors.circleBg,
                     borderColor: colors.ring,
                   }}
                 >
-                  <span className="text-2xl md:text-3xl font-bold tracking-tight z-10 tabular-nums" style={{ color: colors.textOnCircle }}>
-                    {item.value}
-                  </span>
+                  {item.iconType === 'lucide' && IconCmp ? (
+                    <IconCmp size={40} style={{ color: colors.textOnCircle }} />
+                  ) : item.iconType === 'upload' && item.iconUrl ? (
+                    <img src={item.iconUrl} alt="" className="w-11 h-11 md:w-14 md:h-14 object-contain" />
+                  ) : item.iconType === 'url' && item.iconUrl ? (
+                    <img src={item.iconUrl} alt="" className="w-10 h-10 object-contain" />
+                  ) : (
+                    <span className="text-2xl md:text-3xl font-bold tracking-tight z-10 tabular-nums" style={{ color: colors.textOnCircle }}>
+                      {item.value}
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-base font-semibold text-slate-800" style={{ color: colors.label }}>
-                  {item.label}
-                </h3>
+              );
+
+              return (
+              <div key={idx} className={getItemContainerClass(mediaPlacement, mediaAlign)}>
+                {circleElement}
+                <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                  <h3 className="text-base font-semibold text-slate-800" style={{ color: colors.label }}>
+                    {item.label}
+                  </h3>
+                  {hasIcon && (
+                    <span className="text-xl font-bold tabular-nums mt-1" style={{ color: brandColor }}>
+                      {item.value}
+                    </span>
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -927,21 +1509,39 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
             }}
           >
             <div className="grid grid-cols-2 md:grid-cols-4">
-              {items.map((item, idx) => (
+              {items.map((item, idx) => {
+                const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+                const iconElement = item.iconType === 'lucide' && IconCmp ? (
+                  <IconCmp size={36} style={{ color: colors.text }} />
+                ) : item.iconType === 'upload' && item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-10 h-10 md:w-12 md:h-12 object-cover" />
+                ) : item.iconType === 'url' && item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-9 h-9 object-contain" />
+                ) : null;
+
+                return (
                 <div 
                   key={idx}
-                  className={`relative flex flex-col items-center justify-center text-center p-6 md:p-8 ${
+                  className={`relative justify-center p-6 md:p-8 ${getItemContainerClass(mediaPlacement, mediaAlign)} ${
                     idx !== items.length - 1 ? 'md:border-r md:border-white/10' : ''
                   }`}
                 >
-                  <span className="text-4xl md:text-5xl font-extrabold tracking-tight tabular-nums leading-none mb-2" style={{ color: colors.text }}>
-                    {item.value}
-                  </span>
-                  <h3 className="text-sm font-medium opacity-90 relative z-10" style={{ color: colors.label }}>
-                    {item.label}
-                  </h3>
+                  {iconElement && (
+                    <div className={mediaPlacement === 'left' ? 'mb-0 flex shrink-0 items-center justify-center self-center' : 'mb-2'}>
+                      {iconElement}
+                    </div>
+                  )}
+                  <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                    <span className="text-4xl md:text-5xl font-extrabold tracking-tight tabular-nums leading-none mb-2" style={{ color: colors.text }}>
+                      {item.value}
+                    </span>
+                    <h3 className="text-sm font-medium opacity-90 relative z-10" style={{ color: colors.label }}>
+                      {item.label}
+                    </h3>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -956,21 +1556,40 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
       <section className="py-12 md:py-16 px-4 bg-slate-50">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {items.map((item, idx) => (
-              <div key={idx} className="flex flex-col items-start">
-                {/* Accent line */}
-                <div 
-                  className="w-12 h-1 rounded-full mb-4"
-                  style={{ backgroundColor: colors.accent }}
-                />
-                <span className="text-4xl md:text-5xl font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }}>
-                  {item.value}
-                </span>
-                <h3 className="text-base font-medium text-slate-500 mt-2">
-                  {item.label}
-                </h3>
+            {items.map((item, idx) => {
+              const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+              const iconElement = item.iconType === 'lucide' && IconCmp ? (
+                <IconCmp size={32} style={{ color: colors.value }} />
+              ) : item.iconType === 'upload' && item.iconUrl ? (
+                <img src={item.iconUrl} alt="" className="w-9 h-9 md:w-12 md:h-12 object-cover" />
+              ) : item.iconType === 'url' && item.iconUrl ? (
+                <img src={item.iconUrl} alt="" className="w-8 h-8 object-contain" />
+              ) : null;
+
+              return (
+              <div key={idx} className={getItemContainerClass(mediaPlacement, mediaAlign)}>
+                {iconElement && (
+                  <div className={mediaPlacement === 'left' ? 'mb-0 flex shrink-0 items-center justify-center self-center' : 'mb-2'}>
+                    {iconElement}
+                  </div>
+                )}
+                <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                  {mediaPlacement !== 'left' && (
+                    <div 
+                      className="w-12 h-1 rounded-full mb-4"
+                      style={{ backgroundColor: colors.accent }}
+                    />
+                  )}
+                  <span className="text-4xl md:text-5xl font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }}>
+                    {item.value}
+                  </span>
+                  <h3 className="text-base font-medium text-slate-500 mt-2">
+                    {item.label}
+                  </h3>
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -983,13 +1602,22 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
     <section className="py-12 md:py-16 px-4">
       <div className="max-w-5xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-          {items.map((item, idx) => (
+          {items.map((item, idx) => {
+            const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveStatsIconComponent(item.iconName) : null;
+            const iconElement = item.iconType === 'lucide' && IconCmp ? (
+              <IconCmp size={36} style={{ color: colors.value }} />
+            ) : item.iconType === 'upload' && item.iconUrl ? (
+              <img src={item.iconUrl} alt="" className="w-9 h-9 md:w-12 md:h-12 object-cover" />
+            ) : item.iconType === 'url' && item.iconUrl ? (
+              <img src={item.iconUrl} alt="" className="w-9 h-9 object-contain" />
+            ) : null;
+
+            return (
             <div 
               key={idx}
               className="relative bg-white rounded-2xl border overflow-hidden shadow-sm"
               style={{ borderColor: colors.border }}
             >
-              {/* Top progress bar */}
               <div className="h-1 w-full bg-slate-100">
                 <div 
                   className="h-full transition-all duration-500"
@@ -1000,19 +1628,27 @@ function StatsSection({ config, brandColor, secondary, mode, title: _title }: { 
                 />
               </div>
               
-              <div className="flex flex-col items-center justify-center text-center p-6">
-                <span 
-                  className="text-5xl md:text-6xl font-black tracking-tighter tabular-nums leading-none"
-                style={{ color: colors.value }}
-                >
-                  {item.value}
-                </span>
-                <h3 className="text-sm font-semibold text-slate-600 mt-2">
-                  {item.label}
-                </h3>
+              <div className={`justify-center p-6 ${getItemContainerClass(mediaPlacement, mediaAlign)}`}>
+                {iconElement && (
+                  <div className={mediaPlacement === 'left' ? 'mb-0 flex shrink-0 items-center justify-center self-center' : 'mb-2'}>
+                    {iconElement}
+                  </div>
+                )}
+                <div className={mediaPlacement === 'left' ? 'flex-1' : ''}>
+                  <span 
+                    className="text-5xl md:text-6xl font-black tracking-tighter tabular-nums leading-none"
+                    style={{ color: colors.value }}
+                  >
+                    {item.value}
+                  </span>
+                  <h3 className="text-sm font-semibold text-slate-600 mt-2">
+                    {item.label}
+                  </h3>
+                </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
@@ -1035,16 +1671,51 @@ function ServicesSection({
 }) {
   const items = (config.items as ServiceItem[]) || [];
   const style = (config.style as ServicesStyle) || 'elegantGrid';
+  const desktopColumns = getServicesDesktopColumns(config.desktopColumns);
+  const mediaPlacement = getServicesMediaPlacement(config.mediaPlacement);
+  const mediaAlign = getServicesMediaAlign(config.mediaAlign);
+  const spacing = normalizeServicesSpacing(config.spacing);
+  const cornerRadius = normalizeServicesCornerRadius(config.cornerRadius);
   const colors = getServicesColors(brandColor, secondary, mode);
 
+  // Extract header config
+  const headerConfig = extractSectionHeaderConfig(config);
+
   return (
-    <ServicesSectionCore
-      items={items}
-      style={style}
-      title={title}
-      colors={colors}
-      isPreview={false}
-    />
+    <section className={cn(getSectionSpacingClassName(spacing), 'px-3')}>
+      <div className="mx-auto max-w-7xl">
+        <SectionHeader
+          title={title}
+          subtitle={headerConfig.subtitle}
+          badgeText={headerConfig.badgeText}
+          hideHeader={headerConfig.hideHeader}
+          showTitle={headerConfig.showTitle}
+          showSubtitle={headerConfig.showSubtitle}
+          showBadge={headerConfig.showBadge}
+          headerAlign={headerConfig.headerAlign}
+          titleColorPrimary={headerConfig.titleColorPrimary}
+          subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+          uppercaseText={headerConfig.uppercaseText}
+          brandColor={brandColor}
+        />
+        <ServicesSectionCore
+          items={items}
+          style={style}
+          headerAlign={'left' as ServiceItemMediaAlign}
+          desktopColumns={desktopColumns}
+          mediaPlacement={mediaPlacement as ServiceItemMediaPlacement}
+          mediaAlign={mediaAlign as ServiceItemMediaAlign}
+          subtitle={''}
+          showTitle={false}
+          showSubtitle={false}
+          title={''}
+          colors={colors}
+          spacing="none"
+          cornerRadius={cornerRadius}
+          isPreview={false}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -1072,7 +1743,20 @@ function BenefitsSection({
     gridColumnsMobile?: 1 | 2;
     buttonText?: string;
     buttonLink?: string;
+    visualImage?: string;
+    highlightIndex?: number;
+    showItemNumbers?: boolean;
+    showDecorativeVisuals?: boolean;
     harmony?: unknown;
+    hideHeader?: boolean;
+    showTitle?: boolean;
+    showSubtitle?: boolean;
+    showBadge?: boolean;
+    titleColorPrimary?: boolean;
+    subtitleAboveTitle?: boolean;
+    uppercaseText?: boolean;
+    subtitle?: string;
+    badgeText?: string;
   };
 
   const items: BenefitItem[] = (benefitsConfig.items ?? []).map((item, idx) => ({
@@ -1082,16 +1766,7 @@ function BenefitsSection({
     title: item.title ?? '',
   }));
 
-  const style: BenefitsSharedStyle = (
-    benefitsConfig.style === 'cards'
-    || benefitsConfig.style === 'list'
-    || benefitsConfig.style === 'bento'
-    || benefitsConfig.style === 'row'
-    || benefitsConfig.style === 'carousel'
-    || benefitsConfig.style === 'timeline'
-  )
-    ? benefitsConfig.style
-    : 'cards';
+  const style: BenefitsSharedStyle = normalizeBenefitsStyle(benefitsConfig.style);
 
   const harmony = normalizeBenefitsHarmony(benefitsConfig.harmony);
 
@@ -1102,26 +1777,64 @@ function BenefitsSection({
     secondary,
   });
 
-  const sectionConfig: Pick<BenefitsConfig, 'subHeading' | 'heading' | 'buttonText' | 'buttonLink' | 'headerAlign' | 'gridColumnsDesktop' | 'gridColumnsMobile'> = {
+  const _hasSharedHeaderConfig = (
+    typeof benefitsConfig.hideHeader === 'boolean'
+    || typeof benefitsConfig.showTitle === 'boolean'
+    || typeof benefitsConfig.showSubtitle === 'boolean'
+    || typeof benefitsConfig.showBadge === 'boolean'
+    || typeof benefitsConfig.titleColorPrimary === 'boolean'
+    || typeof benefitsConfig.subtitleAboveTitle === 'boolean'
+    || typeof benefitsConfig.uppercaseText === 'boolean'
+    || typeof benefitsConfig.subtitle === 'string'
+    || typeof benefitsConfig.badgeText === 'string'
+  );
+
+  const headerConfig = extractSectionHeaderConfig(config);
+
+  const sectionConfig: Pick<BenefitsConfig, 'subHeading' | 'heading' | 'buttonText' | 'buttonLink' | 'headerAlign' | 'gridColumnsDesktop' | 'gridColumnsMobile' | 'visualImage' | 'highlightIndex' | 'showItemNumbers' | 'showDecorativeVisuals'> = {
     buttonLink: benefitsConfig.buttonLink,
     buttonText: benefitsConfig.buttonText,
     gridColumnsDesktop: benefitsConfig.gridColumnsDesktop,
     gridColumnsMobile: benefitsConfig.gridColumnsMobile,
     heading: benefitsConfig.heading,
     headerAlign: benefitsConfig.headerAlign,
+    highlightIndex: benefitsConfig.highlightIndex,
+    showDecorativeVisuals: benefitsConfig.showDecorativeVisuals,
+    showItemNumbers: benefitsConfig.showItemNumbers,
     subHeading: benefitsConfig.subHeading,
+    visualImage: benefitsConfig.visualImage,
   };
 
   return (
-    <BenefitsSectionShared
-      context="site"
-      style={style}
-      title={title}
-      config={sectionConfig}
-      items={items}
-      tokens={tokens}
-      mode={mode as BenefitsBrandMode}
-    />
+    <section className="py-8 px-3">
+      <div className="max-w-7xl mx-auto">
+        <SectionHeader
+          title={title}
+          subtitle={headerConfig.subtitle}
+          badgeText={headerConfig.badgeText}
+          hideHeader={headerConfig.hideHeader}
+          showTitle={headerConfig.showTitle}
+          showSubtitle={headerConfig.showSubtitle}
+          showBadge={headerConfig.showBadge}
+          headerAlign={headerConfig.headerAlign}
+          titleColorPrimary={headerConfig.titleColorPrimary}
+          subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+          uppercaseText={headerConfig.uppercaseText}
+          brandColor={brandColor}
+        />
+
+        <BenefitsSectionShared
+          context="site"
+          style={style}
+          title={title}
+          config={sectionConfig}
+          items={items}
+          tokens={tokens}
+          mode={mode as BenefitsBrandMode}
+          skipHeader={true}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -1154,7 +1867,7 @@ function FAQSection({
   }));
 
   const style: FaqStyle = faqConfig.style ?? 'accordion';
-  const sectionConfig: FaqConfig = {
+  const _sectionConfig: FaqConfig = {
     description: faqConfig.description,
     buttonText: faqConfig.buttonText,
     buttonLink: faqConfig.buttonLink,
@@ -1166,6 +1879,14 @@ function FAQSection({
     mode,
     style,
   });
+
+  // Extract header config
+  const headerConfig = extractSectionHeaderConfig(config);
+  const hasSharedHeader = !headerConfig.hideHeader && (
+    (headerConfig.showTitle && title.trim().length > 0)
+    || (headerConfig.showSubtitle && (headerConfig.subtitle?.trim().length ?? 0) > 0)
+    || (headerConfig.showBadge && (headerConfig.badgeText?.trim().length ?? 0) > 0)
+  );
 
   const faqSchema = {
     '@context': 'https://schema.org',
@@ -1183,14 +1904,37 @@ function FAQSection({
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <FaqSectionShared
-        items={items}
-        title={title}
-        style={style}
-        config={sectionConfig}
-        tokens={tokens}
-        context="site"
-      />
+      <section className="py-8 px-3">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <SectionHeader
+            title={title}
+            subtitle={headerConfig.subtitle}
+            badgeText={headerConfig.badgeText}
+            hideHeader={headerConfig.hideHeader}
+            showTitle={headerConfig.showTitle}
+            showSubtitle={headerConfig.showSubtitle}
+            showBadge={headerConfig.showBadge}
+            headerAlign={headerConfig.headerAlign}
+            titleColorPrimary={headerConfig.titleColorPrimary}
+            subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+            uppercaseText={headerConfig.uppercaseText}
+            brandColor={brandColor}
+          />
+          <FaqSectionShared
+            items={items}
+            title={title}
+            style={style}
+            config={{
+              buttonLink: faqConfig.buttonLink,
+              buttonText: faqConfig.buttonText,
+              description: faqConfig.description,
+            }}
+            tokens={tokens}
+            context="site"
+            suppressInternalHeader={hasSharedHeader}
+          />
+        </div>
+      </section>
     </>
   );
 }
@@ -1215,6 +1959,11 @@ function CTASection({
     secondaryButtonText?: string;
     secondaryButtonLink?: string;
     badge?: string;
+    spacing?: CTAConfig['spacing'];
+    cornerRadius?: CTAConfig['cornerRadius'];
+    noBorderRadius?: boolean;
+    noVerticalMargin?: boolean;
+    containerWidth?: CTAConfig['containerWidth'];
     style?: CTAStyle;
   };
 
@@ -1237,6 +1986,11 @@ function CTASection({
         secondaryButtonText: ctaConfig.secondaryButtonText ?? '',
         secondaryButtonLink: ctaConfig.secondaryButtonLink ?? '',
         badge: ctaConfig.badge ?? '',
+        spacing: ctaConfig.spacing,
+        cornerRadius: ctaConfig.cornerRadius,
+        noBorderRadius: ctaConfig.noBorderRadius,
+        noVerticalMargin: ctaConfig.noVerticalMargin,
+        containerWidth: ctaConfig.containerWidth,
       }}
       style={style}
       tokens={tokens}
@@ -1245,462 +1999,66 @@ function CTASection({
   );
 }
 
-// ============ TESTIMONIALS SECTION ============
-// 6 Professional Styles: Cards, Slider, Masonry, Quote, Carousel, Minimal
-// Best Practices: Authenticity, Credibility indicators, Diverse formats, Mobile responsive
-type TestimonialsStyle = 'cards' | 'slider' | 'masonry' | 'quote' | 'carousel' | 'minimal';
-
-type TestimonialsRuntimeItem = {
-  id?: string;
-  avatar?: string;
-  content?: string;
-  name?: string;
-  rating?: number;
-  role?: string;
-};
 function TestimonialsSection({ config, brandColor, secondary, mode, title }: { config: Record<string, unknown>; brandColor: string;
   secondary: string; mode: 'single' | 'dual'; title: string }) {
-  const items = Array.isArray(config.items) ? (config.items as TestimonialsRuntimeItem[]) : [];
-  const normalizedItems = React.useMemo(() => items.map((item, idx) => ({
-    avatar: item.avatar ?? '',
-    content: item.content ?? '',
-    id: item.id ?? `testimonial-${idx + 1}`,
-    name: item.name ?? '',
-    rating: typeof item.rating === 'number' && Number.isFinite(item.rating)
-      ? Math.max(1, Math.min(5, item.rating))
-      : 5,
-    role: item.role ?? '',
-  })), [items]);
-  const style = (config.style as TestimonialsStyle) || 'cards';
+  const items = Array.isArray(config.items) ? config.items : [];
+  const style = normalizeTestimonialsStyle(config.style);
+  const desktopColumns = normalizeTestimonialsDesktopColumns(config.desktopColumns);
+  const spacing = normalizeTestimonialsSpacing(config.spacing, config.noVerticalMargin);
+  const cornerRadius = normalizeTestimonialsCornerRadius(config.cornerRadius, config.noBorderRadius);
+  const isFullBleedTestimonials = style === 'split-carousel' || style === 'overlap-carousel';
+  const sectionSpacingClassName = getTestimonialsSectionSpacingClassName(spacing);
   const colors = getTestimonialsSectionColors({
     primary: brandColor,
     secondary,
     mode,
   });
-  const carouselId = useSafeId('testimonials-carousel');
-  const [currentSlide, setCurrentSlide] = React.useState(0);
-  const heading = title || 'Khách hàng nói gì về chúng tôi';
-  const buildFallbackKey = (item: { id: string; name: string; role: string }, idx: number) => `${item.id}-${item.name}-${item.role}-${idx}`;
 
-  // Auto slide for slider/quote styles
-  React.useEffect(() => {
-    if ((style !== 'slider' && style !== 'quote') || normalizedItems.length <= 1) {return;}
-    const timer = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % normalizedItems.length);
-    }, 5000);
-    return () =>{  clearInterval(timer); };
-  }, [normalizedItems.length, style]);
+  // Extract header config
+  const headerConfig = extractSectionHeaderConfig(config);
 
-  const renderStars = (rating: number, size: number = 16) => (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={`star-${star}`}
-          size={size}
-          className={star <= rating ? 'fill-current' : 'text-slate-300'}
-          style={star <= rating ? { color: colors.ratingSecondary } : undefined}
-        />
-      ))}
-    </div>
-  );
-
-  // Empty state
-  if (normalizedItems.length === 0) {
-    return (
-      <section className="py-12 px-4" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="max-w-3xl mx-auto flex flex-col items-center justify-center rounded-xl border p-10 text-center" style={{ backgroundColor: colors.neutralSurface, borderColor: colors.cardBorder }}>
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: colors.iconSurface }}>
-            <Star size={28} style={{ color: colors.quoteSecondary }} />
-          </div>
-          <p className="font-semibold" style={{ color: colors.headingPrimary }}>Chưa có đánh giá nào</p>
-          <p className="text-sm mt-1" style={{ color: colors.neutralMuted }}>Thêm đánh giá đầu tiên để xem preview</p>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 1: Cards - Grid layout with equal height
-  if (style === 'cards') {
-    return (
-      <section className="py-12 px-4" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-8" style={{ color: colors.headingPrimary }}>{heading}</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {normalizedItems.map((item, idx) => (
-              <article
-                key={buildFallbackKey(item, idx)}
-                className="rounded-xl border p-5 flex flex-col h-full"
-                style={{
-                  backgroundColor: colors.cardSurface,
-                  borderTopColor: colors.cardBorder,
-                  borderRightColor: colors.cardBorder,
-                  borderBottomColor: colors.cardBorder,
-                  borderLeftColor: colors.cardBorder,
-                }}
-              >
-                {renderStars(item.rating, 14)}
-                <p className="mt-3 text-sm leading-relaxed flex-1 min-h-[64px]" style={{ color: colors.neutralMuted }}>
-                  “{item.content || 'Nội dung đánh giá...'}”
-                </p>
-                <div className="mt-4 pt-4 border-t flex items-center gap-3" style={{ borderColor: colors.cardBorder }}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                    {(item.name || 'U').charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate" style={{ color: colors.headingPrimary }}>{item.name || 'Tên khách hàng'}</p>
-                    <p className="text-xs truncate" style={{ color: colors.subtitleSecondary }}>{item.role || 'Chức vụ'}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 2: Slider - Single testimonial with navigation
-  if (style === 'slider') {
-    const current = normalizedItems[currentSlide] || normalizedItems[0];
-    if (!current) {return null;}
-
-    return (
-      <section className="py-12 md:py-16 px-4 relative overflow-hidden" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="max-w-5xl mx-auto relative">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-8 md:mb-10" style={{ color: colors.headingPrimary }}>{heading}</h2>
-
-          <div className="absolute right-2 top-10 text-[56px] md:text-[72px] leading-none font-serif pointer-events-none select-none opacity-60" style={{ color: colors.quoteSecondary }}>
-            “
-          </div>
-
-          <article
-            className="rounded-2xl border px-5 py-6 md:px-10 md:py-9 text-center"
-            style={{
-              backgroundColor: colors.cardSurface,
-              borderTopColor: colors.cardBorderStrong,
-              borderRightColor: colors.cardBorderStrong,
-              borderBottomColor: colors.cardBorderStrong,
-              borderLeftColor: colors.cardBorderStrong,
-            }}
-          >
-            <div className="flex items-center justify-center gap-3 mb-5">
-              {renderStars(current.rating, 15)}
-              <span
-                className="text-xs font-medium rounded-full px-2.5 py-1 border"
-                style={{ borderColor: colors.cardBorder, color: colors.subtitleSecondary }}
-              >
-                {currentSlide + 1}/{normalizedItems.length}
-              </span>
-            </div>
-
-            <p className="mx-auto max-w-3xl text-base md:text-xl leading-8 md:leading-9 mb-7 md:mb-8" style={{ color: colors.neutralMuted }}>
-              “{current.content || 'Nội dung đánh giá...'}”
-            </p>
-
-            <div className="mx-auto h-px w-20 mb-6" style={{ backgroundColor: colors.cardBorder }} />
-
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                {(current.name || 'U').charAt(0)}
-              </div>
-              <div className="text-left min-w-0">
-                <p className="font-semibold text-sm md:text-base truncate" style={{ color: colors.headingPrimary }}>{current.name || 'Tên khách hàng'}</p>
-                <p className="text-xs md:text-sm truncate" style={{ color: colors.subtitleSecondary }}>{current.role || 'Chức vụ'}</p>
-              </div>
-            </div>
-          </article>
-
-          {normalizedItems.length > 1 && (
-            <div className="mt-7 flex items-center justify-center gap-3 md:gap-4">
-              <button
-                type="button"
-                onClick={() => { setCurrentSlide((prev) => (prev === 0 ? normalizedItems.length - 1 : prev - 1)); }}
-                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full border flex items-center justify-center transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-                style={{ backgroundColor: colors.neutralSurface, borderColor: colors.buttonSecondaryBorder, color: colors.buttonSecondaryText }}
-                aria-label="Slide trước"
-              >
-                <ChevronLeft size={18} />
-              </button>
-
-              <div className="flex items-center rounded-full border px-1 py-0.5" style={{ borderColor: colors.cardBorder, backgroundColor: colors.neutralSurface }}>
-                {normalizedItems.map((_, idx) => (
-                  <button
-                    key={`slider-dot-${idx}`}
-                    type="button"
-                    onClick={() => { setCurrentSlide(idx); }}
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-                    aria-label={`Đi tới slide ${idx + 1}`}
-                  >
-                    <span
-                      className="block h-2.5 rounded-full transition-all"
-                      style={{
-                        backgroundColor: idx === currentSlide ? colors.dotActive : colors.dotInactive,
-                        width: idx === currentSlide ? 24 : 10,
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => { setCurrentSlide((prev) => (prev + 1) % normalizedItems.length); }}
-                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full border flex items-center justify-center transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-                style={{ backgroundColor: colors.neutralSurface, borderColor: colors.buttonSecondaryBorder, color: colors.buttonSecondaryText }}
-                aria-label="Slide sau"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  // Style 3: Masonry - Pinterest-like layout
-  if (style === 'masonry') {
-    return (
-      <section className="py-12 px-4" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-8" style={{ color: colors.headingPrimary }}>{heading}</h2>
-          <div className="columns-1 md:columns-2 lg:columns-3 gap-4">
-            {normalizedItems.map((item, idx) => (
-              <article
-                key={buildFallbackKey(item, idx)}
-                className="break-inside-avoid mb-4 rounded-xl border p-5"
-                style={{
-                  backgroundColor: colors.cardSurface,
-                  borderTopColor: colors.cardBorder,
-                  borderRightColor: colors.cardBorder,
-                  borderBottomColor: colors.cardBorder,
-                  borderLeftColor: colors.cardBorder,
-                }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                    {(item.name || 'U').charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate" style={{ color: colors.headingPrimary }}>{item.name || 'Tên khách hàng'}</p>
-                    <p className="text-xs truncate" style={{ color: colors.subtitleSecondary }}>{item.role || 'Chức vụ'}</p>
-                  </div>
-                </div>
-                {renderStars(item.rating, 13)}
-                <p className="mt-3 text-sm leading-relaxed" style={{ color: colors.neutralMuted }}>“{item.content || 'Nội dung đánh giá...'}”</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 4: Quote - Big quote focused, elegant typography
-  if (style === 'quote') {
-    const current = normalizedItems[currentSlide] || normalizedItems[0];
-    if (!current) {return null;}
-
-    return (
-      <section className="py-12 md:py-16 px-4" style={{ backgroundColor: colors.cardAltSurface }}>
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-2xl md:text-3xl font-bold mb-8 md:mb-10" style={{ color: colors.headingPrimary }}>{heading}</h2>
-
-          <article
-            className="rounded-2xl border px-5 py-7 md:px-10 md:py-10"
-            style={{
-              backgroundColor: colors.cardSurface,
-              borderTopColor: colors.cardBorder,
-              borderRightColor: colors.cardBorder,
-              borderBottomColor: colors.cardBorder,
-              borderLeftColor: colors.cardBorder,
-            }}
-          >
-            <div className="text-[44px] md:text-[56px] leading-none font-serif mb-3 md:mb-4 select-none opacity-70" style={{ color: colors.quoteSecondary }}>“</div>
-
-            <blockquote className="mx-auto max-w-3xl text-lg md:text-2xl leading-8 md:leading-10" style={{ color: colors.headingPrimary }}>
-              {current.content || 'Nội dung đánh giá...'}
-            </blockquote>
-
-            <div className="mt-7 md:mt-8 flex flex-col items-center gap-4">
-              <div className="flex justify-center">{renderStars(current.rating, 16)}</div>
-              <div className="h-px w-16" style={{ backgroundColor: colors.cardBorder }} />
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                  {(current.name || 'U').charAt(0)}
-                </div>
-                <div className="text-left min-w-0">
-                  <p className="font-semibold text-sm md:text-base truncate" style={{ color: colors.headingPrimary }}>{current.name || 'Tên khách hàng'}</p>
-                  <p className="text-xs md:text-sm truncate" style={{ color: colors.subtitleSecondary }}>{current.role || 'Chức vụ'}</p>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          {normalizedItems.length > 1 && (
-            <div className="mt-7 flex justify-center">
-              <div className="flex items-center rounded-full border px-1 py-0.5" style={{ borderColor: colors.cardBorder, backgroundColor: colors.neutralSurface }}>
-                {normalizedItems.map((_, idx) => (
-                  <button
-                    key={`quote-dot-${idx}`}
-                    type="button"
-                    onClick={() => { setCurrentSlide(idx); }}
-                    className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-                    aria-label={`Đi tới quote ${idx + 1}`}
-                  >
-                    <span
-                      className="block h-2.5 rounded-full transition-all"
-                      style={{
-                        backgroundColor: idx === currentSlide ? colors.dotActive : colors.dotInactive,
-                        width: idx === currentSlide ? 22 : 10,
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  // Style 5: Carousel - Horizontal scroll cards với navigation và drag
-  if (style === 'carousel') {
-    const cardWidth = 360;
-    const gap = 24;
-    const showArrowsDesktop = normalizedItems.length > 3;
-
-    return (
-      <section className="py-12 px-4" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold" style={{ color: colors.headingPrimary }}>{heading}</h2>
-            {showArrowsDesktop && (
-              <div className="hidden md:flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const container = document.querySelector<HTMLElement>(`#${carouselId}`);
-                    if (container) {container.scrollBy({ behavior: 'smooth', left: -(cardWidth + gap) });}
-                  }}
-                  className="w-10 h-10 rounded-full border flex items-center justify-center"
-                  style={{ backgroundColor: colors.neutralSurface, borderColor: colors.buttonSecondaryBorder, color: colors.buttonSecondaryText }}
-                  aria-label="Scroll testimonials trước"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const container = document.querySelector<HTMLElement>(`#${carouselId}`);
-                    if (container) {container.scrollBy({ behavior: 'smooth', left: cardWidth + gap });}
-                  }}
-                  className="w-10 h-10 rounded-full border flex items-center justify-center"
-                  style={{ backgroundColor: colors.neutralSurface, borderColor: colors.buttonSecondaryBorder, color: colors.buttonSecondaryText }}
-                  aria-label="Scroll testimonials sau"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="relative overflow-hidden rounded-xl">
-            <div className="absolute left-0 top-0 bottom-0 w-4 md:w-6 z-10 pointer-events-none" style={{ backgroundImage: `linear-gradient(to right, ${colors.neutralBackground}, transparent)` }} />
-            <div className="absolute right-0 top-0 bottom-0 w-4 md:w-6 z-10 pointer-events-none" style={{ backgroundImage: `linear-gradient(to left, ${colors.neutralBackground}, transparent)` }} />
-
-            <div
-              id={carouselId}
-              className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
-              style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-            >
-              {normalizedItems.map((item, idx) => (
-                <article
-                  key={buildFallbackKey(item, idx)}
-                  className="flex-shrink-0 snap-start w-[300px] rounded-xl border p-5"
-                  style={{
-                    backgroundColor: colors.cardSurface,
-                    borderTopColor: colors.cardBorderStrong,
-                    borderRightColor: colors.cardBorderStrong,
-                    borderBottomColor: colors.cardBorderStrong,
-                    borderLeftColor: colors.cardBorderStrong,
-                  }}
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                      {(item.name || 'U').charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate" style={{ color: colors.headingPrimary }}>{item.name || 'Tên khách hàng'}</p>
-                      <p className="text-xs truncate" style={{ color: colors.subtitleSecondary }}>{item.role || 'Chức vụ'}</p>
-                    </div>
-                  </div>
-
-                  {renderStars(item.rating, 13)}
-                  <p className="mt-3 text-sm leading-relaxed line-clamp-4" style={{ color: colors.neutralMuted }}>
-                    “{item.content || 'Nội dung đánh giá...'}”
-                  </p>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <style>{`#${carouselId}::-webkit-scrollbar { display: none; }`}</style>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 6: Minimal - Clean list with accent line
   return (
-    <section className="py-12 px-4" style={{ backgroundColor: colors.neutralBackground }}>
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold text-center mb-8" style={{ color: colors.headingPrimary }}>{heading}</h2>
-        <div className="space-y-4">
-          {normalizedItems.map((item, idx) => (
-            <article
-              key={buildFallbackKey(item, idx)}
-              className="rounded-lg border-l-4 border p-4 flex gap-3"
-              style={{
-                backgroundColor: colors.cardSurface,
-                borderLeftColor: colors.quoteSecondary,
-                borderTopColor: colors.cardBorder,
-                borderRightColor: colors.cardBorder,
-                borderBottomColor: colors.cardBorder,
-              }}
-            >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0" style={{ backgroundColor: colors.primary, color: colors.avatarTextOnPrimary }}>
-                {(item.name || 'U').charAt(0)}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="font-medium text-sm truncate" style={{ color: colors.headingPrimary }}>{item.name || 'Tên khách hàng'}</span>
-                  <span className="text-xs" style={{ color: colors.neutralMuted }}>•</span>
-                  <span className="text-xs truncate" style={{ color: colors.subtitleSecondary }}>{item.role || 'Chức vụ'}</span>
-                  <div className="ml-auto">{renderStars(item.rating, 11)}</div>
-                </div>
-                <p className="text-sm line-clamp-2" style={{ color: colors.neutralMuted }}>“{item.content || 'Nội dung đánh giá...'}”</p>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium"
-            style={{
-              backgroundColor: colors.buttonSecondaryHoverBg,
-              borderColor: colors.buttonSecondaryBorder,
-              color: colors.buttonSecondaryText,
-            }}
-          >
-            Xem thêm đánh giá
-            <ArrowRight size={14} />
-          </button>
-        </div>
+    <section className={cn(isFullBleedTestimonials ? 'py-0' : 'px-3', !isFullBleedTestimonials && sectionSpacingClassName)}>
+      <div className={isFullBleedTestimonials ? 'w-full' : 'mx-auto max-w-7xl space-y-6'}>
+        {!isFullBleedTestimonials && (
+          <SectionHeader
+            title={title}
+            subtitle={headerConfig.subtitle}
+            badgeText={headerConfig.badgeText}
+            hideHeader={headerConfig.hideHeader}
+            showTitle={headerConfig.showTitle}
+            showSubtitle={headerConfig.showSubtitle}
+            showBadge={headerConfig.showBadge}
+            headerAlign={headerConfig.headerAlign}
+            titleColorPrimary={headerConfig.titleColorPrimary}
+            subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+            uppercaseText={headerConfig.uppercaseText}
+            brandColor={brandColor}
+          />
+        )}
+        <TestimonialsSectionShared
+          items={items}
+          style={style}
+          title={title}
+          subtitle={headerConfig.subtitle}
+          tokens={colors}
+          mode={mode}
+          context="site"
+          hideHeader={!isFullBleedTestimonials || headerConfig.hideHeader}
+          showTitle={headerConfig.showTitle}
+          showSubtitle={headerConfig.showSubtitle}
+          showBadge={headerConfig.showBadge}
+          headerAlign={headerConfig.headerAlign}
+          titleColorPrimary={headerConfig.titleColorPrimary}
+          subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+          uppercaseText={headerConfig.uppercaseText}
+          badgeText={headerConfig.badgeText}
+          desktopColumns={desktopColumns}
+          splitBackgroundImage={typeof config.splitBackgroundImage === 'string' ? config.splitBackgroundImage : undefined}
+          splitBackgroundOverlayOpacity={typeof config.splitBackgroundOverlayOpacity === 'number' ? config.splitBackgroundOverlayOpacity : undefined}
+          spacing={isFullBleedTestimonials ? spacing : 'none'}
+          cornerRadius={cornerRadius}
+        />
       </div>
     </section>
   );
@@ -1709,7 +2067,35 @@ function TestimonialsSection({ config, brandColor, secondary, mode, title }: { c
 // ============ GALLERY/PARTNERS SECTION ============
 // Gallery: 6 Professional Styles (Spotlight, Explore, Stories, Grid, Marquee, Masonry)
 // Partners: 6 Professional Styles (Grid, Marquee, Mono, Badge, Carousel, Featured)
-type GalleryStyle = 'spotlight' | 'explore' | 'stories' | 'grid' | 'marquee' | 'masonry' | 'mono' | 'badge' | 'carousel' | 'featured';
+type GalleryStyle = 'spotlight' | 'explore' | 'stories' | 'grid' | 'marquee' | 'masonry' | 'mono' | 'badge' | 'carousel' | 'featured' | 'clean' | 'divider';
+type GalleryCornerRadius = 'none' | 'sm' | 'lg';
+type GalleryDesktopColumns = 3 | 4;
+
+function normalizeGalleryCornerRadius(value: unknown, noBorderRadius?: unknown): GalleryCornerRadius {
+  if (noBorderRadius === true) {
+    return 'none';
+  }
+
+  if (value === 'none' || value === 'sm' || value === 'lg') {
+    return value;
+  }
+
+  if (value === 'md' || value === 'full') {
+    return 'lg';
+  }
+
+  return 'lg';
+}
+
+function normalizeGalleryDesktopColumns(value: unknown): GalleryDesktopColumns {
+  return value === 3 ? 3 : 4;
+}
+
+function getGalleryCornerRadiusClassName(value: GalleryCornerRadius): string {
+  if (value === 'none') { return 'rounded-none'; }
+  if (value === 'sm') { return 'rounded-md'; }
+  return 'rounded-2xl';
+}
 
 // Auto Scroll Slider Component for Marquee/Mono styles
 const _AutoScrollSlider = ({ children, speed = 0.5, isPaused }: { children: React.ReactNode; speed?: number; isPaused?: boolean }) => {
@@ -1775,21 +2161,32 @@ const GalleryLightbox = ({
   onNavigate?: (direction: 'prev' | 'next') => void;
   colors: GalleryColorTokens;
 }) => {
+  const originalBodyOverflowRef = React.useRef<string | null>(null);
+  const isOpen = Boolean(photo?.url);
+
   React.useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    if (originalBodyOverflowRef.current === null) {
+      originalBodyOverflowRef.current = document.body.style.overflow;
+    }
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {onClose();}
       if (e.key === 'ArrowLeft' && onNavigate) {onNavigate('prev');}
       if (e.key === 'ArrowRight' && onNavigate) {onNavigate('next');}
     };
-    if (photo) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = originalBodyOverflowRef.current ?? '';
+      originalBodyOverflowRef.current = null;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [photo, onClose, onNavigate]);
+  }, [isOpen, onClose, onNavigate]);
 
   if (!photo || !photo.url) {return null;}
 
@@ -1866,58 +2263,9 @@ const GalleryLightbox = ({
 };
 
 // ============ TRUST BADGES / CERTIFICATIONS SECTION ============
-// 6 Styles: grid, cards, marquee, wall, carousel, featured
+// 6 Styles: grid, cards, stack, wall, carousel, seal
 
-type TrustBadgesStyle = 'grid' | 'cards' | 'marquee' | 'wall' | 'carousel' | 'featured';
 interface TrustBadgeItem { url: string; link?: string; name?: string }
-
-// Auto Scroll component for TrustBadges Marquee
-const TrustBadgesAutoScroll = ({ children, speed = 0.6 }: { children: React.ReactNode; speed?: number }) => {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [isPaused, setIsPaused] = React.useState(false);
-
-  React.useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) {return;}
-
-    let animationId: number;
-    let position = scroller.scrollLeft;
-
-    const step = () => {
-      if (!isPaused && scroller) {
-        position += speed;
-        if (position >= scroller.scrollWidth / 2) {
-          position = 0;
-        }
-        scroller.scrollLeft = position;
-      } else if (scroller) {
-        position = scroller.scrollLeft;
-      }
-      animationId = requestAnimationFrame(step);
-    };
-
-    animationId = requestAnimationFrame(step);
-    return () =>{  cancelAnimationFrame(animationId); };
-  }, [isPaused, speed]);
-
-  return (
-    <div className="w-full max-w-7xl mx-auto">
-      <div
-        ref={scrollRef}
-        className="flex overflow-hidden select-none w-full cursor-grab active:cursor-grabbing"
-        style={{
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)',
-          maskImage: 'linear-gradient(to right, transparent, black 5%, black 95%, transparent)'
-        }}
-        onMouseEnter={() =>{  setIsPaused(true); }}
-        onMouseLeave={() =>{  setIsPaused(false); }}
-      >
-        <div className="flex shrink-0 gap-16 md:gap-20 items-center px-4">{children}</div>
-        <div className="flex shrink-0 gap-16 md:gap-20 items-center px-4">{children}</div>
-      </div>
-    </div>
-  );
-};
 
 // Modal Lightbox for viewing certificates
 const CertificateModal = ({ 
@@ -1983,7 +2331,7 @@ function TrustBadgesSection({
   brandColor,
   secondary,
   mode,
-  title: _title,
+  title,
 }: {
   config: Record<string, unknown>;
   brandColor: string;
@@ -1992,67 +2340,148 @@ function TrustBadgesSection({
   title: string;
 }) {
   const items = (config.items as TrustBadgeItem[]) || [];
-  const style = (config.style as TrustBadgesStyle) || 'cards';
-  const carouselId = useSafeId('trustbadges-carousel');
+  const trustCueText = typeof config.trustCueText === 'string' ? config.trustCueText : DEFAULT_TRUST_CUE_TEXT;
+  const stackHeading = typeof config.stackHeading === 'string' ? config.stackHeading : DEFAULT_STACK_HEADING;
+  const stackDescription = typeof config.stackDescription === 'string' ? config.stackDescription : DEFAULT_STACK_DESCRIPTION;
   const [selectedCert, setSelectedCert] = React.useState<TrustBadgeItem | null>(null);
-  const colors = getGalleryColorTokens({ primary: brandColor, secondary, mode });
-  const heading = (config.heading as string) || 'Chứng nhận & Giải thưởng';
-  const subHeading = (config.subHeading as string) || 'Được công nhận bởi các tổ chức uy tín';
+  const [carouselRef, carouselApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
+  const [cardsRef, cardsApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
+  const [sealRef, sealApi] = useEmblaCarousel({ align: 'start', axis: 'y', containScroll: 'trimSnaps' });
+  const [canScrollPrev, setCanScrollPrev] = React.useState(false);
+  const [canScrollNext, setCanScrollNext] = React.useState(false);
+  const [canCardsScrollPrev, setCanCardsScrollPrev] = React.useState(false);
+  const [canCardsScrollNext, setCanCardsScrollNext] = React.useState(false);
+  const [canSealScrollPrev, setCanSealScrollPrev] = React.useState(false);
+  const [canSealScrollNext, setCanSealScrollNext] = React.useState(false);
+  const headerConfig = extractSectionHeaderConfig(config);
+  const {
+    cardBorder,
+    colors,
+    innerRadiusClassName,
+    radiusClassName,
+    renderConfig,
+    sectionSpacingClassName,
+    siteGridClassName,
+  } = useTrustBadgesSectionState({
+    brandColor,
+    config: { ...headerConfig, cornerRadius: config.cornerRadius, noBorderRadius: config.noBorderRadius, noVerticalMargin: config.noVerticalMargin, showBorder: config.showBorder, stackDescription, stackHeading, trustCueText },
+    desktopColumns: config.desktopColumns === 3 ? 3 : 4,
+    mode,
+    secondary,
+    selectedStyle: config.style as TrustBadgesStyle | undefined,
+  });
+  const style = renderConfig.style;
+  const desktopColumns = renderConfig.desktopColumns;
+  const responsiveGridClassName = siteGridClassName;
+  const visibleItems = items.slice(0, getTrustBadgesMaxVisibleItems(desktopColumns));
 
-  const renderHeader = (centered = true) => (
-    <div className={cn("mb-10", centered ? 'text-center' : '')}>
-      {subHeading ? (
-        <div className={cn('mb-3', centered ? 'flex justify-center' : '')}>
-          <span
-            className="inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider"
-            style={{
-              backgroundColor: colors.neutralSurface,
-              borderColor: colors.neutralBorder,
-              color: colors.subheading,
-            }}
-          >
-            {subHeading}
-          </span>
-        </div>
-      ) : null}
-      <h2 className="text-2xl md:text-3xl font-bold" style={{ color: colors.heading }}>
-        <span className="inline-block rounded-md px-2 py-1" style={{ backgroundColor: colors.neutralSurface }}>
-          {heading}
-        </span>
-      </h2>
-      <div className={cn("mt-3 h-1 w-12 rounded-full", centered ? 'mx-auto' : '')} style={{ backgroundColor: colors.sectionAccentBar }} />
-    </div>
+  const updateCarouselState = React.useCallback(() => {
+    if (!carouselApi) { return; }
+    setCanScrollPrev(carouselApi.canScrollPrev());
+    setCanScrollNext(carouselApi.canScrollNext());
+  }, [carouselApi]);
+
+  const updateCardsState = React.useCallback(() => {
+    if (!cardsApi) { return; }
+    setCanCardsScrollPrev(cardsApi.canScrollPrev());
+    setCanCardsScrollNext(cardsApi.canScrollNext());
+  }, [cardsApi]);
+
+  const updateSealState = React.useCallback(() => {
+    if (!sealApi) { return; }
+    setCanSealScrollPrev(sealApi.canScrollPrev());
+    setCanSealScrollNext(sealApi.canScrollNext());
+  }, [sealApi]);
+
+  React.useEffect(() => {
+    if (!carouselApi) { return; }
+    updateCarouselState();
+    carouselApi.on('select', updateCarouselState);
+    carouselApi.on('reInit', updateCarouselState);
+
+    return () => {
+      carouselApi.off('select', updateCarouselState);
+      carouselApi.off('reInit', updateCarouselState);
+    };
+  }, [carouselApi, updateCarouselState]);
+
+  React.useEffect(() => {
+    if (!cardsApi) { return; }
+    updateCardsState();
+    cardsApi.on('select', updateCardsState);
+    cardsApi.on('reInit', updateCardsState);
+
+    return () => {
+      cardsApi.off('select', updateCardsState);
+      cardsApi.off('reInit', updateCardsState);
+    };
+  }, [cardsApi, updateCardsState]);
+
+  React.useEffect(() => {
+    if (!sealApi) { return; }
+    updateSealState();
+    sealApi.on('select', updateSealState);
+    sealApi.on('reInit', updateSealState);
+
+    return () => {
+      sealApi.off('select', updateSealState);
+      sealApi.off('reInit', updateSealState);
+    };
+  }, [sealApi, updateSealState]);
+
+  React.useEffect(() => {
+    if (!carouselApi) { return; }
+    carouselApi.reInit();
+    updateCarouselState();
+  }, [carouselApi, items.length, desktopColumns, style, updateCarouselState]);
+
+  React.useEffect(() => {
+    if (!cardsApi) { return; }
+    cardsApi.reInit();
+    updateCardsState();
+  }, [cardsApi, items.length, desktopColumns, style, updateCardsState]);
+
+  React.useEffect(() => {
+    if (!sealApi) { return; }
+    sealApi.reInit();
+    updateSealState();
+  }, [sealApi, items.length, desktopColumns, style, updateSealState]);
+
+  const sharedHeader = <TrustBadgesSectionHeader brandColor={brandColor} config={headerConfig} fallbackSubtitle={headerConfig.subtitle} title={title} />;
+
+  const TrustCue = ({ compact = false }: { compact?: boolean }) => (
+    <TrustBadgesTrustCue colors={colors} compact={compact} text={trustCueText} />
   );
 
-  // Style 1: Square Grid - Full color, clickable to lightbox
+
+  // Style 1: Square Grid
   if (style === 'grid') {
     return (
-      <section className="w-full py-12 md:py-16 bg-white">
-        <div className="container max-w-7xl mx-auto px-4 md:px-6">
-          {renderHeader(true)}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-            {items.map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={() =>{  setSelectedCert(item); }}
-                className="group relative aspect-square rounded-xl flex items-center justify-center p-5 md:p-6 cursor-zoom-in transition-all duration-300 hover:-translate-y-1"
-                style={{ border: `1px solid ${colors.neutralBorder}`, backgroundColor: colors.neutralSurface }}
+      <section className={cn(sectionSpacingClassName, 'px-3 bg-white')}>
+        <div className="mx-auto max-w-7xl">
+          {sharedHeader}
+          <div className={cn("grid gap-3 md:gap-4", responsiveGridClassName)}>
+            {visibleItems.map((item, idx) => (
+              <div
+                key={idx}
+                onClick={() => { setSelectedCert(item); }}
+                className={cn('group relative flex min-h-[164px] flex-col overflow-hidden cursor-zoom-in transition-all duration-300 hover:-translate-y-0.5', radiusClassName)}
+                style={{ border: cardBorder, backgroundColor: colors.neutralSurface, boxShadow: '0 16px 40px rgba(15, 23, 42, 0.06)' }}
               >
-                {item.url ? (
-                  <SiteImage src={item.url} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" alt={item.name ?? ''} />
-                ) : (
-                  <ImageIcon size={40} className="text-slate-300" />
-                )}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.badgeBg }}>
+                <div className="absolute left-3 top-3 z-10"><TrustCue compact /></div>
+                <div className={cn('flex flex-1 items-center justify-center p-5 pt-10', TRUST_BADGES_A4_ASPECT_CLASS)} style={{ backgroundColor: colors.neutralBackground }}>
+                  {item.url ? (
+                    <SiteImage src={item.url} className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105" alt={item.name ?? ''} />
+                  ) : (
+                    <Shield size={34} style={{ color: colors.subheading }} />
+                  )}
+                </div>
+                <div className="flex min-h-[54px] items-center justify-between gap-3 border-t px-4 py-3" style={{ borderColor: colors.neutralBorder }}>
+                  <p className="min-w-0 text-sm font-semibold leading-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận tin cậy'}</p>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: colors.badgeBg }}>
                     <Maximize2 size={14} style={{ color: colors.badgeText }} />
                   </div>
                 </div>
-                {item.name && (
-                  <div className="absolute bottom-2 left-2 right-2 text-center">
-                    <span className="text-[10px] font-medium text-slate-500 truncate block">{item.name}</span>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -2062,25 +2491,50 @@ function TrustBadgesSection({
     );
   }
 
-  // Style 2: Feature Cards - Large cards with title, hover zoom
+  // Style 2: Feature Cards
   if (style === 'cards') {
     return (
-      <section className="w-full py-12 md:py-16 bg-white">
-        <div className="container max-w-7xl mx-auto px-4 md:px-6">
-          {renderHeader(true)}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-            {items.map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={() =>{  setSelectedCert(item); }}
-                className="group relative flex flex-col rounded-2xl overflow-hidden cursor-zoom-in h-full transition-all duration-300"
-                style={{ border: `1px solid ${colors.neutralBorder}`, backgroundColor: colors.neutralSurface }}
+      <section className={cn(sectionSpacingClassName, 'px-3 bg-slate-50')}>
+        <div className="mx-auto max-w-7xl">
+          {sharedHeader}
+          <div className="relative">
+            {visibleItems.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => cardsApi?.scrollPrev()}
+                  disabled={!canCardsScrollPrev}
+                  className={cn('absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-x-2 -translate-y-1/2 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity', !canCardsScrollPrev && 'cursor-not-allowed opacity-40')}
+                  style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cardsApi?.scrollNext()}
+                  disabled={!canCardsScrollNext}
+                  className={cn('absolute right-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 translate-x-2 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity', !canCardsScrollNext && 'cursor-not-allowed opacity-40')}
+                  style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            )}
+          <div className="-mx-2 overflow-hidden px-2 pb-2" ref={cardsRef}>
+            <div className="flex snap-x gap-4 md:gap-5">
+            {visibleItems.map((item, idx) => (
+              <div
+                key={idx}
+                onClick={() => { setSelectedCert(item); }}
+                className={cn('group relative flex basis-[78%] snap-start flex-col overflow-hidden cursor-zoom-in h-full shrink-0 grow-0 transition-all duration-300 hover:-translate-y-1 md:basis-[31%]', desktopColumns === 4 && 'md:basis-[24%]', radiusClassName)}
+                style={{ border: cardBorder, backgroundColor: colors.neutralSurface, boxShadow: '0 18px 45px rgba(15, 23, 42, 0.08)' }}
               >
-                <div className="aspect-[5/4] flex items-center justify-center p-6 md:p-8 relative overflow-hidden" style={{ backgroundColor: colors.neutralBackground }}>
+                <div className={cn(TRUST_BADGES_A4_ASPECT_CLASS, 'flex items-center justify-center p-5 md:p-6 relative overflow-hidden')} style={{ backgroundColor: colors.neutralBackground }}>
+                  <div className="absolute left-4 top-4 z-20"><TrustCue compact /></div>
                   {item.url ? (
                     <SiteImage src={item.url} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500 z-10" alt={item.name ?? ''} />
                   ) : (
-                    <ImageIcon size={48} className="text-slate-300" />
+                    <Shield size={38} style={{ color: colors.subheading }} />
                   )}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
                     <span className="px-4 py-2 rounded-full font-medium flex items-center gap-2 text-sm" style={{ color: colors.subheading, backgroundColor: colors.neutralSurface, border: `1px solid ${colors.sectionAccentBar}` }}>
@@ -2088,124 +2542,146 @@ function TrustBadgesSection({
                     </span>
                   </div>
                 </div>
-                <div className="py-4 px-5 border-t flex items-center justify-between transition-colors" style={{ borderColor: colors.neutralBorder, backgroundColor: colors.neutralSurface }}>
-                  <span className="font-semibold truncate text-sm" style={{ color: colors.subheading }}>
+                <div className="py-4 px-5 border-t flex min-h-[58px] items-center justify-between gap-3 transition-colors" style={{ borderColor: colors.neutralBorder, backgroundColor: colors.neutralSurface }}>
+                  <span className="font-semibold text-sm leading-tight break-words" style={{ color: colors.subheading }}>
                     {item.name ?? 'Chứng nhận'}
                   </span>
                   <ArrowUpRight size={16} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: colors.subheading }} />
                 </div>
               </div>
             ))}
+            </div>
+          </div>
           </div>
         </div>
-        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() =>{  setSelectedCert(null); }} />
+        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() => { setSelectedCert(null); }} />
       </section>
     );
   }
 
-  // Style 3: Marquee - Auto scroll slider with tooltip, full color
-  if (style === 'marquee') {
+  // Style 3: Stack
+  if (style === 'stack') {
+    const stackItems = visibleItems.filter((item) => item.url || item.name).slice(0, desktopColumns);
+    const compactStack = desktopColumns === 4;
     return (
-      <section className="w-full py-14 md:py-20 border-y" style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
-        <div className="container max-w-7xl mx-auto px-4">
-          {renderHeader(true)}
-        </div>
-        <TrustBadgesAutoScroll speed={0.6}>
-          {items.map((item, idx) => (
-            <div 
-              key={idx} 
-              onClick={() =>{  setSelectedCert(item); }}
-              className="h-24 md:h-32 w-auto flex items-center justify-center px-4 hover:scale-110 transition-all duration-300 cursor-zoom-in relative group"
-            >
-              {item.url ? (
-                <SiteImage src={item.url} className="h-full w-auto object-contain max-w-[200px]" alt={item.name ?? ''} />
-              ) : (
-                <div className="h-16 w-28 bg-slate-200 rounded flex items-center justify-center">
-                  <ImageIcon size={28} className="text-slate-400" />
-                </div>
-              )}
-              {item.name && (
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <BrandBadge text={item.name} variant="solid" brandColor={brandColor} secondary={secondary} />
-                </div>
-              )}
+      <section className={cn('overflow-hidden bg-slate-50 px-3', sectionSpacingClassName)}>
+        <div className="mx-auto max-w-7xl">
+          {sharedHeader}
+          <div className={cn('grid items-stretch', compactStack ? 'gap-3 md:grid-cols-[0.46fr_1.9fr]' : 'gap-4 md:grid-cols-[0.82fr_1.35fr]')}>
+            <div className={cn('flex h-full flex-col border bg-white shadow-sm', compactStack ? 'p-3' : 'p-4 md:p-5', radiusClassName)} style={{ borderColor: renderConfig.showBorder ? colors.neutralBorder : 'transparent', boxShadow: '0 18px 45px rgba(15, 23, 42, 0.06)' }}>
+              <div className={compactStack ? 'mb-3' : 'mb-4'}>
+                <TrustCue />
+                <p className={cn('mt-3 font-bold', compactStack ? 'text-sm' : 'text-base')} style={{ color: colors.heading }}>{stackHeading}</p>
+                <p className={cn('mt-2 text-xs', compactStack ? 'leading-4' : 'leading-5')} style={{ color: colors.mutedText }}>{stackDescription}</p>
+              </div>
+              <div className="space-y-2">
+                {stackItems.map((item, index) => {
+                  const active = index === 0;
+                  return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => { setSelectedCert(item); }}
+                    className={cn('flex w-full items-center border bg-white text-left transition-all duration-300', compactStack ? 'min-h-10 gap-2 px-2.5 py-2' : 'min-h-12 gap-3 px-3 py-2', innerRadiusClassName)}
+                    style={{
+                      borderColor: renderConfig.showBorder ? (active ? colors.sectionAccentBar : colors.neutralBorder) : 'transparent',
+                      boxShadow: active ? `0 12px 28px ${colors.sectionAccentBar}18` : '0 8px 20px rgba(15, 23, 42, 0.04)',
+                    }}
+                  >
+                    <span className={cn('shrink-0 font-semibold', compactStack ? 'w-4 text-xs' : 'w-5 text-sm')} style={{ color: active ? colors.sectionAccentBar : colors.subheading }}>{index + 1}</span>
+                    <span className={cn('min-w-0 flex-1 font-extrabold uppercase tracking-tight break-words', compactStack ? 'text-xs' : 'text-sm')} style={{ color: colors.heading }}>{item.name ?? `Chứng nhận ${index + 1}`}</span>
+                    <ArrowUpRight size={compactStack ? 14 : 17} style={{ color: active ? colors.sectionAccentBar : colors.mutedText }} />
+                  </button>
+                  );
+                })}
+              </div>
             </div>
-          ))}
-        </TrustBadgesAutoScroll>
-        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() =>{  setSelectedCert(null); }} />
+            <div className={cn('grid h-full auto-rows-fr gap-3', desktopColumns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4')}>
+              {stackItems.map((item, idx) => (
+                <button key={idx} type="button" onClick={() => { setSelectedCert(item); }} className={cn('group flex h-full min-h-0 flex-col overflow-hidden border bg-white p-3 text-center shadow-sm transition-all duration-300 hover:-translate-y-1', radiusClassName)} style={{ borderColor: renderConfig.showBorder ? colors.neutralBorder : 'transparent', boxShadow: '0 18px 45px rgba(15, 23, 42, 0.07)' }}>
+                  <div className={cn('mx-auto flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden', innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground }}>
+                    {item.url ? (
+                      <SiteImage src={item.url} className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]" alt={item.name ?? ''} />
+                    ) : (
+                      <Shield size={40} style={{ color: colors.subheading }} />
+                    )}
+                  </div>
+                  <p className="mt-3 min-h-9 text-xs font-extrabold uppercase tracking-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận'}</p>
+                  <div className="mx-auto mt-2 h-0.5 w-7 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() => { setSelectedCert(null); }} />
       </section>
     );
   }
 
-  // Style 4: Framed Wall - Certificate frames hanging on wall
+  // Style 4: Framed Wall
   if (style === 'wall') {
     return (
-      <section className="w-full py-12 md:py-16" style={{ backgroundColor: colors.neutralBackground }}>
-        <div className="container max-w-7xl mx-auto px-4">
-          {renderHeader(true)}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-6 justify-items-center">
-            {items.map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={() =>{  setSelectedCert(item); }}
-                className="group relative p-2 md:p-3 rounded-sm flex flex-col cursor-zoom-in w-[140px] h-[180px] md:w-[160px] md:h-[210px] transition-all duration-300"
-                style={{ border: `1px solid ${colors.neutralBorder}`, backgroundColor: colors.neutralSurface }}
+      <section className={cn(sectionSpacingClassName, 'px-3')} style={{ backgroundColor: colors.neutralBackground }}>
+        <div className="mx-auto max-w-7xl">
+          {sharedHeader}
+          <div className={cn("grid gap-4 md:gap-5", responsiveGridClassName)}>
+            {visibleItems.map((item, idx) => (
+              <div
+                key={idx}
+                onClick={() => { setSelectedCert(item); }}
+                className={cn('group relative p-2 md:p-3 flex min-h-[170px] md:min-h-[210px] flex-col cursor-zoom-in transition-all duration-300 hover:-translate-y-0.5', radiusClassName)}
+                style={{ border: cardBorder, backgroundColor: colors.neutralSurface, boxShadow: '0 16px 40px rgba(15, 23, 42, 0.06)' }}
               >
-                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-1 h-10 bg-gradient-to-b from-slate-400 to-transparent opacity-40"></div>
-                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }}></div>
-                <div className="flex-1 flex items-center justify-center p-3 relative overflow-hidden" style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}` }}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+                  <TrustCue compact />
+                </div>
+                <div className={cn('flex items-center justify-center p-3 relative overflow-hidden', TRUST_BADGES_A4_ASPECT_CLASS, innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground, border: cardBorder }}>
                   {item.url ? (
                     <SiteImage src={item.url} className="w-full h-full object-contain" alt={item.name ?? ''} />
                   ) : (
-                    <ImageIcon size={28} className="text-slate-300" />
+                    <Shield size={28} style={{ color: colors.subheading }} />
                   )}
                 </div>
                 <div className="h-7 md:h-8 flex items-center justify-center mt-1">
-                  <span className="text-[8px] md:text-[9px] font-semibold uppercase tracking-wider text-center truncate px-1" style={{ color: colors.subheading }}>
-                    {item.name ? (item.name.length > 18 ? item.name.slice(0, 16) + '...' : item.name) : 'Certificate'}
+                  <span className="text-[10px] md:text-xs font-semibold text-center leading-tight break-words px-1" style={{ color: colors.subheading }}>
+                    {item.name ?? 'Chứng nhận'}
                   </span>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() =>{  setSelectedCert(null); }} />
+        <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() => { setSelectedCert(null); }} />
       </section>
     );
   }
 
-  // Style 5: Carousel - Horizontal scroll với navigation và drag
+  // Style 5: Carousel
   if (style === 'carousel') {
-    const cardWidth = 180;
-    const gap = 16;
-    // Responsive: Desktop ~6 items (180px each), chỉ hiện arrows khi có > 5 items
-    const showArrowsDesktop = items.length > 5;
+    const showArrowsDesktop = visibleItems.length > 5;
 
     return (
-      <section className="w-full py-12 md:py-16 bg-white">
-        <div className="container max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-10">
-            {renderHeader(false)}
+      <section className={cn(sectionSpacingClassName, 'px-3 bg-white')}>
+        <div className="mx-auto max-w-7xl">
+          <div className="flex items-center justify-between">
+            {sharedHeader}
             {showArrowsDesktop && (
               <div className="hidden md:flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    const container = document.querySelector(`#${carouselId}`);
-                    if (container) {container.scrollBy({ behavior: 'smooth', left: -(cardWidth + gap) });}
-                  }}
-                  className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+                  onClick={() => carouselApi?.scrollPrev()}
+                  disabled={!canScrollPrev}
+                  className={cn('w-10 h-10 rounded-full flex items-center justify-center transition-colors', !canScrollPrev && 'cursor-not-allowed opacity-40')}
                   style={{ border: `1px solid ${colors.sectionAccentBar}`, backgroundColor: colors.neutralSurface }}
                 >
                   <ChevronLeft size={20} style={{ color: colors.heading }} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const container = document.querySelector(`#${carouselId}`);
-                    if (container) {container.scrollBy({ behavior: 'smooth', left: cardWidth + gap });}
-                  }}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white transition-colors"
+                  onClick={() => carouselApi?.scrollNext()}
+                  disabled={!canScrollNext}
+                  className={cn('w-10 h-10 rounded-full flex items-center justify-center text-white transition-colors', !canScrollNext && 'cursor-not-allowed opacity-40')}
                   style={{ backgroundColor: colors.heading }}
                 >
                   <ChevronRight size={20} />
@@ -2215,112 +2691,122 @@ function TrustBadgesSection({
           </div>
 
           <div className="relative overflow-hidden rounded-xl">
-            <div
-              id={carouselId}
-              className="flex overflow-x-auto snap-x snap-mandatory gap-4 py-4 px-2 cursor-grab active:cursor-grabbing select-none"
-              style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-              onMouseDown={(e) => {
-                const el = e.currentTarget;
-                el.dataset.isDown = 'true';
-                el.dataset.startX = String(e.pageX - el.offsetLeft);
-                el.dataset.scrollLeft = String(el.scrollLeft);
-                el.style.scrollBehavior = 'auto';
-              }}
-              onMouseLeave={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-              onMouseUp={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-              onMouseMove={(e) => {
-                const el = e.currentTarget;
-                if (el.dataset.isDown !== 'true') {return;}
-                e.preventDefault();
-                const x = e.pageX - el.offsetLeft;
-                const walk = (x - Number(el.dataset.startX)) * 1.5;
-                el.scrollLeft = Number(el.dataset.scrollLeft) - walk;
-              }}
-            >
-              {items.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() =>{  setSelectedCert(item); }}
-                  className="snap-start flex-shrink-0 w-[140px] md:w-[180px] group cursor-zoom-in"
-                  draggable={false}
-                >
+            <div className="overflow-hidden px-2 py-4" ref={carouselRef}>
+              <div className="flex gap-4">
+                {visibleItems.map((item, idx) => (
                   <div
-                    className="aspect-square rounded-xl flex items-center justify-center p-4 md:p-5 transition-all duration-300"
-                    style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}` }}
+                    key={idx}
+                    onClick={() => { setSelectedCert(item); }}
+                    className={cn('min-w-0 flex-[0_0_140px] group cursor-zoom-in', desktopColumns === 3 ? 'md:flex-[0_0_220px]' : 'md:flex-[0_0_180px]')}
                   >
-                    {item.url ? (
-                      <SiteImage src={item.url} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" alt={item.name ?? ''} draggable={false} />
-                    ) : (
-                      <ImageIcon size={32} className="text-slate-300" />
+                    <div
+                      className={cn(TRUST_BADGES_A4_ASPECT_CLASS, 'flex items-center justify-center p-4 md:p-5 transition-all duration-300', radiusClassName)}
+                      style={{ backgroundColor: colors.neutralBackground, border: cardBorder }}
+                    >
+                      {item.url ? (
+                        <SiteImage src={item.url} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" alt={item.name ?? ''} draggable={false} />
+                      ) : (
+                        <Shield size={32} style={{ color: colors.subheading }} />
+                      )}
+                    </div>
+                    {item.name && (
+                      <p className="text-center text-xs font-semibold leading-tight mt-2 break-words px-1" style={{ color: colors.subheading }}>{item.name}</p>
                     )}
                   </div>
-                  {item.name && (
-                    <p className="text-center text-xs font-medium text-slate-500 mt-2 truncate px-1">{item.name}</p>
-                  )}
-                </div>
-              ))}
-              <div className="flex-shrink-0 w-4" />
+                ))}
+              </div>
             </div>
           </div>
-
-          <style>{`#${carouselId}::-webkit-scrollbar { display: none; }`}</style>
         </div>
         <CertificateModal item={selectedCert} isOpen={Boolean(selectedCert)} onClose={() =>{  setSelectedCert(null); }} />
       </section>
     );
   }
 
-  // Style 6: Featured - 1 featured + grid (default fallback), full color
-  const featuredItem = items[0];
-  const otherItems = items.slice(1, 7);
+  // Style 6: Seal
+  const sealItems = visibleItems;
+  const hubItems = sealItems.slice(0, 3);
   return (
-    <section className="w-full py-12 md:py-16 bg-white">
-        <div className="container max-w-7xl mx-auto px-4">
-          {renderHeader(true)}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-          {featuredItem && (
-            <div 
-              onClick={() =>{  setSelectedCert(featuredItem); }}
-              className="group cursor-zoom-in rounded-2xl overflow-hidden transition-all duration-300"
-              style={{ backgroundColor: colors.iconBg, border: `1px solid ${colors.sectionAccentBar}` }}
-            >
-              <div className="aspect-[4/3] flex items-center justify-center p-6 md:p-8 relative">
-                {featuredItem.url ? (
-                  <SiteImage src={featuredItem.url} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" alt={featuredItem.name ?? ''} />
-                ) : (
-                  <ImageIcon size={64} className="text-slate-300" />
-                )}
-                <div className="absolute top-3 left-3">
-                  <BrandBadge text="NỔI BẬT" variant="solid" brandColor={brandColor} secondary={secondary} />
-                </div>
-                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: colors.subheading, backgroundColor: colors.neutralSurface, border: `1px solid ${colors.neutralBorder}` }}>
-                    <ZoomIn size={20} />
-                  </div>
-                </div>
+    <section className={cn('relative overflow-hidden bg-slate-50 px-3', sectionSpacingClassName)}>
+      <div className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full bg-white/70 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-white/70 blur-2xl" />
+      <div className="mx-auto max-w-7xl">
+        {sharedHeader}
+        <div className="relative grid items-center gap-6 md:grid-cols-[0.9fr_1.15fr] md:gap-10">
+          <div className="relative mx-auto flex aspect-square w-full max-w-[380px] items-center justify-center">
+            <div className="absolute inset-0 rounded-full border border-dashed opacity-60" style={{ borderColor: colors.neutralBorder }} />
+            <div className="absolute inset-8 rounded-full border border-dashed opacity-80" style={{ borderColor: colors.neutralBorder }} />
+            <div className="absolute inset-20 rounded-full border" style={{ borderColor: colors.sectionAccentBar }} />
+            <span className="absolute left-5 top-1/2 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+            <span className="absolute right-8 top-1/4 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+            <span className="absolute bottom-16 right-14 h-2 w-2 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+            <div className="relative z-10 flex h-44 w-44 flex-col items-center justify-center rounded-full border bg-white text-center shadow-xl" style={{ borderColor: colors.sectionAccentBar }}>
+              <Shield size={34} style={{ color: colors.heading }} />
+              <span className="mt-4 text-xs font-bold uppercase tracking-[0.28em]" style={{ color: colors.mutedText }}>{trustCueText}</span>
+              <div className="mt-3 h-0.5 w-8 rounded-full" style={{ backgroundColor: colors.sectionAccentBar }} />
+              <span className="mt-3 text-5xl font-black leading-none" style={{ color: colors.heading }}>{sealItems.length}</span>
+            </div>
+            {hubItems.map((item, idx) => {
+              const positions = [
+                'left-1/2 top-0 -translate-x-1/2',
+                'right-0 top-[36%]',
+                'bottom-2 left-[62%] -translate-x-1/2',
+              ];
+              return (
+                <button key={idx} type="button" onClick={() => { setSelectedCert(item); }} className={cn('absolute z-20 flex h-24 w-16 items-center justify-center border bg-white p-2 shadow-lg', radiusClassName, positions[idx])} style={{ borderColor: colors.neutralBorder }}>
+                  {item.url ? (
+                    <SiteImage src={item.url} className="h-full w-full object-contain" alt={item.name ?? ''} />
+                  ) : (
+                    <Shield size={28} style={{ color: colors.subheading }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="relative">
+            {sealItems.length > 3 && (
+              <div className="absolute -right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => sealApi?.scrollPrev()}
+                  disabled={!canSealScrollPrev}
+                  className={cn('flex h-8 w-8 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity', !canSealScrollPrev && 'cursor-not-allowed opacity-40')}
+                  style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                >
+                  <ChevronLeft className="rotate-90" size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sealApi?.scrollNext()}
+                  disabled={!canSealScrollNext}
+                  className={cn('flex h-8 w-8 items-center justify-center rounded-full border bg-white shadow-sm transition-opacity', !canSealScrollNext && 'cursor-not-allowed opacity-40')}
+                  style={{ borderColor: colors.sectionAccentBar, color: colors.heading }}
+                >
+                  <ChevronRight className="rotate-90" size={16} />
+                </button>
               </div>
-              <div className="py-3 md:py-4 text-center border-t" style={{ borderColor: colors.neutralBorder }}>
-                <span className="font-bold text-sm md:text-base" style={{ color: colors.heading }}>
-                  {featuredItem.name ?? 'Chứng nhận nổi bật'}
-                </span>
+            )}
+            <div className="h-[360px] overflow-hidden pr-2" ref={sealRef}>
+              <div className="flex h-full flex-col gap-4">
+                {sealItems.map((item, idx) => (
+                  <button key={idx} type="button" onClick={() =>{  setSelectedCert(item); }} className={cn('group flex min-h-24 items-center gap-4 border bg-white p-4 text-left shadow-sm transition-all duration-300 hover:-translate-x-1', radiusClassName)} style={{ borderColor: colors.neutralBorder, boxShadow: '0 18px 45px rgba(15, 23, 42, 0.06)' }}>
+                    <div className={cn('flex h-20 w-14 shrink-0 items-center justify-center overflow-hidden', innerRadiusClassName)} style={{ backgroundColor: colors.neutralBackground }}>
+                    {item.url ? (
+                      <SiteImage src={item.url} className="h-full w-full object-contain" alt={item.name ?? ''} />
+                    ) : (
+                      <Shield size={26} style={{ color: colors.subheading }} />
+                    )}
+                    </div>
+                    <div className="h-12 w-px shrink-0" style={{ backgroundColor: colors.neutralBorder }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-extrabold uppercase tracking-tight break-words" style={{ color: colors.heading }}>{item.name ?? 'Chứng nhận'}</p>
+                      <p className="text-xs" style={{ color: colors.mutedText }}>Bằng chứng tin cậy #{idx + 1}</p>
+                    </div>
+                    <ArrowUpRight size={18} style={{ color: colors.heading }} />
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {otherItems.map((item, idx) => (
-              <div 
-                key={idx}
-                onClick={() =>{  setSelectedCert(item); }}
-                className="group aspect-square rounded-xl flex items-center justify-center p-3 md:p-4 cursor-zoom-in transition-all duration-300"
-                style={{ backgroundColor: colors.neutralBackground, border: `1px solid ${colors.neutralBorder}` }}
-              >
-                {item.url ? (
-                  <SiteImage src={item.url} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" alt={item.name ?? ''} />
-                ) : (
-                  <ImageIcon size={24} className="text-slate-300" />
-                )}
-              </div>
-            ))}
           </div>
         </div>
       </div>
@@ -2332,7 +2818,16 @@ function TrustBadgesSection({
 function GallerySection({ config, brandColor, secondary, mode, title, type }: { config: Record<string, unknown>; brandColor: string;
   secondary: string; mode: 'single' | 'dual'; title: string; type: string }) {
   const items = (config.items as { url: string; link?: string; name?: string }[]) || [];
-  const style = (config.style as GalleryStyle) || (type === 'Gallery' ? 'spotlight' : 'grid');
+  const style = type === 'Partners'
+    ? normalizePartnersStyle(config.style)
+    : ((config.style as GalleryStyle) || 'spotlight');
+  const partnersSubheading = type === 'Partners' && typeof (config.subtitle ?? config.subheading) === 'string' ? ((config.subtitle ?? config.subheading) as string) : undefined;
+  const partnersAlign = type === 'Partners' ? normalizePartnersAlign(config.align) : 'center';
+  const partnersDisplayMode = type === 'Partners' ? normalizePartnersDisplayMode(config.displayMode) : 'withName';
+  const partnersCornerRadius = type === 'Partners' ? normalizePartnersCornerRadius(config.cornerRadius) : 'lg';
+  const partnersLogoSize = type === 'Partners' ? normalizePartnersLogoSize(config.logoSize) : 'normal';
+  const partnersShowBorder = type === 'Partners' ? normalizePartnersShowBorder(config.showBorder) : true;
+  const partnersSpacing = type === 'Partners' ? normalizePartnersSpacing(config.spacing) : 'normal';
   const harmony = normalizeGalleryHarmony((config.harmony as string | undefined));
   const [selectedPhoto, setSelectedPhoto] = React.useState<{ id: string; url: string; link?: string; name?: string } | null>(null);
   const [device, setDevice] = React.useState<'mobile' | 'tablet' | 'desktop'>('desktop');
@@ -2343,10 +2838,14 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
   const marqueeBaseTrackRef = React.useRef<HTMLDivElement>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
   const colors = getGalleryColorTokens({ primary: brandColor, secondary, mode, harmony });
-  const layoutAccent = colors.sectionAccentBarByStyle[style as keyof typeof colors.sectionAccentBarByStyle] ?? colors.sectionAccentBar;
   const normalizedItems = items.map((item, idx) => ({ ...item, id: item.url ? `${item.url}-${idx}` : `gallery-${idx}` }));
   const marqueeBaseItems = React.useMemo(() => getGalleryMarqueeBaseItems(normalizedItems), [normalizedItems]);
   const lightboxItems = style === 'marquee' ? marqueeBaseItems : normalizedItems;
+  const galleryCornerRadius = normalizeGalleryCornerRadius(config.cornerRadius, config.noBorderRadius);
+  const galleryRoundedClass = getGalleryCornerRadiusClassName(galleryCornerRadius);
+  const galleryDesktopColumns = normalizeGalleryDesktopColumns(config.desktopColumns);
+  const galleryGridColumnsClass = galleryDesktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
+  const galleryMasonryColumnsClass = galleryDesktopColumns === 3 ? 'columns-3' : 'columns-4';
 
   React.useEffect(() => {
     if (style !== 'marquee') {return;}
@@ -2473,38 +2972,39 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
     const sub = normalizedItems.slice(1, 4);
 
     return (
-      <div
-        className="grid gap-1 border grid-cols-1 md:grid-cols-3"
-        style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
-      >
+      <div className="grid gap-2 grid-cols-1 md:grid-cols-3">
         <div
-          className="relative group cursor-pointer overflow-hidden border aspect-[4/3] md:col-span-2 md:aspect-auto md:row-span-1 md:min-h-[300px]"
-          style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+          className={cn('relative group cursor-pointer overflow-hidden aspect-[4/3] md:col-span-2 md:aspect-auto md:row-span-1 md:min-h-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
+          style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
           onClick={() =>{  setSelectedPhoto(featured); }}
+          tabIndex={0}
+          role="button"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(featured); } }}
         >
           {featured.url ? (
             <SiteImage src={featured.url} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
           ) : (
             <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={48} style={{ color: colors.placeholderIcon }} /></div>
           )}
-          <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-          <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+          <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
         </div>
-        <div className="grid gap-1 grid-cols-3 md:grid-cols-1">
+        <div className="grid gap-2 grid-cols-3 md:grid-cols-1">
           {sub.map((photo) => (
             <div
               key={photo.id}
-              className="aspect-square relative group cursor-pointer overflow-hidden border"
-              style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+              className={cn('aspect-square relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
+              style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
             >
               {photo.url ? (
                 <SiteImage src={photo.url} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={24} style={{ color: colors.placeholderIcon }} /></div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
             </div>
           ))}
         </div>
@@ -2516,25 +3016,26 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
     if (normalizedItems.length === 0) {return renderGalleryEmptyState();}
 
     return (
-      <div className="grid gap-0.5 border grid-cols-3 md:grid-cols-4 lg:grid-cols-5" style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
+      <div className={cn('grid gap-3 grid-cols-3', galleryDesktopColumns === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4')}>
         {normalizedItems.map((photo) => (
           <div
             key={photo.id}
-            className="aspect-square relative group cursor-pointer overflow-hidden border"
-            style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+            className={cn('aspect-square relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
+            style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
             onClick={() =>{  setSelectedPhoto(photo); }}
+            tabIndex={0}
+            role="button"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
           >
             {photo.url ? (
               <SiteImage
                 src={photo.url}
                 alt=""
-                className="w-full h-full object-cover transition-opacity duration-300 hover:opacity-90"
+                className="w-full h-full object-cover transition-all duration-300 group-hover:scale-[1.03] group-hover:brightness-95"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={24} style={{ color: colors.placeholderIcon }} /></div>
             )}
-            <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-            <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
           </div>
         ))}
       </div>
@@ -2546,8 +3047,7 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
 
     return (
       <div
-        className="grid gap-4 grid-cols-3 auto-rows-[110px] sm:auto-rows-[250px] md:grid-cols-3 md:auto-rows-[300px] rounded-lg border p-2"
-        style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}
+        className="grid gap-2 grid-cols-3 auto-rows-[110px] sm:auto-rows-[250px] md:grid-cols-3 md:auto-rows-[300px]"
       >
         {normalizedItems.map((photo, i) => {
           const isLarge = i % 4 === 0 || i % 4 === 3;
@@ -2556,9 +3056,12 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
           return (
             <div
               key={photo.id}
-              className={`${colSpan} relative group cursor-pointer overflow-hidden rounded-sm border`}
-              style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+              className={cn(`${colSpan} relative group cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2`, galleryRoundedClass)}
+              style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
             >
               {photo.url ? (
                 <SiteImage
@@ -2571,8 +3074,7 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
                   <ImageIcon size={32} style={{ color: colors.placeholderIcon }} />
                 </div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
             </div>
           );
         })}
@@ -2585,25 +3087,27 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
 
     const maxVisible = device === 'mobile' ? 6 : (device === 'tablet' ? 9 : 12);
     const visibleItems = normalizedItems.slice(0, maxVisible);
-    const remainingCount = normalizedItems.length - maxVisible;
 
     if (normalizedItems.length <= 2) {
       return (
-        <div className="py-8 px-4">
-          <div className={cn('mx-auto flex items-center justify-center gap-4', normalizedItems.length === 1 ? 'max-w-sm' : 'max-w-xl')}>
+        <div className="px-4 pt-4 pb-8">
+          <div className={cn('mx-auto flex items-center justify-center gap-3', normalizedItems.length === 1 ? 'max-w-sm' : 'max-w-xl')}>
             {normalizedItems.map((photo) => (
               <div
                 key={photo.id}
-                className="flex-1 aspect-square rounded-xl overflow-hidden cursor-pointer group border relative"
-                style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+                className={cn('flex-1 aspect-square overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
+                style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
               >
                 {photo.url ? (
                   <SiteImage src={photo.url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={40} style={{ color: colors.placeholderIcon }} /></div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
+                <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
               </div>
             ))}
           </div>
@@ -2612,37 +3116,29 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
     }
 
     return (
-      <div className="py-8 px-4">
+      <div className="px-4 pt-4 pb-8">
         <div className={cn(
-          'grid gap-2 rounded-lg border p-2',
-          device === 'mobile' ? 'grid-cols-2' : (device === 'tablet' ? 'grid-cols-3' : 'grid-cols-4'),
-        )} style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
+          'grid gap-3',
+          device === 'mobile' ? 'grid-cols-2' : (device === 'tablet' ? 'grid-cols-3' : galleryGridColumnsClass),
+        )}>
           {visibleItems.map((photo) => (
             <div
               key={photo.id}
-              className="aspect-square rounded-lg overflow-hidden cursor-pointer group relative border"
-              style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+              className={cn('aspect-square overflow-hidden cursor-pointer group relative break-inside-avoid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
+              style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
               onClick={() =>{  setSelectedPhoto(photo); }}
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
             >
               {photo.url ? (
                 <SiteImage src={photo.url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={28} style={{ color: colors.placeholderIcon }} /></div>
               )}
-              <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-              <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+              <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
             </div>
           ))}
-          {remainingCount > 0 && (
-            <div
-              className="aspect-square rounded-lg overflow-hidden flex flex-col items-center justify-center cursor-pointer border"
-              style={{ backgroundColor: colors.badgeBg, borderColor: colors.neutralBorder }}
-            >
-              <Plus size={28} style={{ color: colors.iconColor }} className="mb-1" />
-              <span className="text-lg font-bold" style={{ color: colors.badgeText }}>+{remainingCount}</span>
-              <span className="text-xs" style={{ color: colors.mutedText }}>ảnh khác</span>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -2653,8 +3149,8 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
     if (marqueeBaseItems.length === 0) {return renderGalleryEmptyState();}
 
     return (
-      <div className="py-8">
-        <div className="w-full max-w-7xl mx-auto relative overflow-hidden rounded-2xl border p-4 md:p-6" style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
+      <div className="pt-4 pb-8">
+        <div className="w-full max-w-7xl mx-auto relative overflow-hidden py-4 md:py-4 rounded-2xl">
           <div
             className="pointer-events-none absolute inset-y-0 left-0 w-16 md:w-20 z-10"
             style={{ background: `linear-gradient(to right, ${colors.neutralBackground} 0%, transparent 100%)` }}
@@ -2708,12 +3204,10 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
                   <button
                     type="button"
                     key={`gallery-marquee-${loopIdx}-${photo.id}-${idx}`}
-                    className="shrink-0 h-40 md:h-56 lg:h-64 aspect-[4/3] rounded-xl overflow-hidden group relative border text-left appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className={cn('shrink-0 h-40 md:h-56 lg:h-64 aspect-[4/3] overflow-hidden group relative text-left appearance-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass)}
                     style={{
                       backgroundColor: colors.neutralSurface,
-                      borderColor: colors.neutralBorder,
-                      boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
-                      '--tw-ring-color': layoutAccent,
+                      '--tw-ring-color': colors.focusRing,
                     } as React.CSSProperties}
                     onClick={() => { setSelectedPhoto(photo); }}
                     aria-label={`Mở ảnh ${idx + 1}`}
@@ -2725,8 +3219,7 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
                         <ImageIcon size={32} style={{ color: colors.placeholderIcon }} />
                       </div>
                     )}
-                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-                    <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+                    <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors', galleryRoundedClass)} />
                   </button>
                 ))}
               </div>
@@ -2742,25 +3235,27 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
 
     const maxVisible = device === 'mobile' ? 6 : 10;
     const visibleItems = normalizedItems.slice(0, maxVisible);
-    const remainingCount = normalizedItems.length - maxVisible;
 
     if (normalizedItems.length <= 2) {
       return (
-        <div className="py-8 px-4">
-          <div className={cn('mx-auto flex items-center justify-center gap-4', normalizedItems.length === 1 ? 'max-w-md' : 'max-w-2xl')}>
+        <div className="px-4 pt-4 pb-8">
+          <div className={cn('mx-auto flex items-center justify-center gap-3', normalizedItems.length === 1 ? 'max-w-md' : 'max-w-2xl')}>
             {normalizedItems.map((photo, idx) => (
               <div
                 key={photo.id}
-                className={cn('flex-1 rounded-xl overflow-hidden cursor-pointer group border relative', idx % 2 === 0 ? 'aspect-[3/4]' : 'aspect-[4/3]')}
-                style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+                className={cn('flex-1 overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass, idx % 2 === 0 ? 'aspect-[3/4]' : 'aspect-[4/3]')}
+                style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
               >
                 {photo.url ? (
                   <SiteImage src={photo.url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={40} style={{ color: colors.placeholderIcon }} /></div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
+                <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
               </div>
             ))}
           </div>
@@ -2769,11 +3264,11 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
     }
 
     return (
-      <div className="py-8 px-4">
+      <div className="px-4 pt-4 pb-8">
         <div className={cn(
-          'gap-3 rounded-lg border p-2',
-          device === 'mobile' ? 'columns-2' : (device === 'tablet' ? 'columns-3' : 'columns-4')
-        )} style={{ backgroundColor: colors.neutralBackground, borderColor: colors.neutralBorder }}>
+          'gap-3',
+          device === 'mobile' ? 'columns-2' : (device === 'tablet' ? 'columns-3' : galleryMasonryColumnsClass)
+        )}>
           {visibleItems.map((photo, idx) => {
             const heights = ['h-48', 'h-64', 'h-56', 'h-72', 'h-52', 'h-60'];
             const heightClass = heights[idx % heights.length];
@@ -2781,63 +3276,73 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
             return (
               <div
                 key={photo.id}
-                className={cn('mb-3 break-inside-avoid rounded-xl overflow-hidden cursor-pointer group relative border', heightClass)}
-                style={{ backgroundColor: colors.neutralSurface, borderColor: colors.neutralBorder }}
+                className={cn('mb-3 break-inside-avoid overflow-hidden cursor-pointer group relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2', galleryRoundedClass, heightClass)}
+                style={{ backgroundColor: colors.neutralSurface, '--tw-ring-color': colors.focusRing } as React.CSSProperties}
                 onClick={() =>{  setSelectedPhoto(photo); }}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPhoto(photo); } }}
               >
                 {photo.url ? (
                   <SiteImage src={photo.url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.placeholderBg }}><ImageIcon size={28} style={{ color: colors.placeholderIcon }} /></div>
                 )}
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: layoutAccent }} />
-                <div className="absolute inset-0 border-2 opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: layoutAccent }} />
+                <div className={cn('absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors', galleryRoundedClass)} />
               </div>
             );
           })}
         </div>
-        {remainingCount > 0 && (
-          <div className="flex items-center justify-center mt-4">
-            <span className="text-sm font-medium px-4 py-2 rounded-full border" style={{ backgroundColor: colors.badgeBg, color: colors.badgeText, borderColor: colors.neutralBorder }}>
-              +{remainingCount} ảnh khác
-            </span>
-          </div>
-        )}
       </div>
     );
   };
 
-  const renderGalleryContent = () => (
-    <section className="w-full" style={{ backgroundColor: colors.neutralSurface }}>
-      <div className={cn(
-        'container mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-12',
-        style === 'marquee' ? 'max-w-7xl' : 'max-w-[1600px]',
-      )}>
-        {title && (
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tighter mb-4 text-center" style={{ color: colors.primary }}>
-            {title}
-          </h2>
-        )}
-        <div className="mx-auto mb-6 h-1 w-12 rounded-full" style={{ backgroundColor: layoutAccent }} />
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out">
-          {style === 'spotlight' && renderSpotlightStyle()}
-          {style === 'explore' && renderExploreStyle()}
-          {style === 'stories' && renderStoriesStyle()}
-          {style === 'grid' && renderGalleryGridStyle()}
-          {style === 'marquee' && renderGalleryMarqueeStyle()}
-          {style === 'masonry' && renderGalleryMasonryStyle()}
+  const renderGalleryContent = () => {
+    const headerConfig = extractSectionHeaderConfig(config);
+    const galleryFullWidth = ((config.fullWidthDesktop ?? config.fullWidth) as boolean) ?? false;
+    const sectionSpacingClassName = getSectionSpacingClassName(config.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(config.spacing));
+    
+    return (
+      <section className={cn('w-full', sectionSpacingClassName)} style={{ backgroundColor: colors.neutralSurface }}>
+        <div className={cn(
+          'mx-auto px-3',
+          galleryFullWidth ? 'max-w-none' : 'max-w-7xl',
+        )}>
+          <SectionHeader
+            title={title}
+            subtitle={headerConfig.subtitle}
+            badgeText={headerConfig.badgeText}
+            hideHeader={headerConfig.hideHeader}
+            showTitle={headerConfig.showTitle}
+            showSubtitle={headerConfig.showSubtitle}
+            showBadge={headerConfig.showBadge}
+            headerAlign={headerConfig.headerAlign}
+            titleColorPrimary={headerConfig.titleColorPrimary}
+            subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+            uppercaseText={headerConfig.uppercaseText}
+            brandColor={brandColor}
+            className="mb-1.5"
+          />
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out">
+            {style === 'spotlight' && renderSpotlightStyle()}
+            {style === 'explore' && renderExploreStyle()}
+            {style === 'stories' && renderStoriesStyle()}
+            {style === 'grid' && renderGalleryGridStyle()}
+            {style === 'marquee' && renderGalleryMarqueeStyle()}
+            {style === 'masonry' && renderGalleryMasonryStyle()}
+          </div>
         </div>
-      </div>
-      <GalleryLightbox
-        photo={selectedPhoto}
-        onClose={() =>{  setSelectedPhoto(null); }}
-        photos={lightboxItems}
-        currentIndex={currentPhotoIndex}
-        onNavigate={handleLightboxNavigate}
-        colors={colors}
-      />
-    </section>
-  );
+        <GalleryLightbox
+          photo={selectedPhoto}
+          onClose={() =>{  setSelectedPhoto(null); }}
+          photos={lightboxItems}
+          currentIndex={currentPhotoIndex}
+          onNavigate={handleLightboxNavigate}
+          colors={colors}
+        />
+      </section>
+    );
+  };
 
   if (type === 'Gallery') {
     return renderGalleryContent();
@@ -2845,25 +3350,60 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
 
   // ============ PARTNERS STYLES (Grid, Marquee, Mono, Badge) ============
 
+  // Extract header config for Partners
+  const partnersHeaderConfig = extractSectionHeaderConfig(config);
+
+  const renderPartnersWithHeader = (content: React.ReactNode) => {
+    return (
+      <section className={cn('w-full bg-white px-3', getPartnersSectionSpacingClassName(partnersSpacing, 'siteOuter'))}>
+        <div className="mx-auto w-full max-w-7xl">
+          {!partnersHeaderConfig.hideHeader && (
+            <SectionHeader
+              title={title}
+              subtitle={partnersHeaderConfig.subtitle}
+              badgeText={partnersHeaderConfig.badgeText}
+              hideHeader={partnersHeaderConfig.hideHeader}
+              showTitle={partnersHeaderConfig.showTitle}
+              showSubtitle={partnersHeaderConfig.showSubtitle}
+              showBadge={partnersHeaderConfig.showBadge}
+              headerAlign={partnersHeaderConfig.headerAlign}
+              titleColorPrimary={partnersHeaderConfig.titleColorPrimary}
+              subtitleAboveTitle={partnersHeaderConfig.subtitleAboveTitle}
+              uppercaseText={partnersHeaderConfig.uppercaseText}
+              brandColor={brandColor}
+            />
+          )}
+          {content}
+        </div>
+      </section>
+    );
+  };
+
   // Style: Classic Grid - Hover effect, responsive grid
   if (style === 'grid') {
-    return (
+    return renderPartnersWithHeader(
       <PartnersGridShared
         items={items}
         title={title}
+        subheading={partnersSubheading}
+        align={partnersAlign}
+        displayMode={partnersDisplayMode}
+        cornerRadius={partnersCornerRadius}
+        logoSize={partnersLogoSize}
+        showBorder={partnersShowBorder}
+        spacing={partnersSpacing}
         brandColor={brandColor}
         secondary={secondary}
         mode={mode}
-        maxVisible={8}
-        columnsClassName="grid-cols-2 md:grid-cols-4 lg:grid-cols-8"
+        maxVisible={20}
         renderImage={(item, className) => (
-          <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+          <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
         )}
+        skipHeader={true}
       />
     );
   }
 
-  // Style: Marquee - Auto scroll, swipeable
   if (style === 'marquee') {
     return (
       <PartnersMarqueeShared
@@ -2871,30 +3411,40 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
         brandColor={brandColor}
         secondary={secondary}
         mode={mode}
-        title={title}
-        variant="marquee"
+        title={partnersHeaderConfig.showTitle !== false ? title : undefined}
+        subheading={partnersHeaderConfig.showSubtitle !== false ? (partnersHeaderConfig.subtitle || partnersSubheading) : undefined}
+        badgeText={partnersHeaderConfig.showBadge !== false ? partnersHeaderConfig.badgeText : undefined}
+        align={partnersHeaderConfig.headerAlign ?? partnersAlign}
+        displayMode={partnersDisplayMode}
+        logoSize={partnersLogoSize}
+        spacing={partnersSpacing}
         speed={1.15}
         renderImage={(item, className) => (
-          <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+          <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
         )}
+        skipHeader={partnersHeaderConfig.hideHeader === true}
       />
     );
   }
 
-  // Style: Mono - Grayscale, hover to color
-  if (style === 'mono') {
-    return (
-      <PartnersMarqueeShared
+  if (style === 'clean') {
+    return renderPartnersWithHeader(
+      <PartnersCleanShared
         items={items}
         brandColor={brandColor}
         secondary={secondary}
         mode={mode}
         title={title}
-        variant="mono"
-        speed={0.9}
+        subheading={partnersSubheading}
+        align={partnersAlign}
+        displayMode={partnersDisplayMode}
+        cornerRadius={partnersCornerRadius}
+        logoSize={partnersLogoSize}
+        spacing={partnersSpacing}
         renderImage={(item, className) => (
-          <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+          <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
         )}
+        skipHeader={true}
       />
     );
   }
@@ -2903,99 +3453,119 @@ function GallerySection({ config, brandColor, secondary, mode, title, type }: { 
   if (style === 'carousel') {
     const normalizedItems = items.map((item, idx) => ({ ...item, id: idx }));
 
-    return (
+    return renderPartnersWithHeader(
       <PartnersCarouselShared
         items={normalizedItems}
         brandColor={brandColor}
         secondary={secondary}
         mode={mode}
         title={title}
+        subheading={partnersSubheading}
+        align={partnersAlign}
+        displayMode={partnersDisplayMode}
+        cornerRadius={partnersCornerRadius}
+        logoSize={partnersLogoSize}
+        showBorder={partnersShowBorder}
+        spacing={partnersSpacing}
         openInNewTab={false}
         renderImage={(item, className) => (
-          <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+          <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
+        )}
+        skipHeader={true}
+      />
+    );
+  }
+
+  if (style === 'logoCloud') {
+    const normalizedItems = items.map((item, idx) => ({ ...item, id: idx }));
+
+    return renderPartnersWithHeader(
+      <PartnersLogoCloudShared
+        items={normalizedItems}
+        brandColor={brandColor}
+        secondary={secondary}
+        mode={mode}
+        cornerRadius={partnersCornerRadius}
+        logoSize={partnersLogoSize}
+        showBorder={partnersShowBorder}
+        spacing={partnersSpacing}
+        openInNewTab={false}
+        renderImage={(item, className) => (
+          <SiteImage src={item.url} alt={item.name ?? 'Hình ảnh'} className={className} width={180} height={80} mode="logo" />
         )}
       />
     );
   }
 
-  // Style: Featured - Large featured + smaller grid
-  if (style === 'featured') {
-    return (
-      <PartnersFeaturedShared
+  if (style === 'divider') {
+    return renderPartnersWithHeader(
+      <PartnersDividerShared
         items={items}
-        title={title}
         brandColor={brandColor}
         secondary={secondary}
         mode={mode}
-        maxOthers={6}
+        title={title}
+        subheading={partnersSubheading}
+        align={partnersAlign}
+        displayMode={partnersDisplayMode}
+        cornerRadius={partnersCornerRadius}
+        logoSize={partnersLogoSize}
+        showBorder={partnersShowBorder}
+        spacing={partnersSpacing}
         renderImage={(item, className) => (
-          <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+          <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
         )}
+        skipHeader={true}
       />
     );
   }
 
   // Style: Badge - Compact badges with name (default fallback)
-  return (
+  return renderPartnersWithHeader(
     <PartnersBadgeShared
       items={items}
       brandColor={brandColor}
       secondary={secondary}
       mode={mode}
       title={title}
-      maxVisible={6}
+      subheading={partnersSubheading}
+      align={partnersAlign}
+      displayMode={partnersDisplayMode}
+      cornerRadius={partnersCornerRadius}
+      logoSize={partnersLogoSize}
+      showBorder={partnersShowBorder}
+      spacing={partnersSpacing}
+      maxVisible={items.length}
       variant="site"
       renderImage={(item, className) => (
-        <SiteImage src={item.url} alt={item.name ?? ''} className={className} />
+        <SiteImage src={item.url} alt={item.name ?? ''} className={className} mode="logo" />
       )}
+      skipHeader={true}
     />
   );
 }
 
 // ============ PRODUCT CATEGORIES SECTION ============
 // Best Practices: Clear navigation, visual appeal, mobile optimization, hover effects
-// 6 styles: grid, carousel, cards, minimal, marquee, circular
-import { getCategoryIcon } from '@/app/admin/components/CategoryImageSelector';
-
-type ProductCategoriesStyle = 'grid' | 'carousel' | 'cards' | 'minimal' | 'marquee' | 'circular';
+// 8 styles: grid, carousel, cards, marquee, circular, icon-grid, mosaic, compact-grid
+import { ProductCategoriesSectionShared } from '@/app/admin/home-components/product-categories/_components/ProductCategoriesSectionShared';
+import { normalizeProductCategoriesCornerRadius, normalizeProductCategoriesSpacing, normalizeProductCategoriesDesktopColumns, type ProductCategoriesAlign, type ProductCategoriesResolvedItem, type ProductCategoriesStyle } from '@/app/admin/home-components/product-categories/_types';
 
 function ProductCategoriesSection({ config, brandColor, secondary, mode, title }: { config: Record<string, unknown>; brandColor: string;
   secondary: string; mode: 'single' | 'dual'; title: string }) {
   const categoriesConfig = (config.categories as { categoryId: string; customImage?: string; imageMode?: string }[]) || [];
-  const style = (config.style as ProductCategoriesStyle) || 'grid';
-  const productCatCarouselId = useSafeId('productcat-carousel');
+  const style = (config.style as ProductCategoriesStyle) || 'image-strip';
   const showProductCount = (config.showProductCount as boolean) ?? true;
-  const columnsDesktop = (config.columnsDesktop as number) || 4;
-  const columnsMobile = (config.columnsMobile as number) || 2;
+  const spacing = normalizeProductCategoriesSpacing(config.spacing, config.noVerticalMargin);
+  const cornerRadius = normalizeProductCategoriesCornerRadius(config.cornerRadius, config.noBorderRadius);
+  const subtitle = typeof config.subtitle === 'string'
+    ? config.subtitle
+    : typeof config.subheading === 'string'
+      ? config.subheading
+      : '';
+  const headerAlign = (config.headerAlign as ProductCategoriesAlign) ?? (config.align as ProductCategoriesAlign) ?? 'center';
   const colors = React.useMemo(() => getProductCategoriesColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
   const [device, setDevice] = React.useState<'mobile' | 'tablet' | 'desktop'>('desktop');
-  const circularScrollRef = React.useRef<HTMLDivElement>(null);
-  const [circularScrollPosition, setCircularScrollPosition] = React.useState(0);
-  const [circularPageCount, setCircularPageCount] = React.useState(1);
-
-  const getColumnsByDevice = () => {
-    if (device === 'mobile') {return columnsMobile;}
-    if (device === 'tablet') {return Math.min(Math.max(columnsDesktop, 3), 4);}
-    return columnsDesktop;
-  };
-
-  const getVisibleCount = (rows: number = 2) => Math.max(getColumnsByDevice(), 1) * rows;
-  const getCarouselItemStyle = () => {
-    const columns = Math.max(getColumnsByDevice(), 1);
-    return {
-      flexBasis: `calc((100% - (var(--carousel-gap) * ${columns - 1})) / ${columns})`,
-      maxWidth: `calc((100% - (var(--carousel-gap) * ${columns - 1})) / ${columns})`,
-      minWidth: 0,
-    } as React.CSSProperties;
-  };
-  const getCircularItemStyle = () => {
-    const columns = Math.max(getColumnsByDevice(), 1);
-    return {
-      flexBasis: `calc((100% - (var(--circular-gap) * ${columns - 1})) / ${columns})`,
-      maxWidth: `calc((100% - (var(--circular-gap) * ${columns - 1})) / ${columns})`,
-      minWidth: 0,
-    } as React.CSSProperties;
-  };
   
   const categoriesData = useQuery(api.productCategories.listActive);
   const productsData = useQuery(api.products.listPublicResolved, {});
@@ -3071,503 +3641,83 @@ function ProductCategoriesSection({ config, brandColor, secondary, mode, title }
       return {
         ...cat,
         id: item.categoryId,
+        itemId: item.categoryId,
         displayImage,
         displayIcon,
         productCount: productCountMap[item.categoryId] || 0,
       };
     })
-    .filter(Boolean) as { id: string; name: string; slug: string; image?: string; description?: string; displayImage?: string; displayIcon?: string; productCount: number }[];
+    .filter(Boolean) as ProductCategoriesResolvedItem[];
 
-  const getGridCols = () => {
-    switch (columnsDesktop) {
-      case 3: { return 'md:grid-cols-3';
-      }
-      case 5: { return 'md:grid-cols-5';
-      }
-      case 6: { return 'md:grid-cols-6';
-      }
-      default: { return 'md:grid-cols-4';
-      }
-    }
-  };
+  // Demo mode: use embedded demo data instead of real categories
+  const selectionMode = (config.selectionMode as string) || 'real';
+  const demoCategories = Array.isArray(config.demoCategories) ? config.demoCategories as { id: string; name: string; image?: string; productCount?: number; link?: string }[] : [];
+  
+  const finalItems: ProductCategoriesResolvedItem[] = selectionMode === 'demo' && demoCategories.length > 0
+    ? demoCategories.map((item, idx) => ({
+        id: item.id,
+        itemId: idx,
+        name: item.name || `Danh mục ${idx + 1}`,
+        displayImage: item.image,
+        productCount: item.productCount ?? 0,
+        link: item.link,
+      }))
+    : resolvedCategories;
 
-  const getMobileGridCols = () => columnsMobile === 3 ? 'grid-cols-3' : 'grid-cols-2';
-  const maxVisible = getVisibleCount();
-  const visibleCategories = resolvedCategories.slice(0, maxVisible);
-  const remainingCount = Math.max(resolvedCategories.length - maxVisible, 0);
+  if (finalItems.length === 0) {return null;}
 
-  const updateCircularPagination = React.useCallback(() => {
-    if (!circularScrollRef.current) {return;}
-    const { scrollLeft, scrollWidth, clientWidth } = circularScrollRef.current;
-    const maxScroll = Math.max(scrollWidth - clientWidth, 0);
-
-    if (maxScroll <= 0) {
-      setCircularPageCount(1);
-      setCircularScrollPosition(0);
-      return;
-    }
-
-    const pageWidth = Math.max(clientWidth, 1);
-    const pageCount = Math.floor(maxScroll / pageWidth) + 1;
-    const nextPage = Math.round(scrollLeft / pageWidth);
-
-    setCircularPageCount(pageCount);
-    setCircularScrollPosition(Math.max(0, Math.min(nextPage, pageCount - 1)));
-  }, []);
-
-  const handleCircularScroll = () => {
-    updateCircularPagination();
-  };
-
-  const handleCircularPageChange = (index: number) => {
-    if (!circularScrollRef.current) {return;}
-    const { scrollWidth, clientWidth } = circularScrollRef.current;
-    const maxScroll = Math.max(scrollWidth - clientWidth, 0);
-    const pageWidth = Math.max(clientWidth, 1);
-    const targetPage = Math.max(0, Math.min(index, circularPageCount - 1));
-    const targetLeft = Math.min(targetPage * pageWidth, maxScroll);
-
-    setCircularScrollPosition(targetPage);
-    circularScrollRef.current.scrollTo({ left: targetLeft, behavior: 'smooth' });
-  };
-
-  React.useEffect(() => {
-    if (style !== 'circular') {return;}
-
-    const frameId = window.requestAnimationFrame(updateCircularPagination);
-    window.addEventListener('resize', updateCircularPagination);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', updateCircularPagination);
-    };
-  }, [style, resolvedCategories.length, device, updateCircularPagination]);
-
-  // Helper: Render category visual (image or icon)
-  if (resolvedCategories.length === 0) {return null;}
-
-  const renderCategoryVisual = (cat: typeof resolvedCategories[0], iconSize: number = 48) => {
-    const iconData = cat.displayIcon ? getCategoryIcon(cat.displayIcon) : null;
-    if (cat.displayIcon && iconData) {
-      return (
-        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: colors.iconContainerBg }}>
-          {React.createElement(iconData.icon, { size: iconSize, style: { color: colors.primary.solid } })}
-        </div>
-      );
-    }
-    if (cat.displayImage) {
-      return <SiteImage src={cat.displayImage} alt={cat.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />;
-    }
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-slate-100">
-        <Package size={iconSize} className="text-slate-300" />
-      </div>
-    );
-  };
-
-  // Style 1: Grid - Classic grid with hover effect + monochromatic
-  if (style === 'grid') {
-    const gridItems = resolvedCategories.length <= 2 ? resolvedCategories : visibleCategories;
-    return (
-      <section className="py-10 md:py-16">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 text-center" style={{ color: colors.primary.solid }}>{title}</h2>
-          <div className="mx-auto h-1 w-12 rounded-full mb-6 md:mb-8" style={{ backgroundColor: colors.sectionAccent }} />
-          <div className={`grid gap-3 md:gap-4 lg:gap-6 ${getMobileGridCols()} ${getGridCols()}`}>
-            {gridItems.map((cat) => (
-              <a 
-                key={cat.id}
-                href={`/products?category=${cat.slug}`}
-                className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer transition-all duration-300"
-                style={{ boxShadow: colors.cardShadow, border: `1px solid ${colors.cardBorder}` }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = colors.cardShadowHover;
-                  e.currentTarget.style.borderColor = colors.cardBorderHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = colors.cardShadow;
-                  e.currentTarget.style.borderColor = colors.cardBorder;
-                }}
-              >
-                {renderCategoryVisual(cat, 48)}
-                <div
-                  className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent"
-                  style={{ height: '60%' }}
-                />
-                <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 z-10">
-                  <h3 className="font-semibold text-sm md:text-base line-clamp-1" style={{ color: colors.overlayText }}>{cat.name}</h3>
-                  {showProductCount && (
-                    <p className="text-xs mt-0.5" style={{ color: colors.productCountText }}>{cat.productCount} sản phẩm</p>
-                  )}
-                </div>
-              </a>
-            ))}
-            {remainingCount > 0 && resolvedCategories.length > 2 && (
-              <div
-                className="flex flex-col items-center justify-center aspect-square rounded-xl cursor-pointer transition-all"
-                style={{ backgroundColor: colors.ctaMoreBg, border: `2px dashed ${colors.ctaMoreBorder}` }}
-              >
-                <Plus size={32} style={{ color: colors.ctaMoreText }} className="mb-2" />
-                <span className="font-bold text-lg" style={{ color: colors.ctaMoreText }}>
-                  +{remainingCount}
-                </span>
-                <p className="text-xs text-slate-500 mt-1">danh mục khác</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 2: Carousel - Horizontal scroll with navigation
-  if (style === 'carousel') {
-    const showArrows = resolvedCategories.length > getColumnsByDevice();
-    const getScrollAmount = (container: Element | null) => {
-      if (!container) {return 200;}
-      const columns = Math.max(getColumnsByDevice(), 1);
-      return (container as HTMLElement).clientWidth / columns;
-    };
-
-    return (
-      <section className="py-10 md:py-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between px-4 md:px-6 mb-6 md:mb-8">
-            <h2 className="text-xl md:text-2xl lg:text-3xl font-bold" style={{ color: colors.primary.solid }}>{title}</h2>
-            <div className="flex items-center gap-2 md:gap-4">
-              {showArrows && (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    aria-label="Cuộn trước"
-                    onClick={() => {
-                      const container = document.querySelector(`#${productCatCarouselId}`);
-                      if (container) {container.scrollBy({ behavior: 'smooth', left: -getScrollAmount(container) });}
-                    }}
-                    className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white shadow-md border flex items-center justify-center hover:scale-110 transition-transform"
-                    style={{ borderColor: colors.cardBorder }}
-                  >
-                    <ChevronLeft size={18} style={{ color: colors.arrowIcon }} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Cuộn sau"
-                    onClick={() => {
-                      const container = document.querySelector(`#${productCatCarouselId}`);
-                      if (container) {container.scrollBy({ behavior: 'smooth', left: getScrollAmount(container) });}
-                    }}
-                    className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white shadow-md border flex items-center justify-center hover:scale-110 transition-transform"
-                    style={{ borderColor: colors.cardBorder }}
-                  >
-                    <ChevronRight size={18} style={{ color: colors.arrowIcon }} />
-                  </button>
-                </div>
-              )}
-              <Link
-                href="/products"
-                className="text-sm font-medium flex items-center gap-1 hover:underline whitespace-nowrap"
-                style={{ color: colors.linkText }}
-              >
-                Xem tất cả
-                <ArrowRight size={16} />
-              </Link>
-            </div>
-          </div>
-          <div className="relative px-4 md:px-6">
-            <div
-              id={productCatCarouselId}
-              className="flex overflow-x-auto snap-x snap-mandatory gap-3 md:gap-4 py-2 cursor-grab active:cursor-grabbing select-none"
-              style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none', '--carousel-gap': device === 'mobile' ? '12px' : '16px' } as React.CSSProperties}
-              onMouseDown={(e) => {
-                const el = e.currentTarget;
-                el.dataset.isDown = 'true';
-                el.dataset.startX = String(e.pageX - el.offsetLeft);
-                el.dataset.scrollLeft = String(el.scrollLeft);
-                el.style.scrollBehavior = 'auto';
-              }}
-              onMouseLeave={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-              onMouseUp={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-              onMouseMove={(e) => {
-                const el = e.currentTarget;
-                if (el.dataset.isDown !== 'true') {return;}
-                e.preventDefault();
-                const x = e.pageX - el.offsetLeft;
-                const walk = (x - Number(el.dataset.startX)) * 1.5;
-                el.scrollLeft = Number(el.dataset.scrollLeft) - walk;
-              }}
-            >
-              {resolvedCategories.map((cat) => (
-                <a
-                  key={cat.id}
-                  href={`/products?category=${cat.slug}`}
-                  className="snap-start flex-shrink-0 group cursor-pointer"
-                  style={getCarouselItemStyle()}
-                  draggable={false}
-                >
-                  <div
-                    className="aspect-square rounded-xl overflow-hidden mb-2 transition-all"
-                    style={{ border: `2px solid ${colors.cardBorder}` }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.cardBorderHover; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.cardBorder; }}
-                  >
-                    {renderCategoryVisual(cat, 40)}
-                  </div>
-                  <h3 className="font-medium text-center text-sm line-clamp-1" style={{ color: colors.categoryNameText }}>{cat.name}</h3>
-                  {showProductCount && (
-                    <p className="text-xs text-center" style={{ color: colors.productCountText }}>{cat.productCount} sản phẩm</p>
-                  )}
-                </a>
-              ))}
-              <div className="flex-shrink-0 w-4" />
-            </div>
-            {/* Fade edges */}
-            <div className="absolute left-0 top-0 bottom-0 w-4 md:w-6 bg-gradient-to-r from-white/10 to-transparent pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-0 w-4 md:w-6 bg-gradient-to-l from-white/10 to-transparent pointer-events-none" />
-          </div>
-          <style>{`#${productCatCarouselId}::-webkit-scrollbar { display: none; }`}</style>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 3: Cards - Modern horizontal cards with description
-  if (style === 'cards') {
-    return (
-      <section className="py-10 md:py-16" style={{ backgroundColor: colors.sectionBg }}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 text-center" style={{ color: colors.primary.solid }}>{title}</h2>
-          <div className="mx-auto h-1 w-12 rounded-full mb-6 md:mb-8" style={{ backgroundColor: colors.sectionAccent }} />
-          <div className={cn("grid gap-3 md:gap-4", getMobileGridCols(), getGridCols())}>
-            {visibleCategories.map((cat) => (
-              <a 
-                key={cat.id}
-                href={`/products?category=${cat.slug}`}
-                className="group bg-white rounded-xl overflow-hidden flex cursor-pointer transition-all"
-                style={{ border: `1px solid ${colors.cardBorder}` }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = colors.cardBorderHover;
-                  e.currentTarget.style.boxShadow = colors.cardShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = colors.cardBorder;
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div className="w-1.5 self-stretch" style={{ backgroundColor: colors.cardAccentBar }} />
-                <div className="w-24 h-24 md:w-28 md:h-28 flex-shrink-0">
-                  {renderCategoryVisual(cat, 32)}
-                </div>
-                <div className="flex-1 p-3 md:p-4 flex flex-col justify-center">
-                  <h3 className="font-semibold text-sm md:text-base line-clamp-1 mb-1" style={{ color: colors.categoryNameText }}>{cat.name}</h3>
-                  {cat.description && (
-                    <p className="text-xs text-slate-500 line-clamp-2 mb-2 min-h-[2rem]">{cat.description}</p>
-                  )}
-                  <span className="text-xs font-medium flex items-center gap-1" style={{ color: colors.linkText }}>
-                    {showProductCount ? `${cat.productCount} sản phẩm` : 'Xem sản phẩm'}
-                    <ArrowRight size={12} />
-                  </span>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 4: Minimal - Text-based with small icons, compact layout
-  if (style === 'minimal') {
-    return (
-      <section className="py-10 md:py-16">
-        <div className="max-w-5xl mx-auto px-4 md:px-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg md:text-xl font-bold" style={{ color: colors.primary.solid }}>{title}</h2>
-          <Link href="/products" className="text-sm font-medium hover:underline" style={{ color: colors.linkText }}>
-              Tất cả →
-            </Link>
-          </div>
-          <div className={cn("grid gap-2 md:gap-3", getMobileGridCols(), getGridCols())}>
-            {visibleCategories.map((cat) => {
-              const iconData = cat.displayIcon ? getCategoryIcon(cat.displayIcon) : null;
-              return (
-                <a 
-                  key={cat.id}
-                  href={`/products?category=${cat.slug}`}
-                  className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-full cursor-pointer transition-all min-w-0"
-                  style={{ backgroundColor: colors.pillBg, border: `1px solid ${colors.pillBorder}` }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.primary.surface;
-                    e.currentTarget.style.borderColor = colors.primary.border;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = colors.pillBg;
-                    e.currentTarget.style.borderColor = colors.pillBorder;
-                  }}
-                >
-                  {cat.displayIcon && iconData ? (
-                    React.createElement(iconData.icon, { size: 16, style: { color: colors.primary.solid } })
-                  ) : (cat.displayImage ? (
-                    <SiteImage src={cat.displayImage} alt="" className="w-5 h-5 md:w-6 md:h-6 rounded-full object-cover" />
-                  ) : (
-                    <Package size={16} style={{ color: colors.primary.solid }} />
-                  ))}
-                  <span
-                    className="font-medium text-xs md:text-sm truncate min-w-0 flex-1"
-                    style={{ color: colors.categoryNameText }}
-                    title={cat.name}
-                  >
-                    {cat.name}
-                  </span>
-                  {showProductCount && (
-                    <span className="text-xs" style={{ color: colors.productCountText }}>({cat.productCount})</span>
-                  )}
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Style 5: Circular - Horizontal scroll với circular containers
-  if (style === 'circular') {
-    return (
-      <section className="py-10 md:py-16">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 text-center px-4 md:px-6" style={{ color: colors.primary.solid }}>{title}</h2>
-          <div className="mx-auto h-1 w-12 rounded-full mb-6 md:mb-8" style={{ backgroundColor: colors.sectionAccent }} />
-          <div
-            ref={circularScrollRef}
-            className="flex overflow-x-auto scrollbar-hide pb-4 gap-4 md:gap-6 snap-x snap-mandatory px-4 md:px-6"
-            style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none', '--circular-gap': device === 'mobile' ? '16px' : '24px' } as React.CSSProperties}
-            onScroll={handleCircularScroll}
-          >
-            {resolvedCategories.map((cat) => (
-              <a
-                key={cat.id}
-                href={`/products?category=${cat.slug}`}
-                className="flex-shrink-0 snap-start group flex flex-col items-center"
-                style={getCircularItemStyle()}
-              >
-                <div
-                  className="rounded-full overflow-hidden transition-all duration-300 mb-3"
-                  style={{
-                    border: `2px solid ${colors.circularBorder}`,
-                    padding: '18px',
-                    backgroundColor: colors.circularBg,
-                    width: '100%',
-                    aspectRatio: '1/1'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = colors.cardBorderHover;
-                    e.currentTarget.style.boxShadow = colors.cardShadow;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = colors.circularBorder;
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  <div className="w-full h-full rounded-full overflow-hidden">
-                    {renderCategoryVisual(cat, 40)}
-                  </div>
-                </div>
-                <h3 className="font-semibold text-center text-sm line-clamp-1 w-full" style={{ color: colors.categoryNameText }}>{cat.name}</h3>
-                <div className="relative h-[24px] overflow-hidden w-full">
-                  <span
-                    className="block w-full absolute top-0 left-0 text-center transition-transform duration-300 group-hover:translate-y-full group-hover:opacity-0 text-xs"
-                    style={{ color: colors.productCountText }}
-                  >
-                    {showProductCount ? `${cat.productCount} sản phẩm` : '\u00A0'}
-                  </span>
-                  <span
-                    className="block w-full underline absolute top-0 left-0 text-center transition-transform duration-300 -translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 text-xs"
-                    style={{ color: colors.linkText }}
-                  >
-                    Xem chi tiết
-                  </span>
-                </div>
-              </a>
-            ))}
-          </div>
-          {circularPageCount > 1 && (
-            <div className="flex items-center justify-center mt-8 gap-[10px]">
-              {Array.from({ length: circularPageCount }, (_, index) => index).map((index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => { handleCircularPageChange(index); }}
-                  className={cn(
-                    "inline-block h-[8px] rounded-[10px] cursor-pointer transition-all duration-300",
-                    circularScrollPosition === index ? 'w-[28px]' : 'w-[8px] border'
-                  )}
-                  style={
-                    circularScrollPosition === index
-                      ? { backgroundColor: colors.paginationDotActive }
-                      : { borderColor: colors.paginationDotInactive, backgroundColor: 'transparent' }
-                  }
-                  aria-label={`Đi tới trang ${index + 1}`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-        <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
-      </section>
-    );
-  }
-
-  // Style 6: Marquee - Auto-scrolling horizontal animation (default fallback)
   return (
-    <section className="py-10 md:py-16">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 text-center" style={{ color: colors.primary.solid }}>{title}</h2>
-        <div className="mx-auto h-1 w-12 rounded-full mb-6 md:mb-8" style={{ backgroundColor: colors.sectionAccent }} />
-        <div className="relative overflow-hidden rounded-xl">
-          {/* Gradient masks */}
-          <div className="absolute left-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-r from-white to-transparent pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-l from-white to-transparent pointer-events-none" />
-          
-          {/* Marquee track */}
-          <div 
-            className="flex w-max hover:[animation-play-state:paused]"
-            style={{
-              animation: 'marquee-scroll 25s linear infinite',
-            }}
-          >
-            {[...visibleCategories, ...visibleCategories].map((cat, idx) => (
-              <a 
-                key={`${cat.id}-${idx}`}
-                href={`/products?category=${cat.slug}`}
-                className="flex-shrink-0 flex items-center gap-3 px-4 py-3 rounded-full cursor-pointer mx-2 bg-white"
-                style={{ border: `2px solid ${colors.pillBorder}`, boxShadow: colors.cardShadow, backgroundColor: colors.neutral.surface }}
-              >
-                <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-                  {renderCategoryVisual(cat, 24)}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-sm whitespace-nowrap" style={{ color: colors.categoryNameText }}>{cat.name}</h3>
-                  {showProductCount && (
-                    <p className="text-xs whitespace-nowrap" style={{ color: colors.productCountText }}>{cat.productCount} sản phẩm</p>
-                  )}
-                </div>
-                <ArrowUpRight size={14} style={{ color: colors.arrowIcon }} className="flex-shrink-0" />
-              </a>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
+    <ProductCategoriesSectionShared
+      title={title}
+      subtitle={subtitle}
+      subheading={subtitle}
+      headerAlign={headerAlign}
+      align={headerAlign}
+      hideHeader={config.hideHeader as boolean | undefined}
+      showTitle={config.showTitle as boolean | undefined}
+      showSubtitle={config.showSubtitle as boolean | undefined}
+      titleColorPrimary={config.titleColorPrimary as boolean | undefined}
+      subtitleAboveTitle={config.subtitleAboveTitle as boolean | undefined}
+      uppercaseText={config.uppercaseText as boolean | undefined}
+      showBadge={config.showBadge as boolean | undefined}
+      badgeText={config.badgeText as string | undefined}
+      brandColor={brandColor}
+      style={style}
+      items={finalItems}
+      colors={colors}
+      context="site"
+      device={device}
+      mode={mode}
+      showProductCount={showProductCount}
+      spacing={spacing}
+      cornerRadius={cornerRadius}
+      desktopColumns={normalizeProductCategoriesDesktopColumns(config.desktopColumns)}
+      viewAllHref="/products"
+      getItemHref={(item) => item.link || (item.slug ? `/${item.slug}` : '/products')}
+      renderImage={(item, className) => (
+        item.displayImage
+          ? <SiteImage src={item.displayImage} alt={item.name} className={className} />
+          : <div className={cn('flex h-full w-full items-center justify-center bg-slate-100', className)}><Package size={28} className="text-slate-300" /></div>
+      )}
+    />
   );
 }
 
 // ============ CATEGORY PRODUCTS SECTION ============
 // Sản phẩm theo danh mục - Mỗi section là 1 danh mục với các sản phẩm thuộc danh mục đó
-type CategoryProductsStyle = 'grid' | 'carousel' | 'cards' | 'bento' | 'magazine' | 'showcase';
+type CategoryProductsStyle = 'grid' | 'carousel' | 'cards' | 'bento' | 'magazine' | 'showcase' | 'wine-grid';
+type RuntimeDemoCategoryProductsSection = {
+  id: string;
+  categoryName: string;
+  categoryImage?: string;
+  products: {
+    id: string;
+    name: string;
+    image?: string;
+    price?: number;
+    salePrice?: number;
+  }[];
+};
 
 function CategoryProductsSection({
   config,
@@ -3583,12 +3733,16 @@ function CategoryProductsSection({
   title: string;
 }) {
   const sections = (config.sections as { categoryId: string; itemCount: number }[]) || [];
+  const selectionMode = (config.selectionMode as 'real' | 'demo' | undefined) ?? 'real';
+  const demoSections = (config.demoSections as RuntimeDemoCategoryProductsSection[] | undefined) ?? [];
   const style = (config.style as CategoryProductsStyle) || 'grid';
-  const catProductCarouselBaseId = useSafeId('catproduct-carousel');
   const showViewAll = (config.showViewAll as boolean) ?? true;
-  const columnsDesktop = (config.columnsDesktop as number) || 4;
-  const columnsMobile = (config.columnsMobile as number) || 2;
+  const columnsDesktop = config.columnsDesktop === 3 ? 3 : 4;
   const sectionTitle = _title || 'Sản phẩm';
+  const sectionSpacingClassName = getSectionSpacingClassName(normalizeSectionSpacing(config.spacing));
+  const cornerRadius = normalizeCategoryProductsCornerRadius(config.cornerRadius);
+  const cardRadiusClassName = getCategoryProductsCardRadiusClassName(cornerRadius);
+  const imageRadiusClassName = getCategoryProductsImageRadiusClassName(cornerRadius);
   const colors = React.useMemo(
     () => getCategoryProductsColors(brandColor, secondary, mode),
     [brandColor, secondary, mode]
@@ -3599,6 +3753,8 @@ function CategoryProductsSection({
   const productsData = useQuery(api.products.listPublicResolved, { limit: 100 });
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
   const imageAspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = React.useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
   const saleMode = React.useMemo(() => resolveSaleMode(saleModeSetting?.value), [saleModeSetting?.value]);
   const imageAspectRatio = React.useMemo(
     () => resolveProductImageAspectRatio(imageAspectRatioSetting?.value),
@@ -3608,53 +3764,101 @@ function CategoryProductsSection({
     () => ({ aspectRatio: getProductImageAspectRatioCssValue(imageAspectRatio) }),
     [imageAspectRatio]
   );
-  const { frame } = useProductFrameConfig();
+  const { frameConfig, watermarkConfig } = useProductImageOverlayConfigs(imageAspectRatio);
 
-  // Resolve sections with category and products data
-  const resolvedSections = sections
-    .map(section => {
-      const category = categoriesData?.find(c => c._id === section.categoryId);
-      if (!category) {return null;}
-      
-      const products = (productsData ?? [])
-        .filter(p => p.categoryId === section.categoryId)
-        .slice(0, section.itemCount);
-      
-      return {
-        ...section,
-        category,
-        products,
-      };
-    })
-    .filter(Boolean) as { 
-      categoryId: string; 
-      itemCount: number;
-      category: { _id: string; name: string; slug?: string; image?: string }; 
-      products: { _id: string; name: string; image?: string; price?: number; salePrice?: number; slug?: string; hasVariants?: boolean }[] 
-    }[];
-
-  const getGridCols = () => {
-    switch (columnsDesktop) {
-      case 3: { return 'md:grid-cols-3';
-      }
-      case 5: { return 'md:grid-cols-5';
-      }
-      default: { return 'md:grid-cols-4';
-      }
+  const resolvedSections = React.useMemo(() => {
+    if (selectionMode === 'demo') {
+      return demoSections
+        .filter(section => section.categoryName?.trim() || section.products.length > 0)
+        .map((section, index) => ({
+          category: {
+            _id: section.id,
+            image: section.categoryImage,
+            name: section.categoryName || `Danh mục demo ${index + 1}`,
+            slug: undefined,
+          },
+          categoryId: section.id,
+          itemCount: section.products.length,
+          products: section.products.map(product => ({
+            _id: product.id,
+            categoryId: section.id,
+            hasVariants: false,
+            image: product.image,
+            name: product.name || 'Tên sản phẩm',
+            price: product.price,
+            salePrice: product.salePrice,
+          })),
+        }));
     }
-  };
 
-  const getMobileGridCols = () => columnsMobile === 1 ? 'grid-cols-1' : 'grid-cols-2';
+    return sections
+      .map(section => {
+        const category = categoriesData?.find(c => c._id === section.categoryId);
+        if (!category) {return null;}
+
+        const products = (productsData ?? [])
+          .filter(p => p.categoryId === section.categoryId)
+          .slice(0, section.itemCount);
+
+        return {
+          ...section,
+          category,
+          products,
+        };
+      })
+      .filter(Boolean) as {
+        categoryId: string;
+        itemCount: number;
+        category: { _id: string; name: string; slug?: string; image?: string };
+        products: { _id: string; name: string; image?: string; price?: number; salePrice?: number; slug?: string; hasVariants?: boolean }[];
+      }[];
+  }, [categoriesData, demoSections, productsData, sections, selectionMode]);
+
+  const getGridCols = () => getCategoryProductsResponsiveGridClassName(columnsDesktop);
 
   const getPriceDisplay = (price?: number, salePrice?: number, isRangeFromVariant?: boolean) =>
     getHomeComponentPriceLabel({ saleMode, price, salePrice, isRangeFromVariant });
   const formatComparePrice = (price?: number) =>
     price ? getHomeComponentPriceLabel({ saleMode: 'cart', price }).label : '';
+  const getProductDiscount = (product: { price?: number; salePrice?: number; hasVariants?: boolean }) => {
+    const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+    const currentPrice = product.salePrice ?? product.price;
+    if (!priceDisplay.comparePrice || !currentPrice || priceDisplay.comparePrice <= currentPrice) {return null;}
+    return Math.round((1 - currentPrice / priceDisplay.comparePrice) * 100);
+  };
+
+  const resolveProductHref = React.useCallback((params: {
+    product: { slug?: string; _id: string };
+    categorySlug?: string;
+  }) => buildDetailPath({
+    categorySlug: params.categorySlug,
+    mode: routeMode,
+    moduleKey: 'products',
+    recordSlug: params.product.slug ?? params.product._id,
+  }), [routeMode]);
+
+  const categorySlugMap = React.useMemo(() => {
+    if (!categoriesData) {return new Map<string, string>();}
+    return new Map(categoriesData.map((category) => [category._id, category.slug]));
+  }, [categoriesData]);
+
+  const resolveProductHrefByCategory = React.useCallback((params: {
+    product: { slug?: string; _id: string };
+    categoryId: string;
+  }) => resolveProductHref({
+    categorySlug: categorySlugMap.get(params.categoryId),
+    product: params.product,
+  }), [categorySlugMap, resolveProductHref]);
 
   // Product Card Component with Equal Height (line-clamp + min-height)
-  const ProductCard = ({ product }: { product: { _id: string; name: string; image?: string; price?: number; salePrice?: number; slug?: string; hasVariants?: boolean } }) => (
-    <a href={`/products/${product.slug ?? product._id}`} aria-label={`${sectionTitle}: ${product.name}`} className="group cursor-pointer flex flex-col h-full">
-      <div className="rounded-lg overflow-hidden mb-2" style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
+  const ProductCard = ({ product, categoryId }: { product: { _id: string; name: string; image?: string; price?: number; salePrice?: number; slug?: string; hasVariants?: boolean }; categoryId: string }) => (
+    <a href={resolveProductHrefByCategory({ categoryId, product })} aria-label={`${sectionTitle}: ${product.name}`} className="group cursor-pointer flex flex-col h-full">
+      <ProductImageWithOverlay
+        frameConfig={frameConfig}
+        watermarkConfig={watermarkConfig}
+        className={cn('overflow-hidden mb-2', imageRadiusClassName)}
+        style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
+      >
         {product.image ? (
           <SiteImage 
             src={product.image} 
@@ -3666,8 +3870,7 @@ function CategoryProductsSection({
             <Package size={24} style={{ color: colors.emptyStateIcon }} />
           </div>
         )}
-        <ProductImageFrameOverlay frame={frame} />
-      </div>
+      </ProductImageWithOverlay>
       <h4 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]" style={{ color: colors.bodyText }}>{product.name || 'Tên sản phẩm'}</h4>
       <div className="flex flex-col mt-auto">
         {(() => {
@@ -3715,7 +3918,7 @@ function CategoryProductsSection({
   // Style 1: Grid
   if (style === 'grid') {
     return (
-      <div className="py-8 md:py-12 space-y-10 md:space-y-16">
+      <div className={cn('space-y-10 md:space-y-16', sectionSpacingClassName)}>
         {resolvedSections.map((section, idx) => (
           <section key={idx} className="px-4">
             <div className="max-w-7xl mx-auto">
@@ -3723,8 +3926,8 @@ function CategoryProductsSection({
                 <h2 className="text-xl md:text-2xl font-bold" style={{ color: colors.heading }}>{section.category.name}</h2>
                 {showViewAll && (
                   <a 
-                    href={`/products?category=${section.category.slug ?? section.category._id}`}
-                    className="text-sm font-medium flex items-center gap-1 hover:underline px-3 py-1.5 rounded-lg border transition-colors"
+                    href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
+                    className="text-sm font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border transition-colors"
                     style={{ borderColor: colors.buttonBorder, color: colors.buttonText }}
                   >
                     Xem danh mục
@@ -3736,9 +3939,9 @@ function CategoryProductsSection({
               </div>
               
               {section.products.length > 0 ? (
-                <div className={`grid gap-4 ${getMobileGridCols()} ${getGridCols()}`}>
+                <div className={cn('grid gap-4', getGridCols())}>
                   {section.products.map((product) => (
-                    <ProductCard key={product._id} product={product} />
+                    <ProductCard key={product._id} product={product} categoryId={section.category._id} />
                   ))}
                 </div>
               ) : (
@@ -3753,130 +3956,131 @@ function CategoryProductsSection({
 
   // Style 2: Carousel
   if (style === 'carousel') {
-    const cardWidth = 192;
-    const gap = 16;
+    const CarouselSection = ({ section }: { section: typeof resolvedSections[number] }) => {
+      const [emblaRef, emblaApi] = useEmblaCarousel({
+        align: 'start',
+        dragFree: true,
+        containScroll: 'trimSnaps',
+      });
+      const [canScrollPrev, setCanScrollPrev] = React.useState(false);
+      const [canScrollNext, setCanScrollNext] = React.useState(false);
 
-    return (
-      <div className="py-8 md:py-12 space-y-10 md:space-y-16">
-        {resolvedSections.map((section, idx) => {
-          const catProductCarouselId = `${catProductCarouselBaseId}-${idx}`;
-          // Responsive: Desktop ~5-6 items (192px each), chỉ hiện arrows khi có > 5 items
-          const showArrows = section.products.length > 5;
-          return (
-            <section key={idx}>
-              <div className="max-w-7xl mx-auto">
-                <div className="flex items-center justify-between px-4 mb-6">
-                <h2 className="text-xl md:text-2xl font-bold" style={{ color: colors.heading }}>{section.category.name}</h2>
-                  <div className="flex items-center gap-2 md:gap-4">
-                    {showArrows && (
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const container = document.querySelector(`#${catProductCarouselId}`);
-                            if (container) {container.scrollBy({ behavior: 'smooth', left: -(cardWidth + gap) });}
-                          }}
-                          className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white shadow-md border flex items-center justify-center hover:scale-110 transition-transform"
-                          style={{ borderColor: colors.buttonBorder, backgroundColor: colors.buttonBackground }}
-                        >
-                          <ChevronLeft size={18} style={{ color: colors.buttonText }} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const container = document.querySelector(`#${catProductCarouselId}`);
-                            if (container) {container.scrollBy({ behavior: 'smooth', left: cardWidth + gap });}
-                          }}
-                          className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white shadow-md border flex items-center justify-center hover:scale-110 transition-transform"
-                          style={{ borderColor: colors.buttonBorder, backgroundColor: colors.buttonBackground }}
-                        >
-                          <ChevronRight size={18} style={{ color: colors.buttonText }} />
-                        </button>
-                      </div>
-                    )}
-                    {showViewAll && (
-                      <a
-                        href={`/products?category=${section.category.slug ?? section.category._id}`}
-                        className="text-sm font-medium flex items-center gap-1 hover:underline"
-                        style={{ color: colors.buttonText }}
-                      >
-                        Xem danh mục
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                        </svg>
-                      </a>
-                    )}
-                  </div>
-                </div>
+      React.useEffect(() => {
+        if (!emblaApi) { return; }
 
-                {section.products.length > 0 ? (
-                  <div className="relative px-4">
-                    <div
-                      id={catProductCarouselId}
-                      className="flex overflow-x-auto snap-x snap-mandatory gap-4 py-2 cursor-grab active:cursor-grabbing select-none"
-                      style={{ WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-                      onMouseDown={(e) => {
-                        const el = e.currentTarget;
-                        el.dataset.isDown = 'true';
-                        el.dataset.startX = String(e.pageX - el.offsetLeft);
-                        el.dataset.scrollLeft = String(el.scrollLeft);
-                        el.style.scrollBehavior = 'auto';
-                      }}
-                      onMouseLeave={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-                      onMouseUp={(e) => { e.currentTarget.dataset.isDown = 'false'; e.currentTarget.style.scrollBehavior = 'smooth'; }}
-                      onMouseMove={(e) => {
-                        const el = e.currentTarget;
-                        if (el.dataset.isDown !== 'true') {return;}
-                        e.preventDefault();
-                        const x = e.pageX - el.offsetLeft;
-                        const walk = (x - Number(el.dataset.startX)) * 1.5;
-                        el.scrollLeft = Number(el.dataset.scrollLeft) - walk;
-                      }}
+        const update = () => {
+          setCanScrollPrev(emblaApi.canScrollPrev());
+          setCanScrollNext(emblaApi.canScrollNext());
+        };
+
+        update();
+        emblaApi.on('select', update);
+        emblaApi.on('reInit', update);
+
+        return () => {
+          emblaApi.off('select', update);
+          emblaApi.off('reInit', update);
+        };
+      }, [emblaApi]);
+
+      return (
+        <section>
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between px-4 mb-4">
+              <h2 className="text-xl md:text-2xl font-bold" style={{ color: colors.heading }}>{section.category.name}</h2>
+              <div className="flex items-center gap-2">
+                {showViewAll && (
+                  <a
+                    href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
+                    className="text-sm font-medium flex items-center gap-1"
+                    style={{ color: colors.buttonText }}
+                  >
+                    Xem danh mục <ArrowRight size={16} />
+                  </a>
+                )}
+                {(canScrollPrev || canScrollNext) && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Trước"
+                      disabled={!canScrollPrev}
+                      onClick={() => emblaApi?.scrollPrev()}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-all"
+                      style={canScrollPrev
+                        ? { backgroundColor: `${colors.sectionAccent}18`, color: colors.sectionAccent }
+                        : { opacity: 0.3, color: colors.mutedText ?? '#94a3b8' }}
                     >
-                      {section.products.map((product) => (
-                        <a
-                          key={product._id}
-                          href={`/products/${product.slug ?? product._id}`}
-                          className="snap-start flex-shrink-0 w-40 md:w-48 group cursor-pointer"
-                          draggable={false}
-                        >
-                          <div className="rounded-lg overflow-hidden mb-2" style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
-                            {product.image ? (
-                              <SiteImage
-                                src={product.image}
-                                alt={product.name}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                draggable={false}
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package size={24} style={{ color: colors.emptyStateIcon }} />
-                              </div>
-                            )}
-                          <ProductImageFrameOverlay frame={frame} />
-                          </div>
-                          <h4 className="font-medium text-sm line-clamp-2 mb-1" style={{ color: colors.bodyText }}>{product.name}</h4>
-                          <span className="font-bold text-base" style={{ color: colors.priceText }}>
-                            {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
-                          </span>
-                        </a>
-                      ))}
-                      <div className="flex-shrink-0 w-4" />
-                    </div>
-                    {/* Fade edges */}
-                    <div className="absolute left-0 top-0 bottom-0 w-4 md:w-6 pointer-events-none" style={{ background: `linear-gradient(to right, ${colors.neutralSurface}, transparent)` }} />
-                    <div className="absolute right-0 top-0 bottom-0 w-4 md:w-6 pointer-events-none" style={{ background: `linear-gradient(to left, ${colors.neutralSurface}, transparent)` }} />
-                    <style>{`#${catProductCarouselId}::-webkit-scrollbar { display: none; }`}</style>
-                  </div>
-                ) : (
-                  <div className="mx-4">
-                    <EmptyProductsState message="Chưa có sản phẩm" />
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Tiếp"
+                      disabled={!canScrollNext}
+                      onClick={() => emblaApi?.scrollNext()}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-all"
+                      style={canScrollNext
+                        ? { backgroundColor: `${colors.sectionAccent}18`, color: colors.sectionAccent }
+                        : { opacity: 0.3, color: colors.mutedText ?? '#94a3b8' }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
                 )}
               </div>
-            </section>
-          );
-        })}
+            </div>
+
+            {section.products.length > 0 ? (
+              <div className="overflow-hidden px-4" ref={emblaRef}>
+                <div className="flex gap-4 backface-hidden touch-pan-y">
+                  {section.products.map((product) => (
+                    <a
+                      key={product._id}
+                      href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
+                      className="flex-none w-36 md:w-48 group cursor-grab active:cursor-grabbing select-none"
+                      draggable={false}
+                    >
+                      <ProductImageWithOverlay
+                        frameConfig={frameConfig}
+                        watermarkConfig={watermarkConfig}
+                        className={cn('overflow-hidden mb-2', imageRadiusClassName)}
+                        style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
+                      >
+                        {product.image ? (
+                          <SiteImage
+                            src={product.image}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package size={24} style={{ color: colors.emptyStateIcon }} />
+                          </div>
+                        )}
+                      </ProductImageWithOverlay>
+                      <h4 className="font-medium text-sm line-clamp-2 mb-1" style={{ color: colors.bodyText }}>{product.name}</h4>
+                      <span className="font-bold text-base" style={{ color: colors.buttonText }}>
+                        {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mx-4">
+                <EmptyProductsState message="Chưa có sản phẩm" />
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    };
+
+    return (
+      <div className={cn('space-y-8 md:space-y-12', sectionSpacingClassName)}>
+        {resolvedSections.map((section, idx) => (
+          <CarouselSection key={idx} section={section} />
+        ))}
       </div>
     );
   }
@@ -3884,12 +4088,12 @@ function CategoryProductsSection({
   // Style 3: Cards - Modern cards with category header
   if (style === 'cards') {
     return (
-      <div className="py-8 md:py-12 space-y-10 md:space-y-16">
+      <div className={cn('space-y-10 md:space-y-16', sectionSpacingClassName)}>
         {resolvedSections.map((section, idx) => (
           <section key={idx} className="px-4">
             <div className="max-w-7xl mx-auto">
               <div 
-                className="rounded-xl overflow-hidden"
+                className={cn('overflow-hidden', cardRadiusClassName)}
                 style={{ border: `1px solid ${colors.cardBorder}` }}
               >
                 {/* Category Header */}
@@ -3899,7 +4103,7 @@ function CategoryProductsSection({
                 >
                   <div className="flex items-center gap-3">
                     {section.category.image && (
-                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
+                      <div className={cn('w-10 h-10 overflow-hidden bg-white', imageRadiusClassName)}>
                         <SiteImage 
                           src={section.category.image} 
                           alt={section.category.name} 
@@ -3911,8 +4115,8 @@ function CategoryProductsSection({
                   </div>
                   {showViewAll && (
                     <a 
-                      href={`/products?category=${section.category.slug ?? section.category._id}`}
-                      className="text-sm font-medium flex items-center gap-1 hover:underline px-3 py-1.5 rounded-lg transition-colors"
+                      href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
+                      className="text-sm font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors"
                       style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
                     >
                       Xem danh mục
@@ -3926,9 +4130,9 @@ function CategoryProductsSection({
                 {/* Products Grid */}
                 <div className="p-4" style={{ backgroundColor: colors.cardBackground }}>
                   {section.products.length > 0 ? (
-                    <div className={`grid gap-4 ${getMobileGridCols()} ${getGridCols()}`}>
+                    <div className={cn('grid gap-4', getGridCols())}>
                       {section.products.map((product) => (
-                        <ProductCard key={product._id} product={product} />
+                        <ProductCard key={product._id} product={product} categoryId={section.category._id} />
                       ))}
                     </div>
                   ) : (
@@ -3946,7 +4150,7 @@ function CategoryProductsSection({
   // Style 4: Bento - Featured product với bento grid
   if (style === 'bento') {
     return (
-      <div className="py-8 md:py-12 space-y-10 md:space-y-16">
+      <div className={cn('space-y-10 md:space-y-16', sectionSpacingClassName)}>
         {resolvedSections.map((section, idx) => {
           const featured = section.products[0];
           const others = section.products.slice(1, 5);
@@ -3965,7 +4169,7 @@ function CategoryProductsSection({
                   </div>
                   {showViewAll && (
                     <a 
-                      href={`/products?category=${section.category.slug ?? section.category._id}`}
+                      href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
                       className="text-sm font-medium flex items-center gap-1.5 px-4 py-2 rounded-full transition-all hover:shadow-md"
                       style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
                     >
@@ -3984,84 +4188,91 @@ function CategoryProductsSection({
                     {/* Mobile: 2 columns grid */}
                     <div className="grid grid-cols-2 gap-3 md:hidden">
                       {section.products.slice(0, 4).map((product) => (
-                        <ProductCard key={product._id} product={product} />
+                        <ProductCard key={product._id} product={product} categoryId={section.category._id} />
                       ))}
                     </div>
                     
                     {/* Desktop: Bento grid */}
                     <div className="hidden md:grid grid-cols-4 gap-4 auto-rows-[180px]">
                       {/* Featured - 2x2 */}
-                      {featured && (
-                        <a 
-                          href={`/products/${featured.slug ?? featured._id}`}
-                          className="col-span-2 row-span-2 group cursor-pointer relative rounded-2xl overflow-hidden"
+                        <ProductImageWithOverlay
+                          frameConfig={frameConfig}
+                          watermarkConfig={watermarkConfig}
+                          className={cn('col-span-2 row-span-2 group cursor-pointer relative overflow-hidden', cardRadiusClassName)}
                           style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
                         >
-                          {featured.image ? (
-                            <SiteImage 
-                              src={featured.image} 
-                              alt={featured.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package size={48} style={{ color: colors.emptyStateIcon }} />
+                          <a 
+                            href={resolveProductHrefByCategory({ categoryId: section.category._id, product: featured })}
+                            className="absolute inset-0 block w-full h-full"
+                          >
+                            {featured.image ? (
+                              <SiteImage 
+                                src={featured.image} 
+                                alt={featured.name} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package size={48} style={{ color: colors.emptyStateIcon }} />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-30" />
+                            <div className="absolute bottom-0 left-0 right-0 p-5 text-white z-30">
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2"
+                                style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}
+                              >
+                                Nổi bật
+                              </span>
+                              <h3 className="font-bold text-lg line-clamp-2 mb-1">{featured.name}</h3>
+                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                                {(() => {
+                                  const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
+                                  if (priceDisplay.comparePrice) {
+                                    return (
+                                      <>
+                                        <span className="font-bold text-lg">{priceDisplay.label}</span>
+                                        <span className="text-xs text-white/60 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
+                                      </>
+                                    );
+                                  }
+                                  return <span className="font-bold text-lg">{priceDisplay.label}</span>;
+                                })()}
+                              </div>
                             </div>
-                          )}
-                          <ProductImageFrameOverlay frame={frame} />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2"
-                              style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}
-                            >
-                              Nổi bật
-                            </span>
-                            <h3 className="font-bold text-lg line-clamp-2 mb-1">{featured.name}</h3>
-                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-                              {(() => {
-                                const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
-                                if (priceDisplay.comparePrice) {
-                                  return (
-                                    <>
-                                      <span className="font-bold text-lg">{priceDisplay.label}</span>
-                                      <span className="text-xs text-white/60 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                                    </>
-                                  );
-                                }
-                                return <span className="font-bold text-lg">{priceDisplay.label}</span>;
-                              })()}
-                            </div>
-                          </div>
-                        </a>
-                      )}
+                          </a>
+                        </ProductImageWithOverlay>
                       
-                      {/* Other products */}
                       {others.map((product) => (
-                        <a 
+                        <ProductImageWithOverlay
                           key={product._id}
-                          href={`/products/${product.slug ?? product._id}`}
-                          className="group cursor-pointer relative rounded-xl overflow-hidden"
+                          frameConfig={frameConfig}
+                          watermarkConfig={watermarkConfig}
+                          className={cn('group cursor-pointer relative overflow-hidden', imageRadiusClassName)}
                           style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
                         >
-                          {product.image ? (
-                            <SiteImage 
-                              src={product.image} 
-                              alt={product.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package size={24} style={{ color: colors.emptyStateIcon }} />
+                          <a 
+                            href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
+                            className="absolute inset-0 block w-full h-full"
+                          >
+                            {product.image ? (
+                              <SiteImage 
+                                src={product.image} 
+                                alt={product.name} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package size={24} style={{ color: colors.emptyStateIcon }} />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-30" />
+                            <div className="absolute bottom-0 left-0 right-0 p-3 text-white transform translate-y-full group-hover:translate-y-0 transition-transform z-30">
+                              <h4 className="font-medium text-sm line-clamp-1">{product.name}</h4>
+                              <span className="font-bold text-sm">{getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}</span>
                             </div>
-                          )}
-                          <ProductImageFrameOverlay frame={frame} />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <div className="absolute bottom-0 left-0 right-0 p-3 text-white transform translate-y-full group-hover:translate-y-0 transition-transform">
-                            <h4 className="font-medium text-sm line-clamp-1">{product.name}</h4>
-                            <span className="font-bold text-sm">{getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}</span>
-                          </div>
-                        </a>
+                          </a>
+                        </ProductImageWithOverlay>
                       ))}
                     </div>
                   </>
@@ -4077,7 +4288,7 @@ function CategoryProductsSection({
   // Style 5: Magazine - Editorial Grid với Featured Item + Grid nhỏ
   if (style === 'magazine') {
     return (
-      <div className="py-8 md:py-12 space-y-12 md:space-y-16">
+      <div className={cn('space-y-12 md:space-y-16', sectionSpacingClassName)}>
         {resolvedSections.map((section, sectionIdx) => {
           const featured = section.products[0];
           const gridItems = section.products.slice(1, 5);
@@ -4098,11 +4309,11 @@ function CategoryProductsSection({
                   </div>
                   {showViewAll && (
                     <a 
-                      href={`/products?category=${section.category.slug ?? section.category._id}`}
+                      href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
                       className="font-semibold flex items-center gap-2 transition-all hover:gap-3"
                       style={{ color: colors.buttonText }}
                     >
-                      Xem tất cả
+                      Xem danh mục
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                       </svg>
@@ -4117,7 +4328,7 @@ function CategoryProductsSection({
                     {/* Mobile: 2-col grid */}
                     <div className="grid grid-cols-2 gap-3 md:hidden">
                       {section.products.slice(0, 4).map((product) => (
-                        <ProductCard key={product._id} product={product} />
+                        <ProductCard key={product._id} product={product} categoryId={section.category._id} />
                       ))}
                     </div>
                     
@@ -4125,50 +4336,53 @@ function CategoryProductsSection({
                     <div className="hidden md:grid grid-cols-2 gap-6">
                       {/* Featured Item - Large */}
                       {featured && (
-                        <a 
-                          href={`/products/${featured.slug ?? featured._id}`}
-                          className="group cursor-pointer relative rounded-2xl overflow-hidden"
+                        <ProductImageWithOverlay
+                          frameConfig={frameConfig}
+                          watermarkConfig={watermarkConfig}
+                          className={cn('group cursor-pointer relative overflow-hidden', cardRadiusClassName)}
                           style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
                         >
-                          {featured.image ? (
-                            <SiteImage 
-                              src={featured.image} 
-                              alt={featured.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package size={48} style={{ color: colors.emptyStateIcon }} />
+                          <a 
+                            href={resolveProductHrefByCategory({ categoryId: section.category._id, product: featured })}
+                            className="absolute inset-0 block w-full h-full"
+                          >
+                            {featured.image ? (
+                              <SiteImage 
+                                src={featured.image} 
+                                alt={featured.name} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package size={48} style={{ color: colors.emptyStateIcon }} />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent z-30" />
+                            <div className="absolute bottom-0 left-0 right-0 p-6 text-white z-30">
+                              <span
+                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3"
+                                style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}
+                              >
+                                Nổi bật
+                              </span>
+                              <h3 className="font-bold text-xl md:text-2xl line-clamp-2 mb-2">{featured.name}</h3>
+                              <div className="flex items-baseline gap-3">
+                                {(() => {
+                                  const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
+                                  if (priceDisplay.comparePrice) {
+                                    return (
+                                      <>
+                                        <span className="font-bold text-2xl">{priceDisplay.label}</span>
+                                        <span className="text-sm text-white/60 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
+                                      </>
+                                    );
+                                  }
+                                  return <span className="font-bold text-2xl">{priceDisplay.label}</span>;
+                                })()}
+                              </div>
                             </div>
-                          )}
-                          <ProductImageFrameOverlay frame={frame} />
-                          {/* Gradient overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                          {/* Content */}
-                          <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                            <span
-                              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3"
-                              style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}
-                            >
-                              Nổi bật
-                            </span>
-                            <h3 className="font-bold text-xl md:text-2xl line-clamp-2 mb-2">{featured.name}</h3>
-                            <div className="flex items-baseline gap-3">
-                              {(() => {
-                                const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
-                                if (priceDisplay.comparePrice) {
-                                  return (
-                                    <>
-                                      <span className="font-bold text-2xl">{priceDisplay.label}</span>
-                                      <span className="text-sm text-white/60 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                                    </>
-                                  );
-                                }
-                                return <span className="font-bold text-2xl">{priceDisplay.label}</span>;
-                              })()}
-                            </div>
-                          </div>
-                        </a>
+                          </a>
+                        </ProductImageWithOverlay>
                       )}
                       
                       {/* Grid 2x2 */}
@@ -4176,11 +4390,13 @@ function CategoryProductsSection({
                         {gridItems.map((product) => (
                           <a 
                             key={product._id}
-                            href={`/products/${product.slug ?? product._id}`}
+                            href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
                             className="group cursor-pointer"
                           >
-                            <div 
-                              className="rounded-xl overflow-hidden mb-3 relative"
+                            <ProductImageWithOverlay
+                              frameConfig={frameConfig}
+                              watermarkConfig={watermarkConfig}
+                              className={cn('overflow-hidden mb-3 relative', imageRadiusClassName)}
                               style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
                             >
                               {product.image ? (
@@ -4194,10 +4410,9 @@ function CategoryProductsSection({
                                 <Package size={24} style={{ color: colors.emptyStateIcon }} />
                                 </div>
                               )}
-                              <ProductImageFrameOverlay frame={frame} />
                               {/* Quick view overlay */}
                               <div 
-                                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
                               style={{ backgroundColor: colors.neutralSurface }}
                               >
                                 <span 
@@ -4207,7 +4422,7 @@ function CategoryProductsSection({
                                   Xem nhanh
                                 </span>
                               </div>
-                            </div>
+                            </ProductImageWithOverlay>
                           <h4 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]" style={{ color: colors.bodyText }}>{product.name}</h4>
                             <div className="flex items-baseline gap-2 mt-1">
                               {(() => {
@@ -4243,13 +4458,148 @@ function CategoryProductsSection({
     );
   }
 
+  if (style === 'wine-grid') {
+    return (
+      <div className={cn('w-full bg-white px-2', sectionSpacingClassName)}>
+        <div className="mx-auto flex w-full max-w-[1152px] flex-col gap-6">
+          {resolvedSections.map((section, idx) => {
+            return (
+            <section
+              key={idx}
+              className={cn('border bg-white', cardRadiusClassName)}
+              style={{ borderColor: colors.cardBorder }}
+            >
+              <div
+                className={cn(
+                  'flex flex-col gap-3 px-3 py-4 md:px-5 md:py-5 lg:px-6 lg:py-6',
+                  'sm:flex-row sm:items-end sm:justify-between'
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <h3 className="break-words text-base font-bold uppercase leading-6 tracking-[0.1em] md:text-xl md:leading-7 md:tracking-[0.14em] lg:text-2xl lg:leading-8 lg:tracking-[0.18em]" style={{ color: colors.heading }}>
+                    {section.category.name}
+                  </h3>
+                </div>
+                {showViewAll && (
+                  <a
+                    href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
+                    aria-label="Xem thêm - Xem danh mục"
+                    className={cn(
+                      'group flex h-9 shrink-0 items-center justify-center self-start rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.12em] transition-colors hover:bg-[var(--wine-button-hover-bg)] hover:text-[var(--wine-button-hover-text)] sm:self-auto md:h-10 md:px-4 md:text-xs md:tracking-[0.16em]',
+                      'lg:ml-4 lg:px-5'
+                    )}
+                    style={{
+                      '--wine-button-hover-bg': colors.sectionAccent,
+                      '--wine-button-hover-text': colors.featuredBadgeText,
+                      backgroundColor: colors.buttonBackground,
+                      borderColor: colors.sectionAccent,
+                      color: colors.sectionAccent,
+                    } as React.CSSProperties}
+                  >
+                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      Xem thêm
+                      <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                    </span>
+                  </a>
+                )}
+              </div>
+
+              <div className="px-3 pb-4 md:px-5 md:pb-5 lg:px-6 lg:pb-6">
+                {section.products.length === 0 ? (
+                  <EmptyProductsState message="Chưa có sản phẩm trong danh mục này" />
+                ) : (
+                  <div className={cn(
+                    'grid gap-2 md:gap-3',
+                    getGridCols()
+                  )}>
+                    {section.products.map((product) => {
+                      const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+                      const discount = getProductDiscount(product);
+
+                      return (
+                        <article
+                          key={product._id}
+                          className={cn('flex h-full flex-col overflow-hidden border shadow-sm transition-all duration-300', cardRadiusClassName)}
+                          style={{ backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }}
+                        >
+                          <a
+                            href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
+                            className="block"
+                          >
+                            <div className="relative aspect-square overflow-hidden border-b" style={{ backgroundColor: colors.imageBackground, borderColor: colors.cardBorder }}>
+                              {discount !== null && (
+                                <span className="absolute left-0 top-3 z-10 rounded-r-lg px-2.5 py-0.5 text-xs font-bold leading-4 shadow-sm" style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}>
+                                  -{discount}%
+                                </span>
+                              )}
+                              <ProductImageWithOverlay
+                                frameConfig={frameConfig}
+                                watermarkConfig={watermarkConfig}
+                                className="w-full h-full relative"
+                              >
+                                {product.image ? (
+                                  <SiteImage
+                                    src={product.image}
+                                    alt={product.name}
+                                    className="absolute inset-0 h-full w-full object-contain p-1 transition-opacity duration-300"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center">
+                                    <Package size={28} style={{ color: colors.emptyStateIcon }} />
+                                  </div>
+                                )}
+                              </ProductImageWithOverlay>
+                            </div>
+                          </a>
+
+                          <div className="flex min-w-0 flex-1 flex-col p-2.5 md:p-3">
+                            <a href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}>
+                              <h3 className="mb-1.5 line-clamp-2 break-words text-[13px] font-bold leading-5 transition-colors md:mb-2 md:text-sm md:leading-5 lg:text-base lg:leading-6" style={{ color: colors.bodyText }}>
+                                {product.name || 'Tên sản phẩm'}
+                              </h3>
+                            </a>
+                            <div className="mb-2 flex flex-col gap-1" />
+                            <div className="mt-auto flex min-w-0 flex-row items-end justify-between gap-1.5 border-t pt-2" style={{ borderColor: colors.cardBorder }}>
+                              <div className="min-w-0 flex flex-col">
+                                {priceDisplay.comparePrice && (
+                                  <span className="max-w-full truncate text-xs font-medium leading-4 line-through" style={{ color: colors.mutedText }}>
+                                    {formatComparePrice(priceDisplay.comparePrice)}
+                                  </span>
+                                )}
+                                <span className="max-w-full truncate whitespace-nowrap text-[12px] font-bold leading-4 md:text-[13px] md:leading-5 lg:text-sm" style={{ color: colors.bodyText }}>
+                                  {priceDisplay.label}
+                                </span>
+                              </div>
+                              <a
+                                href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
+                                className="inline-flex h-6 min-w-9 shrink-0 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-medium leading-none transition-colors md:min-w-10 md:px-2.5 md:text-[11px]"
+                                style={{ backgroundColor: colors.buttonSolidBackground, color: colors.buttonSolidText }}
+                              >
+                                Xem
+                              </a>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // Style 6: Showcase - Gradient overlay với hover effects lung linh
   return (
-    <div className="py-8 md:py-12 space-y-10 md:space-y-16">
+    <div className={cn('space-y-10 md:space-y-16', sectionSpacingClassName)}>
       {resolvedSections.map((section, idx) => (
         <section key={idx}>
           <div className="max-w-7xl mx-auto px-4">
-            {/* Header với underline effect */}
+            {/* Header */}
             <div className="flex items-end justify-between mb-8">
               <div>
                 <span 
@@ -4266,11 +4616,11 @@ function CategoryProductsSection({
               </div>
               {showViewAll && (
                 <a 
-                  href={`/products?category=${section.category.slug ?? section.category._id}`}
+                  href={buildCategoryPath({ categorySlug: section.category.slug ?? section.category._id, mode: routeMode, moduleKey: 'products' })}
                   className="group flex items-center gap-2 text-sm font-medium transition-colors"
                       style={{ color: colors.buttonText }}
                 >
-                  Xem tất cả 
+                  Xem danh mục 
                   <span 
                     className="w-8 h-8 rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform"
                         style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}` }}
@@ -4286,18 +4636,23 @@ function CategoryProductsSection({
             {section.products.length === 0 ? (
               <EmptyProductsState message="Chưa có sản phẩm" />
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+              <div className={cn('grid gap-5', getGridCols())}>
                 {section.products.map((product) => (
                   <a 
                     key={product._id}
-                    href={`/products/${product.slug ?? product._id}`}
+                    href={resolveProductHrefByCategory({ categoryId: section.category._id, product })}
                     className="group cursor-pointer block"
                   >
                     {/* Image Container với effects */}
-                    <div className="relative rounded-2xl overflow-hidden mb-3" style={imageAspectRatioStyle}>
+                    <ProductImageWithOverlay
+                      frameConfig={frameConfig}
+                      watermarkConfig={watermarkConfig}
+                      className={cn('relative overflow-hidden mb-3', cardRadiusClassName)}
+                      style={imageAspectRatioStyle}
+                    >
                       {/* Background gradient on hover */}
                       <div 
-                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30"
                         style={{ background: `linear-gradient(135deg, ${colors.neutralBorder} 0%, transparent 50%, ${colors.neutralBackground} 100%)` }}
                       />
                       
@@ -4312,7 +4667,6 @@ function CategoryProductsSection({
                           <Package size={32} style={{ color: colors.emptyStateIcon }} />
                         </div>
                       )}
-                      <ProductImageFrameOverlay frame={frame} />
                       
                       {/* Gradient overlay bottom */}
                       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20" />
@@ -4337,7 +4691,7 @@ function CategoryProductsSection({
                           </div>
                         );
                       })()}
-                    </div>
+                    </ProductImageWithOverlay>
                     
                     {/* Product info */}
                     <div className="space-y-1">
@@ -4394,40 +4748,60 @@ function FeaturesSection({ config, brandColor, secondary, mode, title }: { confi
           icon: typeof source.icon === 'string' && source.icon.trim().length > 0 ? source.icon : 'Zap',
           title: typeof source.title === 'string' ? source.title : '',
           description: typeof source.description === 'string' ? source.description : '',
+          ...(typeof source.image === 'string' ? { image: source.image } : {}),
         };
       })
-      .filter((item): item is { id: number; icon: string; title: string; description: string } => item !== null)
+      .filter((item): item is { id: number; icon: string; title: string; description: string; image?: string } => item !== null)
     : [];
 
   const style = (() => {
     const value = config.style;
-    if (value === 'iconGrid' || value === 'alternating' || value === 'compact' || value === 'cards' || value === 'carousel' || value === 'timeline') {
+    if (value === 'iconGrid' || value === 'alternating' || value === 'compact' || value === 'cards' || value === 'carousel' || value === 'timeline' || value === 'carousel6') {
       return value;
     }
-    return 'iconGrid';
+    return 'carousel6';
   })();
+  const showIcons = config.showIcons !== false;
+  const headerConfig = extractSectionHeaderConfig(config);
 
   return (
     <FeaturesSectionShared
       context="site"
       items={items}
       style={style}
+      showIcons={showIcons}
       title={title}
       brandColor={brandColor}
       secondary={secondary}
       mode={mode}
+      hideHeader={headerConfig.hideHeader}
+      showTitle={headerConfig.showTitle}
+      subtitle={headerConfig.subtitle}
+      showSubtitle={headerConfig.showSubtitle}
+      headerAlign={headerConfig.headerAlign}
+      titleColorPrimary={headerConfig.titleColorPrimary}
+      subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+      uppercaseText={headerConfig.uppercaseText}
+      showBadge={headerConfig.showBadge}
+      badgeText={headerConfig.badgeText}
+      spacing={headerConfig.spacing}
+      desktopColumns={config.desktopColumns === 4 ? 4 : 3}
+      cornerRadius={config.cornerRadius === 'none' || config.cornerRadius === 'sm' || config.cornerRadius === 'lg' ? config.cornerRadius : 'lg'}
     />
   );
 }
 
 // ============ PROCESS SECTION ============
-// 6 Professional Styles: Horizontal, Stepper, Cards, Accordion, Minimal, Grid
+// 7 Professional Styles: Horizontal, Stepper, Cards, Accordion, Minimal, Grid, Alternating
 function ProcessSection({ config, brandColor, secondary, mode, title }: { config: Record<string, unknown>; brandColor: string;
   secondary: string; mode: ProcessBrandMode; title: string }) {
   const steps = normalizeProcessRenderSteps(config.steps);
   if (steps.length === 0) {return null;}
 
   const style = normalizeProcessStyle(config.style);
+  const normalizedConfig = normalizeProcessConfig(config);
+  const rawDesktopCols = config.desktopColumns;
+  const desktopColumns: 3 | 4 = rawDesktopCols === 3 ? 3 : 4;
 
   return (
     <ProcessSectionShared
@@ -4438,6 +4812,19 @@ function ProcessSection({ config, brandColor, secondary, mode, title }: { config
       secondary={secondary}
       mode={mode}
       context="site"
+      hideHeader={normalizedConfig.hideHeader}
+      showTitle={normalizedConfig.showTitle}
+      showSubtitle={normalizedConfig.showSubtitle}
+      subtitle={normalizedConfig.subtitle}
+      headerAlign={normalizedConfig.headerAlign}
+      titleColorPrimary={normalizedConfig.titleColorPrimary}
+      subtitleAboveTitle={normalizedConfig.subtitleAboveTitle}
+      uppercaseText={normalizedConfig.uppercaseText}
+      showBadge={normalizedConfig.showBadge}
+      badgeText={normalizedConfig.badgeText}
+      desktopColumns={desktopColumns}
+      spacing={normalizedConfig.spacing}
+      cornerRadius={normalizedConfig.cornerRadius}
     />
   );
 }
@@ -4460,6 +4847,8 @@ function ClientsSection({
   if (items.length === 0) {return null;}
 
   const style = normalizeClientsStyleSafe(config.style);
+  const spacing = normalizeSectionSpacing(config.spacing);
+  const cornerRadius = normalizeClientsCornerRadius(config.cornerRadius, config.noBorderRadius);
   const tokens = getClientsColorTokens({
     primary: brandColor,
     secondary,
@@ -4473,8 +4862,20 @@ function ClientsSection({
       style={style}
       items={items}
       tokens={tokens}
-      carouselId={useSafeId('clients-carousel')}
       device="desktop"
+      hideHeader={config.hideHeader as boolean | undefined}
+      showTitle={config.showTitle as boolean | undefined}
+      subtitle={config.subtitle as string | undefined}
+      showSubtitle={config.showSubtitle as boolean | undefined}
+      headerAlign={config.headerAlign as ClientsHeaderAlign | undefined}
+      titleColorPrimary={config.titleColorPrimary as boolean | undefined}
+      subtitleAboveTitle={config.subtitleAboveTitle as boolean | undefined}
+      uppercaseText={config.uppercaseText as boolean | undefined}
+      showBadge={config.showBadge as boolean | undefined}
+      badgeText={config.badgeText as string | undefined}
+      spacing={spacing}
+      cornerRadius={cornerRadius}
+      brandColor={brandColor}
     />
   );
 }
@@ -4955,7 +5356,13 @@ function FooterSection({
   const description = (config.description as string) || 'Đối tác tin cậy của bạn trong mọi giải pháp công nghệ.';
   const columns = (config.columns as FooterColumn[]) || [];
   const socialLinks = (config.socialLinks as SocialLinkItem[]) || [];
-  const copyright = (config.copyright as string) || '© 2024 VietAdmin. All rights reserved.';
+  const copyright = (config.copyright as string) || '';
+  const snapshotSite = config._snapshotSite as { site_name?: string } | undefined;
+  const siteName = snapshotSite?.site_name || 'VietAdmin';
+  const logoName = typeof config.logoName === 'string' ? config.logoName.trim() : '';
+  const logoAlt = logoName || siteName || 'Logo';
+  const logoInitial = (logoName || siteName || 'V').charAt(0);
+  const currentYear = new Date().getFullYear();
   const showSocialLinks = config.showSocialLinks !== false;
   const showBctLogo = config.showBctLogo === true;
   const bctLogoType = (config.bctLogoType as 'thong-bao' | 'dang-ky') ?? 'thong-bao';
@@ -4964,18 +5371,27 @@ function FooterSection({
     ? '/images/bct/logo-da-dang-ky-bct.webp'
     : '/images/bct/logo-da-thong-bao-bct.png';
   const colors: FooterLayoutColors = getFooterLayoutColors(style, brandColor, secondary, mode);
+  const logoSizeLevel = typeof config.logoSizeLevel === 'number' ? config.logoSizeLevel : 1;
+  const resolveLogoSize = (baseSize: number) => getFooterLogoSize(baseSize, logoSizeLevel);
+  const logoBackgroundStyle = typeof config.logoBackgroundStyle === 'string' ? config.logoBackgroundStyle as FooterLogoBackgroundStyle : 'none';
+  const cornerRadius = config.noBorderRadius === true ? 'none' : config.cornerRadius as FooterCornerRadius | undefined;
+  const maxWidthClass = getFooterMaxWidthClass(config.maxWidth as FooterConfig['maxWidth']);
+  const waveMaxWidthClass = maxWidthClass === 'max-w-6xl' || maxWidthClass === 'max-w-7xl' ? 'max-w-8xl' : maxWidthClass;
+  const sectionSpacingClassName = getFooterSectionSpacingClassName(config.spacing, config.noVerticalMargin);
+  const socialRadiusClassName = getFooterCornerRadiusClassName(cornerRadius, 'icon');
   const useOriginalSocialIconColors = config.useOriginalSocialIconColors !== false;
   const resolveSocialStyles = (platform: string, fallbackBg: string, fallbackText: string) => {
     if (!useOriginalSocialIconColors) {
-      return { bg: fallbackBg, color: fallbackText };
+      return { bg: fallbackBg, color: fallbackText, border: '' };
     }
-
     const original = SOCIAL_ORIGINAL_COLORS[platform];
     if (!original) {
-      return { bg: fallbackBg, color: fallbackText };
+      return { bg: fallbackBg, color: fallbackText, border: '' };
     }
-
-    return { bg: original.bg, color: original.icon };
+    const isIconDark = original.bg.toLowerCase() <= '#333333';
+    const isFooterDark = colors.bg.toLowerCase() <= '#444444';
+    const border = (isIconDark && isFooterDark) ? '1.5px solid rgba(255,255,255,0.25)' : '';
+    return { bg: original.bg, color: original.icon, border };
   };
 
   const renderBctLogo = (className = 'h-10') => {
@@ -4988,6 +5404,25 @@ function FooterSection({
       <a href={bctLogoLink} target="_blank" rel="noopener noreferrer">
         {image}
       </a>
+    );
+  };
+  const renderLogoMark = (baseSize: number, imageClassName = 'object-contain', fallbackColor = colors.textOnPrimary) => {
+    const size = resolveLogoSize(baseSize);
+    const content = logo
+      ? <SiteImage src={logo} alt={logoAlt} className={imageClassName} style={{ width: size, height: 'auto' }} mode="logo" />
+      : <div className={cn('flex items-center justify-center text-xs font-bold', getFooterCornerRadiusClassName(cornerRadius))} style={{ backgroundColor: colors.primary, color: fallbackColor, width: size, height: size }}>{logoInitial}</div>;
+
+    if (logoBackgroundStyle === 'none') {
+      return content;
+    }
+
+    return (
+      <span
+        className={getFooterLogoBackgroundClassName(logoBackgroundStyle, cornerRadius)}
+        style={getFooterLogoBackgroundStyle(logoBackgroundStyle, colors.primary)}
+      >
+        {content}
+      </span>
     );
   };
 
@@ -5006,7 +5441,7 @@ function FooterSection({
         return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>;
       }
       case 'youtube': {
-        return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="white"/></svg>;
+        return <LucideIcons.Youtube size={size} />;
       }
       case 'tiktok': {
         return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>;
@@ -5037,362 +5472,372 @@ function FooterSection({
     { links: [{ label: 'FAQ', url: '/faq' }, { label: 'Liên hệ', url: '/contact' }], title: 'Hỗ trợ' }
   ];
 
+  // Style 1: Classic — 4-Column Grid (Lofi Gym style)
   if (style === 'classic') {
     return (
-      <footer className="w-full py-6 md:py-8" style={{ backgroundColor: colors.bg, borderTop: `1px solid ${colors.border}` }}>
-        <div className="max-w-7xl mx-auto px-3 md:px-4">
-          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-12">
-            <div className="md:col-span-5 space-y-3 text-center md:text-left">
-              <div className="flex items-center gap-2 justify-center md:justify-start">
-                <div className="p-1.5 rounded-lg" style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}>
-                  {logo ? <SiteImage src={logo} alt="Logo" className="h-5 w-5 object-contain brightness-110" mode="logo" /> : <div className="h-5 w-5 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>V</div>}
+      <footer className="w-full" style={{ backgroundColor: colors.classicBg }}>
+        <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4', sectionSpacingClassName)}>
+          <div className="grid gap-6 md:gap-8 grid-cols-1 md:grid-cols-12">
+            <div className="md:col-span-4 space-y-3">
+              {renderLogoMark(28)}
+              {logoName && <span className="text-sm font-bold tracking-tight block" style={{ color: colors.heading }}>{logoName}</span>}
+              <p className="text-xs leading-relaxed opacity-80" style={{ color: colors.textMuted }}>{description}</p>
+            </div>
+            <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+              {getColumns().slice(0, 4).map((col, colIdx) => (
+                <div key={col.id || `col-${colIdx}`}>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider mb-3 pb-1" style={{ color: colors.heading, borderBottom: `2px solid ${colors.borderSoft}` }}>{col.title}</h3>
+                  <ul className="space-y-1.5">
+                    {col.links.map((link, lIdx) => (
+                      <li key={lIdx}><span className="text-xs" style={{ color: colors.link }}>{link.label}</span></li>
+                    ))}
+                  </ul>
                 </div>
-                <span className="text-base font-bold tracking-tight" style={{ color: colors.heading }}>VietAdmin</span>
-              </div>
-              <p className="text-xs leading-relaxed md:max-w-sm" style={{ color: colors.textMuted }}>{description}</p>
+              ))}
+            </div>
+            <div className="md:col-span-2 space-y-3">
+              <h3 className="font-bold text-[10px] uppercase tracking-wider pb-1" style={{ color: colors.heading, borderBottom: `2px solid ${colors.borderSoft}` }}>Kết nối</h3>
               {showSocialLinks && (
-                <div className="flex gap-2 justify-center md:justify-start">
-                    {getSocials().map((s, i) => {
-                      const socialStyles = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
-
-                      return (
-                        <a
-                          key={`${s.id ?? 'social'}-${i}`}
-                          href={s.url}
-                          className="h-9 w-9 flex items-center justify-center rounded-full transition-colors"
-                          style={{ backgroundColor: socialStyles.bg, color: socialStyles.color }}
-                        >
-                          {renderSocialIcon(s.platform, 22)}
-                        </a>
-                      );
-                    })}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getSocials().map((s, idx) => {
+                    const st = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
+                    return <span key={idx} className={cn('h-8 w-8 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 16)}</span>;
+                  })}
                 </div>
               )}
+              {renderBctLogo('h-12')}
             </div>
-            <div className="md:col-span-7 grid grid-cols-2 md:grid-cols-3 gap-5 text-center md:text-left">
-              {getColumns().slice(0, 3).map((col, i) => (
-                <div key={`${col.id ?? 'col'}-${i}`}>
-                  <h3 className="font-semibold text-xs tracking-wide mb-2" style={{ color: colors.heading }}>{col.title}</h3>
+          </div>
+        </div>
+        {config.showCopyright !== false && (
+          <div style={{ borderTop: `1px solid ${colors.borderSoft}` }}>
+            <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 py-3 flex items-center justify-center')}>
+              <p className="text-[10px] opacity-70" style={{ color: colors.textSubtle }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
+            </div>
+          </div>
+        )}
+      </footer>
+    );
+  }
+
+  // Style 2: Modern — Info-Rich (Sudes Nest inspired)
+  if (style === 'modern') {
+    const pc = colors.accent.replace('#', '%23');
+    const seigaihaUrl = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='28'%3E%3Cpath d='M56 26v2h-7.75c2.3-1.3 4.94-2 7.75-2zm-26 2a14 14 0 0 0-7.75-2h-4.5A14 14 0 0 0 10 28H0v-2c4.26 0 8.17 1.38 11.36 3.7A13.98 13.98 0 0 1 22 26c3.87 0 7.44 1.56 10 4.1a13.98 13.98 0 0 1 10.64-3.7A15.99 15.99 0 0 1 56 26zM56 20v2c-4.26 0-8.17 1.38-11.36 3.7A13.98 13.98 0 0 0 34 22c-3.87 0-7.44 1.56-10 4.1A13.98 13.98 0 0 0 13.36 22.4 15.99 15.99 0 0 0 0 20v2c4.26 0 8.17-1.38 11.36-3.7A13.98 13.98 0 0 1 22 14c3.87 0 7.44 1.56 10 4.1A13.98 13.98 0 0 1 42.64 14.4 15.99 15.99 0 0 1 56 14v2c-4.26 0-8.17 1.38-11.36 3.7A13.98 13.98 0 0 0 34 16c-3.87 0-7.44 1.56-10 4.1A13.98 13.98 0 0 0 13.36 16.4 15.99 15.99 0 0 0 0 14v2a14 14 0 0 1 11.36 3.7A13.98 13.98 0 0 0 22 8c3.87 0 7.44 1.56 10 4.1A13.98 13.98 0 0 0 42.64 8.4 15.99 15.99 0 0 0 56 8v2c-4.26 0-8.17 1.38-11.36 3.7A13.98 13.98 0 0 1 34 10c-3.87 0-7.44 1.56-10 4.1A13.98 13.98 0 0 1 13.36 10.4 15.99 15.99 0 0 1 0 8V6c4.26 0 8.17 1.38 11.36 3.7A13.98 13.98 0 0 0 22 2c3.87 0 7.44 1.56 10 4.1A13.98 13.98 0 0 0 42.64 2.4 15.99 15.99 0 0 0 56 2V0H0v2a14 14 0 0 1 11.36 3.7A13.98 13.98 0 0 0 22-4c3.87 0 7.44 1.56 10 4.1A13.98 13.98 0 0 0 42.64-3.6 15.99 15.99 0 0 0 56-4' fill='none' stroke='${pc}' stroke-opacity='0.12' stroke-width='0.5'/%3E%3C/svg%3E")`;
+    return (
+      <footer className="w-full relative" style={{ backgroundColor: colors.bg }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: seigaihaUrl, backgroundSize: '56px 28px' }} />
+        <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 relative', sectionSpacingClassName)}>
+          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-12">
+            <div className="md:col-span-4 space-y-3">
+              <div className="flex items-center gap-2">
+                {renderLogoMark(28)}
+                {logoName && <span className="text-sm font-bold tracking-tight" style={{ color: colors.heading }}>{logoName}</span>}
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{description}</p>
+              {showSocialLinks && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {getSocials().map((s, idx) => {
+                    const st = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
+                    return <span key={idx} className={cn('h-8 w-8 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 16)}</span>;
+                  })}
+                </div>
+              )}
+              {renderBctLogo('h-12')}
+            </div>
+            <div className="md:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+              {getColumns().slice(0, 4).map((col, colIdx) => (
+                <div key={col.id || `col-${colIdx}`}>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider mb-2 pb-1 flex items-center gap-1" style={{ color: colors.heading, borderBottom: `1.5px solid ${colors.accent}` }}>
+                    <span style={{ color: colors.accent, fontSize: '8px' }}>◆</span> {col.title}
+                  </h3>
                   <ul className="space-y-1.5">
-                    {col.links.map((link, j) => (
-                      <li key={j}>
-                        <a
-                          href={link.url}
-                          className="text-xs transition-colors"
-                          style={{ color: colors.textMuted }}
-                          onMouseEnter={(e) => { e.currentTarget.style.color = colors.linkHover; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-                        >
-                          {link.label}
-                        </a>
-                      </li>
+                    {col.links.map((link, lIdx) => (
+                      <li key={lIdx}><span className="text-xs" style={{ color: colors.link }}>{link.label}</span></li>
                     ))}
                   </ul>
                 </div>
               ))}
             </div>
           </div>
-          <div className="mt-6 pt-3 flex flex-col md:flex-row items-center justify-between gap-2 text-center md:text-left" style={{ borderTop: `1px solid ${colors.borderSoft}` }}>
-            <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright}</p>
-            {renderBctLogo('h-14')}
-          </div>
         </div>
+        {config.showCopyright !== false && (
+          <div className="w-full relative" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 py-3 flex items-center justify-center')}>
+              <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
+            </div>
+          </div>
+        )}
       </footer>
     );
   }
 
-  if (style === 'modern') {
-    return (
-      <footer className="w-full py-6 md:py-8" style={{ backgroundColor: colors.bg }}>
-        <div className="max-w-5xl mx-auto px-3 md:px-4 flex flex-col items-center text-center space-y-3 md:space-y-4">
-          <div className="flex flex-col items-center gap-2">
-            <div className="h-10 w-10 rounded-xl flex items-center justify-center mb-1 border" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-              {logo ? <SiteImage src={logo} alt="Logo" className="h-6 w-6 object-contain" mode="logo" /> : <div className="h-6 w-6 rounded-lg flex items-center justify-center font-bold text-sm" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>V</div>}
-            </div>
-            <h2 className="text-base font-bold tracking-tight" style={{ color: colors.heading }}>VietAdmin</h2>
-            <p className="text-xs leading-relaxed max-w-xs md:max-w-md" style={{ color: colors.textMuted }}>{description}</p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-x-3 md:gap-x-4 gap-y-1.5">
-            {getColumns().flatMap(col => col.links).slice(0, 8).map((link, i) => (
-              <a
-                key={i}
-                href={link.url}
-                className="text-xs font-medium underline-offset-4 transition-colors"
-                style={{ color: colors.textMuted, textDecorationColor: colors.primary }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = colors.linkHover; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-              >
-                {link.label}
-              </a>
-            ))}
-          </div>
-          <div className="w-12 h-px" style={{ backgroundColor: colors.dividerGradient }}></div>
-          {showSocialLinks && (
-            <div className="flex gap-3">
-              {getSocials().map((s, i) => {
-                const socialStyles = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
-
-                return (
-                  <a
-                    key={`${s.id ?? 'social'}-${i}`}
-                    href={s.url}
-                    className="h-9 w-9 flex items-center justify-center rounded-full transition-colors"
-                    style={{ backgroundColor: socialStyles.bg, color: socialStyles.color }}
-                  >
-                    {renderSocialIcon(s.platform, 22)}
-                  </a>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex flex-col items-center gap-2">
-            {renderBctLogo('h-14')}
-            <p className="text-[10px] font-medium" style={{ color: colors.textSubtle }}>{copyright}</p>
-          </div>
-        </div>
-      </footer>
-    );
-  }
-
+  // Style 3: Corporate — Split Horizontal Zones
   if (style === 'corporate') {
     return (
-      <footer className="w-full py-6 md:py-8" style={{ backgroundColor: colors.bg, borderTop: `1px solid ${colors.border}` }}>
-        <div className="max-w-7xl mx-auto px-3 md:px-4">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-3 pb-4" style={{ borderBottom: `1px solid ${colors.border}` }}>
-            <div className="flex items-center gap-2">
-              {logo ? <SiteImage src={logo} alt="Logo" className="h-5 w-5 object-contain" mode="logo" /> : <div className="h-5 w-5 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>V</div>}
-              <span className="text-sm font-bold" style={{ color: colors.heading }}>VietAdmin</span>
-            </div>
-            {showSocialLinks && (
-              <div className="flex gap-2">
-                {getSocials().map((s, i) => {
-                  const socialStyles = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
-
-                  return (
-                    <a
-                      key={`${s.id ?? 'social'}-${i}`}
-                      href={s.url}
-                      className="h-8 w-8 flex items-center justify-center rounded-full transition-colors"
-                      style={{ backgroundColor: socialStyles.bg, color: socialStyles.color }}
-                    >
-                      {renderSocialIcon(s.platform, 18)}
-                    </a>
-                  );
-                })}
+      <footer className={cn('w-full', sectionSpacingClassName)} style={{ backgroundColor: colors.bg, borderTop: `1px solid ${colors.border}` }}>
+        <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4')}>
+          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-12 pb-6" style={{ borderBottom: `1px solid ${colors.border}` }}>
+            <div className="md:col-span-5 space-y-2">
+              <div className="flex items-center gap-2">
+                {renderLogoMark(20)}
+                {logoName && <span className="text-sm font-bold" style={{ color: colors.heading }}>{logoName}</span>}
               </div>
-            )}
-          </div>
-          <div className="py-5 grid grid-cols-1 md:grid-cols-4 gap-5 text-center md:text-left">
-            <div className="md:col-span-2 md:pr-4">
-              <h4 className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.heading }}>Về Công Ty</h4>
               <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{description}</p>
             </div>
-            {getColumns().slice(0, 2).map((col, i) => (
-              <div key={`${col.id ?? 'col'}-${i}`}>
+            <div className="md:col-span-4">{renderBctLogo('h-10')}</div>
+            <div className="md:col-span-3">
+              {showSocialLinks && (
+                <>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider mb-2" style={{ color: colors.heading }}>Theo dõi</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {getSocials().map((s, idx) => {
+                      const st = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
+                      return <span key={idx} className={cn('h-8 w-8 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 16)}</span>;
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="py-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {getColumns().slice(0, 4).map((col, colIdx) => (
+              <div key={col.id || `col-${colIdx}`}>
                 <h4 className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.heading }}>{col.title}</h4>
                 <ul className="space-y-1">
-                  {col.links.map((link, j) => (
-                    <li key={j}>
-                      <a
-                        href={link.url}
-                        className="text-xs transition-colors"
-                        style={{ color: colors.textMuted }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = colors.linkHover; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-                      >
-                        {link.label}
-                      </a>
-                    </li>
+                  {col.links.map((link, lIdx) => (
+                    <li key={lIdx}><span className="text-xs" style={{ color: colors.link }}>{link.label}</span></li>
                   ))}
                 </ul>
               </div>
             ))}
           </div>
-          <div className="pt-3 flex flex-col md:flex-row items-center justify-between gap-2 text-center md:text-left">
-            <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright}</p>
-            {renderBctLogo('h-10')}
-          </div>
-        </div>
-      </footer>
-    );
-  }
-
-  if (style === 'minimal') {
-    return (
-      <footer className="w-full py-3 md:py-4" style={{ backgroundColor: colors.bg, borderTop: `1px solid ${colors.border}` }}>
-        <div className="max-w-7xl mx-auto px-3 md:px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="flex flex-col md:flex-row items-center gap-2">
-              {logo ? <SiteImage src={logo} alt="Logo" className="h-4 w-4" mode="logo" /> : <div className="h-4 w-4 rounded flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>V</div>}
-              <span className="text-[10px] font-medium" style={{ color: colors.textSubtle }}>{copyright}</span>
+          {config.showCopyright !== false && (
+            <div className="pt-3 flex items-center justify-center" style={{ borderTop: `1px solid ${colors.borderSoft}` }}>
+              <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
             </div>
-            {showSocialLinks && (
-              <div className="flex gap-2">
-                {getSocials().map((s, i) => {
-                  const socialStyles = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
-
-                  return (
-                    <a
-                      key={`${s.id ?? 'social'}-${i}`}
-                      href={s.url}
-                      className="h-8 w-8 flex items-center justify-center rounded-full transition-colors"
-                      style={{ backgroundColor: socialStyles.bg, color: socialStyles.color }}
-                    >
-                      {renderSocialIcon(s.platform, 18)}
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-            {renderBctLogo('h-10')}
-          </div>
+          )}
         </div>
       </footer>
     );
   }
 
+  // Style 4: Minimal — Compact Bar (Sudes Craft inspired)
+  if (style === 'minimal') {
+    const stripeColor = `${colors.accent}10`;
+    const stripeBg = `repeating-linear-gradient(45deg, transparent, transparent 10px, ${stripeColor} 10px, ${stripeColor} 11px)`;
+    return (
+      <footer className="w-full relative" style={{ backgroundColor: colors.bg }}>
+        <div className="absolute inset-0 pointer-events-none opacity-40" style={{ backgroundImage: stripeBg }} />
+        <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 relative', sectionSpacingClassName)}>
+          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-12">
+            <div className="md:col-span-4 space-y-3">
+              <div className="flex items-center gap-2">
+                {renderLogoMark(28)}
+                {logoName && <span className="text-sm font-bold tracking-tight" style={{ color: colors.heading }}>{logoName}</span>}
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{description}</p>
+              {showSocialLinks && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {getSocials().map((s, idx) => {
+                    const st = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
+                    return <span key={idx} className={cn('h-7 w-7 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 14)}</span>;
+                  })}
+                </div>
+              )}
+              {renderBctLogo('h-10')}
+            </div>
+            <div className="md:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+              {getColumns().slice(0, 4).map((col, colIdx) => (
+                <div key={col.id || `col-${colIdx}`}>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider mb-2" style={{ color: colors.heading }}>{col.title}</h3>
+                  <ul className="space-y-1.5">
+                    {col.links.map((link, lIdx) => (
+                      <li key={lIdx}><span className="text-xs" style={{ color: colors.link }}>{link.label}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {config.showCopyright !== false && (
+          <div className="w-full relative" style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}>
+            <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 py-3 flex items-center justify-center')}>
+              <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
+            </div>
+          </div>
+        )}
+      </footer>
+    );
+  }
+
+  // Style 5: Centered — Magazine 4-Column (Bean Cargo inspired)
   if (style === 'centered') {
     return (
-      <footer className="w-full py-8 md:py-10" style={{ backgroundColor: colors.bg }}>
-        <div className="max-w-6xl mx-auto px-3 md:px-4 text-center">
-          <div className="flex flex-col items-center gap-3 mb-6">
-          <div className="h-12 w-12 rounded-2xl flex items-center justify-center border" style={{ backgroundColor: colors.centeredBrandBg, borderColor: colors.centeredBrandBorder }}>
-              {logo ? <SiteImage src={logo} alt="Logo" className="h-7 w-7 object-contain" mode="logo" /> : <div className="h-7 w-7 rounded-lg flex items-center justify-center font-bold" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>V</div>}
+      <footer className="w-full" style={{ backgroundColor: colors.magazineBg }}>
+        <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4', sectionSpacingClassName)}>
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-5">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                {renderLogoMark(28)}
+                {logoName && <span className="text-sm font-bold tracking-tight" style={{ color: colors.magazineHeading }}>{logoName}</span>}
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: colors.magazineTextMuted }}>{description}</p>
+              {showSocialLinks && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {getSocials().map((s, idx) => {
+                    const st = resolveSocialStyles(s.platform, colors.socialBg, colors.socialText);
+                    return <span key={idx} className={cn('h-7 w-7 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 14)}</span>;
+                  })}
+                </div>
+              )}
+              {renderBctLogo('h-10')}
             </div>
-            <h2 className="text-lg font-bold tracking-tight" style={{ color: colors.heading }}>VietAdmin</h2>
-            <p className="text-xs leading-relaxed max-w-xs md:max-w-md" style={{ color: colors.textMuted }}>{description}</p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-6">
-            {getColumns().slice(0, 4).map((col, i) => (
-              <div key={`${col.id ?? 'col'}-${i}`} className="text-center">
-                <h4 className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.heading }}>{col.title}</h4>
-                <ul className="space-y-1">
-                  {col.links.slice(0, 4).map((link, j) => (
-                    <li key={j}>
-                      <a
-                        href={link.url}
-                        className="text-xs transition-colors"
-                        style={{ color: colors.textMuted }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = colors.linkHover; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-                      >
-                        {link.label}
-                      </a>
-                    </li>
+            {getColumns().slice(0, 4).map((col, colIdx) => (
+              <div key={col.id || `col-${colIdx}`}>
+                <h3 className="font-bold text-[10px] tracking-wide mb-2" style={{ color: colors.magazineHeading }}>{col.title}</h3>
+                <ul className="space-y-1.5">
+                  {col.links.map((link, lIdx) => (
+                    <li key={lIdx}><span className="text-xs" style={{ color: colors.magazineLink }}>{link.label}</span></li>
                   ))}
                 </ul>
               </div>
             ))}
           </div>
-          <div className="w-16 h-px mx-auto mb-5" style={{ backgroundColor: colors.dividerGradient }}></div>
-          {showSocialLinks && (
-            <div className="flex justify-center gap-3 mb-4">
-              {getSocials().map((s, i) => {
-                const socialStyles = resolveSocialStyles(s.platform, colors.centeredSocialBg, colors.centeredSocialText);
-                const socialBorder = useOriginalSocialIconColors && SOCIAL_ORIGINAL_COLORS[s.platform]
-                  ? socialStyles.bg
-                  : colors.centeredSocialBorder;
-                const hoverStyles = useOriginalSocialIconColors && SOCIAL_ORIGINAL_COLORS[s.platform]
-                  ? { bg: socialStyles.bg, border: socialStyles.bg, color: socialStyles.color }
-                  : { bg: colors.centeredSocialHoverBg, border: colors.centeredSocialHoverBorder, color: colors.textOnAccent };
-
-                return (
-                  <a
-                    key={`${s.id ?? 'social'}-${i}`}
-                    href={s.url}
-                    className="h-14 w-14 flex items-center justify-center rounded-full transition-colors"
-                    style={{ backgroundColor: socialStyles.bg, border: `1px solid ${socialBorder}`, color: socialStyles.color }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = hoverStyles.bg;
-                      e.currentTarget.style.borderColor = hoverStyles.border;
-                      e.currentTarget.style.color = hoverStyles.color;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = socialStyles.bg;
-                      e.currentTarget.style.borderColor = socialBorder;
-                      e.currentTarget.style.color = socialStyles.color;
-                    }}
-                  >
-                    {renderSocialIcon(s.platform, 22)}
-                  </a>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex flex-col items-center gap-2">
-            {renderBctLogo('h-10')}
-            <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright}</p>
-          </div>
         </div>
+        {config.showCopyright !== false && (
+          <div className="w-full" style={{ backgroundColor: colors.primary }}>
+            <div className={cn(maxWidthClass, 'mx-auto px-3 md:px-4 py-3 flex items-center justify-center')}>
+              <p className="text-[10px] font-medium" style={{ color: colors.textOnPrimary }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
+            </div>
+          </div>
+        )}
       </footer>
     );
   }
 
+  // Style 6: Stacked — Wave Decorative (Euro Moto parallax wave, default)
   return (
-    <footer className="w-full py-6" style={{ backgroundColor: colors.bg, borderTop: `3px solid ${colors.stackedTopBorder}` }}>
-      <div className="max-w-4xl mx-auto px-4 md:px-6">
-        <div className="flex flex-col md:flex-row items-center md:items-start gap-3 mb-5 text-center md:text-left">
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: colors.primary, color: colors.textOnPrimary }}>
-            {logo ? <SiteImage src={logo} alt="Logo" className="h-6 w-6 object-contain brightness-110" mode="logo" /> : <span className="font-bold text-sm">V</span>}
-          </div>
-          <div className="md:flex-1">
-            <h3 className="text-sm font-bold mb-1" style={{ color: colors.heading }}>VietAdmin</h3>
-            <p className="text-xs leading-relaxed line-clamp-2" style={{ color: colors.textMuted }}>{description}</p>
-          </div>
-        </div>
-        <div className="mb-5 pb-4" style={{ borderBottom: `1px solid ${colors.borderSoft}` }}>
-          <div className="flex flex-wrap justify-center md:justify-start gap-x-3 md:gap-x-4 gap-y-2">
-            {getColumns().flatMap(col => col.links).slice(0, 10).map((link, i) => (
-              <a
-                key={i}
-                href={link.url}
-                className="text-xs font-medium transition-colors"
-                style={{ color: colors.textMuted }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = colors.linkHover; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = colors.textMuted; }}
-              >
-                {link.label}
-              </a>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          {showSocialLinks && (
-            <div className="flex gap-2">
-              {getSocials().map((s, i) => {
-                const socialStyles = resolveSocialStyles(s.platform, colors.stackedSocialBg, colors.stackedSocialText);
-                const hoverStyles = useOriginalSocialIconColors && SOCIAL_ORIGINAL_COLORS[s.platform]
-                  ? { bg: socialStyles.bg, color: socialStyles.color }
-                  : { bg: colors.stackedSocialHoverBg, color: colors.textOnAccent };
-
-                return (
-                  <a
-                    key={`${s.id ?? 'social'}-${i}`}
-                    href={s.url}
-                    className="h-10 w-10 flex items-center justify-center rounded-lg transition-colors"
-                    style={{ backgroundColor: socialStyles.bg, color: socialStyles.color }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = hoverStyles.bg;
-                      e.currentTarget.style.color = hoverStyles.color;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = socialStyles.bg;
-                      e.currentTarget.style.color = socialStyles.color;
-                    }}
-                  >
-                    {renderSocialIcon(s.platform, 22)}
-                  </a>
-                );
-              })}
+    <footer className="w-full relative overflow-x-clip" style={{ backgroundColor: 'transparent' }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes rendererWaveMove {
+          0% { transform: translate3d(-90px, 0, 0); }
+          100% { transform: translate3d(85px, 0, 0); }
+        }
+        .renderer-wave-parallax > use {
+          animation: rendererWaveMove 25s cubic-bezier(.55,.5,.45,.5) infinite;
+        }
+        .renderer-wave-parallax > use:nth-child(1) { animation-delay: -2s; animation-duration: 7s; opacity: 0.7; }
+        .renderer-wave-parallax > use:nth-child(2) { animation-delay: -3s; animation-duration: 10s; opacity: 0.5; }
+        .renderer-wave-parallax > use:nth-child(3) { animation-delay: -4s; animation-duration: 13s; opacity: 0.3; }
+        .renderer-wave-parallax > use:nth-child(4) { animation-delay: -5s; animation-duration: 20s; opacity: 1; }
+      `}} />
+      <div className="w-full relative" style={{ marginBottom: '-1px' }}>
+        <svg className="w-full block h-12 sm:h-16 md:h-20" viewBox="0 24 150 28" preserveAspectRatio="none" shapeRendering="auto" fill={colors.stackedTopBorder}>
+          <defs><path id="renderer-gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" /></defs>
+          <g className="renderer-wave-parallax">
+            <use xlinkHref="#renderer-gentle-wave" x="48" y="0" />
+            <use xlinkHref="#renderer-gentle-wave" x="48" y="3" />
+            <use xlinkHref="#renderer-gentle-wave" x="48" y="5" />
+            <use xlinkHref="#renderer-gentle-wave" x="48" y="7" />
+          </g>
+        </svg>
+      </div>
+      <div className="relative" style={{ backgroundColor: colors.stackedTopBorder }}>
+        <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='600' height='600' viewBox='0 0 600 600' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23fff' stroke-width='1'%3E%3Cellipse cx='300' cy='300' rx='280' ry='200'/%3E%3Cellipse cx='300' cy='300' rx='220' ry='160'/%3E%3Cellipse cx='300' cy='300' rx='160' ry='120'/%3E%3Cellipse cx='300' cy='300' rx='100' ry='80'/%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundSize: '300px 300px',
+        }} />
+        <div className={cn(waveMaxWidthClass, 'mx-auto px-3 md:px-4 relative z-10', sectionSpacingClassName)}>
+          <div className="grid gap-4 md:gap-5 grid-cols-1 md:grid-cols-12">
+            <div className="md:col-span-3 space-y-2.5">
+              {renderLogoMark(24, 'object-contain brightness-110', colors.stackedTextOnBg)}
+              {logoName && <span className="text-sm font-bold tracking-tight block" style={{ color: colors.stackedTextOnBg }}>{logoName}</span>}
+              <p className="text-xs leading-relaxed opacity-85 max-w-xs" style={{ color: colors.stackedTextOnBg }}>{description}</p>
             </div>
-          )}
-          <div className="flex flex-col md:flex-row items-center gap-2">
-            {renderBctLogo('h-10')}
-            <p className="text-[10px]" style={{ color: colors.textSubtle }}>{copyright}</p>
+            <div className="md:col-span-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+              {getColumns().slice(0, 4).map((col, colIdx) => (
+                <div key={col.id || `col-${colIdx}`}>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider mb-2 pb-1" style={{ color: colors.stackedTextOnBg, borderBottom: '1px solid rgba(255,255,255,0.22)' }}>{col.title}</h3>
+                  <ul className="space-y-1">
+                    {col.links.map((link, lIdx) => (
+                      <li key={lIdx}><span className="text-xs opacity-75" style={{ color: colors.stackedTextOnBg }}>{link.label}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="md:col-span-3 space-y-2.5">
+              {showSocialLinks && (
+                <>
+                  <h3 className="font-bold text-[10px] uppercase tracking-wider pb-1" style={{ color: colors.stackedTextOnBg, borderBottom: '1px solid rgba(255,255,255,0.22)' }}>Liên kết</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {getSocials().map((s, idx) => {
+                      const st = resolveSocialStyles(s.platform, colors.stackedSocialBg, colors.stackedSocialText);
+                      return <span key={idx} className={cn('h-8 w-8 flex items-center justify-center', socialRadiusClassName)} style={{ backgroundColor: st.bg, color: st.color, ...(st.border ? { border: st.border } : {}) }}>{renderSocialIcon(s.platform, 16)}</span>;
+                    })}
+                  </div>
+                </>
+              )}
+              {renderBctLogo('h-10')}
+            </div>
           </div>
         </div>
+        {config.showCopyright !== false && (
+          <div className="relative z-10" style={{ borderTop: '0.8px solid rgba(255,255,255,0.3)' }}>
+            <div className={cn(waveMaxWidthClass, 'mx-auto px-3 md:px-4 py-2.5 flex items-center justify-center')}>
+              <p className="text-[10px] text-center opacity-70" style={{ color: colors.stackedTextOnBg }}>{copyright || `© ${currentYear} ${siteName}. All rights reserved.`}</p>
+            </div>
+          </div>
+        )}
       </div>
     </footer>
+  );
+}
+
+// ============ MARQUEE SECTION ============
+function MarqueeSection({ config, brandColor, secondary, mode, title }: { config: Record<string, unknown>; brandColor: string; secondary: string; mode: 'single' | 'dual'; title: string }) {
+  const marqueeMode: MarqueeBrandMode = mode === 'single' ? 'single' : 'dual';
+  const tokens = getMarqueeSectionColors({ primary: brandColor, secondary, mode: marqueeMode });
+  const rawItems = Array.isArray(config.items) ? config.items : [];
+  const items = rawItems.map((item, idx) => normalizeMarqueeItem(item, idx));
+  const style = normalizeMarqueeStyle(config.style);
+  const direction = normalizeMarqueeDirection(config.direction);
+  const speed = normalizeMarqueeSpeed(config.speed);
+  const pauseOnHover = config.pauseOnHover !== false;
+  const scale = normalizeMarqueeScale(config.scale);
+  const uppercase = config.uppercase === true;
+  const headerConfig = extractSectionHeaderConfig(config);
+  const spacing = normalizeMarqueeSpacing(headerConfig.spacing, config.noVerticalMargin);
+  const cornerRadius = normalizeMarqueeCornerRadius(config.cornerRadius, config.noBorderRadius);
+
+  return (
+    <MarqueeSectionShared
+      items={items}
+      style={style}
+      direction={direction}
+      speed={speed}
+      pauseOnHover={pauseOnHover}
+      scale={scale}
+      uppercase={uppercase}
+      tokens={tokens}
+      mode={marqueeMode}
+      title={title}
+      context="site"
+      hideHeader={headerConfig.hideHeader}
+      showTitle={headerConfig.showTitle}
+      showSubtitle={headerConfig.showSubtitle}
+      subtitle={headerConfig.subtitle}
+      headerAlign={headerConfig.headerAlign}
+      titleColorPrimary={headerConfig.titleColorPrimary}
+      subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+      uppercaseText={headerConfig.uppercaseText}
+      showBadge={headerConfig.showBadge}
+      badgeText={headerConfig.badgeText}
+      spacing={spacing}
+      cornerRadius={cornerRadius}
+    />
   );
 }
 

@@ -4,20 +4,35 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Card, CardContent, CardHeader, CardTitle, Label } from '@/app/admin/components/ui';
+import { Label } from '@/app/admin/components/ui';
 import { getContactMapDataFromSettings } from '@/lib/contact/getContactMapData';
 import { ToggleSwitch } from '@/components/modules/shared';
-import type { ContactConfigState } from '../_types';
+import { Contact, Mail, Share2, Type } from 'lucide-react';
+import type { ContactConfigState, ContactDesktopColumns } from '../_types';
 import { validateContactConfig } from '../_lib/validation';
 import { FormFieldsSelector } from './FormFieldsSelector';
 import { ContactInfoItemsManager } from './ContactInfoItemsManager';
 import { SocialLinksManager } from './SocialLinksManager';
 import { DynamicTextFields } from './DynamicTextFields';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import { cn } from '../../../components/ui';
 
 interface ConfigEditorProps {
   value: ContactConfigState;
   onChange: (config: ContactConfigState) => void;
   title?: string;
+  // Toggle states
+  contactDataExpanded?: boolean;
+  formExpanded?: boolean;
+  socialExpanded?: boolean;
+  labelsExpanded?: boolean;
+  displayExpanded?: boolean;
+  onContactDataExpandedChange?: (value: boolean) => void;
+  onFormExpandedChange?: (value: boolean) => void;
+  onSocialExpandedChange?: (value: boolean) => void;
+  onLabelsExpandedChange?: (value: boolean) => void;
+  onDisplayExpandedChange?: (value: boolean) => void;
 }
 
 interface ValidationErrors {
@@ -26,7 +41,21 @@ interface ValidationErrors {
   socialLinks?: Record<number, { url?: string }>;
 }
 
-export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
+export function ConfigEditor({ 
+  value, 
+  onChange, 
+  title,
+  contactDataExpanded = true,
+  formExpanded = true,
+  socialExpanded = true,
+  labelsExpanded = true,
+  displayExpanded = true,
+  onContactDataExpandedChange,
+  onFormExpandedChange,
+  onSocialExpandedChange,
+  onLabelsExpandedChange,
+  onDisplayExpandedChange = () => {},
+}: ConfigEditorProps) {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
   const socialSettings = useQuery(api.settings.listByGroup, { group: 'social' });
@@ -65,19 +94,55 @@ export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {title && (
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           {title}
         </h2>
       )}
 
-      <Card>
-        <CardHeader className="py-3 space-y-1">
-          <CardTitle className="text-base">Dữ liệu liên hệ</CardTitle>
-          <p className="text-xs text-slate-500">Giá trị hiển thị trên preview/site.</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <HomeComponentDisplaySettingsSection
+        open={displayExpanded}
+        onOpenChange={onDisplayExpandedChange}
+        cornerRadius={value.cornerRadius ?? 'lg'}
+        onCornerRadiusChange={(cornerRadius) => updateConfig({ cornerRadius })}
+        spacing={value.spacing ?? 'normal'}
+        onSpacingChange={(spacing) => updateConfig({ spacing })}
+      >
+            <div className="space-y-2">
+              <Label>Số cột desktop cho item grid</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {[3, 4].map((option) => {
+                  const selected = (value.desktopColumns ?? 4) === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => updateConfig({ desktopColumns: option as ContactDesktopColumns })}
+                      className={cn(
+                        'h-10 rounded-md border text-xs transition-colors',
+                        selected
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                          : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                      )}
+                    >
+                      {option} cột
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500">Chỉ áp dụng cho các card thông tin dạng grid.</p>
+            </div>
+      </HomeComponentDisplaySettingsSection>
+
+      <SubSection
+        icon={Contact}
+        title="Dữ liệu liên hệ"
+        open={contactDataExpanded}
+        onOpenChange={onContactDataExpandedChange}
+      >
+        <p className="text-xs text-slate-500">Giá trị hiển thị trên preview/site.</p>
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
               Hiển thị bản đồ
@@ -120,14 +185,16 @@ export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
             isLoadingSettings={isSettingsLoading}
             validationErrors={validationErrors.contactItems}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </SubSection>
 
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-base">Form liên hệ</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SubSection
+        icon={Mail}
+        title="Form liên hệ"
+        open={formExpanded}
+        onOpenChange={onFormExpandedChange}
+      >
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
               Bật form liên hệ
@@ -182,22 +249,6 @@ export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
 
                 <div>
                   <label
-                    htmlFor="submitButtonText"
-                    className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-                  >
-                    Text nút gửi
-                  </label>
-                  <input
-                    id="submitButtonText"
-                    type="text"
-                    value={value.submitButtonText || ''}
-                    onChange={(e) => updateConfig({ submitButtonText: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label
                     htmlFor="responseTimeText"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
                   >
@@ -217,14 +268,16 @@ export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
                 Bật form để chỉnh tiêu đề, mô tả, nút gửi và trường nhập.
               </p>
             )}
-        </CardContent>
-      </Card>
+        </div>
+      </SubSection>
 
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-base">Mạng xã hội</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SubSection
+        icon={Share2}
+        title="Mạng xã hội"
+        open={socialExpanded}
+        onOpenChange={onSocialExpandedChange}
+      >
+        <div className="space-y-4">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -242,22 +295,22 @@ export function ConfigEditor({ value, onChange, title }: ConfigEditorProps) {
             isLoadingSettings={isSettingsLoading || isSocialSettingsLoading}
             validationErrors={validationErrors.socialLinks}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </SubSection>
 
-      <Card>
-        <CardHeader className="py-3 space-y-1">
-          <CardTitle className="text-base">Nhãn hiển thị</CardTitle>
-          <p className="text-xs text-slate-500">Chỉ đổi chữ hiển thị, không đổi dữ liệu liên hệ.</p>
-        </CardHeader>
-        <CardContent>
+      <SubSection
+        icon={Type}
+        title="Nhãn hiển thị"
+        open={labelsExpanded}
+        onOpenChange={onLabelsExpandedChange}
+      >
+        <p className="text-xs text-slate-500">Text tuỳ biến cho tiêu đề, nút và các ghi chú.</p>
           <DynamicTextFields
             style={value.style}
             texts={value.texts || {}}
             onChange={updateTexts}
           />
-        </CardContent>
-      </Card>
+      </SubSection>
     </div>
   );
 }

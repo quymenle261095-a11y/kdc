@@ -14,17 +14,77 @@ import { ImageUploader } from '../../../components/ImageUploader';
 import { QuickCreateServiceCategoryModal } from '../../../components/QuickCreateServiceCategoryModal';
 import { stripHtml, truncateText } from '@/lib/seo';
 import { normalizeRichText } from '@/app/admin/lib/normalize-rich-text';
+import {
+  buildAutoSlotsFromWindow,
+  normalizeSlotTemplate,
+  normalizeSlotTemplateByWeekday,
+  type BookingSlotTemplateByWeekday,
+} from '@/lib/bookings/slotTemplate';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
+import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
 
 const MODULE_KEY = 'services';
+
+type ServiceSlotTemplateScope = 'default' | '0' | '1' | '2' | '3' | '4' | '5' | '6';
+
+const SERVICE_SLOT_SCOPE_OPTIONS: Array<{ value: ServiceSlotTemplateScope; label: string }> = [
+  { value: 'default', label: 'Mặc định (mọi ngày)' },
+  { value: '1', label: 'Thứ 2' },
+  { value: '2', label: 'Thứ 3' },
+  { value: '3', label: 'Thứ 4' },
+  { value: '4', label: 'Thứ 5' },
+  { value: '5', label: 'Thứ 6' },
+  { value: '6', label: 'Thứ 7' },
+  { value: '0', label: 'Chủ nhật' },
+];
+
+const resolveServiceTemplateByScope = (params: {
+  scope: ServiceSlotTemplateScope;
+  defaultSlots: string[];
+  byWeekday: BookingSlotTemplateByWeekday;
+}) => {
+  if (params.scope === 'default') {
+    return normalizeSlotTemplate(params.defaultSlots);
+  }
+  return normalizeSlotTemplate(params.byWeekday[Number(params.scope)] ?? []);
+};
+
+const setServiceTemplateByScope = (params: {
+  scope: ServiceSlotTemplateScope;
+  nextSlots: string[];
+  defaultSlots: string[];
+  byWeekday: BookingSlotTemplateByWeekday;
+}) => {
+  if (params.scope === 'default') {
+    return {
+      defaultSlots: normalizeSlotTemplate(params.nextSlots),
+      byWeekday: params.byWeekday,
+    };
+  }
+
+  const day = Number(params.scope);
+  return {
+    defaultSlots: params.defaultSlots,
+    byWeekday: {
+      ...params.byWeekday,
+      [day]: normalizeSlotTemplate(params.nextSlots),
+    },
+  };
+};
 
 export default function ServiceEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
 
   const serviceData = useQuery(api.services.getById, { id: id as Id<"services"> });
+  const additionalCategoryIdsData = useQuery(api.services.getAdditionalCategoryIds, { id: id as Id<"services"> });
   const categoriesData = useQuery(api.serviceCategories.listAll, {});
   const updateService = useMutation(api.services.update);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
+  const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: MODULE_KEY });
+  const bookingsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'bookings' });
+  const isBookingsModuleEnabled = bookingsModule?.enabled ?? false;
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -38,22 +98,43 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
   const [thumbnail, setThumbnail] = useState<string | undefined>();
   const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | undefined>();
   const [categoryId, setCategoryId] = useState('');
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([]);
   const [price, setPrice] = useState<number | undefined>();
   const [duration, setDuration] = useState('');
+  const [bookingEnabled, setBookingEnabled] = useState(true);
+  const [bookingDurationMin, setBookingDurationMin] = useState<number>(60);
+  const [bookingSlotIntervalMin, setBookingSlotIntervalMin] = useState<number>(30);
+  const [bookingCapacityPerSlot, setBookingCapacityPerSlot] = useState<number>(1);
+  const [bookingSlotTemplateDefault, setBookingSlotTemplateDefault] = useState<string[]>([]);
+  const [bookingSlotTemplateByWeekday, setBookingSlotTemplateByWeekday] = useState<BookingSlotTemplateByWeekday>({});
+  const [activeSlotScope, setActiveSlotScope] = useState<ServiceSlotTemplateScope>('default');
+  const [showAdvancedBooking, setShowAdvancedBooking] = useState(false);
   const [featured, setFeatured] = useState(false);
   const [status, setStatus] = useState<'Draft' | 'Published' | 'Archived'>('Draft');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [editorResetKey] = useState(0);
+  const [editorResetKey, setEditorResetKey] = useState(0);
   const [snapshotVersion, setSnapshotVersion] = useState(0);
+  const selectedCategorySlug = useMemo(
+    () => categoriesData?.find((category) => category._id === categoryId)?.slug,
+    [categoriesData, categoryId]
+  );
+  const multiCategoryEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableMultipleCategories')?.value);
   const initialSnapshotRef = useRef<{
     categoryId: string;
+    additionalCategoryIds: string[];
     content: string;
     renderType: 'content' | 'markdown' | 'html';
     markdownRender: string;
     htmlRender: string;
     duration: string;
+    bookingEnabled: boolean;
+    bookingDurationMin: number;
+    bookingSlotIntervalMin: number;
+    bookingCapacityPerSlot: number;
+    bookingSlotTemplateDefault: string[];
+    bookingSlotTemplateByWeekday: BookingSlotTemplateByWeekday;
     excerpt: string;
     featured: boolean;
     metaDescription: string;
@@ -75,27 +156,88 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
   const hasMarkdownRender = enabledFields.has('markdownRender');
   const hasHtmlRender = enabledFields.has('htmlRender');
   const showAdvancedRenderCard = hasMarkdownRender || hasHtmlRender;
-
   const normalizedContent = useMemo(() => normalizeRichText(content), [content]);
+  const suggestedSlots = useMemo(() => buildAutoSlotsFromWindow({
+    startHour: 9,
+    endHour: 20,
+    slotIntervalMin: bookingSlotIntervalMin,
+    durationMin: bookingDurationMin,
+  }), [bookingDurationMin, bookingSlotIntervalMin]);
+  const activeScopeSlots = useMemo(() => resolveServiceTemplateByScope({
+    scope: activeSlotScope,
+    defaultSlots: bookingSlotTemplateDefault,
+    byWeekday: bookingSlotTemplateByWeekday,
+  }), [activeSlotScope, bookingSlotTemplateByWeekday, bookingSlotTemplateDefault]);
+  const activeScopeSet = useMemo(() => new Set(activeScopeSlots), [activeScopeSlots]);
 
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setTitle(val);
-    const generatedSlug = val.toLowerCase()
+  const generateSlugFromTitle = (value: string) => value.toLowerCase()
       .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
       .replaceAll(/[đĐ]/g, "d")
       .replaceAll(/[^a-z0-9\s]/g, '')
       .replaceAll(/\s+/g, '-');
-    setSlug(generatedSlug);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setTitle(val);
+    setSlug(generateSlugFromTitle(val));
   };
+
+  const handleApplyAiService = (item: AiEntityImportPayload) => {
+    const nextTitle = item.title?.trim() || item.name?.trim() || '';
+    if (!nextTitle) {return;}
+
+    setTitle(nextTitle);
+    setSlug(item.slug?.trim() || generateSlugFromTitle(nextTitle));
+    const nextContent = item.content || item.description || item.htmlRender || item.markdownRender || '';
+    setContent(nextContent);
+    if (item.content) {
+      setRenderType('content');
+      setHtmlRender(item.htmlRender || '');
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.htmlRender) {
+      setRenderType('html');
+      setHtmlRender(item.htmlRender);
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.markdownRender) {
+      setRenderType('markdown');
+      setMarkdownRender(item.markdownRender);
+      setHtmlRender('');
+    }
+    setExcerpt(item.excerpt || item.description || truncateText(stripHtml(nextContent), 180));
+    setMetaTitle(item.metaTitle || truncateText(nextTitle, 60));
+    setMetaDescription(item.metaDescription || truncateText(stripHtml(item.excerpt || nextContent), 160));
+    if (item.thumbnail) {
+      setThumbnail(item.thumbnail);
+      setThumbnailStorageId(undefined);
+    }
+    if (typeof item.price === 'number') {setPrice(item.price);}
+    if (item.duration) {setDuration(item.duration);}
+    setEditorResetKey((prev) => prev + 1);
+  };
+
+  const normalizedBookingSlotTemplateDefault = useMemo(
+    () => normalizeSlotTemplate(bookingSlotTemplateDefault),
+    [bookingSlotTemplateDefault],
+  );
+  const normalizedBookingSlotTemplateByWeekday = useMemo(
+    () => normalizeSlotTemplateByWeekday(bookingSlotTemplateByWeekday),
+    [bookingSlotTemplateByWeekday],
+  );
 
   const currentSnapshot = useMemo(() => ({
     categoryId,
+    additionalCategoryIds,
     content: normalizedContent,
     renderType,
     markdownRender: markdownRender.trim(),
     htmlRender: htmlRender.trim(),
     duration: duration.trim(),
+    bookingEnabled,
+    bookingDurationMin,
+    bookingSlotIntervalMin,
+    bookingCapacityPerSlot,
+    bookingSlotTemplateDefault: normalizedBookingSlotTemplateDefault,
+    bookingSlotTemplateByWeekday: normalizedBookingSlotTemplateByWeekday,
     excerpt: excerpt.trim(),
     featured,
     metaDescription: metaDescription.trim(),
@@ -104,9 +246,33 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
     slug: slug.trim(),
     status,
     thumbnail: thumbnail ?? '',
-    thumbnailStorageId,
+    thumbnailStorageId: thumbnail ? (thumbnailStorageId ?? null) : null,
     title: title.trim(),
-  }), [categoryId, normalizedContent, renderType, markdownRender, htmlRender, duration, excerpt, featured, metaDescription, metaTitle, price, slug, status, thumbnail, thumbnailStorageId, title]);
+  }), [
+    categoryId,
+    additionalCategoryIds,
+    normalizedContent,
+    renderType,
+    markdownRender,
+    htmlRender,
+    duration,
+    bookingEnabled,
+    bookingDurationMin,
+    bookingSlotIntervalMin,
+    bookingCapacityPerSlot,
+    normalizedBookingSlotTemplateDefault,
+    normalizedBookingSlotTemplateByWeekday,
+    excerpt,
+    featured,
+    metaDescription,
+    metaTitle,
+    price,
+    slug,
+    status,
+    thumbnail,
+    thumbnailStorageId,
+    title,
+  ]);
 
   const hasChanges = useMemo(() => {
     if (!initialSnapshotRef.current) {return false;}
@@ -133,7 +299,8 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
       const allowedRenderTypes = new Set<'content' | 'markdown' | 'html'>(['content']);
       if (hasMarkdownRender) {allowedRenderTypes.add('markdown');}
       if (hasHtmlRender) {allowedRenderTypes.add('html');}
-      setRenderType(allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content');
+      const normalizedRenderType = allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content';
+      setRenderType(normalizedRenderType);
       setMarkdownRender(serviceData.markdownRender ?? '');
       setHtmlRender(serviceData.htmlRender ?? '');
       setExcerpt(serviceData.excerpt ?? '');
@@ -142,17 +309,31 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
       setThumbnail(serviceData.thumbnail);
       setThumbnailStorageId((serviceData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId);
       setCategoryId(serviceData.categoryId);
+      setAdditionalCategoryIds(additionalCategoryIdsData ?? []);
       setPrice(serviceData.price);
       setDuration(serviceData.duration ?? '');
+      setBookingEnabled(serviceData.bookingEnabled ?? false);
+      setBookingDurationMin(serviceData.bookingDurationMin ?? 60);
+      setBookingSlotIntervalMin(serviceData.bookingSlotIntervalMin ?? 30);
+      setBookingCapacityPerSlot(serviceData.bookingCapacityPerSlot ?? 1);
+      setBookingSlotTemplateDefault(normalizeSlotTemplate(serviceData.bookingSlotTemplateDefault));
+      setBookingSlotTemplateByWeekday(normalizeSlotTemplateByWeekday(serviceData.bookingSlotTemplateByWeekday));
       setFeatured(serviceData.featured ?? false);
       setStatus(serviceData.status);
       initialSnapshotRef.current = {
         categoryId: serviceData.categoryId,
+        additionalCategoryIds: additionalCategoryIdsData ?? [],
         content: normalizeRichText(serviceData.content),
-        renderType: serviceData.renderType ?? 'content',
+        renderType: normalizedRenderType,
         markdownRender: (serviceData.markdownRender ?? '').trim(),
         htmlRender: (serviceData.htmlRender ?? '').trim(),
         duration: (serviceData.duration ?? '').trim(),
+        bookingEnabled: serviceData.bookingEnabled ?? false,
+        bookingDurationMin: serviceData.bookingDurationMin ?? 60,
+        bookingSlotIntervalMin: serviceData.bookingSlotIntervalMin ?? 30,
+        bookingCapacityPerSlot: serviceData.bookingCapacityPerSlot ?? 1,
+        bookingSlotTemplateDefault: normalizeSlotTemplate(serviceData.bookingSlotTemplateDefault),
+        bookingSlotTemplateByWeekday: normalizeSlotTemplateByWeekday(serviceData.bookingSlotTemplateByWeekday),
         excerpt: (serviceData.excerpt ?? '').trim(),
         featured: serviceData.featured ?? false,
         metaDescription: (serviceData.metaDescription ?? '').trim(),
@@ -161,12 +342,14 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
         slug: serviceData.slug.trim(),
         status: serviceData.status,
         thumbnail: serviceData.thumbnail ?? '',
-        thumbnailStorageId: (serviceData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId,
+        thumbnailStorageId: serviceData.thumbnail
+          ? ((serviceData as { thumbnailStorageId?: Id<'_storage'> }).thumbnailStorageId ?? null)
+          : null,
         title: serviceData.title.trim(),
       };
       setSnapshotVersion((prev) => prev + 1);
     }
-  }, [serviceData, hasMarkdownRender, hasHtmlRender]);
+  }, [serviceData, additionalCategoryIdsData, hasMarkdownRender, hasHtmlRender]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,13 +369,23 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
       const resolvedMetaDescriptionValue = enabledFields.has('metaDescription')
         ? (metaDescription.trim() || resolvedMetaDescription || '')
         : metaDescription.trim();
+      const resolvedBookingEnabled = isBookingsModuleEnabled ? bookingEnabled : false;
       await updateService({
         categoryId: categoryId as Id<"serviceCategories">,
+        additionalCategoryIds: multiCategoryEnabled
+          ? additionalCategoryIds.filter((category) => category !== categoryId) as Id<"serviceCategories">[]
+          : undefined,
         content,
         renderType,
         markdownRender: markdownRender.trim() || undefined,
         htmlRender: htmlRender.trim() || undefined,
         duration: duration.trim() || undefined,
+        bookingEnabled: resolvedBookingEnabled,
+        bookingDurationMin: resolvedBookingEnabled ? bookingDurationMin : undefined,
+        bookingSlotIntervalMin: resolvedBookingEnabled ? bookingSlotIntervalMin : undefined,
+        bookingCapacityPerSlot: resolvedBookingEnabled ? bookingCapacityPerSlot : undefined,
+        bookingSlotTemplateDefault: resolvedBookingEnabled ? normalizedBookingSlotTemplateDefault : undefined,
+        bookingSlotTemplateByWeekday: resolvedBookingEnabled ? normalizedBookingSlotTemplateByWeekday : undefined,
         excerpt: excerpt.trim() || undefined,
         featured,
         id: id as Id<"services">,
@@ -205,7 +398,7 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
         price,
         slug: slug.trim(),
         status,
-        thumbnail,
+        thumbnail: thumbnail ?? '',
         thumbnailStorageId: thumbnail ? (thumbnailStorageId ?? null) : null,
         title: title.trim(),
       });
@@ -260,26 +453,13 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
       onCreated={(id) =>{  setCategoryId(id); }}
     />
     <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-teal-500/10 rounded-lg">
-            <Briefcase className="w-6 h-6 text-teal-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa dịch vụ</h1>
-             <div className="text-sm text-slate-500 mt-1">Cập nhật thông tin dịch vụ</div>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-teal-500/10 rounded-lg">
+          <Briefcase className="w-6 h-6 text-teal-600" />
         </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.open(`/services/${slug}`, '_blank')}
-            className="gap-2"
-          >
-            <ExternalLink size={16} />
-            Xem trên web
-          </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa dịch vụ</h1>
+           <div className="text-sm text-slate-500 mt-1">Cập nhật thông tin dịch vụ</div>
         </div>
       </div>
       
@@ -307,6 +487,153 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
               </div>
             </CardContent>
           </Card>
+
+          {isBookingsModuleEnabled && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Đặt lịch</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={bookingEnabled}
+                  onChange={(e) =>{  setBookingEnabled(e.target.checked); }}
+                  className="w-4 h-4 rounded border-slate-300"
+                />
+                <span className="text-sm text-slate-700 dark:text-slate-200">Cho phép đặt lịch</span>
+              </label>
+
+              {bookingEnabled && (
+                <div className="space-y-4 rounded-md border border-slate-200 dark:border-slate-700 p-3">
+                  <div className="space-y-2">
+                    <Label>Thời lượng (phút)</Label>
+                    <Input
+                      type="number"
+                      min={15}
+                      step={5}
+                      value={bookingDurationMin}
+                      onChange={(e) =>{  setBookingDurationMin(Number(e.target.value || 60)); }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bước lịch (phút)</Label>
+                    <Input
+                      type="number"
+                      min={5}
+                      step={5}
+                      value={bookingSlotIntervalMin}
+                      onChange={(e) =>{  setBookingSlotIntervalMin(Number(e.target.value || 30)); }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Số khách / khung</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={bookingCapacityPerSlot}
+                      onChange={(e) =>{  setBookingCapacityPerSlot(Number(e.target.value || 1)); }}
+                    />
+                  </div>
+
+                  <div className="rounded-md border border-dashed border-slate-300 dark:border-slate-700 p-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedBooking((prev) => !prev)}
+                      className="w-full text-left text-sm font-medium text-slate-700 dark:text-slate-200"
+                    >
+                      Cài đặt nâng cao: khung giờ theo ngày
+                    </button>
+
+                    {showAdvancedBooking && (
+                      <div className="space-y-3 mt-3">
+                        <div className="space-y-2">
+                          <Label>Áp dụng cho</Label>
+                          <select
+                            value={activeSlotScope}
+                            onChange={(e) => setActiveSlotScope(e.target.value as ServiceSlotTemplateScope)}
+                            className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                          >
+                            {SERVICE_SLOT_SCOPE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const next = setServiceTemplateByScope({
+                                scope: activeSlotScope,
+                                nextSlots: suggestedSlots,
+                                defaultSlots: bookingSlotTemplateDefault,
+                                byWeekday: bookingSlotTemplateByWeekday,
+                              });
+                              setBookingSlotTemplateDefault(next.defaultSlots);
+                              setBookingSlotTemplateByWeekday(next.byWeekday);
+                            }}
+                          >
+                            Chọn hết gợi ý
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const next = setServiceTemplateByScope({
+                                scope: activeSlotScope,
+                                nextSlots: [],
+                                defaultSlots: bookingSlotTemplateDefault,
+                                byWeekday: bookingSlotTemplateByWeekday,
+                              });
+                              setBookingSlotTemplateDefault(next.defaultSlots);
+                              setBookingSlotTemplateByWeekday(next.byWeekday);
+                            }}
+                          >
+                            Bỏ hết
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {suggestedSlots.map((slot) => (
+                            <label key={slot} className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 px-2 py-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={activeScopeSet.has(slot)}
+                                onChange={(e) => {
+                                  const nextSet = new Set(activeScopeSlots);
+                                  if (e.target.checked) {
+                                    nextSet.add(slot);
+                                  } else {
+                                    nextSet.delete(slot);
+                                  }
+                                  const next = setServiceTemplateByScope({
+                                    scope: activeSlotScope,
+                                    nextSlots: Array.from(nextSet),
+                                    defaultSlots: bookingSlotTemplateDefault,
+                                    byWeekday: bookingSlotTemplateByWeekday,
+                                  });
+                                  setBookingSlotTemplateDefault(next.defaultSlots);
+                                  setBookingSlotTemplateByWeekday(next.byWeekday);
+                                }}
+                                className="w-4 h-4 rounded border-slate-300"
+                              />
+                              <span className="text-sm text-slate-700 dark:text-slate-200">{slot}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        <p className="text-xs text-slate-500">Đã chọn {activeScopeSlots.length} khung.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          )}
 
           {showAdvancedRenderCard && (
             <Card>
@@ -390,7 +717,7 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
                     {metaTitle.trim() || title || 'Tên dịch vụ'}
                   </div>
                   <div className="text-emerald-600 text-xs">
-                    /services/{slug || 'dich-vu'}
+                    /{selectedCategorySlug || 'chua-phan-loai'}/{slug || 'dich-vu'}
                   </div>
                   <div className="text-slate-600 text-xs mt-1 line-clamp-2">
                     {metaDescription.trim() || excerpt || 'Mô tả ngắn sẽ hiển thị tại đây.'}
@@ -419,7 +746,21 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
               </div>
               <div className="space-y-2">
                 <Label>Danh mục</Label>
-                <div className="flex gap-2">
+                {multiCategoryEnabled ? (
+                  <>
+                  <CategoryTagsInput
+                    categories={categoriesData}
+                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
+                    onQuickCreate={() =>{  setShowCategoryModal(true); }}
+                    onChange={(ids) => {
+                      setCategoryId(ids[0] ?? '');
+                      setAdditionalCategoryIds(ids.slice(1));
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
                   <select 
                     value={categoryId}
                     onChange={(e) =>{  setCategoryId(e.target.value); }}
@@ -438,7 +779,8 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
                   >
                     <Plus size={16} />
                   </Button>
-                </div>
+                  </div>
+                )}
               </div>
               {enabledFields.has('featured') && (
                 <div className="flex items-center gap-2">
@@ -483,7 +825,8 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
               </CardContent>
             </Card>
           )}
-          
+
+
           <Card>
             <CardHeader><CardTitle className="text-base">Ảnh đại diện</CardTitle></CardHeader>
             <CardContent>
@@ -504,22 +847,41 @@ export default function ServiceEditPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/services'); }}>Hủy bỏ</Button>
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={isSubmitting || !hasChanges}
-          className={!hasChanges && !isSubmitting
-            ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-            : 'bg-teal-600 hover:bg-teal-500'}
-        >
-          {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-          {isSubmitting || saveStatus === 'saving'
-            ? 'Đang lưu...'
-            : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
-        </Button>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting || saveStatus === 'saving'}
+        hasChanges={hasChanges}
+        onCancel={() =>{  router.push('/admin/services'); }}
+        submitLabel="Lưu thay đổi"
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/services'); }}>Hủy bỏ</Button>
+          <div className="flex gap-2">
+            <AiEntityImportDialog kind="service" enabledFields={enabledFields} onApply={handleApplyAiService} />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.open(`/${selectedCategorySlug || 'chua-phan-loai'}/${slug}`, '_blank')}
+              className="gap-2"
+              disabled={!slug.trim()}
+            >
+              <ExternalLink size={16} />
+              Xem trên web
+            </Button>
+            <Button
+              type="submit"
+              variant="accent"
+              disabled={isSubmitting || !hasChanges}
+              className={!hasChanges && !isSubmitting
+                ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+                : 'bg-teal-600 hover:bg-teal-500'}
+            >
+              {isSubmitting || saveStatus === 'saving'
+                ? 'Đang lưu...'
+                : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
     </form>
     </>
   );

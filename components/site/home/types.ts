@@ -14,3 +14,7 @@ export interface HomeComponentSectionProps {
   mode: 'single' | 'dual';
   title: string;
 }
+
+export interface SnapshotAwareHomeComponentSectionProps extends HomeComponentSectionProps {
+  snapshotComponentKey?: string;
+}

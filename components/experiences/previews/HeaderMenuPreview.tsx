@@ -4,7 +4,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { ChevronDown, ChevronRight, Eye, Heart, LogOut, Mail, Package, Phone, Search, ShoppingCart, User } from 'lucide-react';
 import { Card, CardContent, cn } from '@/app/admin/components/ui';
-import { getMenuColors, type MenuColorMode, type MenuColors } from '@/components/site/header/colors';
+import { getMenuColors, resolveMenuLayerColors, type MenuColorMode, type MenuColors, type MenuLayerColorConfig } from '@/components/site/header/colors';
 import { buildMenuTree, type MenuTreeNode } from '@/lib/utils/menu-tree';
 
 export type HeaderLayoutStyle = 'classic' | 'topbar' | 'allbirds';
@@ -13,7 +13,7 @@ export type LogoBackgroundStyle = 'none' | 'border' | 'shadow' | 'soft' | 'solid
 export type HeaderMenuConfig = {
   brandName: string;
   showBrandName: boolean;
-  logoSizeLevel: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
+  logoSizeLevel: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30;
   headerSpacingLevel?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   logoBackgroundStyle?: LogoBackgroundStyle;
   headerBackground: 'white' | 'dots' | 'stripes';
@@ -21,9 +21,12 @@ export type HeaderMenuConfig = {
   headerSticky: boolean;
   headerStickyDesktop?: boolean;
   headerStickyMobile?: boolean;
+  layerColors?: MenuLayerColorConfig;
   showBrandAccent: boolean;
+  flatSubMenus?: boolean;
+  borderRadiusStyle?: 'none' | 'small' | 'large';
   cart: { show: boolean };
-  cta: { show: boolean; text: string };
+  cta: { show: boolean; text: string; url?: string };
   login: { show: boolean; text: string };
   search: { show: boolean; placeholder: string; searchProducts: boolean; searchPosts: boolean; searchServices: boolean };
   topbar: {
@@ -37,6 +40,7 @@ export type HeaderMenuConfig = {
     sloganEnabled?: boolean;
   };
   wishlist: { show: boolean };
+  megaLevel1Color?: 'default' | 'primary' | 'secondary';
 };
 
 type MenuItem = {
@@ -52,7 +56,7 @@ type MenuItem = {
 
 type MenuItemWithChildren = MenuTreeNode<MenuItem>;
 
-const buildLinearSteps = (min: number, max: number, count = 20) => {
+const buildLinearSteps = (min: number, max: number, count = 30) => {
   const step = (max - min) / (count - 1);
   return Array.from({ length: count }, (_, index) => Math.round(min + step * index));
 };
@@ -108,6 +112,10 @@ export function HeaderMenuPreview({
     () => getMenuColors(brandColor, secondaryColor, colorMode),
     [brandColor, secondaryColor, colorMode]
   );
+  const layerColors = useMemo(
+    () => resolveMenuLayerColors(config.layerColors, tokens, colorMode),
+    [config.layerColors, tokens, colorMode]
+  );
   const menuVars: React.CSSProperties = {
     '--menu-hover-bg': tokens.navItemHoverBg,
     '--menu-hover-text': tokens.navItemHoverText,
@@ -120,10 +128,27 @@ export function HeaderMenuPreview({
   const showBrandName = config.showBrandName !== false;
   const logoSizeLevel = config.logoSizeLevel ?? 2;
   const headerSpacingLevel = clampHeaderSpacingLevel(config.headerSpacingLevel);
+
+  // Bo góc động theo config
+  const radiusLevel = config.borderRadiusStyle ?? 'large';
+  const r = {
+    btn: radiusLevel === 'none' ? 'rounded-none' : radiusLevel === 'small' ? 'rounded' : 'rounded-lg',
+    dropdown: radiusLevel === 'none' ? 'rounded-none' : radiusLevel === 'small' ? 'rounded-md' : 'rounded-xl',
+    popup: radiusLevel === 'none' ? 'rounded-none' : radiusLevel === 'small' ? 'rounded-md' : 'rounded-2xl',
+    item: radiusLevel === 'none' ? 'rounded-none' : radiusLevel === 'small' ? 'rounded' : 'rounded-lg',
+  };
+
+  // Màu tiêu đề cấp 1 Mega Menu
+  const level1ColorMode = config.megaLevel1Color ?? 'default';
+  const level1Color =
+    level1ColorMode === 'primary' ? tokens.primary
+    : level1ColorMode === 'secondary' ? tokens.secondary
+    : tokens.textPrimary;
+
   const logoSizeMap: Record<HeaderLayoutStyle, number[]> = {
-    classic: buildLinearSteps(24, 96),
-    topbar: buildLinearSteps(28, 108),
-    allbirds: buildLinearSteps(16, 80),
+    classic: buildLinearSteps(24, 160),
+    topbar: buildLinearSteps(28, 180),
+    allbirds: buildLinearSteps(16, 140),
   };
   const headerSpacingMap: Record<HeaderLayoutStyle, number[]> = {
     classic: [6, 8, 10, 12, 14, 16, 18],
@@ -186,9 +211,11 @@ export function HeaderMenuPreview({
       boxShadow: '0 12px 28px rgba(15, 23, 42, 0.18)',
     },
   };
+  const hasBackgroundFrame = logoBackgroundStyle !== 'none';
   const logoWrapStyle: React.CSSProperties = {
-    width: logoBackgroundStyle === 'none' ? logoSize : logoContainerSize,
-    height: logoBackgroundStyle === 'none' ? logoSize : logoContainerSize,
+    width: hasBackgroundFrame ? logoContainerSize : logoSize,
+    height: logo ? 'auto' : (hasBackgroundFrame ? logoContainerSize : logoSize),
+    ...(logo && hasBackgroundFrame ? { padding: Math.max(4, Math.round(logoSize * 0.1)) } : {}),
     borderRadius: logoBackgroundStyle === 'pill'
       ? logoContainerSize
       : layoutStyle === 'allbirds'
@@ -202,12 +229,12 @@ export function HeaderMenuPreview({
   };
   const logoInnerBaseStyle: React.CSSProperties = {
     width: logoSize,
-    height: logoSize,
+    height: logo ? 'auto' : logoSize,
     borderRadius: layoutStyle === 'allbirds' ? logoSize : Math.max(8, Math.round(logoSize * 0.24)),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: logo ? 'visible' : 'hidden',
   };
   const logoInnerStyle: React.CSSProperties = logo
     ? logoInnerBaseStyle
@@ -217,17 +244,18 @@ export function HeaderMenuPreview({
         color: tokens.brandBadgeText,
       };
   const ctaLabel = config.cta.text || 'Liên hệ';
+  const ctaHref = config.cta.url?.trim() || '/contact';
   const loginLabel = config.login.text || 'Đăng nhập';
   const defaultLinks = useMemo(() => ({
     cart: '/cart',
     wishlist: '/wishlist',
     login: '/account/login',
-    cta: '/contact',
+    cta: ctaHref,
     trackOrder: '/account/orders',
     storeSystem: '/stores',
     accountProfile: '/account/profile',
     accountOrders: '/account/orders',
-  }), []);
+  }), [ctaHref]);
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -259,11 +287,10 @@ export function HeaderMenuPreview({
   }, [rootItems]);
   const isDeepMenuForItem = (itemId: Id<'menuItems'>) => (maxLevelByRootId.get(itemId) ?? 1) >= 4;
 
-  if (measureItemRefs.current.length !== rootItems.length) {
-    measureItemRefs.current = Array(rootItems.length).fill(null);
-  }
-
   useLayoutEffect(() => {
+    if (measureItemRefs.current.length !== rootItems.length) {
+      measureItemRefs.current = Array(rootItems.length).fill(null);
+    }
     if (!navRef.current || rootItems.length === 0) {
       setVisibleRootCount(rootItems.length);
       return;
@@ -359,7 +386,7 @@ export function HeaderMenuPreview({
         className={variant === 'text'
           ? 'hover:underline flex items-center gap-1'
           : 'p-2 transition-colors hover:text-[var(--menu-icon-hover)]'}
-        style={variant === 'text' ? { color: tokens.topbarText } : { color: tokens.iconButtonText, ...menuVars }}
+        style={variant === 'text' ? { color: layerColors.topnav.text } : { color: layerColors.navbar.text, ...menuVars }}
       >
         <User size={variant === 'text' ? 12 : 18} />
         {variant === 'text' && <span>{loginLabel}</span>}
@@ -466,7 +493,7 @@ export function HeaderMenuPreview({
   );
 
   const renderMobileMenuButton = (isTransparent = false) => {
-    const color = isTransparent ? tokens.textInverse : tokens.iconButtonText;
+    const color = isTransparent ? tokens.textInverse : layerColors.navbar.text;
     return (
       <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-lg" style={{ color }}>
         <div className="w-5 h-4 flex flex-col justify-between">
@@ -497,10 +524,17 @@ export function HeaderMenuPreview({
         style={{ color: tokens.dropdownItemText, ...menuVars }}
       >
         <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{node.label}</span>
-        {node.children.length > 0 && <ChevronRight size={14} />}
+        {node.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
       </a>
       {node.children.length > 0 && (
-        <div className={cn('absolute top-0 rounded-lg border py-2 min-w-[200px] z-50 hidden group-hover/menu-node:block', depth === 0 ? 'left-full ml-1' : 'right-full mr-1')} style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+        <div 
+          className={cn('absolute top-0 rounded-lg border py-2 min-w-[200px] z-50 hidden group-hover/menu-node:block overflow-y-auto scrollbar-menu-thin', depth === 0 ? 'left-full ml-1' : 'right-full mr-1')} 
+          style={{ 
+            backgroundColor: tokens.dropdownBg, 
+            borderColor: tokens.dropdownBorder,
+            maxHeight: 'min(70vh, 290px)',
+          }}
+        >
           {renderDesktopFlyoutNodes(node.children, depth + 1)}
         </div>
       )}
@@ -583,7 +617,7 @@ export function HeaderMenuPreview({
     return (
     <div className={cn(classicPositionClass)} style={{ ...classicBackgroundStyle, ...classicSeparatorStyle }}>
       {displayTopbar.show && (
-        <div className="px-4 py-2 text-xs" style={{ backgroundColor: tokens.topbarBg, color: tokens.topbarText }}>
+        <div className="px-4 py-2 text-xs" style={{ backgroundColor: layerColors.topnav.bg, color: layerColors.topnav.text }}>
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
@@ -602,7 +636,7 @@ export function HeaderMenuPreview({
               {device !== 'mobile' && (
                 <>
                   {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
-                  {showTrackOrder && showLoginLink && <span style={{ color: tokens.topbarDivider }}>|</span>}
+                  {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
@@ -621,7 +655,7 @@ export function HeaderMenuPreview({
       )}
       <div
         className="px-6 border-b"
-        style={{ borderColor: tokens.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
+        style={{ backgroundColor: layerColors.navbar.bg, borderColor: layerColors.navbar.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
       >
         <div ref={headerRowRef} className="flex items-center gap-4">
           <div ref={brandBlockRef} className="flex items-center gap-3 flex-shrink-0">
@@ -635,7 +669,7 @@ export function HeaderMenuPreview({
               )}
             </div>
             {showBrandName && (
-              <span className="font-semibold" style={{ color: tokens.textPrimary }}>{brandLabel}</span>
+              <span className="font-semibold" style={{ color: layerColors.navbar.text }}>{brandLabel}</span>
             )}
           </div>
 
@@ -657,7 +691,7 @@ export function HeaderMenuPreview({
                           : 'hover:bg-[var(--menu-hover-bg)] hover:text-[var(--menu-hover-text)]'
                       )}
                       style={{
-                        ...(hoveredItem === item._id ? { backgroundColor: tokens.navItemHoverBg, color: tokens.navItemHoverText } : { color: tokens.navItemText }),
+                        ...(hoveredItem === item._id ? { backgroundColor: tokens.navItemHoverBg, color: tokens.navItemHoverText } : { color: layerColors.navbar.text }),
                         ...menuVars,
                       }}
                       title={item.label}
@@ -672,7 +706,7 @@ export function HeaderMenuPreview({
                       <div className="absolute top-full left-1/2 mt-3 -translate-x-1/2 z-50">
                         {isDeepMenuForItem(item._id) ? (
                           <div
-                            className="min-w-[720px] max-w-[960px] rounded-2xl border p-5 shadow-xl"
+                            className={cn(r.popup, 'min-w-[720px] max-w-[960px] border p-5 shadow-xl')}
                             style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
                           >
                             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -683,12 +717,39 @@ export function HeaderMenuPreview({
                                     target={child.openInNewTab ? '_blank' : undefined}
                                     rel={child.openInNewTab ? 'noreferrer' : undefined}
                                     className="block text-sm font-semibold whitespace-normal break-words leading-snug"
-                                    style={{ color: tokens.textPrimary }}
+                                    style={{ color: level1Color }}
                                   >
                                     {child.label}
                                   </a>
                                   <div className="space-y-1">
                                     {child.children.length > 0 ? child.children.map((sub) => (
+                                      config.flatSubMenus ? (
+                                        <div key={sub._id} className="mt-4 mb-2 first:mt-0">
+                                          <div 
+                                            className="mb-2 font-bold uppercase tracking-wider text-[11px] border-l-2 pl-2" 
+                                            style={{ color: tokens.brandBadgeBg || tokens.textPrimary, borderColor: tokens.brandBadgeBg || tokens.borderStrong }}
+                                          >
+                                            {sub.label}
+                                          </div>
+                                          {sub.children.length > 0 && (
+                                            <div className="space-y-1 pl-2 max-h-[240px] overflow-y-auto scrollbar-menu-thin">
+                                              {sub.children.map(leaf => (
+                                                <a 
+                                                  key={leaf._id} 
+                                                  href={leaf.url} 
+                                                  target={leaf.openInNewTab ? '_blank' : undefined} 
+                                                  className="block py-1.5 text-[13px] transition-colors"
+                                                  style={{ color: tokens.textSubtle }}
+                                                  onMouseEnter={(e) => { e.currentTarget.style.color = tokens.textPrimary; }}
+                                                  onMouseLeave={(e) => { e.currentTarget.style.color = tokens.textSubtle; }}
+                                                >
+                                                  {leaf.label}
+                                                </a>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
                                       <div key={sub._id} className="relative group/menu-node">
                                         <a
                                           href={sub.url}
@@ -698,16 +759,17 @@ export function HeaderMenuPreview({
                                           style={{ color: tokens.dropdownItemText, ...menuVars }}
                                         >
                                           <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{sub.label}</span>
-                                          {sub.children.length > 0 && <ChevronRight size={14} />}
+                                          {sub.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                                         </a>
                                         {sub.children.length > 0 && (
                                           <div className="absolute left-full top-0 ml-2 hidden group-hover/menu-node:block">
-                                            <div className="rounded-xl border py-2 min-w-[220px] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                            <div className="rounded-xl border py-2 min-w-[220px] shadow-lg overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                               {renderDesktopFlyoutNodes(sub.children)}
                                             </div>
                                           </div>
                                         )}
                                       </div>
+                                      )
                                     )) : (
                                       <a
                                         href={child.url}
@@ -726,8 +788,12 @@ export function HeaderMenuPreview({
                           </div>
                         ) : (
                           <div
-                            className="rounded-lg border py-2 min-w-[200px]"
-                            style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
+                            className={cn(r.dropdown, 'border py-2 min-w-[200px] overflow-y-auto scrollbar-menu-thin')}
+                            style={{ 
+                              backgroundColor: tokens.dropdownBg, 
+                              borderColor: tokens.dropdownBorder,
+                              maxHeight: 'min(70vh, 290px)',
+                            }}
                           >
                             {item.children.map((child) => (
                               <div key={child._id} className="relative group/menu-node">
@@ -739,11 +805,11 @@ export function HeaderMenuPreview({
                                   style={{ color: tokens.dropdownItemText, ...menuVars }}
                                 >
                                   <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{child.label}</span>
-                                  {child.children.length > 0 && <ChevronRight size={14} />}
+                                  {child.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                                 </a>
                                 {child.children.length > 0 && (
                                   <div className="absolute left-full top-0 pl-1 hidden group-hover/menu-node:block">
-                                    <div className="rounded-lg border py-2 min-w-[180px]" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                    <div className="rounded-lg border py-2 min-w-[180px] overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                       {renderDesktopFlyoutNodes(child.children)}
                                     </div>
                                   </div>
@@ -771,7 +837,7 @@ export function HeaderMenuPreview({
                           : 'hover:bg-[var(--menu-hover-bg)] hover:text-[var(--menu-hover-text)]'
                       )}
                       style={{
-                        ...(hoveredItem === moreKey ? { backgroundColor: tokens.navItemHoverBg, color: tokens.navItemHoverText } : { color: tokens.navItemText }),
+                        ...(hoveredItem === moreKey ? { backgroundColor: tokens.navItemHoverBg, color: tokens.navItemHoverText } : { color: layerColors.navbar.text }),
                         ...menuVars,
                       }}
                     >
@@ -792,7 +858,7 @@ export function HeaderMenuPreview({
                               style={{ color: tokens.dropdownItemText, ...menuVars }}
                             >
                               <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{root.label}</span>
-                              {root.children.length > 0 && <ChevronRight size={14} />}
+                              {root.children.length > 0 && <ChevronRight size={10} className="rotate-90" />}
                             </a>
 
                             {root.children.length > 0 && (
@@ -870,7 +936,7 @@ export function HeaderMenuPreview({
                   </div>
                 )}
                 {config.cart.show && (
-                  <a href={defaultLinks.cart} className="p-2 relative" style={{ color: tokens.iconButtonText }}>
+                  <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                     <ShoppingCart size={20} />
                     <span
                       className="absolute -top-1 -right-1 w-5 h-5 text-[10px] font-bold rounded-full flex items-center justify-center"
@@ -894,12 +960,12 @@ export function HeaderMenuPreview({
           ) : (
             <div className="ml-auto flex items-center gap-2">
               {showSearch && (
-                <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: tokens.iconButtonText }}>
+                <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: layerColors.navbar.text }}>
                   <Search size={20} />
                 </button>
               )}
               {config.cart.show && (
-                <a href={defaultLinks.cart} className="p-2 relative" style={{ color: tokens.iconButtonText }}>
+                <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                   <ShoppingCart size={20} />
                   <span
                     className="absolute -top-1 -right-1 w-5 h-5 text-[10px] font-bold rounded-full flex items-center justify-center"
@@ -952,9 +1018,9 @@ export function HeaderMenuPreview({
   };
 
   const renderTopbarStyle = () => (
-    <div className={cn(classicPositionClass)} style={{ backgroundColor: tokens.surface }}>
+    <div className={cn(classicPositionClass)} style={{ backgroundColor: layerColors.navbar.bg }}>
       {displayTopbar.show && (
-        <div className="px-4 py-2 text-xs" style={{ backgroundColor: tokens.topbarBg, color: tokens.topbarText }}>
+        <div className="px-4 py-2 text-xs" style={{ backgroundColor: layerColors.topnav.bg, color: layerColors.topnav.text }}>
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
@@ -973,7 +1039,7 @@ export function HeaderMenuPreview({
               {device !== 'mobile' && (
                 <>
                   {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
-                  {showTrackOrder && showLoginLink && <span style={{ color: tokens.topbarDivider }}>|</span>}
+                  {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
@@ -990,7 +1056,7 @@ export function HeaderMenuPreview({
 
       <div
         className="px-4 border-b"
-        style={{ borderColor: tokens.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
+        style={{ backgroundColor: layerColors.navbar.bg, borderColor: layerColors.navbar.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1000,7 +1066,7 @@ export function HeaderMenuPreview({
               </div>
             </div>
             {showBrandName && (
-              <span className="font-bold text-lg" style={{ color: tokens.textPrimary }}>{brandLabel}</span>
+              <span className="font-bold text-lg" style={{ color: layerColors.navbar.text }}>{brandLabel}</span>
             )}
           </div>
 
@@ -1031,12 +1097,12 @@ export function HeaderMenuPreview({
             {device === 'mobile' ? (
               <>
                 {showSearch && (
-                  <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: tokens.iconButtonText }}>
+                  <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: layerColors.navbar.text }}>
                     <Search size={20} />
                   </button>
                 )}
                 {config.cart.show && (
-                  <a href={defaultLinks.cart} className="p-2 relative" style={{ color: tokens.iconButtonText }}>
+                  <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                     <ShoppingCart size={20} />
                     <span
                       className="absolute -top-1 -right-1 w-5 h-5 text-[10px] font-bold rounded-full flex items-center justify-center"
@@ -1054,7 +1120,7 @@ export function HeaderMenuPreview({
                   <a
                     href={defaultLinks.wishlist}
                     className="p-2 transition-colors flex flex-col items-center text-xs gap-0.5 hover:text-[var(--menu-icon-hover)]"
-                    style={{ color: tokens.iconButtonText, ...menuVars }}
+                    style={{ color: layerColors.navbar.text, ...menuVars }}
                   >
                     <Heart size={20} /><span>Yêu thích</span>
                   </a>
@@ -1063,7 +1129,7 @@ export function HeaderMenuPreview({
                   <a
                     href={defaultLinks.cart}
                     className="p-2 transition-colors flex flex-col items-center text-xs gap-0.5 relative hover:text-[var(--menu-icon-hover)]"
-                    style={{ color: tokens.iconButtonText, ...menuVars }}
+                    style={{ color: layerColors.navbar.text, ...menuVars }}
                   >
                     <ShoppingCart size={20} /><span>Giỏ hàng</span>
                     <span
@@ -1090,7 +1156,7 @@ export function HeaderMenuPreview({
       </div>
 
       {device !== 'mobile' && (
-        <div className="px-4 py-2 border-b" style={{ backgroundColor: tokens.navBarBg, borderColor: tokens.border }}>
+        <div className="px-4 py-2 border-b" style={{ backgroundColor: layerColors.menu.bg, borderColor: layerColors.menu.border }}>
           <nav className="flex items-center gap-1">
             {menuTree.map((item) => (
               <div key={item._id} className="relative" onMouseEnter={() => setHoveredItem(item._id)} onMouseLeave={() => setHoveredItem(null)}>
@@ -1105,7 +1171,7 @@ export function HeaderMenuPreview({
                   style={{
                     ...(hoveredItem === item._id
                       ? { backgroundColor: tokens.navItemHoverBg, color: tokens.navItemHoverText }
-                      : { color: tokens.navItemText }),
+                      : { color: layerColors.menu.text }),
                     ...menuVars,
                   }}
                 >
@@ -1127,7 +1193,7 @@ export function HeaderMenuPreview({
                                 target={child.openInNewTab ? '_blank' : undefined}
                                 rel={child.openInNewTab ? 'noreferrer' : undefined}
                                 className="block text-sm font-semibold whitespace-normal break-words leading-snug"
-                                style={{ color: tokens.textPrimary }}
+                                style={{ color: level1Color }}
                               >
                                 {child.label}
                               </a>
@@ -1142,11 +1208,11 @@ export function HeaderMenuPreview({
                                       style={{ color: tokens.dropdownItemText, ...menuVars }}
                                     >
                                       <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{sub.label}</span>
-                                      {sub.children.length > 0 && <ChevronRight size={14} />}
+                                      {sub.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                                     </a>
                                     {sub.children.length > 0 && (
                                       <div className="absolute left-full top-0 ml-2 hidden group-hover/menu-node:block">
-                                        <div className="rounded-xl border py-2 min-w-[220px] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                        <div className="rounded-xl border py-2 min-w-[220px] shadow-lg overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                           {renderDesktopFlyoutNodes(sub.children)}
                                         </div>
                                       </div>
@@ -1170,8 +1236,12 @@ export function HeaderMenuPreview({
                       </div>
                     ) : (
                       <div
-                        className="rounded-lg border py-2 min-w-[200px]"
-                        style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
+                        className="rounded-lg border py-2 min-w-[200px] overflow-y-auto scrollbar-menu-thin"
+                        style={{ 
+                          backgroundColor: tokens.dropdownBg, 
+                          borderColor: tokens.dropdownBorder,
+                          maxHeight: 'min(70vh, 290px)',
+                        }}
                       >
                         {item.children.map((child) => (
                           <div key={child._id} className="relative group/menu-node">
@@ -1183,11 +1253,11 @@ export function HeaderMenuPreview({
                               style={{ color: tokens.dropdownItemText, ...menuVars }}
                             >
                               <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{child.label}</span>
-                              {child.children.length > 0 && <ChevronRight size={14} />}
+                              {child.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                             </a>
                             {child.children.length > 0 && (
                               <div className="absolute left-full top-0 pl-1 hidden group-hover/menu-node:block">
-                                <div className="rounded-lg border py-2 min-w-[180px]" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                <div className="rounded-lg border py-2 min-w-[180px] overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                   {renderDesktopFlyoutNodes(child.children)}
                                 </div>
                               </div>
@@ -1220,7 +1290,7 @@ export function HeaderMenuPreview({
       )}
 
       {device === 'mobile' && mobileMenuOpen && (
-        <div className="border-t" style={{ borderColor: tokens.border, backgroundColor: tokens.surface }}>
+        <div className="border-t" style={{ borderColor: layerColors.menu.border, backgroundColor: layerColors.menu.bg }}>
           {renderMobileNodes(menuTree)}
           {config.cta.show && (
             <div className="p-4">
@@ -1239,9 +1309,9 @@ export function HeaderMenuPreview({
   );
 
   const renderAllbirdsStyle = () => (
-    <div className={cn(classicPositionClass)} style={{ backgroundColor: tokens.surface, ...classicSeparatorStyle }}>
+    <div className={cn(classicPositionClass)} style={{ backgroundColor: layerColors.navbar.bg, ...classicSeparatorStyle }}>
       {displayTopbar.show && (
-        <div className="px-4 py-2 text-xs" style={{ backgroundColor: tokens.topbarBg, color: tokens.topbarText }}>
+        <div className="px-4 py-2 text-xs" style={{ backgroundColor: layerColors.topnav.bg, color: layerColors.topnav.text }}>
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
@@ -1260,7 +1330,7 @@ export function HeaderMenuPreview({
               {device !== 'mobile' && (
                 <>
                   {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
-                  {showTrackOrder && showLoginLink && <span style={{ color: tokens.topbarDivider }}>|</span>}
+                  {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
@@ -1279,7 +1349,7 @@ export function HeaderMenuPreview({
       )}
       <div
         className={cn('px-6', !isDesktop && 'border-b')}
-        style={{ borderColor: tokens.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
+        style={{ backgroundColor: layerColors.navbar.bg, borderColor: layerColors.navbar.border, paddingTop: headerSpacingY, paddingBottom: headerSpacingY }}
       >
         {device !== 'mobile' ? (
           <div className="flex items-center justify-between gap-6">
@@ -1291,7 +1361,7 @@ export function HeaderMenuPreview({
                 ></div>
               </div>
               {showBrandName && (
-                <span className="text-base font-semibold" style={{ color: tokens.textPrimary }}>{brandLabel}</span>
+                <span className="text-base font-semibold" style={{ color: layerColors.navbar.text }}>{brandLabel}</span>
               )}
             </div>
             <nav className="flex items-center gap-6">
@@ -1320,7 +1390,7 @@ export function HeaderMenuPreview({
                         'text-sm font-medium transition-colors',
                         hoveredItem === item._id ? 'text-[var(--menu-hover-text)]' : 'hover:text-[var(--menu-hover-text)]'
                       )}
-                      style={{ color: tokens.allbirdsNavText, ...menuVars }}
+                      style={{ color: layerColors.navbar.text, ...menuVars }}
                     >
                       {item.label}
                     </a>
@@ -1334,7 +1404,7 @@ export function HeaderMenuPreview({
                             <div className={cn('grid gap-6', gridCols)}>
                               {item.children.map((child) => (
                                 <div key={child._id} className="space-y-3">
-                                  <a href={child.url} className="text-sm font-semibold whitespace-normal break-words leading-snug" style={{ color: tokens.textPrimary }}>
+                                  <a href={child.url} className="text-sm font-semibold whitespace-normal break-words leading-snug" style={{ color: level1Color }}>
                                     {child.label}
                                   </a>
                                   <div className="space-y-2">
@@ -1348,11 +1418,11 @@ export function HeaderMenuPreview({
                                           style={{ color: tokens.dropdownSubItemText, ...menuVars }}
                                         >
                                           <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{sub.label}</span>
-                                          {sub.children.length > 0 && <ChevronRight size={14} />}
+                                          {sub.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                                         </a>
                                         {sub.children.length > 0 && (
                                           <div className="absolute left-full top-0 ml-2 hidden group-hover/menu-node:block">
-                                            <div className="rounded-xl border py-2 min-w-[220px] shadow-lg" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                            <div className="rounded-xl border py-2 min-w-[220px] shadow-lg overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                               {renderDesktopFlyoutNodes(sub.children)}
                                             </div>
                                           </div>
@@ -1374,8 +1444,12 @@ export function HeaderMenuPreview({
                           </div>
                         ) : (
                           <div
-                            className="rounded-lg border py-2 min-w-[240px]"
-                            style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
+                            className="rounded-lg border py-2 min-w-[240px] overflow-y-auto scrollbar-menu-thin"
+                            style={{ 
+                              backgroundColor: tokens.dropdownBg, 
+                              borderColor: tokens.dropdownBorder,
+                              maxHeight: 'min(70vh, 290px)',
+                            }}
                           >
                             {item.children.map((child) => (
                               <div key={child._id} className="relative group/menu-node">
@@ -1387,11 +1461,11 @@ export function HeaderMenuPreview({
                                   style={{ color: tokens.dropdownItemText, ...menuVars }}
                                 >
                                   <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{child.label}</span>
-                                  {child.children.length > 0 && <ChevronRight size={14} />}
+                                  {child.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
                                 </a>
                                 {child.children.length > 0 && (
                                   <div className="absolute left-full top-0 pl-1 hidden group-hover/menu-node:block">
-                                    <div className="rounded-lg border py-2 min-w-[180px]" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}>
+                                    <div className="rounded-lg border py-2 min-w-[180px] overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
                                       {renderDesktopFlyoutNodes(child.children)}
                                     </div>
                                   </div>
@@ -1433,7 +1507,7 @@ export function HeaderMenuPreview({
                   <button
                     onClick={() => setSearchOpen((prev) => !prev)}
                     className="p-2 transition-colors hover:text-[var(--menu-icon-hover)]"
-                    style={{ color: tokens.iconButtonText, ...menuVars }}
+                    style={{ color: layerColors.navbar.text, ...menuVars }}
                   >
                     <Search size={18} />
                   </button>
@@ -1444,7 +1518,7 @@ export function HeaderMenuPreview({
                 <a
                   href={defaultLinks.login}
                   className="p-2 transition-colors hover:text-[var(--menu-icon-hover)]"
-                  style={{ color: tokens.iconButtonText, ...menuVars }}
+                  style={{ color: layerColors.navbar.text, ...menuVars }}
                 >
                   <User size={18} />
                 </a>
@@ -1453,7 +1527,7 @@ export function HeaderMenuPreview({
                 <a
                   href={defaultLinks.cart}
                   className="p-2 relative transition-colors hover:text-[var(--menu-icon-hover)]"
-                  style={{ color: tokens.iconButtonText, ...menuVars }}
+                  style={{ color: layerColors.navbar.text, ...menuVars }}
                 >
                   <ShoppingCart size={18} />
                   <span
@@ -1476,17 +1550,17 @@ export function HeaderMenuPreview({
                 ></div>
               </div>
               {showBrandName && (
-                <span className="text-base font-semibold" style={{ color: tokens.textPrimary }}>{brandLabel}</span>
+                <span className="text-base font-semibold" style={{ color: layerColors.navbar.text }}>{brandLabel}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
               {showSearch && (
-                <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: tokens.iconButtonText }}>
+                <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: layerColors.navbar.text }}>
                   <Search size={18} />
                 </button>
               )}
               {config.cart.show && (
-                <a href={defaultLinks.cart} className="p-2 relative" style={{ color: tokens.iconButtonText }}>
+                <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                   <ShoppingCart size={18} />
                   <span
                     className="absolute -top-1 -right-1 w-5 h-5 text-[10px] font-bold rounded-full flex items-center justify-center"

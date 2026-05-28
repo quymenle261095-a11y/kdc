@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowRight, Package } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, Package } from 'lucide-react';
+import useEmblaCarousel from 'embla-carousel-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { cn } from '../../../components/ui';
@@ -7,11 +8,12 @@ import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
-import { ProductImageFrameOverlay, useProductFrameConfig } from '@/components/shared/ProductImageFrameBox';
+import { ProductImageWithOverlayAuto } from '@/components/shared/ProductImageWithOverlay';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { CATEGORY_PRODUCTS_STYLES } from '../_lib/constants';
 import { getCategoryProductsColors } from '../_lib/colors';
 import { getHomeComponentPriceLabel, resolveSaleMode } from '../../_shared/lib/productPrice';
+import { getSectionSpacingClassName, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 import { getProductImageAspectRatioCssValue, getProductImageAspectRatioLabel, resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
 import type {
   CategoryProductsBrandMode,
@@ -19,6 +21,13 @@ import type {
   CategoryProductsProduct,
   CategoryProductsSection,
   CategoryProductsStyle,
+  DemoCategoryProductsSection,
+} from '../_types';
+import {
+  getCategoryProductsCardRadiusClassName,
+  getCategoryProductsImageRadiusClassName,
+  getCategoryProductsPreviewGridClassName,
+  normalizeCategoryProductsCornerRadius,
 } from '../_types';
 
 interface CategoryProductsPreviewProps {
@@ -68,44 +77,59 @@ export const CategoryProductsPreview = ({
     () => getProductImageAspectRatioLabel(imageAspectRatio),
     [imageAspectRatio]
   );
+  const sectionSpacingClassName = getSectionSpacingClassName(normalizeSectionSpacing(config.spacing));
+  const cornerRadius = normalizeCategoryProductsCornerRadius(config.cornerRadius);
+  const cardRadiusClassName = getCategoryProductsCardRadiusClassName(cornerRadius);
+  const imageRadiusClassName = getCategoryProductsImageRadiusClassName(cornerRadius);
 
-  // Resolve sections with category and products data
-  const resolvedSections = config.sections
-    .map((section) => {
-      const category = categoriesData.find(c => c._id === section.categoryId);
-      if (!category) {return null;}
-
-      const products = productsData
-        .filter(p => p.categoryId === section.categoryId)
-        .slice(0, section.itemCount);
-
-      return {
-        ...section,
-        category,
-        products,
-      };
-    })
-    .filter(Boolean) as (CategoryProductsSection & { 
-      category: { _id: string; name: string; slug?: string; image?: string }; 
-      products: CategoryProductsProduct[]; 
-    })[];
-
-  const getGridCols = () => {
-    if (device === 'mobile') {
-      return config.columnsMobile === 1 ? 'grid-cols-1' : 'grid-cols-2';
+  const resolvedSections = React.useMemo(() => {
+    if (config.selectionMode === 'demo') {
+      return ((config.demoSections ?? []) as DemoCategoryProductsSection[])
+        .filter(section => section.categoryName.trim() || section.products.length > 0)
+        .map((section, index) => ({
+          category: {
+            _id: section.id,
+            image: section.categoryImage,
+            name: section.categoryName || `Danh mục demo ${index + 1}`,
+            slug: undefined,
+          },
+          categoryId: section.id,
+          id: index,
+          itemCount: section.products.length,
+          products: section.products.map(product => ({
+            _id: product.id,
+            categoryId: section.id,
+            hasVariants: false,
+            image: product.image,
+            name: product.name || 'Tên sản phẩm',
+            price: product.price,
+            salePrice: product.salePrice,
+          })),
+        }));
     }
-    if (device === 'tablet') {
-      return 'grid-cols-3';
-    }
-    switch (config.columnsDesktop) {
-      case 3: { return 'grid-cols-3';
-      }
-      case 5: { return 'grid-cols-5';
-      }
-      default: { return 'grid-cols-4';
-      }
-    }
-  };
+
+    return config.sections
+      .map((section) => {
+        const category = categoriesData.find(c => c._id === section.categoryId);
+        if (!category) {return null;}
+
+        const products = productsData
+          .filter(p => p.categoryId === section.categoryId)
+          .slice(0, section.itemCount);
+
+        return {
+          ...section,
+          category,
+          products,
+        };
+      })
+      .filter(Boolean) as (CategoryProductsSection & {
+        category: { _id: string; name: string; slug?: string; image?: string };
+        products: CategoryProductsProduct[];
+      })[];
+  }, [categoriesData, config.demoSections, config.sections, config.selectionMode, productsData]);
+
+  const getGridCols = () => getCategoryProductsPreviewGridClassName(config.columnsDesktop, device);
 
   const getPriceDisplay = (price?: number, salePrice?: number, isRangeFromVariant?: boolean) =>
     getHomeComponentPriceLabel({ saleMode, price, salePrice, isRangeFromVariant });
@@ -136,6 +160,9 @@ export const CategoryProductsPreview = ({
       case 'showcase': {
         return `${sectionCount} section • Ảnh: ${imageAspectRatioLabel}`;
       }
+      case 'wine-grid': {
+        return `${sectionCount} section • ${totalProducts} SP • Ảnh vuông contain`;
+      }
       default: {
         return `${sectionCount} section • ${totalProducts} sản phẩm`;
       }
@@ -165,19 +192,17 @@ export const CategoryProductsPreview = ({
   );
 
   const FramePreviewImage = ({ src, alt, className }: { src: string; alt: string; className?: string }) => {
-    const { frame } = useProductFrameConfig();
     return (
-      <>
+      <ProductImageWithOverlayAuto className="w-full h-full relative overflow-hidden">
         <PreviewImage src={src} alt={alt} className={className} />
-        <ProductImageFrameOverlay frame={frame} />
-      </>
+      </ProductImageWithOverlayAuto>
     );
   };
 
   // Product Card Component with Equal Height (line-clamp + min-height)
   const ProductCard = ({ product }: { product: CategoryProductsProduct }) => (
     <div className="group cursor-pointer flex flex-col h-full">
-      <div className="rounded-lg overflow-hidden mb-2" style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
+      <div className={cn('overflow-hidden mb-2', imageRadiusClassName)} style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
         {product.image ? (
           <FramePreviewImage
             src={product.image}
@@ -226,7 +251,7 @@ export const CategoryProductsPreview = ({
 
   // Style 1: Grid - Classic grid layout per section
   const renderGridStyle = () => (
-    <div className="w-full py-4 space-y-8 md:space-y-12">
+    <div className={cn('w-full space-y-8 md:space-y-12', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
@@ -247,7 +272,7 @@ export const CategoryProductsPreview = ({
                 </h2>
                 {config.showViewAll && (
                   <button
-                    className="text-sm font-medium flex items-center gap-1 underline px-3 py-1.5 rounded-lg border"
+                    className="text-sm font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border"
                     style={{ borderColor: colors.buttonBorder, color: colors.buttonText }}
                   >
                     Xem danh mục <ArrowRight size={16} />
@@ -271,79 +296,135 @@ export const CategoryProductsPreview = ({
     </div>
   );
 
-  // Style 2: Carousel - Horizontal scroll
+  // Style 2: Carousel - Embla carousel per section
+  const CarouselSection = ({ section }: { section: typeof resolvedSections[number] }) => {
+    const [emblaRef, emblaApi] = useEmblaCarousel({
+      align: 'start',
+      dragFree: true,
+      containScroll: 'trimSnaps',
+    });
+    const [canScrollPrev, setCanScrollPrev] = React.useState(false);
+    const [canScrollNext, setCanScrollNext] = React.useState(false);
+
+    React.useEffect(() => {
+      if (!emblaApi) { return; }
+      const update = () => {
+        setCanScrollPrev(emblaApi.canScrollPrev());
+        setCanScrollNext(emblaApi.canScrollNext());
+      };
+      update();
+      emblaApi.on('select', update);
+      emblaApi.on('reInit', update);
+      return () => { emblaApi.off('select', update); emblaApi.off('reInit', update); };
+    }, [emblaApi]);
+
+    return (
+      <section>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between px-4 mb-4">
+            <h2
+              className={cn(
+                'font-bold',
+                device === 'mobile' ? 'text-lg' : 'text-xl md:text-2xl'
+              )}
+              style={{ color: colors.heading }}
+            >
+              {section.category.name}
+            </h2>
+            <div className="flex items-center gap-2">
+              {config.showViewAll && (
+                <button 
+                  className="text-sm font-medium flex items-center gap-1"
+                  style={{ color: colors.buttonText }}
+                >
+                  Xem danh mục <ArrowRight size={16} />
+                </button>
+              )}
+              {(canScrollPrev || canScrollNext) && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label="Trước"
+                    disabled={!canScrollPrev}
+                    onClick={() => emblaApi?.scrollPrev()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-all"
+                    style={canScrollPrev
+                      ? { backgroundColor: `${colors.sectionAccent}18`, color: colors.sectionAccent }
+                      : { opacity: 0.3, color: colors.mutedText ?? '#94a3b8' }}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Tiếp"
+                    disabled={!canScrollNext}
+                    onClick={() => emblaApi?.scrollNext()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-all"
+                    style={canScrollNext
+                      ? { backgroundColor: `${colors.sectionAccent}18`, color: colors.sectionAccent }
+                      : { opacity: 0.3, color: colors.mutedText ?? '#94a3b8' }}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {section.products.length === 0 ? (
+            <div className="mx-4">
+              <EmptyState message="Chưa có sản phẩm" size="small" />
+            </div>
+          ) : (
+            <div className="overflow-hidden px-4" ref={emblaRef}>
+              <div className="flex gap-4 backface-hidden touch-pan-y">
+                {section.products.map((product) => (
+                  <div 
+                    key={product._id}
+                    className={cn(
+                      'flex-none group cursor-grab active:cursor-grabbing select-none',
+                      device === 'mobile' ? 'w-36' : 'w-48'
+                    )}
+                  >
+                    <div className={cn('overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2', imageRadiusClassName)} style={imageAspectRatioStyle}>
+                      {product.image ? (
+                        <FramePreviewImage 
+                          src={product.image} 
+                          alt={product.name} 
+                          className="w-full h-full object-cover" 
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package size={24} className="text-slate-300" />
+                        </div>
+                      )}
+                    </div>
+                    <h4 className={cn(
+                      'font-medium line-clamp-2 mb-1',
+                      device === 'mobile' ? 'text-xs' : 'text-sm'
+                    )}>{product.name}</h4>
+                    <span className={cn('font-bold', device === 'mobile' ? 'text-sm' : 'text-base')} style={{ color: colors.buttonText }}>
+                      {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
+
   const renderCarouselStyle = () => (
-    <div className="w-full py-4 space-y-8 md:space-y-12">
+    <div className={cn('w-full space-y-8 md:space-y-12', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
         resolvedSections.map((section) => (
-          <section key={section.id}>
-            <div className="max-w-7xl mx-auto">
-              <div className="flex items-center justify-between px-4 mb-4">
-                <h2
-                  className={cn(
-                    'font-bold',
-                    device === 'mobile' ? 'text-lg' : 'text-xl md:text-2xl'
-                  )}
-                  style={{ color: colors.heading }}
-                >
-                  {section.category.name}
-                </h2>
-                {config.showViewAll && (
-                  <button 
-                    className="text-sm font-medium flex items-center gap-1 underline"
-                    style={{ color: colors.buttonText }}
-                  >
-                    Xem danh mục <ArrowRight size={16} />
-                  </button>
-                )}
-              </div>
-
-              {section.products.length === 0 ? (
-                <div className="mx-4">
-                  <EmptyState message="Chưa có sản phẩm" size="small" />
-                </div>
-              ) : (
-                <div className="overflow-x-auto pb-4 px-4 scrollbar-hide">
-                  <div className="flex gap-4">
-                    {section.products.map((product) => (
-                      <div 
-                        key={product._id}
-                        className={cn(
-                          'flex-shrink-0 group cursor-pointer',
-                          device === 'mobile' ? 'w-36' : 'w-48'
-                        )}
-                      >
-                        <div className="rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2" style={imageAspectRatioStyle}>
-                          {product.image ? (
-                            <FramePreviewImage 
-                              src={product.image} 
-                              alt={product.name} 
-                              className="w-full h-full object-cover" 
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package size={24} className="text-slate-300" />
-                            </div>
-                          )}
-                        </div>
-                        <h4 className={cn(
-                          'font-medium line-clamp-2 mb-1',
-                          device === 'mobile' ? 'text-xs' : 'text-sm'
-                        )}>{product.name}</h4>
-                        <span className={cn('font-bold', device === 'mobile' ? 'text-sm' : 'text-base')} style={{ color: colors.buttonText }}>
-                          {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
+          <CarouselSection key={section.id} section={section} />
         ))
       )}
     </div>
@@ -351,7 +432,7 @@ export const CategoryProductsPreview = ({
 
   // Style 3: Cards - Modern cards with category header
   const renderCardsStyle = () => (
-    <div className="w-full py-4 space-y-8 md:space-y-12">
+    <div className={cn('w-full space-y-8 md:space-y-12', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
@@ -361,7 +442,7 @@ export const CategoryProductsPreview = ({
           <section key={section.id} className="px-4">
             <div className="max-w-7xl mx-auto">
               <div
-                className="rounded-xl overflow-hidden"
+                className={cn('overflow-hidden', cardRadiusClassName)}
                 style={{ border: `1px solid ${colors.cardBorder}` }}
               >
                 <div
@@ -370,7 +451,7 @@ export const CategoryProductsPreview = ({
                 >
                   <div className="flex items-center gap-3">
                     {section.category.image && (
-                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
+                      <div className={cn('w-10 h-10 overflow-hidden bg-white', imageRadiusClassName)}>
                         <PreviewImage 
                           src={section.category.image} 
                           alt={section.category.name} 
@@ -390,7 +471,7 @@ export const CategoryProductsPreview = ({
                   </div>
                   {config.showViewAll && (
                     <button
-                      className="text-sm font-medium flex items-center gap-1 underline px-3 py-1.5 rounded-lg"
+                      className="text-sm font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg"
                       style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
                     >
                       Xem danh mục <ArrowRight size={14} />
@@ -422,7 +503,7 @@ export const CategoryProductsPreview = ({
 
   // Style 4: Bento - Featured product với grid layout sáng tạo
   const renderBentoStyle = () => (
-    <div className="w-full py-4 space-y-10 md:space-y-16">
+    <div className={cn('w-full space-y-10 md:space-y-16', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
@@ -475,7 +556,7 @@ export const CategoryProductsPreview = ({
                 ) : (
                   <div className="grid grid-cols-4 gap-4 auto-rows-[180px]">
                     {featured && (
-                      <div className="col-span-2 row-span-2 group cursor-pointer relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      <div className={cn('col-span-2 row-span-2 group cursor-pointer relative overflow-hidden bg-slate-100 dark:bg-slate-800', cardRadiusClassName)}>
                         {featured.image ? (
                           <FramePreviewImage 
                             src={featured.image} 
@@ -517,7 +598,7 @@ export const CategoryProductsPreview = ({
                     )}
 
                     {others.map((product) => (
-                      <div key={product._id} className="group cursor-pointer relative rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      <div key={product._id} className={cn('group cursor-pointer relative overflow-hidden bg-slate-100 dark:bg-slate-800', imageRadiusClassName)}>
                         {product.image ? (
                           <FramePreviewImage 
                             src={product.image} 
@@ -547,7 +628,7 @@ export const CategoryProductsPreview = ({
 
   // Style 5: Magazine - Editorial Grid với Featured Item + Grid nhỏ
   const renderMagazineStyle = () => (
-    <div className="w-full py-4 space-y-12 md:space-y-16">
+    <div className={cn('w-full space-y-12 md:space-y-16', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
@@ -586,7 +667,7 @@ export const CategoryProductsPreview = ({
                       )}
                       style={{ color: colors.buttonText }}
                     >
-                      Xem tất cả <ArrowRight size={device === 'mobile' ? 16 : 18} />
+                      Xem danh mục <ArrowRight size={device === 'mobile' ? 16 : 18} />
                     </button>
                   )}
                 </div>
@@ -602,7 +683,7 @@ export const CategoryProductsPreview = ({
                 ) : (
                   <div className="grid grid-cols-2 gap-6">
                     {featured && (
-                      <div className="group cursor-pointer relative rounded-2xl overflow-hidden" style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
+                      <div className={cn('group cursor-pointer relative overflow-hidden', cardRadiusClassName)} style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
                         {featured.image ? (
                           <FramePreviewImage 
                             src={featured.image} 
@@ -647,7 +728,7 @@ export const CategoryProductsPreview = ({
                       {gridItems.map((product) => (
                         <div key={product._id} className="group cursor-pointer">
                           <div 
-                            className="rounded-xl overflow-hidden mb-3 relative"
+                            className={cn('overflow-hidden mb-3 relative', imageRadiusClassName)}
                             style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
                           >
                             {product.image ? (
@@ -720,7 +801,7 @@ export const CategoryProductsPreview = ({
 
   // Style 6: Showcase - always-visible mobile-first cards
   const renderShowcaseStyle = () => (
-    <div className="w-full py-4 space-y-10 md:space-y-16">
+    <div className={cn('w-full space-y-10 md:space-y-16', sectionSpacingClassName)}>
       {resolvedSections.length === 0 ? (
         <div className="px-4">
           <EmptyState message="Chưa chọn danh mục nào" />
@@ -756,7 +837,7 @@ export const CategoryProductsPreview = ({
                     className="flex items-center gap-2 text-sm font-medium"
                     style={{ color: colors.buttonText }}
                   >
-                    Xem tất cả
+                    Xem danh mục
                     <span
                       className="w-8 h-8 rounded-full flex items-center justify-center"
                       style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}` }}
@@ -775,12 +856,12 @@ export const CategoryProductsPreview = ({
               ) : (
                 <div className={cn(
                   'grid gap-4',
-                  device === 'mobile' ? 'grid-cols-2' : 'grid-cols-4'
+                  getGridCols()
                 )}>
                   {section.products.map((product) => (
                     <div key={product._id} className="cursor-pointer">
                       <div
-                        className="relative rounded-2xl overflow-hidden border"
+                        className={cn('relative overflow-hidden border', cardRadiusClassName)}
                         style={{ ...imageAspectRatioStyle, borderColor: colors.cardBorder, backgroundColor: colors.imageBackground }}
                       >
                         {product.image ? (
@@ -853,6 +934,136 @@ export const CategoryProductsPreview = ({
     </div>
   );
 
+  const getProductDiscount = (product: CategoryProductsProduct) => {
+    const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+    const currentPrice = product.salePrice ?? product.price;
+    if (!priceDisplay.comparePrice || !currentPrice || priceDisplay.comparePrice <= currentPrice) {return null;}
+    return Math.round((1 - currentPrice / priceDisplay.comparePrice) * 100);
+  };
+
+  const renderWineGridStyle = () => (
+    <div className={cn('w-full bg-white px-2', sectionSpacingClassName)}>
+      {resolvedSections.length === 0 ? (
+        <EmptyState message="Chưa chọn danh mục nào" />
+      ) : (
+        <div className="mx-auto flex w-full max-w-[1152px] flex-col gap-6">
+          {resolvedSections.map((section) => {
+            const productGridClassName = cn(getGridCols(), 'gap-2 md:gap-3');
+
+            return (
+            <section
+              key={section.id}
+              className={cn('border bg-white', cardRadiusClassName)}
+              style={{ borderColor: colors.cardBorder }}
+            >
+              <div className={cn(
+                'flex flex-col gap-3 px-3 py-4 md:px-5 md:py-5 lg:px-6 lg:py-6',
+                'sm:flex-row sm:items-end sm:justify-between'
+              )}>
+                <div className="min-w-0 flex-1">
+                  <h3 className="break-words text-base font-bold uppercase leading-6 tracking-[0.1em] md:text-xl md:leading-7 md:tracking-[0.14em] lg:text-2xl lg:leading-8 lg:tracking-[0.18em]" style={{ color: colors.heading }}>
+                    {section.category.name}
+                  </h3>
+                </div>
+                {config.showViewAll && (
+                  <button
+                    type="button"
+                    aria-label="Xem thêm - Xem danh mục"
+                    className={cn(
+                      'group flex h-9 shrink-0 items-center justify-center self-start rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase leading-4 tracking-[0.12em] transition-colors hover:bg-[var(--wine-button-hover-bg)] hover:text-[var(--wine-button-hover-text)] md:h-10 md:px-4 md:text-xs md:tracking-[0.16em]',
+                      'sm:self-auto lg:ml-4 lg:px-5'
+                    )}
+                    style={{
+                      '--wine-button-hover-bg': colors.sectionAccent,
+                      '--wine-button-hover-text': colors.featuredBadgeText,
+                      backgroundColor: colors.buttonBackground,
+                      borderColor: colors.sectionAccent,
+                      color: colors.sectionAccent,
+                    } as React.CSSProperties}
+                  >
+                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      Xem thêm
+                      <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              <div className="px-3 pb-4 md:px-5 md:pb-5 lg:px-6 lg:pb-6">
+                {section.products.length === 0 ? (
+                  <EmptyState message="Chưa có sản phẩm trong danh mục này" size="small" />
+                ) : (
+                  <div className={cn('grid', productGridClassName)}>
+                    {section.products.map((product) => {
+                      const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+                      const discount = getProductDiscount(product);
+
+                      return (
+                        <article
+                          key={product._id}
+                          className={cn('flex h-full flex-col overflow-hidden border shadow-sm transition-all duration-300', cardRadiusClassName)}
+                          style={{ backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }}
+                        >
+                          <div className="relative aspect-square overflow-hidden border-b" style={{ backgroundColor: colors.imageBackground, borderColor: colors.cardBorder }}>
+                            {discount !== null && (
+                              <span className="absolute left-0 top-3 z-10 rounded-r-lg px-2.5 py-0.5 text-xs font-bold leading-4 shadow-sm" style={{ backgroundColor: colors.featuredBadgeBackground, color: colors.featuredBadgeText }}>
+                                -{discount}%
+                              </span>
+                            )}
+                            <div className="relative h-full w-full">
+                              {product.image ? (
+                                <PreviewImage
+                                  src={product.image}
+                                  alt={product.name}
+                                  className="absolute inset-0 h-full w-full object-contain p-1 transition-opacity duration-300"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Package size={28} style={{ color: colors.emptyStateIcon }} />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex min-w-0 flex-1 flex-col p-2.5 md:p-3">
+                            <h3 className="mb-1.5 line-clamp-2 break-words text-[13px] font-bold leading-5 transition-colors md:mb-2 md:text-sm md:leading-5 lg:text-base lg:leading-6" style={{ color: colors.bodyText }}>
+                              {product.name || 'Tên sản phẩm'}
+                            </h3>
+                            <div className="mb-2 flex flex-col gap-1" />
+                            <div className="mt-auto flex min-w-0 flex-row items-end justify-between gap-1.5 border-t pt-2" style={{ borderColor: colors.cardBorder }}>
+                              <div className="min-w-0 flex flex-col">
+                                {priceDisplay.comparePrice && (
+                                  <span className="max-w-full truncate text-xs font-medium leading-4 line-through" style={{ color: colors.mutedText }}>
+                                    {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
+                                  </span>
+                                )}
+                                <span className="max-w-full truncate whitespace-nowrap text-[12px] font-bold leading-4 md:text-[13px] md:leading-5 lg:text-sm" style={{ color: colors.bodyText }}>
+                                  {priceDisplay.label}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="inline-flex h-6 min-w-9 shrink-0 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-medium leading-none transition-colors md:min-w-10 md:px-2.5 md:text-[11px]"
+                                style={{ backgroundColor: colors.buttonSolidBackground, color: colors.buttonSolidText }}
+                              >
+                                Xem
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
       <PreviewWrapper 
@@ -874,6 +1085,7 @@ export const CategoryProductsPreview = ({
           {previewStyle === 'bento' && renderBentoStyle()}
           {previewStyle === 'magazine' && renderMagazineStyle()}
           {previewStyle === 'showcase' && renderShowcaseStyle()}
+          {previewStyle === 'wine-grid' && renderWineGridStyle()}
         </BrowserFrame>
       </PreviewWrapper>
       <ColorInfoPanel brandColor={_brandColor} secondary={colors.secondary} />

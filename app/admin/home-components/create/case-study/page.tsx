@@ -1,29 +1,31 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertTriangle, Eye, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { AlertTriangle, Eye } from 'lucide-react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { useSectionHeaderState } from '../../_shared/hooks/useSectionHeaderState';
+import { HeaderConfigSection } from '../../_shared/components/HeaderConfigSection';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import {
   getCaseStudyValidationResult,
 } from '../../case-study/_lib/colors';
 import type {
   CaseStudyBrandMode,
+  CaseStudyCornerRadius,
+  CaseStudyDesktopColumns,
+  CaseStudyProject,
   CaseStudyStyle,
 } from '../../case-study/_types';
+import {
+  DEFAULT_CASE_STUDY_CONFIG,
+  DEFAULT_CASE_STUDY_CORNER_RADIUS,
+  DEFAULT_CASE_STUDY_DESKTOP_COLUMNS,
+} from '../../case-study/_types';
 import { CaseStudyPreview } from '../../case-study/_components/CaseStudyPreview';
-import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
-
-interface Project {
-  id: string | number;
-  title: string;
-  category: string;
-  image: string;
-  description: string;
-  link: string;
-}
+import { CaseStudyForm } from '../../case-study/_components/CaseStudyForm';
 
 export default function CaseStudyCreatePage() {
   const COMPONENT_TYPE = 'CaseStudy';
@@ -34,40 +36,16 @@ export default function CaseStudyCreatePage() {
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
   const brandMode: CaseStudyBrandMode = mode === 'single' ? 'single' : 'dual';
   const [warningMessages, setWarningMessages] = useState<string[]>([]);
+  const headerState = useSectionHeaderState(DEFAULT_CASE_STUDY_CONFIG);
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(['header'], true);
   const [caseStudyStyle, setCaseStudyStyle] = useState<CaseStudyStyle>('grid');
+  const [cornerRadius, setCornerRadius] = useState<CaseStudyCornerRadius>(DEFAULT_CASE_STUDY_CORNER_RADIUS);
+  const [desktopColumns, setDesktopColumns] = useState<CaseStudyDesktopColumns>(DEFAULT_CASE_STUDY_DESKTOP_COLUMNS);
   
-  // Reset carousel index when changing away from carousel style
-  React.useEffect(() => {
-    if (caseStudyStyle !== 'carousel') {
-      // No need to reset anything in create page
-    }
-  }, [caseStudyStyle]);
-  
-  const [projects, setProjects] = useState<Project[]>([
+  const [projects, setProjects] = useState<CaseStudyProject[]>([
     { category: 'Website', description: 'Thiết kế và phát triển website doanh nghiệp', id: 'project-1', image: '', link: '', title: 'Dự án Website ABC Corp' },
     { category: 'Mobile App', description: 'Ứng dụng đặt hàng cho chuỗi F&B', id: 'project-2', image: '', link: '', title: 'Ứng dụng Mobile XYZ' }
   ]);
-
-  const handleAddProject = () => {
-    setProjects([...projects, { 
-      category: '', 
-      description: '', 
-      id: `project-${Date.now()}`, 
-      image: '', 
-      link: '', 
-      title: '' 
-    }]);
-  };
-
-  const handleRemoveProject = (id: string | number) => {
-    if (projects.length > 1) {
-      setProjects(projects.filter(p => p.id !== id));
-    }
-  };
-
-  const updateProject = (id: string | number, field: keyof Project, value: string) => {
-    setProjects(projects.map(p => p.id === id ? { ...p, [field]: value } : p));
-  };
 
   const onSubmit = (e: React.FormEvent) => {
     const { harmonyStatus, accessibility } = getCaseStudyValidationResult({
@@ -90,8 +68,21 @@ export default function CaseStudyCreatePage() {
     setWarningMessages(warnings);
 
     void handleSubmit(e, {
+      hideHeader: headerState.hideHeader,
+      showTitle: headerState.showTitle,
+      subtitle: headerState.subtitle,
+      showSubtitle: headerState.showSubtitle,
+      headerAlign: headerState.headerAlign,
+      titleColorPrimary: headerState.titleColorPrimary,
+      subtitleAboveTitle: headerState.subtitleAboveTitle,
+      uppercaseText: headerState.uppercaseText,
+      showBadge: headerState.showBadge,
+      badgeText: headerState.badgeText,
       projects: projects.map(p => ({ category: p.category, description: p.description, image: p.image, link: p.link, title: p.title })),
       style: caseStudyStyle,
+      cornerRadius,
+      desktopColumns,
+      spacing: headerState.spacing,
     });
   };
 
@@ -111,91 +102,51 @@ export default function CaseStudyCreatePage() {
       customFontState={customFontState}
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
+      skipTitleInput={true}
     >
-      <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Dự án tiêu biểu</CardTitle>
-          <Button 
-            type="button" 
-            variant="outline" 
-            size="sm" 
-            onClick={handleAddProject} 
-            className="gap-2"
-          >
-            <Plus size={14} /> Thêm dự án
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {projects.map((project, idx) => (
-            <div key={project.id} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Dự án {idx + 1}</Label>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-red-500 h-8 w-8" 
-                  onClick={() =>{  handleRemoveProject(project.id); }}
-                  disabled={projects.length <= 1}
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Left: Image upload */}
-                <div>
-                  <Label className="text-sm mb-2 block">Hình ảnh dự án</Label>
-                  <SettingsImageUploader
-                    value={project.image}
-                    onChange={(url) =>{  updateProject(project.id, 'image', url ?? ''); }}
-                    folder="case-studies"
-                    previewSize="lg"
-                  />
-                </div>
-                
-                {/* Right: Info fields */}
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-slate-500">Tên dự án</Label>
-                      <Input 
-                        placeholder="VD: Website ABC Corp" 
-                        value={project.title} 
-                        onChange={(e) =>{  updateProject(project.id, 'title', e.target.value); }} 
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-slate-500">Danh mục</Label>
-                      <Input 
-                        placeholder="VD: Website, Mobile..." 
-                        value={project.category} 
-                        onChange={(e) =>{  updateProject(project.id, 'category', e.target.value); }} 
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-slate-500">Mô tả ngắn</Label>
-                    <Input 
-                      placeholder="Mô tả ngắn về dự án" 
-                      value={project.description} 
-                      onChange={(e) =>{  updateProject(project.id, 'description', e.target.value); }} 
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-slate-500">Link chi tiết</Label>
-                    <Input 
-                      placeholder="https://example.com/project" 
-                      value={project.link} 
-                      onChange={(e) =>{  updateProject(project.id, 'link', e.target.value); }} 
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
+
+      <HeaderConfigSection
+        hideHeader={headerState.hideHeader}
+        title={title}
+        showTitle={headerState.showTitle}
+        subtitle={headerState.subtitle}
+        showSubtitle={headerState.showSubtitle}
+        headerAlign={headerState.headerAlign}
+        titleColorPrimary={headerState.titleColorPrimary}
+        subtitleAboveTitle={headerState.subtitleAboveTitle}
+        uppercaseText={headerState.uppercaseText}
+        showBadge={headerState.showBadge}
+        badgeText={headerState.badgeText}
+        onHideHeaderChange={headerState.setHideHeader}
+        onTitleChange={setTitle}
+        onShowTitleChange={headerState.setShowTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onShowSubtitleChange={headerState.setShowSubtitle}
+        onHeaderAlignChange={headerState.setHeaderAlign}
+        onTitleColorPrimaryChange={headerState.setTitleColorPrimary}
+        onSubtitleAboveTitleChange={headerState.setSubtitleAboveTitle}
+        onUppercaseTextChange={headerState.setUppercaseText}
+        onShowBadgeChange={headerState.setShowBadge}
+        onBadgeTextChange={headerState.setBadgeText}
+        expanded={openSections.header}
+        onExpandedChange={(value) => toggleSection('header', value)}
+        className="mb-3"
+        titleRequired={true}
+        titleLabel="Tiêu đề hiển thị"
+        titlePlaceholder="Nhập tiêu đề component..."
+      />
+
+      <CaseStudyForm
+        projects={projects}
+        onChange={setProjects}
+        cornerRadius={cornerRadius}
+        setCornerRadius={setCornerRadius}
+        desktopColumns={desktopColumns}
+        setDesktopColumns={setDesktopColumns}
+        spacing={headerState.spacing}
+        setSpacing={headerState.setSpacing}
+      />
 
       <CaseStudyPreview
         projects={projects.map((p, idx) => ({
@@ -211,6 +162,20 @@ export default function CaseStudyCreatePage() {
         mode={brandMode}
         selectedStyle={caseStudyStyle}
         onStyleChange={setCaseStudyStyle}
+        title={title}
+        hideHeader={headerState.hideHeader}
+        showTitle={headerState.showTitle}
+        subtitle={headerState.subtitle}
+        showSubtitle={headerState.showSubtitle}
+        headerAlign={headerState.headerAlign}
+        titleColorPrimary={headerState.titleColorPrimary}
+        subtitleAboveTitle={headerState.subtitleAboveTitle}
+        uppercaseText={headerState.uppercaseText}
+        showBadge={headerState.showBadge}
+        badgeText={headerState.badgeText}
+        cornerRadius={cornerRadius}
+        desktopColumns={desktopColumns}
+        spacing={headerState.spacing}
         fontStyle={fontStyle}
         fontClassName="font-active"
       />

@@ -48,6 +48,13 @@ const getAPCALc = (text: string, background: string) => {
 };
 
 export type ProductDetailColorMode = 'single' | 'dual';
+export type ProductDetailElementColorChoice = 'white' | 'black' | 'primary' | 'secondary' | 'red';
+
+export type ProductDetailElementResolvedColors = {
+  bg: string;
+  text: string;
+  border: string;
+};
 
 export const resolveSecondaryForMode = (
   primary: string,
@@ -81,6 +88,29 @@ export const getAPCATextColor = (background: string, _fontSize = 16, _fontWeight
   const nearBlackLc = Math.abs(APCAcontrast(sRGBtoY([17, 17, 17]), sRGBtoY(bgRgb)));
 
   return whiteLc >= nearBlackLc ? '#ffffff' : '#111111';
+};
+
+export const resolveProductDetailElementColor = (
+  choice: ProductDetailElementColorChoice | undefined,
+  tokens: Pick<ProductDetailColors, 'primary' | 'secondary' | 'surface' | 'border' | 'headingColor'>
+): ProductDetailElementResolvedColors => {
+  if (choice === 'primary') {
+    return { bg: tokens.primary, text: getAPCATextColor(tokens.primary, 12, 700), border: tokens.primary };
+  }
+
+  if (choice === 'secondary') {
+    return { bg: tokens.secondary, text: getAPCATextColor(tokens.secondary, 12, 700), border: tokens.secondary };
+  }
+
+  if (choice === 'black') {
+    return { bg: '#111111', text: '#ffffff', border: '#111111' };
+  }
+
+  if (choice === 'red') {
+    return { bg: '#dc2626', text: '#ffffff', border: '#dc2626' };
+  }
+
+  return { bg: tokens.surface, text: tokens.headingColor, border: tokens.border };
 };
 
 export const ensureAPCATextColor = (

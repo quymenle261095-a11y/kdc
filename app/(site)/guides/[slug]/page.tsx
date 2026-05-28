@@ -5,6 +5,7 @@ import InternalLinkCluster from '@/components/seo/InternalLinkCluster';
 import { RelatedPagesBlock } from '@/components/seo/RelatedPagesBlock';
 import { getFunnelInternalLinks, getRelatedLandingPages } from '@/lib/seo/internal-links';
 import LandingHeroImage from '@/components/seo/LandingHeroImage';
+import { RichContent } from '@/components/common/RichContent';
 
 interface Props { params: Promise<{ slug: string }> }
 
@@ -24,7 +25,7 @@ export default async function GuidePage({ params }: Props) {
       {page.heroImage && <LandingHeroImage alt={page.title} src={page.heroImage} variant="hero" />}
       <h1 className="text-4xl font-bold mb-4">{page.title}</h1>
       <p className="text-xl text-slate-600 mb-8">{page.summary}</p>
-      {page.content && <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: page.content }} />}
+      {page.content && <RichContent content={page.content} className="max-w-none" />}
       {page.faqItems && page.faqItems.length > 0 && (
         <div className="mt-12"><h2 className="text-2xl font-bold mb-6">Câu hỏi thường gặp</h2>
           <div className="space-y-4">{page.faqItems.map((faq, i) => (

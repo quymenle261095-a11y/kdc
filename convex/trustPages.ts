@@ -541,11 +541,15 @@ export const previewAutoGenerate = query({
 });
 
 export const applyAutoGenerate = mutation({
-  args: { overwrite: v.optional(v.boolean()) },
+  args: {
+    overwrite: v.optional(v.boolean()),
+    status: v.optional(v.union(v.literal('Draft'), v.literal('Published'))),
+  },
   handler: async (ctx, args) => {
     await ensureFeatureEnabled(ctx);
     const plan = await buildAutoGeneratePlan(ctx);
     const overwrite = args.overwrite === true;
+    const desiredStatus = args.status === 'Published' ? 'Published' : 'Draft';
     const policyCategory = plan.policyCategory ?? (await getPolicyCategory(ctx, true));
     if (!policyCategory) {
       throw new Error('Không thể tạo danh mục chính sách');
@@ -561,17 +565,23 @@ export const applyAutoGenerate = mutation({
       postTitle?: string | null;
       postStatus?: string | null;
     }[] = [];
+    let deletedCount = 0;
+    let createdCount = 0;
+    let keptCount = 0;
+    let disabledCount = 0;
 
     if (overwrite) {
       const existingPosts = await PostsModel.listByCategory(ctx, { categoryId: policyCategory.id, limit: 1000 });
       for (const post of existingPosts) {
         await PostsModel.remove(ctx, { cascade: true, id: post._id });
+        deletedCount += 1;
       }
     }
 
     for (const slot of plan.slots) {
       if (!slot.enabled) {
         results.push({ key: slot.slot.key, action: 'disabled' });
+        disabledCount += 1;
         if (overwrite) {
           updates.push({ key: slot.slot.mappingKey, value: null });
         }
@@ -580,9 +590,6 @@ export const applyAutoGenerate = mutation({
 
       if (overwrite) {
         const payload = buildDraftPayload(slot.slot, plan.settingsMap, policyCategory.name);
-        const status = slot.postStatus && ['Published', 'Draft', 'Archived'].includes(slot.postStatus)
-          ? slot.postStatus
-          : 'Draft';
         const postId = await PostsModel.create(ctx, {
           title: payload.title,
           slug: payload.slug,
@@ -592,8 +599,8 @@ export const applyAutoGenerate = mutation({
           metaTitle: payload.metaTitle,
           metaDescription: payload.metaDescription,
           categoryId: policyCategory.id,
-          status: status as 'Draft' | 'Published' | 'Archived',
-          publishImmediately: status === 'Published',
+          status: desiredStatus,
+          publishImmediately: desiredStatus === 'Published',
         });
         updates.push({ key: slot.slot.mappingKey, value: postId });
         results.push({
@@ -601,12 +608,13 @@ export const applyAutoGenerate = mutation({
           action: 'draft',
           postId,
           postTitle: payload.title,
-          postStatus: status,
+          postStatus: desiredStatus,
         });
+        createdCount += 1;
         continue;
       }
 
-      if (slot.action === 'mapped' || slot.action === 'suggested') {
+      if (slot.action === 'mapped') {
         updates.push({ key: slot.slot.mappingKey, value: slot.postId ?? null });
         results.push({
           key: slot.slot.key,
@@ -615,10 +623,11 @@ export const applyAutoGenerate = mutation({
           postTitle: slot.postTitle ?? null,
           postStatus: slot.postStatus ?? null,
         });
+        keptCount += 1;
         continue;
       }
 
-      if (slot.action === 'draft' && slot.payload) {
+      if ((slot.action === 'draft' || slot.action === 'suggested') && slot.payload) {
         const postId = await PostsModel.create(ctx, {
           title: slot.payload.title,
           slug: slot.payload.slug,
@@ -628,16 +637,18 @@ export const applyAutoGenerate = mutation({
           metaTitle: slot.payload.metaTitle,
           metaDescription: slot.payload.metaDescription,
           categoryId: policyCategory.id,
-          status: 'Draft',
+          status: desiredStatus,
+          publishImmediately: desiredStatus === 'Published',
         });
         updates.push({ key: slot.slot.mappingKey, value: postId });
         results.push({
           key: slot.slot.key,
-          action: slot.action,
+          action: 'draft',
           postId,
           postTitle: slot.payload.title,
-          postStatus: 'Draft',
+          postStatus: desiredStatus,
         });
+        createdCount += 1;
       }
     }
 
@@ -653,8 +664,15 @@ export const applyAutoGenerate = mutation({
     }
 
     return {
+      mode: overwrite ? ('overwrite' as const) : ('apply' as const),
       policyCategory,
       results,
+      summary: {
+        createdCount,
+        deletedCount,
+        disabledCount,
+        keptCount,
+      },
       updatedSettings: updates.reduce<Record<string, unknown>>((acc, update) => {
         acc[update.key] = update.value;
         return acc;
@@ -662,6 +680,7 @@ export const applyAutoGenerate = mutation({
     };
   },
   returns: v.object({
+    mode: v.union(v.literal('apply'), v.literal('overwrite')),
     policyCategory: v.object({ id: v.id('postCategories'), name: v.string(), slug: v.string() }),
     results: v.array(
       v.object({
@@ -677,6 +696,12 @@ export const applyAutoGenerate = mutation({
         postStatus: v.optional(v.union(v.string(), v.null())),
       })
     ),
+    summary: v.object({
+      createdCount: v.number(),
+      deletedCount: v.number(),
+      disabledCount: v.number(),
+      keptCount: v.number(),
+    }),
     updatedSettings: v.record(v.string(), v.any()),
   }),
 });

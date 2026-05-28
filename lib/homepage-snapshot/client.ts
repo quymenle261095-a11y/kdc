@@ -22,6 +22,7 @@ const splitSnapshotFiles = (payload: HomepageSnapshotPayload) => ({
   'homepage/component-order.json': toJsonFile(payload.homepage.componentOrder),
   'homepage/dependencies.json': toJsonFile(payload.homepage.dependencies),
   'homepage/system-style.json': toJsonFile(payload.homepage.systemStyle),
+  'homepage/demo-bundle.json': toJsonFile(payload.homepage.demoBundle ?? null),
   'index/media.index.json': toJsonFile(payload.index.mediaIndex),
   'reports/import-preview.json': toJsonFile({
     summary: { blocking: 0, warnings: 0 },
@@ -95,6 +96,7 @@ export async function parseHomepageSnapshotFile(file: File): Promise<ParsedSnaps
     typeFontOverrides: {},
     globalFontOverride: { enabled: false, fontKey: 'system-default' },
   } as HomepageSnapshotPayload['homepage']['systemStyle']);
+  const demoBundle = await parseJson(zip, 'homepage/demo-bundle.json', null as HomepageSnapshotPayload['homepage']['demoBundle'] | null);
   const mediaIndex = await parseJson(zip, 'index/media.index.json', [] as HomepageSnapshotPayload['index']['mediaIndex']);
 
   const mediaFiles: ParsedSnapshotMediaFile[] = [];
@@ -120,6 +122,7 @@ export async function parseHomepageSnapshotFile(file: File): Promise<ParsedSnaps
         componentOrder,
         dependencies,
         systemStyle,
+        demoBundle: demoBundle ?? undefined,
       },
       index: { mediaIndex },
     },

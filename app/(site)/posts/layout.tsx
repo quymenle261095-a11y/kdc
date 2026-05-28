@@ -5,6 +5,7 @@ import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
 import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings } from '@/lib/get-settings';
 import { buildSeoMetadata } from '@/lib/seo/metadata';
+import { buildDetailPath } from '@/lib/ia/route-mode';
 
 export async function generateMetadata(): Promise<Metadata> {
   const client = getConvexClient();
@@ -55,16 +56,25 @@ export default async function PostsListLayout({ children }: { children: React.Re
   }
   const site = await getSiteSettings();
   const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL) ?? '';
-  const posts = await client.query(api.posts.listPublishedWithOffset, {
-    limit: 20,
-    offset: 0,
-    sortBy: 'newest',
-  });
+  const [posts, categories] = await Promise.all([
+    client.query(api.posts.listPublishedWithOffset, {
+      limit: 20,
+      offset: 0,
+      sortBy: 'newest',
+    }),
+    client.query(api.postCategories.listActive, {}),
+  ]);
+  const categoryMap = new Map(categories.map((category) => [category._id, category.slug]));
 
   const itemListSchema = generateItemListSchema({
     items: posts.map((post) => ({
       name: post.title,
-      url: `${baseUrl}/posts/${post.slug}`,
+      url: `${baseUrl}${buildDetailPath({
+        categorySlug: categoryMap.get(post.categoryId),
+        mode: 'unified',
+        moduleKey: 'posts',
+        recordSlug: post.slug,
+      })}`,
     })),
     name: 'Bài viết mới nhất',
     url: `${baseUrl}/posts`,

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowUpDown, ChevronDown, Loader2, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ImageOff, Loader2, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { Button, TableHead, cn } from './ui';
 
 export const ColumnToggle = ({ columns, visibleColumns, onToggle }: {
@@ -115,6 +115,16 @@ export const BulkActionBar = ({
   publishLoadingLabel = 'Đang đăng bán...',
   unpublishLabel = 'Chuyển nháp',
   unpublishLoadingLabel = 'Đang chuyển nháp...',
+  onShow,
+  onHide,
+  showLabel = 'Hiển thị',
+  showLoadingLabel = 'Đang hiển thị...',
+  hideLabel = 'Ẩn',
+  hideLoadingLabel = 'Đang ẩn...',
+  onClearBrokenMedia,
+  isClearBrokenMediaLoading,
+  clearBrokenMediaLabel = 'Xóa ảnh lỗi',
+  clearBrokenMediaLoadingLabel = 'Đang xóa ảnh lỗi...',
   onDelete,
   onClearSelection,
   isLoading,
@@ -129,11 +139,21 @@ export const BulkActionBar = ({
   isSelectingAllResults?: boolean;
   onPublish?: () => void;
   onUnpublish?: () => void;
-  isStatusLoading?: 'publish' | 'unpublish' | null;
+  isStatusLoading?: 'publish' | 'unpublish' | 'show' | 'hide' | null;
   publishLabel?: string;
   publishLoadingLabel?: string;
   unpublishLabel?: string;
   unpublishLoadingLabel?: string;
+  onShow?: () => void;
+  onHide?: () => void;
+  showLabel?: string;
+  showLoadingLabel?: string;
+  hideLabel?: string;
+  hideLoadingLabel?: string;
+  onClearBrokenMedia?: () => void;
+  isClearBrokenMediaLoading?: boolean;
+  clearBrokenMediaLabel?: string;
+  clearBrokenMediaLoadingLabel?: string;
   onDelete: () => void;
   onClearSelection: () => void;
   isLoading?: boolean;
@@ -206,6 +226,42 @@ export const BulkActionBar = ({
           >
             {isStatusLoading === 'unpublish' ? <Loader2 size={14} className="animate-spin" /> : null}
             {isStatusLoading === 'unpublish' ? unpublishLoadingLabel : `${unpublishLabel} (${selectedCount})`}
+          </Button>
+        )}
+        {onShow && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-8"
+            onClick={onShow}
+            disabled={isLoading || Boolean(isStatusLoading)}
+          >
+            {isStatusLoading === 'show' ? <Loader2 size={14} className="animate-spin" /> : null}
+            {isStatusLoading === 'show' ? showLoadingLabel : `${showLabel} (${selectedCount})`}
+          </Button>
+        )}
+        {onHide && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-8"
+            onClick={onHide}
+            disabled={isLoading || Boolean(isStatusLoading)}
+          >
+            {isStatusLoading === 'hide' ? <Loader2 size={14} className="animate-spin" /> : null}
+            {isStatusLoading === 'hide' ? hideLoadingLabel : `${hideLabel} (${selectedCount})`}
+          </Button>
+        )}
+        {onClearBrokenMedia && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 h-8"
+            onClick={onClearBrokenMedia}
+            disabled={isLoading || Boolean(isStatusLoading) || isClearBrokenMediaLoading}
+          >
+            {isClearBrokenMediaLoading ? <Loader2 size={14} className="animate-spin" /> : <ImageOff size={14} />}
+            {isClearBrokenMediaLoading ? clearBrokenMediaLoadingLabel : `${clearBrokenMediaLabel} (${selectedCount})`}
           </Button>
         )}
         <Button variant="destructive" size="sm" className="gap-2 h-8" onClick={onDelete} disabled={isLoading || Boolean(isStatusLoading)}>

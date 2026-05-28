@@ -16,6 +16,8 @@ import { stripHtml, truncateText } from '@/lib/seo';
 import { getMacroTemplate, getTemplateFieldSpec, type GeneratorFieldKey } from '@/lib/posts/generator/macro-templates';
 import type { GeneratorRequest, GeneratedArticlePayload } from '@/lib/posts/generator/types';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
+import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
 
 const MODULE_KEY = 'posts';
 const COC_TARGET_OPTIONS: Array<{ key: GeneratorRequest['templateKey']; label: string; description: string }> = [
@@ -55,6 +57,7 @@ export default function PostCreatePage() {
   const [thumbnail, setThumbnail] = useState<string | undefined>();
   const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | undefined>();
   const [categoryId, setCategoryId] = useState('');
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([]);
   const [authorName, setAuthorName] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
   const [publishAtLocal, setPublishAtLocal] = useState('');
@@ -99,12 +102,17 @@ export default function PostCreatePage() {
     return fields;
   }, [fieldsData]);
 
+  const categoryData = categoriesData?.find((c) => c._id === categoryId);
+  const categorySlugPreview = categoryData?.slug || 'chua-phan-loai';
+
+
   const hasMarkdownRender = enabledFields.has('markdownRender');
   const hasHtmlRender = enabledFields.has('htmlRender');
   const showAdvancedRenderCard = hasMarkdownRender || hasHtmlRender;
   const schedulingEnabled = enabledFields.has('publish_date') && (schedulingFeature?.enabled ?? false);
 
   const generatorEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableAutoPostGenerator')?.value);
+  const multiCategoryEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableMultipleCategories')?.value);
   const cocTarget = useMemo(
     () => COC_TARGET_OPTIONS.find((option) => option.key === generatorTemplateKey),
     [generatorTemplateKey],
@@ -367,6 +375,38 @@ export default function PostCreatePage() {
     setEditorResetKey((prev) => prev + 1);
   };
 
+  const handleApplyAiPost = (item: AiEntityImportPayload) => {
+    const nextTitle = item.title?.trim() || item.name?.trim() || '';
+    if (!nextTitle) {return;}
+
+    setTitle(nextTitle);
+    setSlug(item.slug?.trim() || generateSlugFromTitle(nextTitle));
+    const nextContent = item.content || item.description || item.htmlRender || item.markdownRender || '';
+    setContent(nextContent);
+    if (item.content) {
+      setRenderType('content');
+      setHtmlRender(item.htmlRender || '');
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.htmlRender) {
+      setRenderType('html');
+      setHtmlRender(item.htmlRender);
+      setMarkdownRender('');
+    } else if (item.markdownRender) {
+      setRenderType('markdown');
+      setMarkdownRender(item.markdownRender);
+      setHtmlRender('');
+    }
+    setExcerpt(item.excerpt || item.description || truncateText(stripHtml(nextContent), 180));
+    setMetaTitle(item.metaTitle || truncateText(nextTitle, 60));
+    setMetaDescription(item.metaDescription || truncateText(stripHtml(item.excerpt || nextContent), 160));
+    if (item.thumbnail) {
+      setThumbnail(item.thumbnail);
+      setThumbnailStorageId(undefined);
+    }
+    if (item.authorName) {setAuthorName(item.authorName);}
+    setEditorResetKey((prev) => prev + 1);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !categoryId) {return;}
@@ -385,6 +425,9 @@ export default function PostCreatePage() {
       await createPost({
         authorName: enabledFields.has('author_name') ? authorName.trim() || undefined : undefined,
         categoryId: categoryId as Id<"postCategories">,
+        additionalCategoryIds: multiCategoryEnabled
+          ? additionalCategoryIds.filter((id) => id !== categoryId) as Id<"postCategories">[]
+          : undefined,
         content,
         renderType,
         markdownRender: markdownRender.trim() || undefined,
@@ -715,7 +758,7 @@ export default function PostCreatePage() {
                     {metaTitle.trim() || title || 'Tiêu đề bài viết'}
                   </div>
                   <div className="text-emerald-600 text-xs">
-                    /posts/{slug || 'bai-viet'}
+                    /{categorySlugPreview}/{slug || 'bai-viet'}
                   </div>
                   <div className="text-slate-600 text-xs mt-1 line-clamp-2">
                     {metaDescription.trim() || excerpt || 'Mô tả ngắn sẽ hiển thị tại đây.'}
@@ -767,7 +810,21 @@ export default function PostCreatePage() {
               )}
               <div className="space-y-2">
                 <Label>Danh mục <span className="text-red-500">*</span></Label>
-                <div className="flex gap-2">
+                {multiCategoryEnabled ? (
+                  <>
+                  <CategoryTagsInput
+                    categories={categoriesData}
+                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
+                    onQuickCreate={() =>{  setShowCategoryModal(true); }}
+                    onChange={(ids) => {
+                      setCategoryId(ids[0] ?? '');
+                      setAdditionalCategoryIds(ids.slice(1));
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
                   <select 
                     value={categoryId} 
                     onChange={(e) =>{  setCategoryId(e.target.value); }}
@@ -788,7 +845,8 @@ export default function PostCreatePage() {
                   >
                     <Plus size={16} />
                   </Button>
-                </div>
+                  </div>
+                )}
               </div>
               {enabledFields.has('author_name') && (
                 <div className="space-y-2">
@@ -828,7 +886,15 @@ export default function PostCreatePage() {
         submitLabel="Đăng bài"
         align="end"
         disableSave={isSubmitting || !title.trim() || !categoryId}
-      />
+      >
+        <div className="flex flex-wrap justify-end gap-2">
+          <AiEntityImportDialog kind="post" enabledFields={enabledFields} onApply={handleApplyAiPost} />
+          <Button type="submit" variant="accent" disabled={isSubmitting || !title.trim() || !categoryId}>
+            {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
+            Đăng bài
+          </Button>
+        </div>
+      </HomeComponentStickyFooter>
     </form>
     {galleryModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4" onClick={handleCloseGallery}>

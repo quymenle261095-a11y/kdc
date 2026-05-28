@@ -36,13 +36,15 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleTheme, setMobileMenuOpen }) => {
   const pathname = usePathname();
   const { user } = useAdminAuth();
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     if (!user?.trial?.expiresAt) {
+      setNow(0);
       return;
     }
 
+    setNow(Date.now());
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 60 * 1000);

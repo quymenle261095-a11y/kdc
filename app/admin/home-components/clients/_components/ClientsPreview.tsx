@@ -6,13 +6,13 @@ import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
   getClientsValidationResult,
-  type ClientsAccessibilityScore,
-  type ClientsHarmonyStatus,
 } from '../_lib/colors';
+import { CLIENTS_STYLES } from '../_lib/constants';
 import { ClientsSectionShared } from './ClientsSectionShared';
-import type { ClientItem, ClientsBrandMode, ClientsStyle } from '../_types';
+import type { ClientItem, ClientsBrandMode, ClientsCornerRadius, ClientsStyle, ClientsHeaderAlign } from '../_types';
 
 interface ClientsPreviewProps {
   items: ClientItem[];
@@ -22,50 +22,33 @@ interface ClientsPreviewProps {
   mode?: ClientsBrandMode;
   selectedStyle?: ClientsStyle;
   onStyleChange?: (style: ClientsStyle) => void;
-  warningMessages?: string[];
-  showValidationSummary?: boolean;
-  texts?: Record<string, string>;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  // Shared header config
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  subtitle?: string;
+  showSubtitle?: boolean;
+  headerAlign?: ClientsHeaderAlign;
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing;
+  cornerRadius?: ClientsCornerRadius;
 }
 
-const STYLES: Array<{ id: ClientsStyle; label: string }> = [
-  { id: 'simpleGrid', label: 'Simple Grid' },
-  { id: 'compactInline', label: 'Compact Inline' },
-  { id: 'subtleMarquee', label: 'Subtle Marquee' },
-  { id: 'grid', label: 'Grid' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'featured', label: 'Featured' },
-];
-
 const getImageInfoText = (style: ClientsStyle, count: number) => {
-  if (count === 0) {return 'Chưa có logo';}
-  if (style === 'simpleGrid') {return `${count} logo • Grayscale grid`;}
-  if (style === 'compactInline') {return `${count} logo • Inline flex`;}
-  if (style === 'subtleMarquee') {return `${count} logo • Slow scroll`;}
-  if (style === 'grid') {return `${count} logo • 216×84px`;}
-  if (style === 'featured') {
-    return count <= 4 ? `${count} logo • 240×96px` : `4 featured + ${count - 4} khác`;
-  }
-  return `${count} logo • 240×96px`;
-};
-
-const getSummaryWarnings = (
-  mode: ClientsBrandMode,
-  harmonyStatus: ClientsHarmonyStatus,
-  accessibility: ClientsAccessibilityScore,
-) => {
-  const warnings: string[] = [];
-
-  if (mode === 'dual' && harmonyStatus.isTooSimilar) {
-    warnings.push(`Màu chính/phụ đang khá giống nhau (deltaE=${harmonyStatus.deltaE} < 20).`);
-  }
-
-  if (accessibility.failing.length > 0) {
-    warnings.push(`Một số cặp chữ/nền có APCA thấp (minLc=${accessibility.minLc.toFixed(1)}).`);
-  }
-
-  return warnings;
+  if (count === 0) {return 'Chưa có ảnh banner';}
+  if (style === 'layout01') {return `${count} ảnh • Mosaic 1 lớn + 3 phụ`;}
+  if (style === 'layout02') {return `${count} ảnh • 1 banner full-width`;}
+  if (style === 'layout03') {return `${count} ảnh • 1 ảnh trên + 2 ảnh dưới`;}
+  if (style === 'layout04') {return `${count} ảnh • 2 banner ngang cân đối`;}
+  if (style === 'layout05') {return `${count} ảnh • 3 banner landscape`;}
+  if (style === 'layout07') {return `${count} ảnh • Grid 2×2 ngang`;}
+  if (style === 'layout08') {return `${count} ảnh • Carousel vuốt ngang`;}
+  return `${count} ảnh • 4 banner dọc nổi bật`;
 };
 
 export const ClientsPreview = ({
@@ -74,13 +57,22 @@ export const ClientsPreview = ({
   brandColor,
   secondary,
   mode = 'dual',
-  selectedStyle = 'simpleGrid',
+  selectedStyle = 'layout02',
   onStyleChange,
-  warningMessages,
-  showValidationSummary = false,
-  texts = {},
   fontStyle,
   fontClassName,
+  hideHeader,
+  showTitle,
+  subtitle,
+  showSubtitle,
+  headerAlign,
+  titleColorPrimary,
+  subtitleAboveTitle,
+  uppercaseText,
+  showBadge,
+  badgeText,
+  spacing,
+  cornerRadius,
 }: ClientsPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
 
@@ -92,18 +84,19 @@ export const ClientsPreview = ({
   }), [brandColor, secondary, mode, selectedStyle]);
 
   const info = getImageInfoText(selectedStyle, items.length);
-  const generatedWarnings = getSummaryWarnings(mode, validation.harmonyStatus, validation.accessibility);
-  const warnings = warningMessages ?? generatedWarnings;
+  const resolvedTitle = typeof title === 'string' ? title.trim() : '';
+  const previewSubtitle = (subtitle ?? '').trim();
+  const previewBadgeText = (badgeText ?? '').trim();
 
   return (
     <>
       <PreviewWrapper
-        title="Preview Clients"
+        title="Preview Banner ảnh thương hiệu"
         device={device}
         setDevice={setDevice}
         previewStyle={selectedStyle}
         setPreviewStyle={(value) => onStyleChange?.(value as ClientsStyle)}
-        styles={STYLES}
+        styles={CLIENTS_STYLES}
         info={info}
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
@@ -116,56 +109,59 @@ export const ClientsPreview = ({
                 <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: validation.tokens.placeholderIconBackground }}>
                   <ImageIcon size={28} style={{ color: validation.tokens.placeholderIcon }} />
                 </div>
-                <p className="text-sm font-medium" style={{ color: validation.tokens.neutralText }}>Chưa có logo khách hàng</p>
-                <p className="text-xs mt-1" style={{ color: validation.tokens.placeholderText }}>Thêm ít nhất 3 logo để hiển thị đẹp hơn</p>
+                <p className="text-sm font-medium" style={{ color: validation.tokens.neutralText }}>Chưa có ảnh banner</p>
+                <p className="text-xs mt-1" style={{ color: validation.tokens.placeholderText }}>Thêm từ 1 đến 8 ảnh để xem preview</p>
               </div>
             </section>
           ) : (
             <ClientsSectionShared
               context="preview"
-              title={title}
+              title={resolvedTitle}
               style={selectedStyle}
               items={items}
               tokens={validation.tokens}
               device={device}
-              texts={texts}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              subtitle={previewSubtitle}
+              showSubtitle={showSubtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={previewBadgeText}
+              spacing={spacing}
+              cornerRadius={cornerRadius}
+              brandColor={brandColor}
             />
           )}
         </BrowserFrame>
       </PreviewWrapper>
 
-      {mode === 'dual' && (
-        <ColorInfoPanel
-          brandColor={validation.tokens.primary}
-          secondary={validation.tokens.secondary}
-          description="Màu phụ áp dụng cho badge, điểm nhấn card, nút điều hướng carousel và thành phần accent của Clients."
-        />
-      )}
+      <ColorInfoPanel
+        brandColor={validation.tokens.primary}
+        secondary={mode === 'single' ? validation.tokens.primary : validation.tokens.secondary}
+        description={mode === 'single'
+          ? 'Chế độ một màu: màu chính được dùng cho badge, viền ảnh, nền overlay và các điểm nhấn của banner ảnh thương hiệu.'
+          : 'Màu phụ áp dụng cho badge, viền ảnh, nền overlay và các điểm nhấn của banner ảnh thương hiệu.'}
+      />
 
       <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
           <ImageIcon size={14} className="text-slate-400 flex-shrink-0" />
           <div className="text-xs text-slate-600 dark:text-slate-400">
-            {selectedStyle === 'simpleGrid' && <span><strong>Simple Grid</strong> • Static grid, full color, clean minimal</span>}
-            {selectedStyle === 'compactInline' && <span><strong>Compact Inline</strong> • Single row flexbox, full color, minimal</span>}
-            {selectedStyle === 'subtleMarquee' && <span><strong>Subtle Marquee</strong> • Very slow scroll (60s), full color, clean</span>}
-            {selectedStyle === 'grid' && <span><strong>216×84px</strong> PNG trong suốt • Grid tĩnh, max 12 logo</span>}
-            {selectedStyle === 'carousel' && <span><strong>240×96px</strong> PNG trong suốt • Kéo/vuốt ngang</span>}
-            {selectedStyle === 'featured' && <span><strong>240×96px</strong> PNG trong suốt • 4 logo featured</span>}
+            {selectedStyle === 'layout01' && <span><strong>Layout 01</strong> • 1 ảnh lớn bên trái, 2 ảnh vuông phía trên và 1 ảnh ngang phía dưới</span>}
+            {selectedStyle === 'layout02' && <span><strong>Layout 02</strong> • 1 banner full-width theo đúng showcase hero</span>}
+            {selectedStyle === 'layout03' && <span><strong>Layout 03</strong> • 1 banner ngang phía trên và 2 banner nhỏ phía dưới</span>}
+            {selectedStyle === 'layout04' && <span><strong>Layout 04</strong> • 2 banner ngang song song</span>}
+            {selectedStyle === 'layout05' && <span><strong>Layout 05</strong> • 3 banner landscape trong một hàng</span>}
+            {selectedStyle === 'layout06' && <span><strong>Layout 06</strong> • 4 banner dọc/portrait</span>}
+            {selectedStyle === 'layout07' && <span><strong>Layout 07</strong> • Grid 2×2, 4 ảnh ngang</span>}
+            {selectedStyle === 'layout08' && <span><strong>Layout 08</strong> • Carousel vuốt ngang, có trạng thái nút trước/sau</span>}
           </div>
         </div>
       </div>
-
-      {(showValidationSummary && warnings.length > 0) && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <p className="font-semibold mb-1">Cảnh báo màu (warning-only):</p>
-          <ul className="list-disc pl-4 space-y-1">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </>
   );
 };

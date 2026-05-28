@@ -2,9 +2,15 @@
 
 import React from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui';
 import { MultiImageUploader } from '../../../components/MultiImageUploader';
 import type { GalleryItem } from '../_types';
+import { AiTrustBadgesImport } from './AiTrustBadgesImport';
+
+import type { ImageAspectRatioInput } from '@/lib/products/image-aspect-ratio';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+
 
 export const GalleryForm = ({
   galleryItems,
@@ -13,6 +19,8 @@ export const GalleryForm = ({
   style,
   headerPrimary: _headerPrimary,
   headerSecondary: _headerSecondary,
+  onAiImport,
+  defaultExpanded = true,
 }: {
   galleryItems: GalleryItem[];
   setGalleryItems: (items: GalleryItem[]) => void;
@@ -20,6 +28,8 @@ export const GalleryForm = ({
   style?: string;
   headerPrimary?: string;
   headerSecondary?: string;
+  onAiImport?: (items: GalleryItem[]) => void;
+  defaultExpanded?: boolean;
 }) => {
   const folders: Record<'Gallery' | 'Partners' | 'TrustBadges', string> = {
     Gallery: 'gallery',
@@ -27,39 +37,78 @@ export const GalleryForm = ({
     TrustBadges: 'trust-badges'
   };
 
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
+    ['gallery'],
+    defaultExpanded
+  );
+
+  const getCropAspectRatio = (index: number): ImageAspectRatioInput => {
+    if (componentType === 'TrustBadges') return 'square';
+    if (componentType === 'Partners') return { label: 'Tự do', value: 0, cssValue: 'auto' };
+
+    if (style === 'spotlight') {
+      return index === 0 ? 'landscape43' : 'square';
+    }
+    if (style === 'explore' || style === 'grid') {
+      return 'square';
+    }
+    if (style === 'stories') {
+      return (index % 4 === 0 || index % 4 === 3) ? { label: 'Ngang 2:1', value: 2 } : 'landscape43';
+    }
+    if (style === 'marquee') {
+      return 'landscape43';
+    }
+    if (style === 'masonry') {
+      return { label: 'Tự do', value: 0, cssValue: 'auto' };
+    }
+    return 'square';
+  };
+
   return (
     <>
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">
-            {componentType === 'Partners' ? 'Logo đối tác' : (componentType === 'TrustBadges' ? 'Chứng nhận' : 'Thư viện ảnh')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-
-          <MultiImageUploader<GalleryItem>
-            items={galleryItems}
-            onChange={setGalleryItems}
-            folder={folders[componentType]}
-            imageKey="url"
-            extraFields={
-              componentType === 'Partners' 
-                ? [{ key: 'link', placeholder: 'Link website đối tác (tùy chọn)', type: 'url' }]
-                : (componentType === 'TrustBadges'
-                ? [{ key: 'name', placeholder: 'Tên chứng nhận/bằng cấp', type: 'text' }]
-                : [])
-            }
-            minItems={1}
-            maxItems={20}
-            aspectRatio={componentType === 'Partners' ? 'video' : (componentType === 'Gallery' ? 'video' : 'square')}
-            columns={componentType === 'Gallery' ? 2 : (componentType === 'TrustBadges' ? 3 : 2)}
-            showReorder={true}
-            addButtonText={componentType === 'Partners' ? 'Thêm logo' : (componentType === 'TrustBadges' ? 'Thêm chứng nhận' : 'Thêm ảnh')}
-            emptyText="Chưa có ảnh nào"
-            layout="vertical"
-          />
-        </CardContent>
-      </Card>
+      <FormSectionsToggleAllButton
+        hasClosedSection={hasClosedSection}
+        onToggleAll={handleToggleAll}
+      />
+      <SubSection
+        icon={ImageIcon}
+        title={componentType === 'Partners' ? 'Logo đối tác' : (componentType === 'TrustBadges' ? 'Chứng nhận' : 'Thư viện ảnh')}
+        open={openSections.gallery}
+        onOpenChange={(open) => toggleSection('gallery', open)}
+        actions={componentType === 'TrustBadges' && onAiImport ? (
+          <AiTrustBadgesImport onApply={onAiImport} />
+        ) : null}
+      >
+        <MultiImageUploader<GalleryItem>
+          items={galleryItems}
+          onChange={setGalleryItems}
+          folder={folders[componentType]}
+          imageKey="url"
+          extraFields={
+            componentType === 'Partners' 
+              ? [{ key: 'link', placeholder: 'Link website đối tác (tùy chọn)', type: 'url' }]
+              : (componentType === 'TrustBadges'
+              ? [{ key: 'name', placeholder: 'Tên chứng nhận/bằng cấp', type: 'text' }]
+              : [
+                  { key: 'name', placeholder: 'Chú thích ảnh (tùy chọn)', type: 'text' },
+                  { key: 'link', placeholder: 'Link đính kèm (tùy chọn)', type: 'url' }
+                ])
+          }
+          minItems={1}
+          maxItems={20}
+          aspectRatio={componentType === 'Partners' ? 'video' : (componentType === 'Gallery' ? 'video' : 'square')}
+          columns={componentType === 'Gallery' ? 2 : (componentType === 'TrustBadges' ? 3 : 2)}
+          showReorder={true}
+          addButtonText={componentType === 'Partners' ? 'Thêm logo' : (componentType === 'TrustBadges' ? 'Thêm chứng nhận' : 'Thêm ảnh')}
+          emptyText="Chưa có ảnh nào"
+          layout="vertical"
+          enableCrop={componentType === 'TrustBadges' || componentType === 'Gallery'}
+          cropOnUpload={false}
+          cropAspectRatio={(item, index) => getCropAspectRatio(index)}
+          deleteMode="defer"
+          imageFit={componentType === 'TrustBadges' ? 'contain' : 'cover'}
+        />
+      </SubSection>
 
       {componentType === 'Partners' && (
         <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">

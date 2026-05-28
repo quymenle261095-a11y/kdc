@@ -45,7 +45,7 @@ const HeroSkeleton = ({ animation }: { animation: LoadingAnimation }) => (
 
 export function HomePageLoading() {
   return (
-    <div className="min-h-[60vh]">
+    <div className="min-h-screen">
       <div className="space-y-10">
         <HeroSkeleton animation={DEFAULT_ANIMATION} />
       </div>

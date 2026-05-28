@@ -3,9 +3,15 @@
 import React from 'react';
 import { Briefcase, Clock, MapPin, Star } from 'lucide-react';
 import { cn } from '../../../components/ui';
-import { DEFAULT_CAREER_TEXTS } from '../_lib/constants';
+import { getSectionSpacingClassName, normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
+import {
+  DEFAULT_CAREER_TEXTS,
+  normalizeCareerCornerRadius,
+  normalizeCareerDesktopColumns,
+  normalizeCareerLogoSize,
+} from '../_lib/constants';
 import type { CareerColorTokens } from '../_lib/colors';
-import type { CareerStyle, CareerTexts } from '../_types';
+import type { CareerCornerRadius, CareerStyle, CareerTexts } from '../_types';
 
 type CareerSectionContext = 'preview' | 'site';
 type CareerPreviewDevice = 'mobile' | 'tablet' | 'desktop';
@@ -29,6 +35,19 @@ interface CareerSectionSharedProps {
   title: string;
   device?: CareerPreviewDevice;
   texts?: CareerTexts;
+  spacing?: SectionSpacing;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  desktopColumns?: 3 | 4;
+  cornerRadius?: CareerCornerRadius;
+  logoSize?: 'small' | 'medium' | 'large';
 }
 
 const PREVIEW_MAX_VISIBLE_BY_STYLE: Record<CareerStyle, Record<CareerPreviewDevice, number>> = {
@@ -40,11 +59,11 @@ const PREVIEW_MAX_VISIBLE_BY_STYLE: Record<CareerStyle, Record<CareerPreviewDevi
   timeline: { desktop: 10, tablet: 8, mobile: 6 },
 };
 
-const getSectionPadding = (context: CareerSectionContext, device: CareerPreviewDevice) => {
-  if (context === 'preview') {
-    return cn('py-7 px-4', device === 'mobile' ? 'py-6 px-3' : 'md:py-10 md:px-6');
-  }
-  return 'py-12 md:py-16 px-4';
+const getSectionPadding = (context: CareerSectionContext, device: CareerPreviewDevice, spacing?: SectionSpacing) => {
+  const vertical = context === 'preview' && spacing === undefined
+    ? cn('py-7', device === 'mobile' ? 'py-6' : 'md:py-10')
+    : getSectionSpacingClassName(normalizeSectionSpacing(spacing));
+  return cn(vertical, context === 'preview' ? (device === 'mobile' ? 'px-3' : 'px-4 md:px-6') : 'px-4');
 };
 
 const getMaxVisible = (
@@ -58,10 +77,26 @@ const getMaxVisible = (
   return PREVIEW_MAX_VISIBLE_BY_STYLE[style][device];
 };
 
-const getGridClass = (device: CareerPreviewDevice, desktopClass: string) => {
-  if (device === 'mobile') {return 'grid-cols-1';}
-  if (device === 'tablet') {return 'grid-cols-2';}
-  return desktopClass;
+const getCareerGridClass = (device: CareerPreviewDevice, desktopColumns: 3 | 4) => {
+  if (device === 'mobile') {
+    return desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
+  }
+  if (device === 'tablet') {
+    return desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-2';
+  }
+  return desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
+};
+
+const getCareerRadiusClassName = (cornerRadius: CareerCornerRadius) => {
+  if (cornerRadius === 'none') {return 'rounded-none';}
+  if (cornerRadius === 'sm') {return 'rounded-lg';}
+  return 'rounded-2xl';
+};
+
+const getCareerLogoSizeClassNames = (logoSize: 'small' | 'medium' | 'large') => {
+  if (logoSize === 'small') {return { box: 'h-9 w-9', icon: 17 };}
+  if (logoSize === 'large') {return { box: 'h-14 w-14', icon: 26 };}
+  return { box: 'h-11 w-11', icon: 21 };
 };
 
 const renderEmptyState = (tokens: CareerColorTokens, texts: CareerTexts) => (
@@ -101,9 +136,16 @@ const renderCards = ({
   const maxVisible = getMaxVisible('cards', context, device);
   const visibleJobs = jobs.slice(0, maxVisible);
   const remainingCount = jobs.length - visibleJobs.length;
+  const display = texts as CareerTexts & {
+    desktopColumns?: 3 | 4;
+    cornerRadius?: CareerCornerRadius;
+    logoSize?: 'small' | 'medium' | 'large';
+  };
+  const radiusClassName = getCareerRadiusClassName(display.cornerRadius ?? 'lg');
+  const logoSizeClassNames = getCareerLogoSizeClassNames(display.logoSize ?? 'medium');
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl')} style={{ color: tokens.heading }}>
           {title}
@@ -113,11 +155,11 @@ const renderCards = ({
         </p>
       </div>
 
-      <div className={cn('grid gap-4 max-w-6xl mx-auto', getGridClass(device, 'grid-cols-2 lg:grid-cols-3'))}>
+      <div className={cn('grid gap-4 max-w-6xl mx-auto', getCareerGridClass(device, display.desktopColumns ?? 3))}>
         {visibleJobs.map((job) => (
           <article
             key={job.key}
-            className="rounded-xl border flex flex-col h-full"
+            className={cn('border flex flex-col h-full', radiusClassName)}
             style={{
               backgroundColor: tokens.cardBackground,
               borderColor: tokens.cardBorder,
@@ -125,20 +167,24 @@ const renderCards = ({
           >
             <div className={cn('flex-1', device === 'mobile' ? 'p-4' : 'p-5')}>
               <div className="flex items-start justify-between mb-3 gap-2">
-                <span
-                  className="text-xs font-medium px-2 py-1 rounded whitespace-nowrap border"
-                  style={{
-                    backgroundColor: tokens.badgeBackground,
-                    color: tokens.badgeText,
-                    borderColor: tokens.badgeBorder,
-                  }}
-                >
-                  {job.department || 'Đang cập nhật'}
+                <span className={cn('flex shrink-0 items-center justify-center rounded-full', logoSizeClassNames.box)} style={{ backgroundColor: tokens.badgeBackground, color: tokens.badgeText }}>
+                  <Briefcase size={logoSizeClassNames.icon} />
                 </span>
                 <span className="text-xs whitespace-nowrap" style={{ color: tokens.metaText }}>
                   {job.type || 'Full-time'}
                 </span>
               </div>
+
+              <span
+                className="mb-3 inline-flex max-w-full break-words text-xs font-medium px-2 py-1 rounded border"
+                style={{
+                  backgroundColor: tokens.badgeBackground,
+                  color: tokens.badgeText,
+                  borderColor: tokens.badgeBorder,
+                }}
+              >
+                {job.department || 'Đang cập nhật'}
+              </span>
 
               <h3 className="font-semibold line-clamp-2 mb-2 min-h-[2.75rem]" style={{ color: tokens.neutralText }}>
                 {job.title || 'Vị trí tuyển dụng'}
@@ -212,7 +258,7 @@ const renderList = ({
   const remainingCount = jobs.length - visibleJobs.length;
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl')} style={{ color: tokens.heading }}>
           {title}
@@ -300,7 +346,7 @@ const renderMinimal = ({
   const visibleJobs = jobs.slice(0, maxVisible);
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="max-w-5xl mx-auto">
         <div className={cn('gap-8', device === 'mobile' ? 'flex flex-col' : 'flex md:flex-row md:gap-12')}>
           <div className={cn('text-center md:text-left', device === 'mobile' ? '' : 'md:w-1/3')}>
@@ -370,7 +416,7 @@ const renderTable = ({
   const isCompact = device === 'mobile';
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl')} style={{ color: tokens.heading }}>
           {title}
@@ -444,9 +490,14 @@ const renderFeatured = ({
   const maxVisible = getMaxVisible('featured', context, device);
   const visibleJobs = jobs.slice(0, maxVisible);
   const [featuredJob, ...otherJobs] = visibleJobs;
+  const display = texts as CareerTexts & {
+    desktopColumns?: 3 | 4;
+    cornerRadius?: CareerCornerRadius;
+  };
+  const radiusClassName = getCareerRadiusClassName(display.cornerRadius ?? 'lg');
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl')} style={{ color: tokens.heading }}>
           {title}
@@ -456,7 +507,7 @@ const renderFeatured = ({
 
       <div className="max-w-6xl mx-auto">
         <article
-          className="rounded-2xl border-2 p-6 md:p-8 mb-6 relative"
+          className={cn('border-2 p-6 md:p-8 mb-6 relative', radiusClassName)}
           style={{
             backgroundColor: tokens.neutralSurface,
             borderColor: tokens.primary,
@@ -527,11 +578,11 @@ const renderFeatured = ({
         {otherJobs.length > 0 && (
           <>
             <h4 className="font-semibold mb-4 text-lg" style={{ color: tokens.neutralText }}>Vị trí khác</h4>
-            <div className={cn('grid gap-4', getGridClass(device, 'grid-cols-2 lg:grid-cols-3'))}>
+            <div className={cn('grid gap-4', getCareerGridClass(device, display.desktopColumns ?? 3))}>
               {otherJobs.map((job) => (
                 <article
                   key={job.key}
-                  className="rounded-lg border p-4"
+                  className={cn('border p-4', radiusClassName)}
                   style={{
                     backgroundColor: tokens.cardBackground,
                     borderColor: tokens.cardBorder,
@@ -601,7 +652,7 @@ const renderTimeline = ({
   }, {});
 
   return (
-    <section className={getSectionPadding(context, device)} style={{ backgroundColor: tokens.neutralBackground }}>
+    <section className={getSectionPadding(context, device, (texts as CareerTexts & { spacing?: SectionSpacing }).spacing)} style={{ backgroundColor: tokens.neutralBackground }}>
       <div className="text-center mb-8">
         <h2 className={cn('font-bold tracking-tight', device === 'mobile' ? 'text-xl' : 'text-2xl md:text-3xl')} style={{ color: tokens.heading }}>
           {title}
@@ -711,8 +762,27 @@ export function CareerSectionShared({
   title,
   device = 'desktop',
   texts = DEFAULT_CAREER_TEXTS,
+  spacing,
+  desktopColumns,
+  cornerRadius,
+  logoSize,
 }: CareerSectionSharedProps) {
-  const mergedTexts = { ...DEFAULT_CAREER_TEXTS, ...texts };
+  const normalizedDesktopColumns = normalizeCareerDesktopColumns(desktopColumns);
+  const normalizedCornerRadius = normalizeCareerCornerRadius(cornerRadius);
+  const normalizedLogoSize = normalizeCareerLogoSize(logoSize);
+  const mergedTexts = {
+    ...DEFAULT_CAREER_TEXTS,
+    ...texts,
+    spacing,
+    desktopColumns: normalizedDesktopColumns,
+    cornerRadius: normalizedCornerRadius,
+    logoSize: normalizedLogoSize,
+  } as CareerTexts & {
+    spacing?: SectionSpacing;
+    desktopColumns: 3 | 4;
+    cornerRadius: CareerCornerRadius;
+    logoSize: 'small' | 'medium' | 'large';
+  };
 
   if (style === 'cards') {
     return renderCards({ jobs, title, tokens, context, device, texts: mergedTexts });

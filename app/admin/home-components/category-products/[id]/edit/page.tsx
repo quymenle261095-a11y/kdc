@@ -1,22 +1,27 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Package, Loader2, AlertTriangle, Eye } from 'lucide-react';
+import { Package, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { CategoryProductsForm } from '../../_components/CategoryProductsForm';
 import { CategoryProductsPreview } from '../../_components/CategoryProductsPreview';
-import { DEFAULT_CATEGORY_PRODUCTS_CONFIG } from '../../_lib/constants';
+import { DEFAULT_CATEGORY_PRODUCTS_CONFIG, DEFAULT_DEMO_CATEGORY_PRODUCTS_SECTIONS } from '../../_lib/constants';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import {
   getCategoryProductsValidationResult,
@@ -24,40 +29,88 @@ import {
 } from '../../_lib/colors';
 import type {
   CategoryProductsBrandMode,
+  CategoryProductsCornerRadius,
   CategoryProductsSection,
+  CategoryProductsSelectionMode,
   CategoryProductsStyle,
+  DemoCategoryProductsSection,
 } from '../../_types';
+import {
+  getCategoryProductsResponsiveColumns,
+  normalizeCategoryProductsCornerRadius,
+  normalizeCategoryProductsDesktopColumns,
+} from '../../_types';
+import { resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
 
 const COMPONENT_TYPE = 'CategoryProducts';
 
-export default function CategoryProductsEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type CategoryProductsEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function CategoryProductsEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: CategoryProductsEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const brandMode: CategoryProductsBrandMode = effectiveColors.mode === 'single' ? 'single' : 'dual';
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
   const categoriesData = useQuery(api.productCategories.listActive);
   const productsData = useQuery(api.products.listPublicResolved, { limit: 100 });
+  const aspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
-  const [sections, setSections] = useState<CategoryProductsSection[]>([]);
+  const {
+    state: sections,
+    set: setSections,
+    undo: undosections,
+    redo: redosections,
+    canUndo: canUndosections,
+    canRedo: canRedosections,
+    reset: resetsections,
+  } = useUndoRedo<CategoryProductsSection[]>([], { maxHistory: 15 });
+  const [selectionMode, setSelectionMode] = useState<CategoryProductsSelectionMode>('real');
+  const [demoSections, setDemoSections] = useState<DemoCategoryProductsSection[]>(DEFAULT_DEMO_CATEGORY_PRODUCTS_SECTIONS);
   const [style, setStyle] = useState<CategoryProductsStyle>('grid');
   const [showViewAll, setShowViewAll] = useState(true);
-  const [columnsDesktop, setColumnsDesktop] = useState(4);
-  const [columnsMobile, setColumnsMobile] = useState(2);
+  const [columnsDesktop, setColumnsDesktop] = useState<3 | 4>(4);
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
+  const [cornerRadius, setCornerRadius] = useState<CategoryProductsCornerRadius>(normalizeCategoryProductsCornerRadius(DEFAULT_CATEGORY_PRODUCTS_CONFIG.cornerRadius));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
-  const [warningMessages, setWarningMessages] = useState<string[]>([]);
+  const columnsMobile = getCategoryProductsResponsiveColumns(columnsDesktop).mobile;
+  const productImageCropAspectRatio = style === 'wine-grid' ? 'square' : resolveProductImageAspectRatio(aspectRatioSetting?.value);
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'CategoryProducts') {
+      if (!snapshotComponent && component.type !== 'CategoryProducts') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
@@ -73,23 +126,34 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
       })) ?? [];
       const loadedStyle = (config.style as CategoryProductsStyle) || 'grid';
       const loadedShowViewAll = config.showViewAll ?? true;
-      const loadedColumnsDesktop = config.columnsDesktop ?? 4;
-      const loadedColumnsMobile = config.columnsMobile ?? 2;
+      const loadedColumnsDesktop = normalizeCategoryProductsDesktopColumns(config.columnsDesktop);
+      const loadedColumnsMobile = getCategoryProductsResponsiveColumns(loadedColumnsDesktop).mobile;
+      const loadedSelectionMode = (config.selectionMode as CategoryProductsSelectionMode | undefined) ?? 'real';
+      const loadedDemoSections = (config.demoSections as DemoCategoryProductsSection[] | undefined) ?? DEFAULT_DEMO_CATEGORY_PRODUCTS_SECTIONS;
+      const loadedSpacing = normalizeSectionSpacing(config.spacing);
+      const loadedCornerRadius = normalizeCategoryProductsCornerRadius(config.cornerRadius);
 
-      setSections(loadedSections);
+      resetsections(loadedSections);
+      setSelectionMode(loadedSelectionMode);
+      setDemoSections(loadedDemoSections);
       setStyle(loadedStyle);
       setShowViewAll(loadedShowViewAll);
       setColumnsDesktop(loadedColumnsDesktop);
-      setColumnsMobile(loadedColumnsMobile);
+      setSpacing(loadedSpacing);
+      setCornerRadius(loadedCornerRadius);
 
       setInitialSnapshot(JSON.stringify({
         title: component.title,
         active: component.active,
+        demoSections: loadedDemoSections,
         sections: loadedSections,
+        selectionMode: loadedSelectionMode,
         style: loadedStyle,
         showViewAll: loadedShowViewAll,
         columnsDesktop: loadedColumnsDesktop,
         columnsMobile: loadedColumnsMobile,
+        spacing: loadedSpacing,
+        cornerRadius: loadedCornerRadius,
         type: component.type,
       }));
       setHasChanges(false);
@@ -102,21 +166,25 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
     const snapshot = JSON.stringify({
       title,
       active,
+      demoSections,
       sections,
+      selectionMode,
       style,
       showViewAll,
       columnsDesktop,
       columnsMobile,
+      spacing,
+      cornerRadius,
       type: component.type,
     });
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-    const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
       ? customState.enabled !== initialCustom.enabled
         || customState.mode !== initialCustom.mode
         || customState.primary !== initialCustom.primary
         || resolvedCustomSecondary !== initialCustom.secondary
       : false;
-    const customFontChanged = showFontCustomBlock
+    const customFontChanged = enableTypeOverrides && showFontCustomBlock
       ? customFontState.enabled !== initialFontCustom.enabled
         || customFontState.fontKey !== initialFontCustom.fontKey
       : false;
@@ -124,11 +192,15 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
   }, [
     title,
     active,
+    demoSections,
     sections,
+    selectionMode,
     style,
     showViewAll,
     columnsDesktop,
     columnsMobile,
+    spacing,
+    cornerRadius,
     component,
     initialSnapshot,
     customState,
@@ -139,60 +211,54 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
     showFontCustomBlock,
   ]);
 
-  const buildWarningMessages = (validation: ReturnType<typeof getCategoryProductsValidationResult>) => {
-    const messages: string[] = [];
-
-    if (brandMode === 'dual' && validation.harmonyStatus.isTooSimilar) {
-      messages.push(`Màu phụ đang khá gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}). Nên tăng độ tách biệt.`);
-    }
-
-    if (validation.accessibility.failing.length > 0) {
-      messages.push(`Một số cặp màu chữ/nền chưa đủ tương phản (minLc = ${validation.accessibility.minLc.toFixed(1)}).`);
-    }
-
-    return messages;
-  };
-
   useEffect(() => {
     if (!component || component.type !== 'CategoryProducts') {return;}
     const harmony = normalizeCategoryProductsHarmony((component.config as { harmony?: string } | undefined)?.harmony);
-    const validation = getCategoryProductsValidationResult({
+    getCategoryProductsValidationResult({
       primary: effectiveColors.primary,
       secondary: effectiveColors.secondary,
       mode: brandMode,
       harmony,
     });
-    setWarningMessages(buildWarningMessages(validation));
   }, [component, effectiveColors.primary, effectiveColors.secondary, brandMode]);
+
+  useUnsavedGuard(hasChanges);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting || !hasChanges) {return;}
 
     const harmony = normalizeCategoryProductsHarmony((component?.config as { harmony?: string } | undefined)?.harmony);
-    const validation = getCategoryProductsValidationResult({
+    getCategoryProductsValidationResult({
       primary: effectiveColors.primary,
       secondary: effectiveColors.secondary,
       mode: brandMode,
       harmony,
     });
-
-    setWarningMessages(buildWarningMessages(validation));
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config: {
-          columnsDesktop,
-          columnsMobile,
-          sections: sections.map(s => ({ categoryId: s.categoryId, itemCount: s.itemCount })),
-          showViewAll,
-          style,
-        },
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      const nextConfig = {
+        columnsDesktop,
+        columnsMobile,
+        spacing,
+        cornerRadius,
+        demoSections: selectionMode === 'demo' ? demoSections : undefined,
+        sections: sections.map(s => ({ categoryId: s.categoryId, itemCount: s.itemCount })),
+        selectionMode,
+        showViewAll,
+        style,
+      };
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -208,7 +274,7 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
           secondary: resolvedCustomSecondary,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -223,11 +289,15 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
       setInitialSnapshot(JSON.stringify({
         title,
         active,
+        demoSections,
         sections,
+        selectionMode,
         style,
         showViewAll,
         columnsDesktop,
         columnsMobile,
+        spacing,
+        cornerRadius,
         type: component?.type,
       }));
       setHasChanges(false);
@@ -257,11 +327,12 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Sản phẩm theo danh mục</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
+        <Card className="mb-3">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Package size={20} />
@@ -278,24 +349,7 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
                 placeholder="Nhập tiêu đề component..."
               />
             </div>
-
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
-                )}
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5'
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
+</CardContent>
         </Card>
 
         <CategoryProductsForm
@@ -303,30 +357,26 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
           setSections={setSections}
           columnsDesktop={columnsDesktop}
           setColumnsDesktop={setColumnsDesktop}
-          columnsMobile={columnsMobile}
-          setColumnsMobile={setColumnsMobile}
           showViewAll={showViewAll}
           setShowViewAll={setShowViewAll}
           categoriesData={categoriesData ?? []}
+          selectionMode={selectionMode}
+          setSelectionMode={setSelectionMode}
+          demoSections={demoSections}
+          setDemoSections={setDemoSections}
+          spacing={spacing}
+          setSpacing={setSpacing}
+          cornerRadius={cornerRadius}
+          setCornerRadius={setCornerRadius}
+          productImageCropAspectRatio={productImageCropAspectRatio}
+          defaultExpanded={false}
+          className="mb-3"
         />
-
-        {warningMessages.length > 0 && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <div className="space-y-2">
-              {warningMessages.map((message, idx) => (
-                <div key={idx} className="flex items-start gap-2">
-                  {message.includes('deltaE') ? <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> : <Eye size={14} className="mt-0.5 flex-shrink-0" />}
-                  <p>{message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Sản phẩm theo danh mục"
                 enabled={customState.enabled}
@@ -357,7 +407,7 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Sản phẩm theo danh mục"
                 enabled={customFontState.enabled}
@@ -373,9 +423,13 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
               config={{
               columnsDesktop,
               columnsMobile,
+              demoSections,
               sections,
+              selectionMode,
               showViewAll,
+              spacing,
               style,
+              cornerRadius,
               }}
               brandColor={effectiveColors.primary}
               secondary={effectiveColors.secondary}
@@ -393,8 +447,17 @@ export default function CategoryProductsEditPage({ params }: { params: Promise<{
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() =>{  router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndosections,
+          canRedo: canRedosections,
+          onUndo: undosections,
+          onRedo: redosections,
+        }}
         />
       </form>
     </div>

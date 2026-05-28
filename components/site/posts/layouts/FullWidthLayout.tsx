@@ -24,9 +24,10 @@ interface FullWidthLayoutProps {
   tokens: PostsListColors;
   categoryMap: Map<string, string>;
   enabledFields: Set<string>;
+  getDetailHref: (post: Post) => string;
 }
 
-export function FullWidthLayout({ posts, brandColor: _brandColor, tokens, categoryMap, enabledFields }: FullWidthLayoutProps) {
+export function FullWidthLayout({ posts, brandColor: _brandColor, tokens, categoryMap, enabledFields, getDetailHref }: FullWidthLayoutProps) {
   const showExcerpt = enabledFields.has('excerpt');
   const [brokenThumbnails, setBrokenThumbnails] = React.useState<Set<string>>(new Set());
 
@@ -55,7 +56,7 @@ export function FullWidthLayout({ posts, brandColor: _brandColor, tokens, catego
         const showImage = Boolean(post.thumbnail) && !brokenThumbnails.has(String(post._id));
 
         return (
-          <Link key={post._id} href={`/posts/${post.slug}`} className="group">
+          <Link key={post._id} href={getDetailHref(post)} className="group">
             <article
               className="rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200 border h-full flex flex-col"
               style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}

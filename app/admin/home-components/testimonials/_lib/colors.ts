@@ -190,7 +190,7 @@ export const calculateAccentBalance = ({
     };
   }
 
-  if (style === 'cards' || style === 'slider') {
+  if (style === 'cards' || style === 'slider' || style === 'split-carousel' || style === 'overlap-carousel' || style === 'builder-cards' || style === 'builder-carousel') {
     return {
       neutral: 60,
       primary: 28,
@@ -198,7 +198,7 @@ export const calculateAccentBalance = ({
     };
   }
 
-  if (style === 'masonry' || style === 'minimal') {
+  if (style === 'marquee' || style === 'minimal') {
     return {
       neutral: 62,
       primary: 26,

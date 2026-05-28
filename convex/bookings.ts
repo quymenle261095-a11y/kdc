@@ -14,6 +14,7 @@ import {
 } from "../lib/bookings/slotTemplate";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { consumeRateLimit } from "./lib/rateLimit";
 
 const bookingStatus = v.union(
   v.literal("Pending"),
@@ -422,6 +423,15 @@ export const createPublicBooking = mutation({
     const canonicalName = args.customerName.trim() || submittedFields.full_name?.trim() || "";
     if (!canonicalName) {
       throw new Error("Vui lòng nhập họ và tên");
+    }
+
+    const rateLimit = await consumeRateLimit(
+      ctx,
+      `${args.serviceId}:${args.bookingDate}:${canonicalName.toLowerCase()}`,
+      "publicBooking"
+    );
+    if (!rateLimit.allowed) {
+      throw new Error("Bạn gửi yêu cầu đặt lịch quá nhanh. Vui lòng thử lại sau.");
     }
 
     const activeCustomerFields = settings.customerFieldConfigs.filter((field) => field.enabled);

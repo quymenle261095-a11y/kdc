@@ -1,5 +1,7 @@
 'use client';
 
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,20 +10,23 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { BenefitsForm } from '../../_components/BenefitsForm';
 import { BenefitsPreview } from '../../_components/BenefitsPreview';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import { DEFAULT_BENEFITS_CONFIG, DEFAULT_BENEFITS_HARMONY } from '../../_lib/constants';
+import { DEFAULT_BENEFITS_CONFIG, DEFAULT_BENEFITS_HARMONY, normalizeBenefitsCornerRadius, normalizeBenefitsSpacing } from '../../_lib/constants';
 import {
   buildBenefitsWarningMessages,
   getBenefitsValidationResult,
   normalizeBenefitsHarmony,
+  normalizeBenefitsStyle,
 } from '../../_lib/colors';
 import type {
   BenefitItem,
@@ -29,7 +34,7 @@ import type {
   BenefitsBrandMode,
   BenefitsConfig,
   BenefitsEditorState,
-  BenefitsStyle,
+  BenefitsHeaderAlign,
 } from '../../_types';
 
 const buildUiId = (item: BenefitPersistItem, idx: number) => {
@@ -69,12 +74,6 @@ const toPersistItem = (item: BenefitItem): BenefitPersistItem => ({
   title: item.title,
 });
 
-const normalizeStyle = (value: unknown): BenefitsStyle => (
-  value === 'cards' || value === 'list' || value === 'bento' || value === 'row' || value === 'carousel' || value === 'timeline'
-    ? value
-    : 'cards'
-);
-
 const toEditorState = (config: Partial<BenefitsConfig> | undefined): BenefitsEditorState => {
   const source = config ?? {};
 
@@ -86,7 +85,7 @@ const toEditorState = (config: Partial<BenefitsConfig> | undefined): BenefitsEdi
     buttonLink: typeof source.buttonLink === 'string' ? source.buttonLink : (DEFAULT_BENEFITS_CONFIG.buttonLink ?? ''),
     buttonText: typeof source.buttonText === 'string' ? source.buttonText : (DEFAULT_BENEFITS_CONFIG.buttonText ?? ''),
     gridColumnsDesktop: typeof source.gridColumnsDesktop === 'number'
-      ? (source.gridColumnsDesktop === 3 ? 3 : 4)
+      ? (source.gridColumnsDesktop === 3 ? 3 : source.gridColumnsDesktop === 5 ? 5 : 4)
       : (DEFAULT_BENEFITS_CONFIG.gridColumnsDesktop ?? 4),
     gridColumnsMobile: typeof source.gridColumnsMobile === 'number'
       ? (source.gridColumnsMobile === 1 ? 1 : 2)
@@ -94,11 +93,30 @@ const toEditorState = (config: Partial<BenefitsConfig> | undefined): BenefitsEdi
     headerAlign: source.headerAlign === 'center' || source.headerAlign === 'right'
       ? source.headerAlign
       : (DEFAULT_BENEFITS_CONFIG.headerAlign ?? 'left'),
+    highlightIndex: typeof source.highlightIndex === 'number' ? source.highlightIndex : (DEFAULT_BENEFITS_CONFIG.highlightIndex ?? 2),
+    cornerRadius: normalizeBenefitsCornerRadius(source.cornerRadius, source.noBorderRadius),
     harmony: normalizeBenefitsHarmony(source.harmony ?? DEFAULT_BENEFITS_HARMONY),
     heading: typeof source.heading === 'string' ? source.heading : (DEFAULT_BENEFITS_CONFIG.heading ?? ''),
     items,
-    style: normalizeStyle(source.style),
+    showDecorativeVisuals: typeof source.showDecorativeVisuals === 'boolean'
+      ? source.showDecorativeVisuals
+      : (DEFAULT_BENEFITS_CONFIG.showDecorativeVisuals ?? true),
+    showItemNumbers: typeof source.showItemNumbers === 'boolean'
+      ? source.showItemNumbers
+      : (DEFAULT_BENEFITS_CONFIG.showItemNumbers ?? true),
+    style: normalizeBenefitsStyle(source.style),
     subHeading: typeof source.subHeading === 'string' ? source.subHeading : (DEFAULT_BENEFITS_CONFIG.subHeading ?? ''),
+    visualImage: typeof source.visualImage === 'string' ? source.visualImage : (DEFAULT_BENEFITS_CONFIG.visualImage ?? ''),
+    // Shared header config
+    hideHeader: typeof source.hideHeader === 'boolean' ? source.hideHeader : (DEFAULT_BENEFITS_CONFIG.hideHeader ?? false),
+    showTitle: typeof source.showTitle === 'boolean' ? source.showTitle : (DEFAULT_BENEFITS_CONFIG.showTitle ?? true),
+    showSubtitle: typeof source.showSubtitle === 'boolean' ? source.showSubtitle : (DEFAULT_BENEFITS_CONFIG.showSubtitle ?? true),
+    subtitle: typeof source.subtitle === 'string' ? source.subtitle : (DEFAULT_BENEFITS_CONFIG.subtitle ?? ''),
+    titleColorPrimary: typeof source.titleColorPrimary === 'boolean' ? source.titleColorPrimary : (DEFAULT_BENEFITS_CONFIG.titleColorPrimary ?? false),
+    subtitleAboveTitle: typeof source.subtitleAboveTitle === 'boolean' ? source.subtitleAboveTitle : (DEFAULT_BENEFITS_CONFIG.subtitleAboveTitle ?? false),
+    uppercaseText: typeof source.uppercaseText === 'boolean' ? source.uppercaseText : (DEFAULT_BENEFITS_CONFIG.uppercaseText ?? false),
+    showBadge: typeof source.showBadge === 'boolean' ? source.showBadge : (DEFAULT_BENEFITS_CONFIG.showBadge ?? true),
+    badgeText: typeof source.badgeText === 'string' ? source.badgeText : (DEFAULT_BENEFITS_CONFIG.badgeText ?? ''),
   };
 };
 
@@ -108,11 +126,40 @@ const toPersistConfig = (state: BenefitsEditorState): BenefitsConfig => ({
   gridColumnsDesktop: state.gridColumnsDesktop,
   gridColumnsMobile: state.gridColumnsMobile,
   headerAlign: state.headerAlign,
+  highlightIndex: state.highlightIndex,
+  cornerRadius: state.cornerRadius,
   harmony: state.harmony,
   heading: state.heading,
   items: state.items.map(toPersistItem),
-  style: state.style,
+  showDecorativeVisuals: state.showDecorativeVisuals,
+  showItemNumbers: state.showItemNumbers,
+  style: normalizeBenefitsStyle(state.style),
   subHeading: state.subHeading,
+  visualImage: state.visualImage,
+  // Shared header config
+  hideHeader: state.hideHeader,
+  showTitle: state.showTitle,
+  showSubtitle: state.showSubtitle,
+  subtitle: state.subtitle,
+  titleColorPrimary: state.titleColorPrimary,
+  subtitleAboveTitle: state.subtitleAboveTitle,
+  uppercaseText: state.uppercaseText,
+  showBadge: state.showBadge,
+  badgeText: state.badgeText,
+});
+
+const buildPreviewConfig = ({
+  state,
+  header,
+}: {
+  state: BenefitsEditorState;
+  header: Pick<
+    BenefitsConfig,
+    'hideHeader' | 'showTitle' | 'subtitle' | 'showSubtitle' | 'headerAlign' | 'titleColorPrimary' | 'subtitleAboveTitle' | 'uppercaseText' | 'showBadge' | 'badgeText' | 'spacing'
+  >;
+}): BenefitsConfig => ({
+  ...toPersistConfig(state),
+  ...header,
 });
 
 const createSnapshot = ({
@@ -122,7 +169,7 @@ const createSnapshot = ({
 }: {
   title: string;
   active: boolean;
-  state: BenefitsEditorState;
+  state: BenefitsEditorState & { spacing?: SectionSpacing };
 }) => JSON.stringify({
   active,
   config: {
@@ -131,6 +178,8 @@ const createSnapshot = ({
     gridColumnsDesktop: state.gridColumnsDesktop,
     gridColumnsMobile: state.gridColumnsMobile,
     headerAlign: state.headerAlign,
+    highlightIndex: state.highlightIndex,
+    cornerRadius: state.cornerRadius,
     harmony: state.harmony,
     heading: state.heading,
     items: state.items.map((item) => ({
@@ -138,18 +187,58 @@ const createSnapshot = ({
       icon: item.icon,
       title: item.title,
     })),
-    style: state.style,
+    showDecorativeVisuals: state.showDecorativeVisuals,
+    showItemNumbers: state.showItemNumbers,
+    style: normalizeBenefitsStyle(state.style),
     subHeading: state.subHeading,
+    visualImage: state.visualImage,
+    // Shared header config
+    hideHeader: state.hideHeader,
+    showTitle: state.showTitle,
+    showSubtitle: state.showSubtitle,
+    subtitle: state.subtitle,
+    titleColorPrimary: state.titleColorPrimary,
+    subtitleAboveTitle: state.subtitleAboveTitle,
+    uppercaseText: state.uppercaseText,
+    showBadge: state.showBadge,
+    badgeText: state.badgeText,
+    spacing: state.spacing ?? DEFAULT_SECTION_SPACING,
   },
   title,
 });
 
 const COMPONENT_TYPE = 'Benefits';
 
-export default function BenefitsEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type BenefitsEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function BenefitsEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: BenefitsEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
@@ -163,11 +252,25 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
   const [editorState, setEditorState] = useState<BenefitsEditorState>(() => toEditorState(undefined));
   const [initialSnapshot, setInitialSnapshot] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Header config state
+  const [expandedSections, setExpandedSections] = useState({ header: false });
+  const [hideHeader, setHideHeader] = useState(false);
+  const [showTitle, setShowTitle] = useState(DEFAULT_BENEFITS_CONFIG.showTitle ?? true);
+  const [subtitle, setSubtitle] = useState('');
+  const [showSubtitle, setShowSubtitle] = useState(DEFAULT_BENEFITS_CONFIG.showSubtitle ?? true);
+  const [headerAlign, setHeaderAlign] = useState<BenefitsHeaderAlign>(DEFAULT_BENEFITS_CONFIG.headerAlign ?? 'left');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(false);
+  const [uppercaseText, setUppercaseText] = useState(false);
+  const [showBadge, setShowBadge] = useState(true);
+  const [badgeText, setBadgeText] = useState('');
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
 
   useEffect(() => {
     if (component === undefined || component === null) {return;}
 
-    if (component.type !== 'Benefits') {
+    if (!snapshotComponent && component.type !== 'Benefits') {
       router.replace(`/admin/home-components/${id}/edit`);
       return;
     }
@@ -177,28 +280,63 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
 
     const state = toEditorState(component.config as Partial<BenefitsConfig> | undefined);
     setEditorState(state);
+    
+    // Load header config
+    const headerConfig = extractSectionHeaderConfig(component.config ?? {});
+    setHideHeader(headerConfig.hideHeader ?? false);
+    setShowTitle(headerConfig.showTitle ?? true);
+    setSubtitle(headerConfig.subtitle ?? '');
+    setShowSubtitle(headerConfig.showSubtitle ?? true);
+    setHeaderAlign((headerConfig.headerAlign ?? 'left') as BenefitsHeaderAlign);
+    setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+    setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+    setUppercaseText(headerConfig.uppercaseText ?? false);
+    setShowBadge(headerConfig.showBadge ?? true);
+    setBadgeText(headerConfig.badgeText ?? '');
+    const loadedSpacing = normalizeBenefitsSpacing((component.config as Partial<BenefitsConfig> | undefined)?.spacing, (component.config as Partial<BenefitsConfig> | undefined)?.noVerticalMargin);
+    setSpacing(loadedSpacing);
 
     setInitialSnapshot(createSnapshot({
       active: component.active,
-      state,
+      state: {
+        ...state,
+        spacing: loadedSpacing,
+      },
       title: component.title,
     }));
-  }, [component, id, router]);
+  }, [component, id, router, snapshotComponent]);
 
   const currentSnapshot = useMemo(
-    () => createSnapshot({ title, active, state: editorState }),
-    [title, active, editorState],
+    () => createSnapshot({ 
+      title, 
+      active, 
+      state: {
+        ...editorState,
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+      }
+    }),
+    [title, active, editorState, hideHeader, showTitle, subtitle, showSubtitle, headerAlign, titleColorPrimary, subtitleAboveTitle, uppercaseText, showBadge, badgeText, spacing],
   );
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
   const resolvedInitialSecondary = resolveSecondaryByMode(initialCustom.mode, initialCustom.primary, initialCustom.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== resolvedInitialSecondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
@@ -216,6 +354,8 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
     return buildBenefitsWarningMessages({ mode: brandMode, validation });
   }, [effectiveColors, brandMode, editorState.harmony, editorState.style]);
 
+  useUnsavedGuard(hasChanges);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSubmitting || !hasChanges) {return;}
@@ -224,15 +364,30 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
     try {
       const payload: Record<string, unknown> = {
         ...toPersistConfig(editorState),
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
       };
 
-      await updateMutation({
-        active,
-        config: payload,
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: payload, title });
+      } else {
+        await updateMutation({
+          active,
+          config: payload,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -242,7 +397,7 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -252,7 +407,7 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
 
       toast.success('Đã cập nhật Lợi ích');
       setInitialSnapshot(currentSnapshot);
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -260,7 +415,7 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -292,56 +447,56 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Lợi ích</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Thông tin chung</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(event) => { setTitle(event.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() => { setActive(!active); }}
-              >
-                <div
-                  className={cn(
-                    'w-5 h-5 bg-white rounded-full transition-transform shadow',
-                    active ? 'translate-x-2.5' : '-translate-x-2.5',
-                  )}
-                />
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={expandedSections.header}
+          onExpandedChange={(value) => setExpandedSections({ header: value })}
+          className="mb-3"
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
         <BenefitsForm
           state={editorState}
           onChange={(updater) => { setEditorState((prev) => updater(prev)); }}
           mode={brandMode}
+          spacing={spacing}
+          onSpacingChange={setSpacing}
+          defaultExpanded={false}
+          className="mb-4"
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div />
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Lợi ích"
                 enabled={customState.enabled}
@@ -377,7 +532,7 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Lợi ích"
                 enabled={customFontState.enabled}
@@ -391,6 +546,7 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
             )}
             <BenefitsPreview
               items={editorState.items}
+              title={title}
               brandColor={effectiveColors.primary}
               secondary={effectiveColors.secondary}
               mode={brandMode}
@@ -401,13 +557,22 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
                   style,
                 }));
               }}
-              config={{
-                buttonLink: editorState.buttonLink,
-                buttonText: editorState.buttonText,
-                harmony: editorState.harmony,
-                heading: editorState.heading,
-                subHeading: editorState.subHeading,
-              }}
+              config={buildPreviewConfig({
+                state: editorState,
+                header: {
+                  hideHeader,
+                  showTitle,
+                  subtitle,
+                  showSubtitle,
+                  headerAlign,
+                  titleColorPrimary,
+                  subtitleAboveTitle,
+                  uppercaseText,
+                  showBadge,
+                  badgeText,
+                  spacing,
+                },
+              })}
               fontStyle={fontStyle}
               fontClassName="font-active"
             />
@@ -430,8 +595,10 @@ export default function BenefitsEditPage({ params }: { params: Promise<{ id: str
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => { router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
         />
       </form>
     </div>

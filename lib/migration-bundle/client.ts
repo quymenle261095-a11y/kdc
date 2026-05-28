@@ -52,7 +52,6 @@ const splitModuleFiles = (payload: MigrationBundlePayload) => {
     files['modules/products/options.json'] = toJsonFile(data.options ?? []);
     files['modules/products/option-values.json'] = toJsonFile(data.optionValues ?? []);
     files['modules/products/variants.chunk-001.json'] = toJsonFile(data.variants ?? []);
-    files['modules/products/frames.json'] = toJsonFile(data.frames ?? []);
     files['modules/products/supplemental-contents.json'] = toJsonFile(data.supplementalContents ?? []);
   }
 
@@ -150,8 +149,8 @@ export async function parseBundleFile(file: File): Promise<ParsedBundleInput> {
   const mediaIndex = await parseJson(zip, 'index/media.index.json', [] as MigrationBundlePayload['index']['mediaIndex']);
 
   const records: MigrationBundlePayload['index']['records'] = {};
-  for (const module of modules) {
-    records[module] = await parseJson(zip, `index/records/${module}.index.json`, []);
+  for (const moduleKey of modules) {
+    records[moduleKey] = await parseJson(zip, `index/records/${moduleKey}.index.json`, []);
   }
 
   const payload: MigrationBundlePayload = {
@@ -182,7 +181,6 @@ export async function parseBundleFile(file: File): Promise<ParsedBundleInput> {
       options: await parseJson(zip, 'modules/products/options.json', []),
       optionValues: await parseJson(zip, 'modules/products/option-values.json', []),
       variants: await parseJson(zip, 'modules/products/variants.chunk-001.json', []),
-      frames: await parseJson(zip, 'modules/products/frames.json', []),
       supplementalContents: await parseJson(zip, 'modules/products/supplemental-contents.json', []),
     };
   }

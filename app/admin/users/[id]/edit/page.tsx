@@ -9,6 +9,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Loader2, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Card, CardContent, Input, Label } from '../../../components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { ImageUploader } from '../../../components/ImageUploader';
 import { useAdminAuth } from '../../../auth/context';
 
@@ -60,7 +61,6 @@ function UserEditForm({ params, token }: { params: Promise<{ id: string }>; toke
   const [roleId, setRoleId] = useState<Id<"roles"> | ''>('');
   const [status, setStatus] = useState<'Active' | 'Inactive' | 'Banned'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [shouldRedirect, setShouldRedirect] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -73,6 +73,29 @@ function UserEditForm({ params, token }: { params: Promise<{ id: string }>; toke
     fieldsData?.forEach(f => fields.add(f.fieldKey));
     return fields;
   }, [fieldsData]);
+
+  const hasChanges = useMemo(() => {
+    if (!userData) {return false;}
+
+    const current = {
+      avatar: enabledFields.has('avatar') ? avatar : undefined,
+      email: email.trim(),
+      name: name.trim(),
+      phone: enabledFields.has('phone') ? phone.trim() : undefined,
+      roleId: isRolesEnabled ? (roleId || undefined) : undefined,
+      status,
+    };
+    const original = {
+      avatar: enabledFields.has('avatar') ? userData.avatar : undefined,
+      email: userData.email.trim(),
+      name: userData.name.trim(),
+      phone: enabledFields.has('phone') ? (userData.phone ?? '').trim() : undefined,
+      roleId: isRolesEnabled ? userData.roleId : undefined,
+      status: userData.status,
+    };
+
+    return JSON.stringify(current) !== JSON.stringify(original);
+  }, [avatar, email, enabledFields, isRolesEnabled, name, phone, roleId, status, userData]);
 
   useEffect(() => {
     if (userData) {
@@ -93,6 +116,7 @@ function UserEditForm({ params, token }: { params: Promise<{ id: string }>; toke
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasChanges) {return;}
     if (!token) {
       toast.error('Thiếu token xác thực');
       return;
@@ -118,14 +142,10 @@ function UserEditForm({ params, token }: { params: Promise<{ id: string }>; toke
         token,
       });
       toast.success('Đã cập nhật người dùng');
-      if (shouldRedirect) {
-        router.push('/admin/users');
-      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     } finally {
       setIsSubmitting(false);
-      setShouldRedirect(false);
     }
   };
 
@@ -267,27 +287,26 @@ function UserEditForm({ params, token }: { params: Promise<{ id: string }>; toke
               </div>
             )}
           </CardContent>
-          
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-b-lg flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/users'); }}>Hủy bỏ</Button>
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={isSubmitting}
-              onClick={() =>{  setShouldRedirect(true); }}
-            >
-              Lưu & quay lại
-            </Button>
-            <Button
-              type="submit"
-              variant="accent"
-              disabled={isSubmitting}
-              onClick={() =>{  setShouldRedirect(false); }}
-            >
-              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-              Lưu thay đổi
-            </Button>
-          </div>
+          <HomeComponentStickyFooter
+            isSubmitting={isSubmitting}
+            hasChanges={hasChanges}
+            submitLabel="Lưu thay đổi"
+            savedLabel="Đã lưu"
+            disableSave={!hasChanges || isSubmitting}
+            align="end"
+          >
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/users'); }} disabled={isSubmitting}>Hủy bỏ</Button>
+              <Button
+                type="submit"
+                variant="accent"
+                disabled={!hasChanges || isSubmitting}
+              >
+                {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
+                {hasChanges ? 'Lưu thay đổi' : 'Đã lưu'}
+              </Button>
+            </div>
+          </HomeComponentStickyFooter>
         </form>
       </Card>
 

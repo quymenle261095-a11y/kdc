@@ -7,6 +7,7 @@ import {
 } from '@/app/admin/home-components/team/_lib/constants';
 import { getTeamColorTokens } from '@/app/admin/home-components/team/_lib/colors';
 import { TeamSectionShared } from '@/app/admin/home-components/team/_components/TeamSectionShared';
+import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
 import type {
   TeamBrandMode,
   TeamStyle,
@@ -44,6 +45,17 @@ export function TeamSection({
     ? normalizedConfig.members
     : normalizeTeamConfig({}).members;
 
+  // Extract header config via shared util (backward compat: fallback to texts.subtitle)
+  const legacySubtitle = typeof normalizedConfig.texts?.subtitle === 'string'
+    ? normalizedConfig.texts.subtitle
+    : '';
+
+  const rawHeaderConfig = extractSectionHeaderConfig(config);
+  const headerConfig = {
+    ...rawHeaderConfig,
+    subtitle: rawHeaderConfig.subtitle || legacySubtitle,
+  };
+
   return (
     <TeamSectionShared
       context="site"
@@ -53,6 +65,19 @@ export function TeamSection({
       tokens={tokens}
       mode={mode}
       carouselId="team-site-carousel"
+      hideHeader={headerConfig.hideHeader}
+      showTitle={headerConfig.showTitle}
+      showSubtitle={headerConfig.showSubtitle}
+      subtitle={headerConfig.subtitle}
+      headerAlign={headerConfig.headerAlign}
+      titleColorPrimary={headerConfig.titleColorPrimary}
+      subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+      uppercaseText={headerConfig.uppercaseText}
+      showBadge={headerConfig.showBadge}
+      badgeText={headerConfig.badgeText}
+      spacing={normalizedConfig.spacing}
+      desktopColumns={normalizedConfig.desktopColumns}
+      cornerRadius={normalizedConfig.cornerRadius}
     />
   );
 }

@@ -244,12 +244,12 @@ export const getTeamColorTokens = ({
   const mutedText = '#64748b';
 
   const socialButtonBg = secondaryPalette.surface;
-  const socialButtonBorder = secondaryPalette.border;
+  const socialButtonBorder = neutralBorder;
   const socialButtonTextCandidate = pickReadableTextOnSolid(socialButtonBg);
   const socialButtonIcon = resolveBrandTextOnBackground(socialButtonTextCandidate, socialButtonBg, 13, 600, neutralText);
 
   const carouselNavBg = secondaryPalette.surface;
-  const carouselNavBorder = secondaryPalette.border;
+  const carouselNavBorder = neutralBorder;
   const carouselNavTextCandidate = pickReadableTextOnSolid(carouselNavBg);
   const carouselNavIcon = resolveBrandTextOnBackground(carouselNavTextCandidate, carouselNavBg, 14, 700, neutralText);
 
@@ -273,7 +273,7 @@ export const getTeamColorTokens = ({
 
     cardBackground: neutralSurface,
     cardBorder: neutralBorder,
-    cardBorderHover: secondaryPalette.border,
+    cardBorderHover: neutralBorder,
 
     avatarFallbackBg: primaryPalette.solid,
     avatarFallbackText: primaryPalette.textOnSolid,
@@ -308,6 +308,8 @@ export const getTeamColorTokens = ({
       bento: primaryPalette.solid,
       timeline: primaryPalette.solid,
       spotlight: secondaryPalette.solid,
+      construction: primaryPalette.solid,
+      layout8: primaryPalette.solid,
     },
   };
 };

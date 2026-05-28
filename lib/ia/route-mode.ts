@@ -11,13 +11,7 @@ export const buildCategoryPath = (params: {
   moduleKey: 'posts' | 'products' | 'services';
   categorySlug: string;
 }): string => {
-  if (params.mode === 'unified') {
-    return `/${params.categorySlug}`;
-  }
-  if (params.moduleKey === 'posts') {
-    return `/posts?catpost=${params.categorySlug}`;
-  }
-  return `/${params.moduleKey}?category=${params.categorySlug}`;
+  return `/${params.categorySlug}`;
 };
 
 export const buildDetailPath = (params: {
@@ -26,7 +20,7 @@ export const buildDetailPath = (params: {
   recordSlug: string;
   categorySlug?: string | null;
 }): string => {
-  if (params.mode === 'unified' && params.categorySlug) {
+  if (params.categorySlug) {
     return `/${params.categorySlug}/${params.recordSlug}`;
   }
   return `/${params.moduleKey}/${params.recordSlug}`;

@@ -57,7 +57,7 @@ export const sanitizeGoogleMapIframe = (html: string) => {
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '');
 
   return sanitized.replace(/<iframe\b[^>]*>/i, (match) => {
-    let tag = match
+    const tag = match
       .replace(/\s(width|height)=(["']).*?\2/gi, '')
       .replace(/\sstyle=(["']).*?\1/gi, '')
       .replace(/\sloading=(["']).*?\1/gi, '')

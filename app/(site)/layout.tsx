@@ -8,6 +8,8 @@ import { buildSiteSchemas } from '@/lib/seo/schema-policy';
 import { TelemetryGate } from '@/components/telemetry/TelemetryGate';
 import type { Metadata } from 'next';
 
+export const revalidate = 1800; // 30 minutes — on-demand revalidation via seo-revalidate action
+
 const resolveUrl = (url: string, baseUrl: string): string => {
   if (!url) {
     return baseUrl;

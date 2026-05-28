@@ -37,7 +37,7 @@ const toRgbTuple = (value: string, fallback: string): [number, number, number] |
   return [r, g, b];
 };
 
-const getAPCALc = (text: string, background: string) => {
+export const getAPCALc = (text: string, background: string) => {
   const textRgb = toRgbTuple(text, '#ffffff');
   const backgroundRgb = toRgbTuple(background, '#0f172a');
 
@@ -138,20 +138,20 @@ export const getProcessColors = (
     sectionBadgeText: secondaryResolved,
     sectionBadgeBorder: neutralBorder,
     progressTrack: neutralBorder,
-    progressFill: secondaryResolved,
-    stepDotBg: secondaryResolved,
-    stepDotText: getAPCATextColor(secondaryResolved, 12, 700),
-    stepDotShadow: `${secondaryResolved}40`,
-    connectorLine: `${secondaryResolved}33`,
+    progressFill: primaryResolved,
+    stepDotBg: primaryResolved,
+    stepDotText: getAPCATextColor(primaryResolved, 12, 700),
+    stepDotShadow: `${primaryResolved}26`,
+    connectorLine: neutralBorder,
     cardBorder: neutralBorder,
     cardHoverBorder: secondaryResolved,
     cardAccentBackground: `linear-gradient(to right, ${primaryResolved}, ${secondaryResolved})`,
     cardStepBg: primaryResolved,
     cardStepText: getAPCATextColor(primaryResolved, 14, 700),
     accordionBorder: neutralBorder,
-    accordionActiveBorder: secondaryResolved,
-    accordionActiveShadow: `${secondaryResolved}22`,
-    arrowIcon: secondaryResolved,
+    accordionActiveBorder: primaryResolved,
+    accordionActiveShadow: `${primaryResolved}18`,
+    arrowIcon: '#334155',
     emptyIconBg: getSolidTint(primaryResolved, 0.42),
     emptyIconColor: primaryResolved,
   };

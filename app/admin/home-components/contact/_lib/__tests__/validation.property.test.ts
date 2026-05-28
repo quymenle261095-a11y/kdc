@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest';
 import { fc, test } from '@fast-check/vitest';
-import { isValidHref, isValidUrl } from '../validation';
+import { isValidHref, isValidUrl, isValidZaloLink, normalizeZaloPhone } from '../validation';
 
 describe('Validation Properties', () => {
   // Property 10: URL Validation Round Trip
@@ -51,5 +51,21 @@ describe('Validation Properties', () => {
 
   test.prop([fc.constant('')], { numRuns: 100 })('empty href is valid', (emptyHref: string) => {
     expect(isValidHref(emptyHref)).toBe(true);
+  });
+
+  test.prop([
+    fc.constantFrom('https://zalo.me/0948066514', '0948066514', '+84 948 066 514', '0948.066.514'),
+  ], { numRuns: 20 })('valid zalo links return true', (value: string) => {
+    expect(isValidZaloLink(value)).toBe(true);
+  });
+
+  test.prop([
+    fc.constantFrom('zalo-user', 'abc123', 'ftp://zalo.me/0948066514'),
+  ], { numRuns: 20 })('invalid zalo links return false', (value: string) => {
+    expect(isValidZaloLink(value)).toBe(false);
+  });
+
+  test.prop([fc.constant('+84 948 066 514')], { numRuns: 20 })('normalize zalo phone keeps digits and plus only', (value: string) => {
+    expect(normalizeZaloPhone(value)).toBe('+84948066514');
   });
 });

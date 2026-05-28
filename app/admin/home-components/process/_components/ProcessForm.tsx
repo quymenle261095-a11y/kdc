@@ -1,24 +1,200 @@
 'use client';
 
 import React from 'react';
-import { GripVertical, Layers, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../components/ui';
+import { GripVertical, Layers, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { useMutation } from 'convex/react';
+import { toast } from 'sonner';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
+import { ImageEditorDialog } from '@/app/admin/components/ImageEditorDialog';
+import { ImageSourceActions } from '@/app/admin/components/ImageSourceActions';
+import { useFileDraftUploads } from '@/app/admin/components/useFileDraftUploads';
+import { prepareImageForUpload, validateImageFile } from '@/lib/image/uploadPipeline';
+import { resolveNamingContext } from '@/lib/image/uploadNaming';
+import { Button, Input, Label, cn } from '../../../components/ui';
 import type { ProcessFormStep } from '../_lib/normalize';
 import { createProcessFormStep } from '../_lib/normalize';
+import { AiDemoProcessImport } from '../../product-list/_components/AiDemoProductsImport';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
 
 interface ProcessFormProps {
   steps: ProcessFormStep[];
   onChange: (steps: ProcessFormStep[]) => void;
   secondary: string;
+  defaultExpanded?: boolean;
 }
 
-export const ProcessForm = ({ steps, onChange, secondary }: ProcessFormProps) => {
+const ProcessIconUpload = ({
+  value,
+  onChange,
+  index,
+}: {
+  value: string;
+  onChange: (url: string, storageId?: string | null) => void;
+  index: number;
+}) => {
+  const [uploading, setUploading] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
+  const [isEditorOpen, setIsEditorOpen] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
+  const saveImage = useMutation(api.storage.saveImage);
+  const { trackDraftUpload } = useFileDraftUploads('process-icons');
+
+  const handleFile = React.useCallback(async (file: File) => {
+    const error = validateImageFile(file, 5);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const naming = resolveNamingContext(undefined, { entityName: 'process', field: 'icon', index });
+      const prepared = await prepareImageForUpload(file, { quality: 0.85, naming });
+      const uploadUrl = await generateUploadUrl();
+      const response = await fetch(uploadUrl, {
+        body: prepared.file,
+        headers: { 'Content-Type': prepared.mimeType },
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const { storageId } = await response.json() as { storageId: string };
+      const result = await saveImage({
+        filename: prepared.filename,
+        folder: 'process-icons',
+        height: prepared.height,
+        mimeType: prepared.mimeType,
+        size: prepared.size,
+        storageId: storageId as Id<'_storage'>,
+        width: prepared.width,
+      });
+      await trackDraftUpload(storageId as Id<'_storage'>, 'process-icons');
+      onChange(result.url ?? '', storageId);
+      toast.success('Tải icon thành công');
+    } catch {
+      toast.error('Lỗi tải icon');
+    } finally {
+      setUploading(false);
+    }
+  }, [generateUploadUrl, index, onChange, saveImage, trackDraftUpload]);
+
+  const handleClipboardPaste = React.useCallback(async () => {
+    if (uploading) {return;}
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((type) => type.startsWith('image/'));
+        if (!imageType) {continue;}
+
+        const blob = await item.getType(imageType);
+        const ext = imageType.split('/')[1] || 'png';
+        void handleFile(new File([blob], `process-icon-clipboard-${Date.now()}.${ext}`, { type: imageType }));
+        return;
+      }
+      toast.error('Clipboard không có ảnh. Hãy copy ảnh trước.');
+    } catch {
+      toast.error('Không đọc được clipboard. Hãy copy ảnh trước.');
+    }
+  }, [handleFile, uploading]);
+
+  return (
+    <>
+      <div className="flex shrink-0 items-center gap-1">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) { void handleFile(file); }
+            event.target.value = '';
+          }}
+        />
+        <div
+          className={cn(
+            'flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-md border-2 border-dashed transition-all',
+            uploading && 'pointer-events-none',
+            dragging ? 'scale-105 border-blue-400 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800',
+          )}
+          onClick={() => { if (!uploading) { inputRef.current?.click(); } }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragging(true);
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragging(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragging(false);
+            const file = event.dataTransfer.files[0];
+            if (file) { void handleFile(file); }
+          }}
+        >
+          {uploading ? (
+            <Loader2 size={14} className="animate-spin text-blue-500" />
+          ) : value ? (
+            <img src={value} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <Upload size={13} className="text-slate-400" />
+          )}
+        </div>
+        <ImageSourceActions
+          mode="upload"
+          onUpload={() => inputRef.current?.click()}
+          onUrl={() => {
+            const next = window.prompt('URL icon', value);
+            if (next !== null) { onChange(next.trim()); }
+          }}
+          onPaste={handleClipboardPaste}
+          onCrop={() => setIsEditorOpen(true)}
+          cropLabel="1:1"
+          cropDisabled={!value || uploading}
+          disabled={uploading}
+          iconSize={11}
+          className="gap-1"
+        />
+      </div>
+      {isEditorOpen && value && (
+        <ImageEditorDialog
+          imageUrl={value}
+          preferredCropAspectRatio="square"
+          onClose={() => setIsEditorOpen(false)}
+          onApply={(editedFile) => {
+            setIsEditorOpen(false);
+            void handleFile(editedFile);
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+export const ProcessForm = ({ steps, onChange, secondary, defaultExpanded = true }: ProcessFormProps) => {
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
   const [dragOverId, setDragOverId] = React.useState<string | null>(null);
+
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
+    ['steps'],
+    defaultExpanded
+  );
 
   const safeSecondary = secondary.trim().length > 0 ? secondary : '#3b82f6';
 
   const handleAdd = () => {
+    if (steps.length >= 4) { return; }
     onChange([...steps, createProcessFormStep({ icon: String(steps.length + 1) })]);
   };
 
@@ -67,14 +243,28 @@ export const ProcessForm = ({ steps, onChange, secondary }: ProcessFormProps) =>
   });
 
   return (
-    <Card className="mb-6">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Các bước quy trình</CardTitle>
-        <Button type="button" variant="outline" size="sm" onClick={handleAdd} className="gap-2">
-          <Plus size={14} /> Thêm bước
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="mb-6">
+      <FormSectionsToggleAllButton
+        hasClosedSection={hasClosedSection}
+        onToggleAll={handleToggleAll}
+      />
+      <SubSection
+        icon={Layers}
+        title={`Các bước quy trình (${steps.length})`}
+        open={openSections.steps}
+        onOpenChange={(open) => toggleSection('steps', open)}
+        actions={(
+          <>
+            <AiDemoProcessImport onApply={(items) => onChange(items as ProcessFormStep[])} />
+            {steps.length < 4 && (
+              <Button type="button" variant="outline" size="sm" onClick={handleAdd} className="gap-2">
+                <Plus size={14} /> Thêm bước
+              </Button>
+            )}
+          </>
+        )}
+      >
+      <div className="space-y-4">
         {steps.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: `${safeSecondary}14` }}>
@@ -113,36 +303,75 @@ export const ProcessForm = ({ steps, onChange, secondary }: ProcessFormProps) =>
                 </Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <Input
-                  placeholder="Icon/Số (VD: 1, 01, ✓)"
-                  value={step.icon}
-                  onChange={(event) => {
-                    handleUpdate(step.id, (current) => ({ ...current, icon: event.target.value }));
-                  }}
-                  className="md:col-span-1"
-                />
-                <Input
-                  placeholder="Tiêu đề bước"
-                  value={step.title}
-                  onChange={(event) => {
-                    handleUpdate(step.id, (current) => ({ ...current, title: event.target.value }));
-                  }}
-                  className="md:col-span-3"
-                />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-xs text-slate-500">Icon / ảnh</Label>
+                  <div className="flex items-center gap-2">
+                    <ProcessIconUpload
+                      value={step.icon}
+                      index={idx}
+                      onChange={(url, storageId) => handleUpdate(step.id, (current) => ({ ...current, icon: url, iconStorageId: storageId }))}
+                    />
+                    <div className="relative min-w-0 flex-1">
+                      <Input
+                        placeholder="Số, ký tự hoặc URL"
+                        value={step.icon}
+                        onChange={(event) => {
+                          handleUpdate(step.id, (current) => ({ ...current, icon: event.target.value, iconStorageId: null }));
+                        }}
+                        className="pr-6"
+                      />
+                      {step.icon && (
+                        <button type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" onClick={() => handleUpdate(step.id, (c) => ({ ...c, icon: '', iconStorageId: null }))}>
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5 md:col-span-3">
+                  <Label className="text-xs text-slate-500">Tiêu đề bước</Label>
+                  <div className="relative">
+                    <Input
+                      placeholder="Tiêu đề bước"
+                      value={step.title}
+                      onChange={(event) => {
+                        handleUpdate(step.id, (current) => ({ ...current, title: event.target.value }));
+                      }}
+                      className="pr-6"
+                    />
+                    {step.title && (
+                      <button type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" onClick={() => handleUpdate(step.id, (c) => ({ ...c, title: '' }))}>
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <Input
-                placeholder="Mô tả chi tiết bước này..."
-                value={step.description}
-                onChange={(event) => {
-                  handleUpdate(step.id, (current) => ({ ...current, description: event.target.value }));
-                }}
-              />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Mô tả</Label>
+                <div className="relative">
+                  <Input
+                    placeholder="Mô tả chi tiết bước này..."
+                    value={step.description}
+                    onChange={(event) => {
+                      handleUpdate(step.id, (current) => ({ ...current, description: event.target.value }));
+                    }}
+                    className="pr-6"
+                  />
+                  {step.description && (
+                    <button type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" onClick={() => handleUpdate(step.id, (c) => ({ ...c, description: '' }))}>
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+      </SubSection>
+    </div>
   );
 };

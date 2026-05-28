@@ -1,9 +1,11 @@
 import { DEFAULT_COUNTDOWN_CONFIG } from './constants';
+import { normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 import type {
   CountdownConfig,
   CountdownConfigState,
   CountdownStyle,
 } from '../_types';
+import { normalizeCountdownCornerRadius } from '../_types';
 
 const COUNTDOWN_STYLE_SET = new Set<CountdownStyle>(['banner', 'floating', 'minimal', 'split', 'sticky', 'popup']);
 
@@ -23,6 +25,10 @@ export const normalizeCountdownStyle = (value: unknown): CountdownStyle => {
   }
   return DEFAULT_COUNTDOWN_CONFIG.style;
 };
+
+export const normalizeCountdownSpacing = (value: unknown, noVerticalMargin?: unknown): SectionSpacing => (
+  noVerticalMargin === true ? 'none' : normalizeSectionSpacing(value)
+);
 
 export const normalizeCountdownEndDate = (value: unknown) => {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -54,9 +60,14 @@ export const normalizeCountdownConfig = (raw: unknown): CountdownConfigState => 
     showHours: normalizeBoolean(source.showHours, DEFAULT_COUNTDOWN_CONFIG.showHours),
     showMinutes: normalizeBoolean(source.showMinutes, DEFAULT_COUNTDOWN_CONFIG.showMinutes),
     showSeconds: normalizeBoolean(source.showSeconds, DEFAULT_COUNTDOWN_CONFIG.showSeconds),
+    spacing: normalizeCountdownSpacing(source.spacing, source.noVerticalMargin),
+    cornerRadius: normalizeCountdownCornerRadius(source.cornerRadius, source.noBorderRadius),
     style: normalizeCountdownStyle(source.style),
   };
 };
+
+const normalizedPersistSpacing = (config: CountdownConfigState) => normalizeCountdownSpacing(config.spacing, config.noVerticalMargin);
+const normalizedPersistCornerRadius = (config: CountdownConfigState) => normalizeCountdownCornerRadius(config.cornerRadius, config.noBorderRadius);
 
 export const toCountdownPersistConfig = (config: CountdownConfigState): CountdownConfig => ({
   heading: config.heading,
@@ -71,5 +82,9 @@ export const toCountdownPersistConfig = (config: CountdownConfigState): Countdow
   showHours: config.showHours,
   showMinutes: config.showMinutes,
   showSeconds: config.showSeconds,
+  spacing: normalizedPersistSpacing(config),
+  cornerRadius: normalizedPersistCornerRadius(config),
+  noBorderRadius: normalizedPersistCornerRadius(config) === 'none',
+  noVerticalMargin: normalizedPersistSpacing(config) === 'none',
   style: config.style,
 });

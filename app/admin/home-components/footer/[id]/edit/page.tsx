@@ -1,5 +1,7 @@
 'use client';
 
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,7 +10,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { LayoutTemplate, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
@@ -22,20 +24,46 @@ import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/c
 
 const COMPONENT_TYPE = 'Footer';
 
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type FooterEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
 interface FooterInitialData {
   title: string;
   active: boolean;
   config: FooterConfig;
 }
 
-export default function FooterEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function FooterEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: FooterEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
@@ -50,13 +78,13 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
     if (!initialData) {return false;}
 
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-    const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
       ? customState.enabled !== initialCustom.enabled
         || customState.mode !== initialCustom.mode
         || customState.primary !== initialCustom.primary
         || resolvedCustomSecondary !== initialCustom.secondary
       : false;
-    const customFontChanged = showFontCustomBlock
+    const customFontChanged = enableTypeOverrides && showFontCustomBlock
       ? customFontState.enabled !== initialFontCustom.enabled
         || customFontState.fontKey !== initialFontCustom.fontKey
       : false;
@@ -67,11 +95,11 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
       || customChanged
       || customFontChanged
     );
-  }, [active, config, initialData, title, customState, initialCustom, showCustomBlock]);
+  }, [active, config, customFontState, customState, enableTypeOverrides, initialCustom, initialData, initialFontCustom, showCustomBlock, showFontCustomBlock, title]);
 
   useEffect(() => {
     if (component) {
-      if (component.type !== 'Footer') {
+      if (!snapshotComponent && component.type !== 'Footer') {
         router.replace(`/admin/home-components/${id}/edit`);
         return;
       }
@@ -90,19 +118,30 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
     }
   }, [component, id, router]);
 
+  useUnsavedGuard(hasChanges);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) {return;}
 
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        active,
-        config,
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      const nextConfig = {
+        ...config,
+        noBorderRadius: config.cornerRadius === 'none',
+        noVerticalMargin: config.spacing === 'none',
+      };
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig as Record<string, any>, title });
+      } else {
+        await updateMutation({
+          active,
+          config: nextConfig,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -112,7 +151,7 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -124,7 +163,7 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
         config,
         title,
       });
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -132,7 +171,7 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -165,7 +204,8 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Footer</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -186,32 +226,15 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
                 placeholder="Nhập tiêu đề component..."
               />
             </div>
-
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  "cursor-pointer inline-flex items-center justify-center rounded-full w-12 h-6 transition-colors",
-                  active ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
-                )}
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  "w-5 h-5 bg-white rounded-full transition-transform shadow",
-                  active ? "translate-x-2.5" : "-translate-x-2.5"
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
+</CardContent>
         </Card>
 
-        <FooterForm value={config} onChange={setConfig} primary={effectiveColors.primary} secondary={effectiveColors.secondary} mode={brandMode} />
+        <FooterForm value={config} onChange={setConfig} primary={effectiveColors.primary} secondary={effectiveColors.secondary} mode={brandMode} defaultExpanded={false} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
           <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
+            {enableTypeOverrides && showCustomBlock && (
               <TypeColorOverrideCard
                 title="Màu custom cho Footer"
                 enabled={customState.enabled}
@@ -236,7 +259,7 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
                 onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
               />
             )}
-            {showFontCustomBlock && (
+            {enableTypeOverrides && showFontCustomBlock && (
               <TypeFontOverrideCard
                 title="Font custom cho Footer"
                 enabled={customFontState.enabled}
@@ -264,8 +287,10 @@ export default function FooterEditPage({ params }: { params: Promise<{ id: strin
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() =>{  router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
         />
       </form>
     </div>

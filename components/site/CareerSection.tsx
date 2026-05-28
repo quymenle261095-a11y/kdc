@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   DEFAULT_CAREER_HARMONY,
+  normalizeCareerCornerRadius,
   normalizeCareerHarmony,
 } from '@/app/admin/home-components/career/_lib/constants';
 import { getCareerColorTokens } from '@/app/admin/home-components/career/_lib/colors';
@@ -46,6 +47,11 @@ export function CareerSection({
       style={normalizedStyle}
       title={title}
       tokens={tokens}
+      texts={normalizedConfig.texts}
+      spacing={normalizedConfig.spacing}
+      desktopColumns={normalizedConfig.desktopColumns}
+      cornerRadius={normalizeCareerCornerRadius(normalizedConfig.cornerRadius)}
+      logoSize={normalizedConfig.logoSize}
     />
   );
 }

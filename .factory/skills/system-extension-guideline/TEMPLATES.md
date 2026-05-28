@@ -57,6 +57,9 @@ return <Default />;
 
 ## Seed + Clear (idempotent + cleanup + relations)
 
+> [!NOTE]
+> **SEED/CLEAR EXCEPTION**: Đây là EXCEPTION duy nhất dành cho các tác vụ reset seed data cô lập. Tuyệt đối không sao chép direct delete `ctx.storage.delete` sang các business mutations thông thường. Các business mutations bắt buộc phải sử dụng FLS (File Lifecycle Service) safe references sync & cleanup gateway.
+
 ```ts
 const existing = await ctx.db.query('posts').first();
 if (existing) return null;

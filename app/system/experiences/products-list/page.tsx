@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
+import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
 import { Eye, Heart, LayoutTemplate, Loader2, Package, Save, ShoppingCart, Tag } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/app/admin/components/ui';
@@ -30,6 +31,7 @@ import { enforceMultipleToggles } from '@/lib/experiences/module-toggle-guards';
 
 type ListLayoutStyle = 'grid' | 'sidebar' | 'list';
 type PaginationType = 'pagination' | 'infiniteScroll';
+type ProductListCornerRadius = 'none' | 'sm' | 'lg';
 
 type ProductsListExperienceConfig = {
   layoutStyle: ListLayoutStyle;
@@ -44,6 +46,7 @@ type ProductsListExperienceConfig = {
   showPromotionBadge: boolean;
   enableQuickAddVariant: boolean;
   hideEmptyCategories: boolean;
+  cornerRadius: ProductListCornerRadius;
 };
 
 type LayoutConfig = {
@@ -81,6 +84,7 @@ const DEFAULT_CONFIG: ProductsListExperienceConfig = {
   showPromotionBadge: true,
   enableQuickAddVariant: true,
   hideEmptyCategories: true,
+  cornerRadius: 'lg',
 };
 
 const HINTS = [
@@ -111,6 +115,22 @@ function ModuleFeatureStatus({ label, enabled, href, moduleName }: { label: stri
 }
 
 export default function ProductsListExperiencePage() {
+  const initStats = useMutation(api.products.initStats);
+  const [isSyncingStats, setIsSyncingStats] = useState(false);
+
+  const handleSyncStats = async () => {
+    setIsSyncingStats(true);
+    try {
+      await initStats();
+      toast.success('Đã đồng bộ lại bộ đếm thống kê sản phẩm thành công!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Lỗi khi đồng bộ bộ đếm thống kê sản phẩm.');
+    } finally {
+      setIsSyncingStats(false);
+    }
+  };
+
   const experienceSetting = useQuery(api.settings.getByKey, { key: EXPERIENCE_KEY });
   const productsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'products' });
   const wishlistModule = useQuery(api.admin.modules.getModuleByKey, { key: 'wishlist' });
@@ -134,6 +154,7 @@ export default function ProductsListExperiencePage() {
       showPromotionBadge?: boolean;
       enableQuickAddVariant?: boolean;
       hideEmptyCategories?: boolean;
+      cornerRadius?: ProductListCornerRadius;
     } | undefined;
     
     const normalizePaginationType = (value?: string | boolean): PaginationType => {
@@ -166,6 +187,7 @@ export default function ProductsListExperiencePage() {
       showPromotionBadge: raw?.showPromotionBadge ?? true,
       enableQuickAddVariant: raw?.enableQuickAddVariant ?? true,
       hideEmptyCategories: raw?.hideEmptyCategories ?? true,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
     };
   }, [experienceSetting?.value]);
 
@@ -305,6 +327,17 @@ export default function ProductsListExperiencePage() {
               onChange={(v) => setConfig(prev => ({ ...prev, hideEmptyCategories: v }))}
               accentColor={brandColor}
             />
+            <SelectRow
+              label="Bo góc"
+              value={config.cornerRadius}
+              options={[
+                { value: 'none', label: 'Không bo góc' },
+                { value: 'sm', label: 'Bo góc ít' },
+                { value: 'lg', label: 'Bo góc nhiều' },
+              ]}
+              onChange={(v) => setConfig(prev => ({ ...prev, cornerRadius: v as ProductListCornerRadius }))}
+              disabled={!canUseProducts}
+            />
           </ControlCard>
 
           <ControlCard title="Phân trang">
@@ -365,6 +398,34 @@ export default function ProductsListExperiencePage() {
               accentColor={brandColor}
               disabled={!canUsePromotions}
             />
+          </ControlCard>
+
+          <ControlCard title="Bảo trì hệ thống">
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Nếu số lượng sản phẩm ngoài public hiển thị sai lệch so với trang Admin, hãy nhấn nút dưới đây để đồng bộ lại bộ đếm thống kê.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSyncStats}
+                disabled={isSyncingStats}
+                className="w-full gap-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900/50"
+              >
+                {isSyncingStats ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Đang đồng bộ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Package size={14} />
+                    <span>Đồng bộ lại bộ đếm sản phẩm</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </ControlCard>
         </CardContent>
       </Card>
@@ -488,6 +549,7 @@ export default function ProductsListExperiencePage() {
                 showAddToCartButton={config.showAddToCartButton && (cartModule?.enabled ?? false) && (ordersModule?.enabled ?? false)}
                 showBuyNowButton={config.showBuyNowButton && (ordersModule?.enabled ?? false)}
                 showPromotionBadge={config.showPromotionBadge && (promotionsModule?.enabled ?? false)}
+                cornerRadius={config.cornerRadius}
               />
             </BrowserFrame>
           </div>

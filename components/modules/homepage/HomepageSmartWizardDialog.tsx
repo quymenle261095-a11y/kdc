@@ -193,10 +193,10 @@ export function HomepageSmartWizardDialog({ open, onOpenChange }: HomepageSmartW
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-cyan-500" /> Homepage Smart Wizard
+            <Wand2 className="w-5 h-5 text-cyan-500" /> Tạo nhanh trang chủ
           </DialogTitle>
           <DialogDescription>
-            Chọn ngành + template để tạo homepage nhanh.
+            Chọn ngành và mẫu để dựng trang chủ nhanh.
           </DialogDescription>
         </DialogHeader>
 

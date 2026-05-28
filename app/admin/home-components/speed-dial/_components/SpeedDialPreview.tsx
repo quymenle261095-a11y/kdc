@@ -16,6 +16,7 @@ interface SpeedDialPreviewProps {
   selectedStyle: SpeedDialStyle;
   onStyleChange: (style: SpeedDialStyle) => void;
   defaultOpen: boolean;
+  enableShadow?: boolean;
 }
 
 export function SpeedDialPreview({
@@ -29,6 +30,7 @@ export function SpeedDialPreview({
   selectedStyle,
   onStyleChange,
   defaultOpen,
+  enableShadow = true,
 }: SpeedDialPreviewProps) {
   const { device, setDevice } = usePreviewDevice();
   const styleForRender = selectedStyle ?? style;
@@ -49,6 +51,7 @@ export function SpeedDialPreview({
       previewStyle={styleForRender}
       onPreviewStyleChange={onStyleChange}
       defaultOpen={defaultOpen}
+      enableShadow={enableShadow}
     />
   );
 }

@@ -1,221 +1,212 @@
 'use client';
 
 import React from 'react';
-import { Video as VideoIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '@/app/admin/components/ui';
+import { Film, MousePointerClick } from 'lucide-react';
+import { Card, CardContent, Input, Label } from '@/app/admin/components/ui';
 import { ImageFieldWithUpload } from '@/app/admin/components/ImageFieldWithUpload';
-import { VIDEO_STYLES_WITH_CTA, TEXT_FIELDS, DEFAULT_TEXTS } from '../_lib/constants';
-import { getVideoInfo } from '../_lib/colors';
+import { VIDEO_STYLES_WITH_CTA } from '../_lib/constants';
+import { getVideoInfo, getYouTubeThumbnail } from '../_lib/colors';
 import type { VideoConfig, VideoStyle } from '../_types';
+import { AiVideoImport } from './AiVideoImport';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
 
 interface VideoFormProps {
   config: VideoConfig;
   onChange: (next: VideoConfig) => void;
   selectedStyle: VideoStyle;
+  /** create = mở hết, edit = đóng hết */
+  defaultExpanded?: boolean;
 }
 
-const updateConfig = (
-  config: VideoConfig,
-  patch: Partial<VideoConfig>,
-  onChange: (next: VideoConfig) => void,
-) => {
-  onChange({ ...config, ...patch });
-};
+/* ------------------------------------------------------------------ */
+/*  Main form                                                          */
+/* ------------------------------------------------------------------ */
 
 export function VideoForm({
   config,
   onChange,
   selectedStyle,
+  defaultExpanded = true,
 }: VideoFormProps) {
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
+    ['video', 'cta'],
+    defaultExpanded
+  );
   const videoType = getVideoInfo(config.videoUrl || '').type;
   const showCTAConfig = VIDEO_STYLES_WITH_CTA.includes(selectedStyle);
-  
-  const textFields = TEXT_FIELDS[selectedStyle] || [];
-  const defaultTexts = DEFAULT_TEXTS[selectedStyle] || {};
-  const currentTexts = config.texts || {};
-  
-  const getTextValue = (key: string) => {
-    return currentTexts[key] || defaultTexts[key] || '';
+  const videoAspect = config.videoAspect === 'portrait' ? 'portrait' : 'landscape';
+
+  const getAutoThumbnail = (videoUrl?: string) => {
+    const info = getVideoInfo(videoUrl || '');
+    return info.type === 'youtube' && info.id ? getYouTubeThumbnail(info.id) : '';
   };
-  
-  const updateTextValue = (key: string, value: string) => {
-    onChange({
-      ...config,
-      texts: {
-        ...currentTexts,
-        [key]: value,
-      },
+
+  const patch = (partial: Partial<VideoConfig>) => onChange({ ...config, ...partial });
+
+  const patchVideoUrl = (videoUrl: string) => {
+    const currentAutoThumbnail = getAutoThumbnail(config.videoUrl);
+    const nextAutoThumbnail = getAutoThumbnail(videoUrl);
+    const shouldSyncThumbnail = !config.thumbnailUrl || config.thumbnailUrl === currentAutoThumbnail;
+
+    patch({
+      videoUrl,
+      ...(shouldSyncThumbnail && nextAutoThumbnail ? { thumbnailUrl: nextAutoThumbnail } : {}),
     });
   };
 
   return (
-    <>
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <VideoIcon size={18} />
-            Video
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
+    <Card className="mb-6">
+      <CardContent className="p-4 space-y-3">
+        {/* ── AI Import ─ */}
+        <div className="flex justify-end">
+          <AiVideoImport
+            onApply={(nextPatch) => {
+              const currentAutoThumbnail = getAutoThumbnail(config.videoUrl);
+              const nextAutoThumbnail = getAutoThumbnail(nextPatch.videoUrl);
+              const shouldSyncThumbnail = !config.thumbnailUrl || config.thumbnailUrl === currentAutoThumbnail;
+
+              onChange({
+                ...config,
+                ...nextPatch,
+                ...(shouldSyncThumbnail && nextAutoThumbnail && !nextPatch.thumbnailUrl ? { thumbnailUrl: nextAutoThumbnail } : {}),
+              });
+            }}
+          />
+        </div>
+        <FormSectionsToggleAllButton
+          hasClosedSection={hasClosedSection}
+          onToggleAll={handleToggleAll}
+        />
+        {/* ── Video & Thumbnail ────────────────────── */}
+        <SubSection
+          icon={Film}
+          title="Video & ảnh bìa"
+          open={openSections.video}
+          onOpenChange={(open) => toggleSection('video', open)}
+        >
+          <div className="space-y-1.5">
             <Label>URL Video <span className="text-red-500">*</span></Label>
             <Input
               type="url"
               value={config.videoUrl || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig(config, { videoUrl: e.target.value }, onChange)}
-              placeholder="YouTube, YouTube Shorts, Google Drive hoặc link trực tiếp"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => patchVideoUrl(e.target.value)}
+              placeholder="YouTube, Vimeo, Drive hoặc link trực tiếp"
               required
             />
             {config.videoUrl?.trim() ? (
-              <p className="text-xs text-slate-500">
-                Loại video: <span className="font-medium capitalize">{videoType}</span>
-                {videoType === 'youtube' && ' - Hỗ trợ embed tự động (YouTube, Shorts)'}
-                {videoType === 'vimeo' && ' - Hỗ trợ embed tự động'}
-                {videoType === 'drive' && ' - Hỗ trợ Google Drive embed'}
-                {videoType === 'direct' && ' - Sử dụng video HTML5 trực tiếp'}
+              <p className="text-[11px] text-slate-400">
+                Loại: <span className="font-medium capitalize">{videoType}</span>
               </p>
             ) : null}
           </div>
 
           <ImageFieldWithUpload
-            label="Thumbnail (ảnh bìa)"
+            label="Thumbnail / ảnh bìa"
             value={config.thumbnailUrl || ''}
-            onChange={(thumbnailUrl) => updateConfig(config, { thumbnailUrl }, onChange)}
+            onChange={(thumbnailUrl) => patch({ thumbnailUrl })}
             folder="video-thumbnails"
-            aspectRatio="video"
+            className={videoAspect === 'portrait' ? 'max-w-[180px]' : 'max-w-xs'}
+            aspectRatio={videoAspect === 'portrait' ? 'portrait' : 'video'}
             quality={0.85}
-            placeholder="Để trống sẽ tự động lấy thumbnail từ YouTube"
+            placeholder={videoAspect === 'portrait' ? 'Dán URL thumbnail dọc 9:16 hoặc upload ảnh bìa' : 'Dán URL thumbnail ngang 16:9 hoặc upload ảnh bìa'}
           />
-        </CardContent>
-      </Card>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Nội dung</CardTitle>
-          <p className="text-xs text-slate-500 mt-1">Tùy chỉnh text cho style {selectedStyle}</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {textFields.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <Label>{field.label}</Label>
-              {field.key === 'description' ? (
-                <textarea
-                  value={getTextValue(field.key)}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateTextValue(field.key, e.target.value)}
-                  placeholder={field.placeholder}
-                  className="w-full min-h-[96px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
-                />
-              ) : (
-                <Input
-                  value={getTextValue(field.key)}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateTextValue(field.key, e.target.value)}
-                  placeholder={field.placeholder}
-                />
-              )}
-            </div>
-          ))}
-          
-          <div className="space-y-2">
-            <Label>Tiêu đề (legacy)</Label>
-            <Input
-              value={config.heading || ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig(config, { heading: e.target.value }, onChange)}
-              placeholder="Tiêu đề video section (fallback)"
-            />
-            <p className="text-xs text-slate-500">Dùng khi texts config chưa có</p>
+          <div className="grid grid-cols-1 gap-2 pt-1 md:grid-cols-2">
+            {([
+              {
+                value: 'landscape' as const,
+                title: 'Video ngang 16:9',
+                description: 'Phù hợp YouTube, Vimeo, banner, cinema.',
+              },
+              {
+                value: 'portrait' as const,
+                title: 'Video dọc 9:16',
+                description: 'Phù hợp shorts/reels, thumbnail dọc.',
+              },
+            ]).map((option) => {
+              const selected = videoAspect === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => patch({ videoAspect: option.value })}
+                  className={`rounded-lg border p-3 text-left transition-colors ${
+                    selected
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-950/30 dark:text-blue-200'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{option.title}</span>
+                  <span className="mt-1 block text-xs opacity-75">{option.description}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="space-y-2">
-            <Label>Mô tả ngắn (legacy)</Label>
-            <textarea
-              value={config.description || ''}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateConfig(config, { description: e.target.value }, onChange)}
-              placeholder="Mô tả cho video section... (fallback)"
-              className="w-full min-h-[96px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
-            />
-            <p className="text-xs text-slate-500">Dùng khi texts config chưa có</p>
+          {/* Playback options — inline grid */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {([
+              { key: 'autoplay' as const, label: 'Tự phát', checked: config.autoplay === true },
+              { key: 'loop' as const, label: 'Lặp lại', checked: config.loop === true },
+              { key: 'muted' as const, label: 'Tắt tiếng', checked: config.muted !== false },
+            ] as const).map(({ key, label, checked }) => (
+              <label key={key} className="flex items-center gap-1.5 cursor-pointer text-sm text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => patch({ [key]: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                {label}
+              </label>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </SubSection>
 
-      {showCTAConfig ? (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">CTA & Badge</CardTitle>
-            <p className="text-xs text-slate-500 mt-1">Cấu hình cho style {selectedStyle}</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Badge / Label</Label>
-              <Input
-                value={config.badge || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig(config, { badge: e.target.value }, onChange)}
-                placeholder="VD: Video mới, Giới thiệu, Featured..."
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nút CTA - Text</Label>
+        {/* ── CTA & Badge (chỉ styles hỗ trợ) ───── */}
+        {showCTAConfig && (
+          <SubSection
+            icon={MousePointerClick}
+            title="CTA & Badge"
+            open={openSections.cta}
+            onOpenChange={(open) => toggleSection('cta', open)}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Badge</Label>
                 <Input
-                  value={config.buttonText || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig(config, { buttonText: e.target.value }, onChange)}
-                  placeholder="VD: Tìm hiểu thêm, Xem ngay..."
+                  value={config.badge || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => patch({ badge: e.target.value })}
+                  placeholder="VD: Video mới"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Nút CTA - Link</Label>
+              <div className="space-y-1.5">
+                <Label>Nút CTA</Label>
+                <Input
+                  value={config.buttonText || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => patch({ buttonText: e.target.value })}
+                  placeholder="VD: Xem ngay"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Link CTA</Label>
                 <Input
                   value={config.buttonLink || ''}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig(config, { buttonLink: e.target.value }, onChange)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => patch({ buttonLink: e.target.value })}
                   placeholder="/lien-he hoặc https://..."
                 />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      ) : null}
+          </SubSection>
+        )}
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Tùy chọn Video</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.autoplay === true}
-                onChange={(e) => updateConfig(config, { autoplay: e.target.checked }, onChange)}
-                className="w-4 h-4 rounded"
-              />
-              <span className="text-sm">Tự động phát</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.loop === true}
-                onChange={(e) => updateConfig(config, { loop: e.target.checked }, onChange)}
-                className="w-4 h-4 rounded"
-              />
-              <span className="text-sm">Lặp video</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.muted !== false}
-                onChange={(e) => updateConfig(config, { muted: e.target.checked }, onChange)}
-                className="w-4 h-4 rounded"
-              />
-              <span className="text-sm">Tắt tiếng</span>
-            </label>
-          </div>
-          <p className="text-xs text-slate-500">
-            Lưu ý: để autoplay hoạt động ổn định, nên bật chế độ tắt tiếng (muted).
-          </p>
-        </CardContent>
-      </Card>
-    </>
+      </CardContent>
+    </Card>
   );
 }

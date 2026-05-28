@@ -290,12 +290,12 @@ export const getServiceListColorTokens = ({
   const mutedText = '#64748b';
 
   const badgeNewBg = neutralSurface;
-  const badgeNewBorder = secondaryPalette.border;
-  const badgeNewText = resolveBrandTextOnBackground(secondaryPalette.solid, badgeNewBg, 11, 600, neutralText);
+  const badgeNewBorder = primaryPalette.border;
+  const badgeNewText = resolveBrandTextOnBackground(primaryPalette.solid, badgeNewBg, 11, 600, neutralText);
 
-  const navButtonBg = secondaryPalette.surface;
-  const navButtonBorder = secondaryPalette.border;
-  const navButtonText = resolveBrandTextOnBackground(secondaryPalette.solid, navButtonBg, 14, 600, neutralText);
+  const navButtonBg = primaryPalette.surface;
+  const navButtonBorder = primaryPalette.border;
+  const navButtonText = resolveBrandTextOnBackground(primaryPalette.solid, navButtonBg, 14, 600, neutralText);
 
   return {
     primary: primaryResolved,
@@ -312,7 +312,7 @@ export const getServiceListColorTokens = ({
 
     cardBackground: neutralSurface,
     cardBorder: neutralBorder,
-    cardBorderHover: secondaryPalette.border,
+    cardBorderHover: primaryPalette.border,
 
     imageFallbackBg: neutralBackground,
     imageFallbackIcon: primaryPalette.solid,
@@ -320,29 +320,29 @@ export const getServiceListColorTokens = ({
     subtitleText: secondaryPalette.interactiveText,
     titleText: neutralText,
     descriptionText: mutedText,
-    priceText: secondaryPalette.solid,
-    inlineMetaText: secondaryPalette.interactiveText,
+    priceText: primaryPalette.solid,
+    inlineMetaText: primaryPalette.interactiveText,
 
-    badgeHotBg: primaryPalette.solid,
-    badgeHotText: primaryPalette.textOnSolid,
+    badgeHotBg: secondaryPalette.solid,
+    badgeHotText: secondaryPalette.textOnSolid,
     badgeNewBg,
     badgeNewBorder,
     badgeNewText,
 
-    ctaGhostText: secondaryPalette.interactiveText,
-    ctaGhostBorder: secondaryPalette.border,
-    ctaGhostHoverBg: secondaryPalette.surface,
+    ctaGhostText: primaryPalette.interactiveText,
+    ctaGhostBorder: primaryPalette.border,
+    ctaGhostHoverBg: primaryPalette.surface,
 
-    ctaSolidBg: secondaryPalette.solid,
-    ctaSolidText: secondaryPalette.textOnSolid,
-    ctaSolidHoverBg: secondaryPalette.hoverSurface,
+    ctaSolidBg: primaryPalette.solid,
+    ctaSolidText: primaryPalette.textOnSolid,
+    ctaSolidHoverBg: primaryPalette.hoverSurface,
 
     navButtonBg,
     navButtonBorder,
     navButtonText,
 
-    dotActive: secondaryPalette.solid,
-    dotInactive: withAlpha(secondaryPalette.solid, 0.3, primaryResolved),
+    dotActive: primaryPalette.solid,
+    dotInactive: withAlpha(primaryPalette.solid, 0.3, primaryResolved),
 
     featuredOverlayScrim: 'linear-gradient(to top, rgba(2,6,23,0.84), rgba(2,6,23,0.32), rgba(2,6,23,0.06))',
     featuredOverlayText: '#ffffff',

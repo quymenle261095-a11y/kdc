@@ -408,9 +408,9 @@ export const guideArticles = [
     subsection: 'Social proof & content',
     subsectionOrder: 4,
     slug: 'admin-home-components-social-proof',
-    title: 'Testimonials, clients, partners, blog, FAQ',
-    description: 'Khung nhóm component social proof, đối tác, nội dung và FAQ.',
-    keywords: ['testimonials', 'clients', 'partners', 'blog', 'faq'],
+    title: 'Testimonials, banner ảnh thương hiệu, partners, blog, FAQ',
+    description: 'Khung nhóm component social proof, banner ảnh, đối tác, nội dung và FAQ.',
+    keywords: ['testimonials', 'banner ảnh thương hiệu', 'clients', 'partners', 'blog', 'faq'],
     relatedRoutes: [
       '/admin/home-components/create/testimonials',
       '/admin/home-components/create/clients',

@@ -23,6 +23,14 @@ const getNextId = (items: Array<{ id?: number | string }>) => {
   return max + 1;
 };
 
+const getSocialPlaceholder = (platform: string) => {
+  if (platform.trim().toLowerCase() === 'zalo') {
+    return 'https://zalo.me/0948066514 hoặc 0948066514';
+  }
+
+  return 'https://facebook.com/yourpage';
+};
+
 export function SocialLinksManager({
   links,
   onChange,
@@ -155,7 +163,7 @@ export function SocialLinksManager({
                   <Input
                     value={link.url}
                     onChange={(e) => { updateSocialLink(link.id, 'url', e.target.value); }}
-                    placeholder="https://facebook.com/yourpage"
+                    placeholder={getSocialPlaceholder(link.platform)}
                     className={hasError ? 'border-red-500 dark:border-red-500' : ''}
                   />
                   {hasError && (

@@ -1,17 +1,18 @@
 'use client';
 
 import React, { use, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2, Trash, Trash2, Plus, Sparkles, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../components/ui';
 import { LexicalEditor } from '../../../components/LexicalEditor';
-import { ImageUpload } from '../../../components/ImageUpload';
+import { ImageUploader } from '../../../components/ImageUploader';
 import type { ImageItem } from '../../../components/MultiImageUploader';
 import { MultiImageUploader } from '../../../components/MultiImageUploader';
 import { ModuleGuard } from '../../../components/ModuleGuard';
@@ -19,10 +20,126 @@ import { DigitalCredentialsForm } from '@/components/orders/DigitalCredentialsFo
 import { stripHtml, truncateText } from '@/lib/seo';
 import { ProductCategoryCombobox } from '@/app/admin/products/components/ProductCategoryCombobox';
 import { QuickCreateCategoryModal } from '@/app/admin/products/components/QuickCreateCategoryModal';
+import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
 import { normalizeRichText } from '@/app/admin/lib/normalize-rich-text';
 import { resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import { getAttributeIconComponent } from '@/app/admin/attribute-groups/_lib/iconRegistry';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
+import { InlineMatrixBuilder, type OptionCatalogItem, type VariantOptionSelection, type VariantRow } from '@/app/admin/products/components/inline-matrix-builder';
+import { normalizeVariantRows, normalizeVariantSelections, validateVariantPayload } from '@/app/admin/products/components/inline-variant-utils';
 
 const MODULE_KEY = 'products';
+
+// Hàm xóa dấu tiếng Việt phục vụ fuzzy search
+const removeTones = (str: string): string => {
+  return str
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[đđ]/g, 'd')
+    .replaceAll(/[ĐĐ]/g, 'D')
+    .toLowerCase();
+};
+
+const normalizeAttributeText = (str: string): string => removeTones(str).normalize('NFC').trim();
+
+// Hàm phân tách giá trị và đơn vị của term range
+const parseTermValue = (termName: string) => {
+  const match = termName.match(/^([\d.,]+)\s*(.*)$/);
+  if (match) {
+    return { value: match[1].replace(',', '.'), unit: match[2].trim() };
+  }
+  return { value: '', unit: '' };
+};
+
+// Hàm tìm đơn vị chủ đạo của group
+const getDominantUnit = (terms: Array<{ name: string }>) => {
+  const counts: Record<string, number> = {};
+  terms.forEach(t => {
+    const { unit } = parseTermValue(t.name);
+    if (unit) {
+      counts[unit] = (counts[unit] || 0) + 1;
+    }
+  });
+  let dominant = '';
+  let maxCount = 0;
+  Object.entries(counts).forEach(([unit, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      dominant = unit;
+    }
+  });
+  return dominant;
+};
+
+const findAttributeGroupByName = (groups: any[], groupName: string) => {
+  const normalizedName = normalizeAttributeText(groupName);
+  return groups.find((group) => normalizeAttributeText(group.name) === normalizedName);
+};
+
+const getAttributeValidationErrors = (
+  formConfig: { groups: Array<{ _id: string; name: string; filterType?: string; terms: Array<{ _id: Id<"attributeTerms">; name: string }> }> } | null | undefined,
+  attributeTermIds: Id<"attributeTerms">[],
+  rangeInputs: Record<string, { value: string; unit: string }>
+) => {
+  if (!formConfig) {return [];}
+
+  return formConfig.groups
+    .filter((group) => {
+      if (group.filterType === 'range') {
+        return !rangeInputs[group._id]?.value?.trim();
+      }
+      return !group.terms.some((term) => attributeTermIds.includes(term._id));
+    })
+    .map((group) => group.name);
+};
+
+type RangeInputs = Record<string, { value: string; unit: string }>;
+type ProductFormConfig = {
+  groups: Array<{
+    _id: string;
+    name: string;
+    filterType?: string;
+    terms: Array<{ _id: Id<"attributeTerms">; name: string }>;
+  }>;
+};
+
+const normalizeAssignedTermsForForm = (
+  formConfig: ProductFormConfig | null | undefined,
+  termIds: Id<"attributeTerms">[]
+) => {
+  if (!formConfig) {
+    return { attributeTermIds: termIds, rangeInputs: {} as RangeInputs };
+  }
+
+  const nonRangeIds: Id<"attributeTerms">[] = [];
+  const initialRanges: RangeInputs = {};
+
+  termIds.forEach(termId => {
+    const group = formConfig.groups.find(g => g.terms.some(t => t._id === termId));
+    if (!group) {return;}
+
+    if (group.filterType === 'range') {
+      const term = group.terms.find(t => t._id === termId);
+      if (term) {
+        const { value, unit } = parseTermValue(term.name);
+        initialRanges[group._id] = { value, unit };
+      }
+      return;
+    }
+
+    nonRangeIds.push(termId);
+  });
+
+  formConfig.groups.forEach(group => {
+    if (group.filterType === 'range' && !initialRanges[group._id]) {
+      const dominant = getDominantUnit(group.terms) || '%';
+      initialRanges[group._id] = { value: '', unit: dominant };
+    }
+  });
+
+  return { attributeTermIds: nonRangeIds, rangeInputs: initialRanges };
+};
 
 export default function ProductEditPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -37,11 +154,19 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
 
   const productData = useQuery(api.products.getById, { id: id as Id<"products"> });
+  const additionalCategoryIdsData = useQuery(api.products.getAdditionalCategoryIds, { id: id as Id<"products"> });
   const categoriesData = useQuery(api.productCategories.listActive);
-  const updateProduct = useMutation(api.products.update);
+  const updateProduct = useMutation(api.productsSmart.updateProductWithVariants);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: MODULE_KEY });
-  const optionsData = useQuery(api.productOptions.listActive);
+  const optionsData = useQuery(api.productOptions.listAll, { limit: 500 });
+  const valuesData = useQuery(api.productOptionValues.listAll, { limit: 500 });
+  const variantsData = useQuery(api.productVariants.listByProduct, { productId: id as Id<"products"> });
+  const allProducts = useQuery(api.products.listAll, { limit: 500 });
+
+  const allActiveProducts = useMemo(() => {
+    return allProducts?.filter(p => p.status === 'Active') ?? [];
+  }, [allProducts]);
 
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -51,6 +176,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
   const [stock, setStock] = useState('0');
   const [affiliateLink, setAffiliateLink] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [renderType, setRenderType] = useState<'content' | 'markdown' | 'html'>('content');
   const [markdownRender, setMarkdownRender] = useState('');
@@ -63,13 +189,66 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
   const [status, setStatus] = useState<'Draft' | 'Active' | 'Archived'>('Draft');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
-  const [editorResetKey] = useState(0);
+  const [editorResetKey, setEditorResetKey] = useState(0);
   const [snapshotVersion, setSnapshotVersion] = useState(0);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [hasVariants, setHasVariants] = useState(false);
-  const [selectedOptionIds, setSelectedOptionIds] = useState<Id<'productOptions'>[]>([]);
+  const [variantSelections, setVariantSelections] = useState<VariantOptionSelection[]>([]);
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([]);
   const [productType, setProductType] = useState<'physical' | 'digital'>('physical');
+  const [combos, setCombosState] = useState<any[]>([]);
+  const setCombos = React.useCallback((nextValue: any[] | ((prev: any[]) => any[])) => {
+    if (typeof nextValue === 'function') {
+      setCombosState(prev => {
+        const res = nextValue(prev);
+        return JSON.parse(JSON.stringify(res));
+      });
+    } else {
+      setCombosState(JSON.parse(JSON.stringify(nextValue)));
+    }
+  }, []);
+
+  const [draggedComboIndex, setDraggedComboIndex] = useState<number | null>(null);
+  const [dragOverComboIndex, setDragOverComboIndex] = useState<number | null>(null);
+
+  const getDragPropsCombo = (index: number) => ({
+    draggable: true,
+    onDragStart: () => setDraggedComboIndex(index),
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      if (draggedComboIndex !== index) {
+        setDragOverComboIndex(index);
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      if (draggedComboIndex === null || draggedComboIndex === index) return;
+      const nextCombos = [...combos];
+      const [moved] = nextCombos.splice(draggedComboIndex, 1);
+      nextCombos.splice(index, 0, moved);
+      setCombos(nextCombos);
+      setDraggedComboIndex(null);
+      setDragOverComboIndex(null);
+    },
+    onDragEnd: () => {
+      setDraggedComboIndex(null);
+      setDragOverComboIndex(null);
+    },
+  });
+
+  const [collapsedCombos, setCollapsedCombos] = useState<Record<number, boolean>>({});
+  const toggleComboCollapse = (index: number) => {
+    setCollapsedCombos(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
+  const selectedCategorySlug = useMemo(
+    () => categoriesData?.find((category) => category._id === categoryId)?.slug,
+    [categoriesData, categoryId]
+  );
   const [digitalDeliveryType, setDigitalDeliveryType] = useState<'account' | 'license' | 'download' | 'custom'>('account');
   const [isNameCopied, setIsNameCopied] = useState(false);
   const [digitalCredentialsTemplate, setDigitalCredentialsTemplate] = useState<{
@@ -80,9 +259,21 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     customContent?: string;
     expiresAt?: number;
   }>({});
+  const generatedSku = useQuery(
+    api.productsSmart.generateSmartSku,
+    categoryId
+      ? { name: name.trim() || 'Product', categoryId: categoryId as Id<"productCategories"> }
+      : 'skip'
+  );
+  const resolvedSkuPreview = sku.trim() || generatedSku || productData?.sku || '';
+  const skuExists = useQuery(
+    api.productsSmart.checkSkuExists,
+    resolvedSkuPreview ? { sku: resolvedSkuPreview, ignoreProductId: id as Id<"products"> } : 'skip'
+  );
   const initialSnapshotRef = useRef<{
     affiliateLink: string;
     categoryId: string;
+    additionalCategoryIds: string[];
     description: string;
     renderType: 'content' | 'markdown' | 'html';
     markdownRender: string;
@@ -99,18 +290,23 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     galleryImages: string[];
     hasVariants: boolean;
     image: string;
-    imageStorageId?: Id<'_storage'>;
+    imageStorageId?: Id<'_storage'> | null;
     metaDescription: string;
     metaTitle: string;
     name: string;
     price: string;
     productType: 'physical' | 'digital';
+    productTypeId?: string;
+    attributeTermIds?: Id<"attributeTerms">[];
+    rangeInputs: RangeInputs;
     salePrice: string;
-    selectedOptionIds: Id<'productOptions'>[];
     sku: string;
     slug: string;
     status: 'Draft' | 'Active' | 'Archived';
     stock: string;
+    variantSelections: ReturnType<typeof normalizeVariantSelections>;
+    variantRows: ReturnType<typeof normalizeVariantRows>;
+    combos: any[];
   } | null>(null);
 
   const enabledFields = useMemo(() => {
@@ -133,11 +329,115 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     return (setting?.value as string) || 'variant';
   }, [settingsData]);
 
+  const variantStock = useMemo(() => {
+    const setting = settingsData?.find(s => s.settingKey === 'variantStock');
+    return (setting?.value as string) || 'variant';
+  }, [settingsData]);
+
   const productTypeMode = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'productTypeMode');
     const value = setting?.value as 'physical' | 'digital' | 'both' | undefined;
     return value ?? 'both';
   }, [settingsData]);
+  const multiCategoryEnabled = useMemo(() => (
+    Boolean(settingsData?.find(s => s.settingKey === 'enableMultipleCategories')?.value)
+  ), [settingsData]);
+
+  const enableProductTypes = useMemo(() => {
+    const setting = settingsData?.find(s => s.settingKey === 'enableProductTypes');
+    return setting?.value === true;
+  }, [settingsData]);
+
+  const productTypesData = useQuery(api.productTypes.listAll, enableProductTypes ? {} : 'skip');
+  const categoryProductTypesData = useQuery(
+    api.productTypes.listAssignedTypesForCategory,
+    enableProductTypes && categoryId ? { categoryId: categoryId as Id<"productCategories"> } : 'skip'
+  );
+  const assignedTermIdsData = useQuery(api.attributeTerms.getAssignedTermIds, { productId: id as Id<"products"> });
+  const [productTypeId, setProductTypeId] = useState('');
+  const [attributeTermIds, setAttributeTermIds] = useState<Id<"attributeTerms">[]>([]);
+  const updateAttributeGroup = useMutation(api.attributeGroups.update);
+  const createAttributeTerm = useMutation(api.attributeTerms.create);
+  const [rangeInputs, setRangeInputs] = useState<Record<string, { value: string; unit: string }>>({});
+  const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
+  const activeProductTypeId = productTypeId || productData?.productTypeId || '';
+  const formConfig = useQuery(api.productTypes.getFormConfig, activeProductTypeId ? { typeId: activeProductTypeId as Id<"productTypes"> } : 'skip');
+
+  const handleAddStandardTerm = async (group: any) => {
+    const termName = window.prompt(`Nhập giá trị mới cho nhóm thuộc tính "${group.name}":`);
+    if (termName && termName.trim()) {
+      const trimmedName = termName.trim();
+      const exists = group.terms.some(
+        (t: any) => t.name.toLowerCase().trim() === trimmedName.toLowerCase().trim()
+      );
+      if (exists) {
+        toast.error("Giá trị thuộc tính này đã tồn tại.");
+        return;
+      }
+      try {
+        const newTermId = await createAttributeTerm({
+          groupId: group._id,
+          name: trimmedName,
+          slug: trimmedName
+            .toLowerCase()
+            .normalize("NFD")
+            .replaceAll(/[\u0300-\u036F]/g, "")
+            .replaceAll(/[đĐ]/g, "d")
+            .replaceAll(/[^a-z0-9\s-]/g, "")
+            .trim()
+            .replaceAll(/\s+/g, "-")
+            .replaceAll(/-+/g, "-"),
+          active: true
+        });
+        
+        // Tự động tick chọn giá trị mới tạo
+        const isSingle = group.inputType === 'radio' || group.filterType === 'single';
+        if (isSingle) {
+          const otherTermIds = group.terms.map((t: any) => t._id);
+          setAttributeTermIds(prev => [...prev.filter(id => !otherTermIds.includes(id)), newTermId]);
+        } else {
+          setAttributeTermIds(prev => [...prev, newTermId]);
+        }
+        
+        toast.success(`Đã thêm giá trị "${trimmedName}" thành công.`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Không thể tạo giá trị thuộc tính mới.");
+      }
+    }
+  };
+  const availableProductTypes = useMemo(() => {
+    if (categoryId && categoryProductTypesData && categoryProductTypesData.length > 0) {
+      return categoryProductTypesData;
+    }
+    return productTypesData ?? [];
+  }, [categoryId, categoryProductTypesData, productTypesData]);
+
+  const selectedCategoryIds = useMemo(() => {
+    return [categoryId, ...additionalCategoryIds].filter(Boolean) as Id<"productCategories">[];
+  }, [categoryId, additionalCategoryIds]);
+
+  const assignedTypesForSelectedCategories = useQuery(
+    api.productTypes.listAssignedTypesForCategories,
+    enableProductTypes && selectedCategoryIds.length > 0 ? { categoryIds: selectedCategoryIds } : 'skip'
+  );
+
+  const hasTaxonomyConflict = useMemo(() => {
+    if (!enableProductTypes || !assignedTypesForSelectedCategories) return false;
+    const uniqueTypeIds = new Set<string>();
+    assignedTypesForSelectedCategories.forEach(row => {
+      row.types.forEach(type => uniqueTypeIds.add(type._id));
+    });
+    return uniqueTypeIds.size > 1;
+  }, [enableProductTypes, assignedTypesForSelectedCategories]);
+
+  useEffect(() => {
+    if (formConfig && assignedTermIdsData && isDataLoaded) {
+      const normalizedTerms = normalizeAssignedTermsForForm(formConfig, assignedTermIdsData);
+      setAttributeTermIds(normalizedTerms.attributeTermIds);
+      setRangeInputs(normalizedTerms.rangeInputs);
+    }
+  }, [formConfig, assignedTermIdsData, isDataLoaded]);
 
   const digitalEnabled = productTypeMode !== 'physical';
 
@@ -158,17 +458,55 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     const setting = settingsData?.find(s => s.settingKey === 'defaultImageAspectRatio');
     return resolveProductImageAspectRatio(setting?.value);
   }, [settingsData]);
+  const enableCombosSetting = useMemo(() => {
+    const setting = settingsData?.find(s => s.settingKey === 'enableCombos');
+    return Boolean(setting?.value);
+  }, [settingsData]);
+
+  const showCombosPanel = enableCombosSetting && saleMode === 'contact' && !hasVariants;
 
   const isAffiliateMode = saleMode === 'affiliate';
   const isPriceRequired = saleMode === 'cart';
   const showProductTypeSelector = productTypeMode === 'both';
-  const hideBasePricing = variantEnabled && variantPricing === 'variant';
+  const hideBasePricing = variantEnabled && hasVariants && variantPricing === 'variant';
+  const hideBaseStock = variantEnabled && hasVariants && variantStock === 'variant';
+  const optionCatalog = useMemo<OptionCatalogItem[]>(() => {
+    const valuesByOption = new Map<string, NonNullable<typeof valuesData>>();
+    valuesData?.forEach((value) => {
+      const list = valuesByOption.get(value.optionId) ?? [];
+      list.push(value);
+      valuesByOption.set(value.optionId, list);
+    });
+    return (optionsData ?? [])
+      .map((option) => ({
+        id: option._id,
+        name: option.name,
+        order: option.order,
+        values: (valuesByOption.get(option._id) ?? [])
+          .sort((a, b) => a.order - b.order)
+          .map((value) => ({
+            id: value._id,
+            label: value.label ?? value.value,
+            order: value.order,
+          })),
+      }))
+      .sort((a, b) => a.order - b.order);
+  }, [optionsData, valuesData]);
+  const normalizedVariantSelections = useMemo(() => normalizeVariantSelections(variantSelections), [variantSelections]);
+  const normalizedVariantRows = useMemo(() => normalizeVariantRows(variantRows), [variantRows]);
 
   const normalizedDescription = useMemo(() => normalizeRichText(description), [description]);
+
+  const generateSlugFromTitle = (value: string) => value.toLowerCase()
+    .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
+    .replaceAll(/[đĐ]/g, "d")
+    .replaceAll(/[^a-z0-9\s]/g, '')
+    .replaceAll(/\s+/g, '-');
 
   const currentSnapshot = useMemo(() => ({
     affiliateLink: affiliateLink.trim(),
     categoryId,
+    additionalCategoryIds,
     description: normalizedDescription,
     renderType,
     markdownRender: markdownRender.trim(),
@@ -178,21 +516,27 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     galleryImages: galleryItems.map(item => item.url).filter(Boolean),
     hasVariants,
     image: image ?? '',
-    imageStorageId,
+    imageStorageId: image ? (imageStorageId ?? null) : null,
     metaDescription: metaDescription.trim(),
     metaTitle: metaTitle.trim(),
     name: name.trim(),
     price: price.trim(),
     productType,
     salePrice: salePrice.trim(),
-    selectedOptionIds: [...selectedOptionIds].sort(),
     sku: sku.trim(),
     slug: slug.trim(),
     status,
     stock: stock.trim(),
+    variantSelections: normalizedVariantSelections,
+    variantRows: normalizedVariantRows,
+    productTypeId,
+    attributeTermIds,
+    rangeInputs,
+    combos: JSON.parse(JSON.stringify(combos)),
   }), [
     affiliateLink,
     categoryId,
+    additionalCategoryIds,
     normalizedDescription,
     renderType,
     markdownRender,
@@ -209,11 +553,16 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     price,
     productType,
     salePrice,
-    selectedOptionIds,
     sku,
     slug,
     status,
     stock,
+    normalizedVariantSelections,
+    normalizedVariantRows,
+    productTypeId,
+    attributeTermIds,
+    rangeInputs,
+    combos,
   ]);
 
   const hasChanges = useMemo(() => {
@@ -233,7 +582,175 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
   }, [hasChanges, saveStatus]);
 
   useEffect(() => {
-    if (productData && !isDataLoaded) {
+    if (!enableProductTypes || !categoryId || !categoryProductTypesData || categoryProductTypesData.length === 0) {
+      return;
+    }
+    if (categoryProductTypesData.length === 1) {
+      const nextTypeId = categoryProductTypesData[0]._id;
+      if (productTypeId !== nextTypeId) {
+        setProductTypeId(nextTypeId);
+        setAttributeTermIds([]);
+      }
+      return;
+    }
+    if (productTypeId && !categoryProductTypesData.some(type => type._id === productTypeId)) {
+      setProductTypeId('');
+      setAttributeTermIds([]);
+    }
+  }, [enableProductTypes, categoryId, categoryProductTypesData, productTypeId]);
+
+  const handleApplyAiProduct = (item: AiEntityImportPayload) => {
+    const nextName = item.name?.trim() || item.title?.trim() || '';
+    if (!nextName) {return;}
+
+    setName(nextName);
+    setSlug(item.slug?.trim() || generateSlugFromTitle(nextName));
+    if (typeof item.price === 'number') {setPrice(String(item.price));}
+    if (typeof item.salePrice === 'number') {setSalePrice(String(item.salePrice));}
+    if (typeof item.stock === 'number') {setStock(String(item.stock));}
+    const nextDescription = item.content || item.description || item.excerpt || item.htmlRender || item.markdownRender || '';
+    setDescription(nextDescription);
+    if (item.content) {
+      setRenderType('content');
+      setHtmlRender(item.htmlRender || '');
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.htmlRender) {
+      setRenderType('html');
+      setHtmlRender(item.htmlRender);
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.markdownRender) {
+      setRenderType('markdown');
+      setMarkdownRender(item.markdownRender);
+      setHtmlRender('');
+    }
+    setMetaTitle(item.metaTitle || truncateText(nextName, 60));
+    setMetaDescription(item.metaDescription || truncateText(stripHtml(nextDescription), 160));
+    if (item.image) {
+      setImage(item.image);
+      setImageStorageId(undefined);
+    }
+
+    if (enableProductTypes && (item.attributeTermIds?.length || item.newAttributes || item.attributeRangeValues) && !formConfig) {
+      toast.warning('Chưa tải được cấu hình kiểu sản phẩm nên chưa thể áp dụng thuộc tính AI.');
+    }
+
+    if (enableProductTypes && formConfig?.groups) {
+      const validTermIds = new Set(
+        formConfig.groups.flatMap((group: any) => group.filterType !== 'range' ? group.terms.map((term: any) => term._id) : [])
+      );
+      const nextTermIds = new Set<Id<"attributeTerms">>(
+        (item.attributeTermIds ?? []).filter((termId) => validTermIds.has(termId)) as Id<"attributeTerms">[]
+      );
+
+      if (item.newAttributes) {
+        Object.entries(item.newAttributes).forEach(([groupName, values]) => {
+          const group = findAttributeGroupByName(formConfig.groups, groupName);
+          if (!group || group.filterType === 'range') {return;}
+          values.forEach((value) => {
+            const existingTerm = group.terms.find((term: any) => normalizeAttributeText(term.name) === normalizeAttributeText(value));
+            if (existingTerm) {
+              nextTermIds.add(existingTerm._id);
+            }
+          });
+        });
+      }
+
+      if (nextTermIds.size > 0) {
+        setAttributeTermIds(Array.from(nextTermIds));
+      }
+    }
+
+    // Gán các thuộc tính lọc Range từ AI
+    if (enableProductTypes && item.attributeRangeValues && formConfig && formConfig.groups) {
+      const nextRangeInputs = { ...rangeInputs };
+      formConfig.groups.forEach((group: any) => {
+        if (group.filterType === 'range') {
+          const matchEntry = Object.entries(item.attributeRangeValues!).find(
+            ([k]) => normalizeAttributeText(k) === normalizeAttributeText(group.name)
+          );
+          
+          const aiValue = matchEntry ? matchEntry[1] : undefined;
+          if (aiValue) {
+            const parsed = parseTermValue(aiValue);
+            if (parsed.value) {
+              nextRangeInputs[group._id] = {
+                value: parsed.value,
+                unit: parsed.unit || getDominantUnit(group.terms) || '%'
+              };
+            }
+          }
+        }
+      });
+      setRangeInputs(nextRangeInputs);
+    }
+
+    // Gán combo từ AI
+    if (enableCombosSetting && item.combos && item.combos.length > 0) {
+      setCombos(item.combos);
+    }
+
+    setEditorResetKey((prev) => prev + 1);
+  };
+
+  useEffect(() => {
+    if (productData && !isDataLoaded && optionsData !== undefined && valuesData !== undefined && variantsData !== undefined && assignedTermIdsData !== undefined) {
+      if (enableProductTypes && productData.productTypeId && formConfig === undefined) {
+        return;
+      }
+
+      const normalizedTerms = normalizeAssignedTermsForForm(formConfig, assignedTermIdsData ?? []);
+      const variantOptionIds = (productData.optionIds?.length ?? 0) > 0
+        ? productData.optionIds ?? []
+        : Array.from(new Set(variantsData.flatMap((variant) => variant.optionValues.map((item) => item.optionId))));
+      const selectedOptions = variantOptionIds
+        .map((optionId) => optionsData.find((option) => option._id === optionId))
+        .filter((option): option is NonNullable<typeof optionsData>[number] => Boolean(option))
+        .sort((a, b) => a.order - b.order);
+      const usedValuesByOption = new Map<string, Id<'productOptionValues'>[]>();
+
+      variantsData
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .forEach((variant) => {
+          variant.optionValues.forEach((item) => {
+            const list = usedValuesByOption.get(item.optionId) ?? [];
+            if (!list.includes(item.valueId)) {
+              list.push(item.valueId);
+            }
+            usedValuesByOption.set(item.optionId, list);
+          });
+        });
+
+      const nextVariantSelections: VariantOptionSelection[] = selectedOptions.map((option) => {
+        const usedValueIds = usedValuesByOption.get(option._id) ?? [];
+        const fallbackValueIds = valuesData
+          .filter((value) => value.optionId === option._id && value.active)
+          .sort((a, b) => a.order - b.order)
+          .map((value) => value._id);
+        return {
+          optionId: option._id,
+          valueIds: usedValueIds.length > 0 ? usedValueIds : fallbackValueIds,
+        };
+      });
+      const nextVariantRows: VariantRow[] = variantsData
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((variant) => ({
+          id: variant._id,
+          sku: variant.sku,
+          price: variant.price ?? productData.price,
+          salePrice: variant.salePrice,
+          stock: variant.stock ?? 0,
+          optionValues: selectedOptions.map((option) => {
+            const item = variant.optionValues.find((entry) => entry.optionId === option._id);
+            return item
+              ? { optionId: option._id, valueId: item.valueId }
+              : null;
+          }).filter((item): item is { optionId: Id<'productOptions'>; valueId: Id<'productOptionValues'> } => Boolean(item)),
+        }));
+      const nextNormalizedVariantSelections = normalizeVariantSelections(nextVariantSelections);
+      const nextNormalizedVariantRows = normalizeVariantRows(nextVariantRows);
+
       setName(productData.name);
       setSlug(productData.slug);
       setSku(productData.sku);
@@ -242,12 +759,14 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
       setStock(productData.stock.toString());
       setAffiliateLink(((productData as { affiliateLink?: string }).affiliateLink ?? '').toString());
       setCategoryId(productData.categoryId);
+      setAdditionalCategoryIds(additionalCategoryIdsData ?? []);
       setDescription(productData.description ?? '');
       const nextRenderType = productData.renderType ?? 'content';
       const allowedRenderTypes = new Set<'content' | 'markdown' | 'html'>(['content']);
       if (hasMarkdownRender) {allowedRenderTypes.add('markdown');}
       if (hasHtmlRender) {allowedRenderTypes.add('html');}
-      setRenderType(allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content');
+      const normalizedRenderType = allowedRenderTypes.has(nextRenderType) ? nextRenderType : 'content';
+      setRenderType(normalizedRenderType);
       setMarkdownRender(productData.markdownRender ?? '');
       setHtmlRender(productData.htmlRender ?? '');
       setMetaTitle(productData.metaTitle ?? '');
@@ -262,15 +781,21 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
       })));
       setStatus(productData.status);
       setHasVariants(productData.hasVariants ?? false);
-      setSelectedOptionIds(productData.optionIds ?? []);
+      setVariantSelections(nextVariantSelections);
+      setVariantRows(nextVariantRows);
+      setProductTypeId(productData.productTypeId ?? '');
+      setAttributeTermIds(normalizedTerms.attributeTermIds);
+      setRangeInputs(normalizedTerms.rangeInputs);
       setProductType(productData.productType ?? 'physical');
       setDigitalDeliveryType(productData.digitalDeliveryType ?? 'account');
       setDigitalCredentialsTemplate(productData.digitalCredentialsTemplate ?? {});
+      setCombos((productData as any).combos ?? []);
       initialSnapshotRef.current = {
         affiliateLink: ((productData as { affiliateLink?: string }).affiliateLink ?? '').trim(),
         categoryId: productData.categoryId,
+        additionalCategoryIds: additionalCategoryIdsData ?? [],
         description: normalizeRichText(productData.description ?? ''),
-        renderType: productData.renderType ?? 'content',
+        renderType: normalizedRenderType,
         markdownRender: (productData.markdownRender ?? '').trim(),
         htmlRender: (productData.htmlRender ?? '').trim(),
         digitalCredentialsTemplate: productData.digitalCredentialsTemplate ?? {},
@@ -278,23 +803,30 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
         galleryImages: (productData.images ?? []).filter(Boolean),
         hasVariants: productData.hasVariants ?? false,
         image: productData.image ?? '',
-        imageStorageId: (productData as { imageStorageId?: Id<'_storage'> }).imageStorageId,
+        imageStorageId: productData.image
+          ? ((productData as { imageStorageId?: Id<'_storage'> }).imageStorageId ?? null)
+          : null,
         metaDescription: (productData.metaDescription ?? '').trim(),
         metaTitle: (productData.metaTitle ?? '').trim(),
         name: productData.name.trim(),
         price: productData.price.toString(),
-        productType: productData.productType ?? 'physical',
+        productType: productTypeMode === 'both' ? (productData.productType ?? 'physical') : productTypeMode,
         salePrice: productData.salePrice?.toString() ?? '',
-        selectedOptionIds: [...(productData.optionIds ?? [])].sort(),
         sku: productData.sku.trim(),
         slug: productData.slug.trim(),
         status: productData.status,
         stock: productData.stock.toString(),
+        variantSelections: nextNormalizedVariantSelections,
+        variantRows: nextNormalizedVariantRows,
+        productTypeId: productData.productTypeId ?? '',
+        attributeTermIds: normalizedTerms.attributeTermIds,
+        rangeInputs: normalizedTerms.rangeInputs,
+        combos: JSON.parse(JSON.stringify((productData as any).combos ?? [])),
       };
       setSnapshotVersion((prev) => prev + 1);
       setIsDataLoaded(true);
     }
-  }, [productData, isDataLoaded, hasMarkdownRender, hasHtmlRender]);
+  }, [productData, additionalCategoryIdsData, assignedTermIdsData, isDataLoaded, hasMarkdownRender, hasHtmlRender, optionsData, valuesData, variantsData, enableProductTypes, formConfig]);
 
   useEffect(() => {
     const allowedRenderTypes = new Set<'content' | 'markdown' | 'html'>(['content']);
@@ -306,10 +838,14 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
   }, [renderType, hasMarkdownRender, hasHtmlRender]);
 
   useEffect(() => {
-    if (!hasVariants) {
-      setSelectedOptionIds([]);
+    if (!isDataLoaded || !productData) return;
+    
+    if (categoryId === productData.categoryId) {
+      setSku(productData.sku);
+    } else {
+      setSku(generatedSku || '');
     }
-  }, [hasVariants]);
+  }, [categoryId, generatedSku, productData, isDataLoaded]);
 
   useEffect(() => {
     if (productTypeMode === 'physical' || productTypeMode === 'digital') {
@@ -370,17 +906,33 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
       return;
     }
-    if (enabledFields.has('sku') && !sku.trim()) {
-      toast.error('Vui lòng nhập mã SKU');
+    const resolvedProductSku = sku.trim() || generatedSku || productData?.sku || `SKU-${Date.now()}`;
+    if (resolvedProductSku && skuExists === true) {
+      toast.error('Mã SKU đã tồn tại, vui lòng chọn mã khác');
       return;
     }
     if (isAffiliateMode && !affiliateLink.trim()) {
       toast.error('Vui lòng nhập link affiliate cho sản phẩm');
       return;
     }
-    if (variantEnabled && hasVariants && selectedOptionIds.length === 0) {
-      toast.error('Vui lòng chọn ít nhất một tùy chọn cho phiên bản');
+    if (galleryItems.some(item => Boolean(item.url)) && !image) {
+      toast.error('Vui lòng chọn ảnh chính trước khi thêm ảnh vào thư viện');
       return;
+    }
+    const variantPayload = {
+      options: variantEnabled && hasVariants ? normalizedVariantSelections : [],
+      variants: variantEnabled && hasVariants ? normalizedVariantRows : [],
+    };
+    if (variantEnabled && hasVariants) {
+      const variantError = validateVariantPayload(
+        variantPayload.options,
+        variantPayload.variants,
+        variantPricing === 'variant'
+      );
+      if (variantError) {
+        toast.error(variantError);
+        return;
+      }
     }
     if (!hideBasePricing && salePrice.trim() !== '') {
       const parsedSalePrice = resolveSalePrice(salePrice);
@@ -392,11 +944,87 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
         }
       }
     }
+    if (hasTaxonomyConflict) {
+      toast.error("Không thể lưu: Các danh mục được chọn phải thuộc cùng một kiểu sản phẩm.");
+      return;
+    }
+    if (enableProductTypes && availableProductTypes.length > 0 && !productTypeId) {
+      toast.error('Vui lòng chọn kiểu sản phẩm trước khi lưu.');
+      return;
+    }
+    if (enableProductTypes && productTypeId && !formConfig) {
+      toast.error('Đang tải cấu hình thuộc tính, vui lòng thử lại sau.');
+      return;
+    }
+    const missingAttributes = enableProductTypes && productTypeId
+      ? getAttributeValidationErrors(formConfig, attributeTermIds, rangeInputs)
+      : [];
+    if (missingAttributes.length > 0) {
+      toast.error(`Vui lòng điền đủ thuộc tính trước khi lưu: ${missingAttributes.join(', ')}`);
+      return;
+    }
 
     setIsSubmitting(true);
     setSaveStatus('saving');
     try {
-      const resolvedStock = productType === 'digital' ? 0 : (parseInt(stock) || 0);
+      // Xử lý các thuộc tính Range
+      const rangeTermIds: Id<"attributeTerms">[] = [];
+      if (enableProductTypes && formConfig) {
+        // Xác nhận đơn vị lệch chuẩn trước khi lưu
+        for (const group of formConfig.groups) {
+          if (group.filterType === 'range') {
+            const input = rangeInputs[group._id];
+            if (input && input.value.trim()) {
+              const dominantUnit = getDominantUnit(group.terms);
+              if (dominantUnit && input.unit !== dominantUnit) {
+                const confirmMsg = `Đơn vị của thuộc tính '${group.name}' bạn chọn là '${input.unit}' khác với đơn vị phổ biến hiện tại là '${dominantUnit}'. Bạn có chắc chắn muốn lưu?`;
+                if (!window.confirm(confirmMsg)) {
+                  setIsSubmitting(false);
+                  setSaveStatus('idle');
+                  return;
+                }
+              }
+            }
+          }
+        }
+
+        // Tạo các term range chưa tồn tại và lấy ID
+        for (const group of formConfig.groups) {
+          if (group.filterType === 'range') {
+            const input = rangeInputs[group._id];
+            if (input && input.value.trim()) {
+              const val = input.value.trim();
+              const unit = input.unit.trim();
+              const termName = `${val}${unit}`;
+              
+              // Tìm term sẵn có
+              const existingTerm = group.terms.find(t => t.name === termName);
+              if (existingTerm) {
+                rangeTermIds.push(existingTerm._id);
+              } else {
+                try {
+                  // Tạo mới term
+                  const newTermId = await createAttributeTerm({
+                    groupId: group._id,
+                    name: termName,
+                    slug: termName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                    active: true
+                  });
+                  rangeTermIds.push(newTermId);
+                } catch (err) {
+                  console.error(err);
+                  toast.error(`Không thể tạo giá trị thuộc tính "${termName}"`);
+                  setIsSubmitting(false);
+                  setSaveStatus('idle');
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const resolvedStock = productType === 'digital' || hideBaseStock ? 0 : (parseInt(stock) || 0);
       const resolvedMetaTitle = truncateText(name.trim(), 60);
       const resolvedMetaDescription = truncateText(stripHtml(description || ''), 160);
       const resolvedGalleryItems = galleryItems
@@ -414,13 +1042,16 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
       await updateProduct({
         ...(isAffiliateMode ? { affiliateLink: affiliateLink.trim() || undefined } : {}),
         categoryId: categoryId as Id<"productCategories">,
+        additionalCategoryIds: multiCategoryEnabled
+          ? additionalCategoryIds.filter((category) => category !== categoryId) as Id<"productCategories">[]
+          : undefined,
         description: description.trim() || undefined,
         renderType,
         markdownRender: markdownRender.trim() || undefined,
         htmlRender: htmlRender.trim() || undefined,
         id: id as Id<"products">,
         hasVariants: variantEnabled ? hasVariants : undefined,
-        image,
+        image: image ?? '',
         imageStorageId: image ? (imageStorageId ?? null) : null,
         images: enabledFields.has('images') ? resolvedImages : undefined,
         imageStorageIds: enabledFields.has('images') ? resolvedImageStorageIds : undefined,
@@ -431,18 +1062,22 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
           ? (resolvedMetaTitleValue || undefined)
           : undefined,
         name: name.trim(),
-        optionIds: variantEnabled ? (hasVariants ? selectedOptionIds : []) : undefined,
+        options: variantPayload.options,
+        variants: variantPayload.variants,
         price: hideBasePricing ? 0 : (parseInt(price) || 0),
         salePrice: resolvedSalePrice,
-        sku: (sku.trim() || productData?.sku) ?? `SKU-${Date.now()}`,
+        sku: resolvedProductSku,
         slug: slug.trim(),
         status,
         stock: resolvedStock,
+        productTypeId: enableProductTypes && productTypeId ? productTypeId as Id<"productTypes"> : undefined,
+        attributeTermIds: enableProductTypes ? [...attributeTermIds, ...rangeTermIds] : undefined,
         productType: digitalEnabled ? productType : undefined,
         digitalDeliveryType: digitalEnabled && productType === 'digital' ? digitalDeliveryType : undefined,
         digitalCredentialsTemplate: digitalEnabled && productType === 'digital' && Object.keys(digitalCredentialsTemplate).length > 0
           ? digitalCredentialsTemplate
           : undefined,
+        combos,
       });
       const persistedSnapshot = {
         ...currentSnapshot,
@@ -452,6 +1087,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
         htmlRender: htmlRender.trim(),
         metaDescription: resolvedMetaDescriptionValue,
         metaTitle: resolvedMetaTitleValue,
+        combos: JSON.parse(JSON.stringify(combos)),
       };
       if (enabledFields.has('metaTitle')) {
         setMetaTitle(resolvedMetaTitleValue);
@@ -471,7 +1107,14 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  if (productData === undefined || fieldsData === undefined || settingsData === undefined) {
+  if (
+    productData === undefined
+    || fieldsData === undefined
+    || settingsData === undefined
+    || optionsData === undefined
+    || valuesData === undefined
+    || variantsData === undefined
+  ) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 size={32} className="animate-spin text-orange-500" />
@@ -501,15 +1144,6 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
           <Link href="/admin/products" className="text-sm text-orange-600 hover:underline">Quay lại danh sách</Link>
         </div>
         <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.open(`/products/${slug}`, '_blank')}
-            className="gap-2"
-          >
-            <ExternalLink size={16} />
-            Xem trên web
-          </Button>
           {variantEnabled && hasVariants && (
             <Link href={`/admin/products/${id}/variants`}>
               <Button variant="outline">Quản lý phiên bản</Button>
@@ -529,12 +1163,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                   <Input value={name} onChange={(e) => {
                     const val = e.target.value;
                     setName(val);
-                    const generatedSlug = val.toLowerCase()
-                      .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
-                      .replaceAll(/[đĐ]/g, "d")
-                      .replaceAll(/[^a-z0-9\s]/g, '')
-                      .replaceAll(/\s+/g, '-');
-                    setSlug(generatedSlug);
+                    setSlug(generateSlugFromTitle(val));
                   }} required placeholder="Nhập tên sản phẩm..." autoFocus />
                   <Button
                     type="button"
@@ -557,8 +1186,18 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                 </div>
                 {enabledFields.has('sku') && (
                   <div className="space-y-2">
-                    <Label>Mã SKU <span className="text-red-500">*</span></Label>
-                    <Input value={sku} onChange={(e) =>{  setSku(e.target.value); }} required placeholder="VD: PROD-001" className="font-mono" />
+                    <Label>Mã gốc SKU / Prefix</Label>
+                    <Input
+                      value={sku || generatedSku || ''}
+                      onChange={(e) =>{  setSku(e.target.value); }}
+                      placeholder="Mã SKU được hệ thống tự động sinh..."
+                      className="font-mono bg-slate-50 dark:bg-slate-900 cursor-not-allowed"
+                      disabled={true}
+                    />
+                    {skuExists === true && (
+                      <p className="text-xs text-red-500">SKU này đã tồn tại.</p>
+                    )}
+                    <p className="text-xs text-slate-500">Mã SKU được sinh tự động dựa trên danh mục chính và số thứ tự độc lập.</p>
                   </div>
                 )}
               </div>
@@ -653,7 +1292,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                   )}
                 </div>
               )}
-              {enabledFields.has('stock') && productType !== 'digital' && (
+              {enabledFields.has('stock') && productType !== 'digital' && !hideBaseStock && (
                 <div className="space-y-2">
                   <Label>Số lượng tồn kho</Label>
                   <Input type="number" value={stock} onChange={(e) =>{  setStock(e.target.value); }} placeholder="0" min="0" />
@@ -759,28 +1398,570 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                   <Label htmlFor="has-variants" className="cursor-pointer">Sản phẩm có nhiều phiên bản</Label>
                 </div>
                 {hasVariants && (
-                  <div className="space-y-2">
-                    <Label>Chọn tùy chọn cho phiên bản</Label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {optionsData?.map(option => (
-                        <label key={option._id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={selectedOptionIds.includes(option._id)}
-                            onChange={() =>{
-                              setSelectedOptionIds(prev => prev.includes(option._id)
-                                ? prev.filter(item => item !== option._id)
-                                : [...prev, option._id]);
-                            }}
-                            className="w-4 h-4 rounded border-slate-300"
-                          />
-                          <span>{option.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {optionsData?.length === 0 && (
-                      <p className="text-xs text-slate-500">Chưa có tùy chọn nào. Hãy tạo option trước.</p>
-                    )}
+                  <InlineMatrixBuilder
+                    baseSku={resolvedSkuPreview || productData.sku}
+                    basePrice={Number.parseInt(price) || 0}
+                    optionCatalog={optionCatalog}
+                    initialSelections={variantSelections}
+                    initialVariants={variantRows}
+                    onChange={(selections, variants) => {
+                      setVariantSelections(selections);
+                      setVariantRows(variants);
+                    }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {showCombosPanel && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-orange-500 shrink-0" />
+                  <div>
+                    <CardTitle className="text-base">Cấu hình Combo</CardTitle>
+                    <p className="text-xs text-slate-500 mt-0.5">Để trống giá combo thì trang sản phẩm sẽ hiện "Liên hệ".</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newIndex = combos.length;
+                      setCollapsedCombos(prev => ({ ...prev, [newIndex]: false }));
+                      setCombos(prev => [
+                        ...prev,
+                        {
+                          name: '',
+                          type: 'standard',
+                          standardConfig: {
+                            minQty: 2,
+                            rewardType: 'discount_percent',
+                            rewardValue: 10,
+                          }
+                        }
+                      ]);
+                    }}
+                    className="gap-1"
+                  >
+                    <Plus size={14} /> Thêm combo thường
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newIndex = combos.length;
+                      setCollapsedCombos(prev => ({ ...prev, [newIndex]: false }));
+                      setCombos(prev => [
+                        ...prev,
+                        {
+                          name: '',
+                          type: 'mix',
+                          mixConfig: {
+                            items: [],
+                            rewardType: 'discount_percent',
+                            rewardValue: 10,
+                          }
+                        }
+                      ]);
+                    }}
+                    className="gap-1"
+                  >
+                    <Plus size={14} /> Thêm combo mix
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {combos.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 text-sm border border-dashed border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50/20 dark:bg-slate-900/10">
+                    Chưa có cấu hình combo nào cho sản phẩm này.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <AnimatePresence initial={false}>
+                      {combos.map((combo, index) => {
+                        const isCollapsed = collapsedCombos[index] ?? true;
+                        return (
+                          <motion.div
+                            key={combo.syncId || `combo-${index}`}
+                            initial={{ opacity: 0, height: 0, y: 15 }}
+                            animate={{ opacity: 1, height: 'auto', y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -15 }}
+                            transition={{ duration: 0.25, ease: 'easeInOut' }}
+                            layout
+                            className={cn(
+                              "border rounded-lg relative overflow-hidden transition-all duration-200",
+                              isCollapsed ? "p-3 space-y-0" : "p-4 space-y-4",
+                              draggedComboIndex === index ? "opacity-40" : "opacity-100",
+                              dragOverComboIndex === index ? "border-orange-400 bg-orange-50/20 dark:bg-orange-950/10 scale-[1.01]" : "border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30"
+                            )}
+                            {...getDragPropsCombo(index)}
+                          >
+                            {/* Header của Combo Card */}
+                            <div 
+                              className={cn(
+                                "flex items-center justify-between cursor-pointer select-none",
+                                isCollapsed ? "" : "border-b border-slate-100 dark:border-slate-800 pb-3"
+                              )}
+                              onClick={() => toggleComboCollapse(index)}
+                            >
+                              <div className="flex items-center gap-2 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                <div className="text-slate-400 cursor-grab active:cursor-grabbing hover:text-slate-600 transition-colors p-1" title="Kéo thả để sắp xếp">
+                                  <GripVertical size={16} />
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shrink-0 ${
+                                  combo.type === 'standard' 
+                                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400' 
+                                    : 'bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400'
+                                }`}>
+                                  {combo.type === 'standard' ? 'Combo thường' : 'Combo mix'}
+                                </span>
+                                {combo.type === 'mix' && combo.isSynced && (
+                                  <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-semibold shrink-0">
+                                    Đã đồng bộ
+                                  </span>
+                                )}
+                                
+                                {/* Tóm tắt thông tin khi thu gọn */}
+                                {isCollapsed && (
+                                  <div className="flex items-center gap-2 ml-2 min-w-0 truncate text-xs text-slate-500">
+                                    <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">
+                                      {combo.name || '(Trống tên)'}
+                                    </span>
+                                    <span className="text-slate-300">|</span>
+                                    <span className="text-emerald-600 font-bold shrink-0">
+                                      {combo.price ? `${combo.price.toLocaleString('vi-VN')} đ` : 'Liên hệ'}
+                                    </span>
+                                    {combo.type === 'standard' && combo.standardConfig && (
+                                      <>
+                                        <span className="text-slate-300">|</span>
+                                        <span className="shrink-0">
+                                          Mua tối thiểu {combo.standardConfig.minQty} chai
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md p-0 flex items-center justify-center"
+                                  onClick={() => toggleComboCollapse(index)}
+                                  title={isCollapsed ? "Mở rộng chi tiết" : "Thu gọn"}
+                                >
+                                  {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md p-0 flex items-center justify-center"
+                                  onClick={() => {
+                                    setCombos(prev => prev.filter((_, i) => i !== index));
+                                  }}
+                                  title="Xóa combo"
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {!isCollapsed && (
+                              <>
+
+                          {/* Nội dung Form tên và giá */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Tên combo (Tùy chọn)</Label>
+                              <Input
+                                value={combo.name}
+                                onChange={(e) => {
+                                  const next = [...combos];
+                                  next[index].name = e.target.value;
+                                  setCombos(next);
+                                }}
+                                placeholder="VD: Mua 5 chai nha, Set Quà Tết"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Giá combo (VND - Tùy chọn)</Label>
+                              <Input
+                                type="number"
+                                value={combo.price ?? ''}
+                                onChange={(e) => {
+                                  const next = [...combos];
+                                  next[index].price = e.target.value ? Number(e.target.value) : undefined;
+                                  setCombos(next);
+                                }}
+                                placeholder="Liên hệ"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Chi tiết từng loại combo: Standard */}
+                          {combo.type === 'standard' && combo.standardConfig && (
+                            <div className="border-t border-slate-100 dark:border-slate-800 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Số lượng mua tối thiểu <span className="text-red-500">*</span></Label>
+                                <Input
+                                  type="number"
+                                  value={combo.standardConfig.minQty}
+                                  onChange={(e) => {
+                                    const next = [...combos];
+                                    next[index].standardConfig.minQty = Math.max(1, Number(e.target.value));
+                                    setCombos(next);
+                                  }}
+                                  min={1}
+                                  required
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Hình thức ưu đãi <span className="text-red-500">*</span></Label>
+                                <select
+                                  value={combo.standardConfig.rewardType}
+                                  onChange={(e) => {
+                                    const next = [...combos];
+                                    next[index].standardConfig.rewardType = e.target.value;
+                                    if (e.target.value === 'gift_self') {
+                                      next[index].standardConfig.giftQty = 1;
+                                      next[index].standardConfig.giftProductId = undefined;
+                                      next[index].standardConfig.rewardValue = undefined;
+                                    } else if (e.target.value === 'gift_other') {
+                                      next[index].standardConfig.giftQty = 1;
+                                      next[index].standardConfig.rewardValue = undefined;
+                                    } else {
+                                      next[index].standardConfig.rewardValue = 10;
+                                      next[index].standardConfig.giftProductId = undefined;
+                                      next[index].standardConfig.giftQty = undefined;
+                                    }
+                                    setCombos(next);
+                                  }}
+                                  className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                                >
+                                  <option value="discount_percent">Giảm giá theo %</option>
+                                  <option value="discount_amount">Giảm số tiền cụ thể</option>
+                                  <option value="gift_self">Tặng thêm chính sản phẩm này</option>
+                                  <option value="gift_other">Tặng sản phẩm khác</option>
+                                </select>
+                              </div>
+
+                              {/* Mức giảm giá */}
+                              {(combo.standardConfig.rewardType === 'discount_percent' || combo.standardConfig.rewardType === 'discount_amount') && (
+                                <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">
+                                    Mức giảm giá{' '}
+                                    {combo.standardConfig.rewardType === 'discount_percent' ? '(%)' : '(VND)'}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    value={combo.standardConfig.rewardValue ?? ''}
+                                    onChange={(e) => {
+                                      const next = [...combos];
+                                      next[index].standardConfig.rewardValue = Number(e.target.value);
+                                      setCombos(next);
+                                    }}
+                                    min={1}
+                                    max={combo.standardConfig.rewardType === 'discount_percent' ? 100 : undefined}
+                                    required
+                                  />
+                                </div>
+                              )}
+
+                              {/* Tặng chính sản phẩm */}
+                              {combo.standardConfig.rewardType === 'gift_self' && (
+                                <div className="space-y-1 md:col-span-2">
+                                  <Label className="text-xs">Số lượng tặng <span className="text-red-500">*</span></Label>
+                                  <Input
+                                    type="number"
+                                    value={combo.standardConfig.giftQty ?? 1}
+                                    onChange={(e) => {
+                                      const next = [...combos];
+                                      next[index].standardConfig.giftQty = Math.max(1, Number(e.target.value));
+                                      setCombos(next);
+                                    }}
+                                    min={1}
+                                    required
+                                  />
+                                </div>
+                              )}
+
+                              {/* Tặng sản phẩm khác */}
+                              {combo.standardConfig.rewardType === 'gift_other' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Sản phẩm tặng kèm <span className="text-red-500">*</span></Label>
+                                    <select
+                                      value={combo.standardConfig.giftProductId ?? ''}
+                                      onChange={(e) => {
+                                        const next = [...combos];
+                                        next[index].standardConfig.giftProductId = e.target.value ? e.target.value : undefined;
+                                        setCombos(next);
+                                      }}
+                                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                                      required
+                                    >
+                                      <option value="">-- Chọn sản phẩm tặng --</option>
+                                      {allActiveProducts.map((p: any) => (
+                                        <option key={p._id} value={p._id}>{p.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Số lượng tặng <span className="text-red-500">*</span></Label>
+                                    <Input
+                                      type="number"
+                                      value={combo.standardConfig.giftQty ?? 1}
+                                      onChange={(e) => {
+                                        const next = [...combos];
+                                        next[index].standardConfig.giftQty = Math.max(1, Number(e.target.value));
+                                        setCombos(next);
+                                      }}
+                                      min={1}
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Chi tiết từng loại combo: Mix */}
+                          {combo.type === 'mix' && combo.mixConfig && (
+                            <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Số lượng của sản phẩm này trong combo <span className="text-red-500">*</span></Label>
+                                  <Input
+                                    type="number"
+                                    value={combo.mixConfig.currentProductQty ?? 1}
+                                    onChange={(e) => {
+                                      const next = [...combos];
+                                      next[index].mixConfig.currentProductQty = Math.max(1, Number(e.target.value));
+                                      setCombos(next);
+                                    }}
+                                    min={1}
+                                    required
+                                  />
+                                </div>
+                                
+                                {/* Checkbox đối xứng thẳng hàng */}
+                                <div className="space-y-1 flex flex-col justify-end pb-2">
+                                  <Label className="text-xs text-slate-400 dark:text-slate-500">Đồng bộ liên kết</Label>
+                                  <div className="flex items-center gap-2 h-10 border border-slate-100 dark:border-slate-800/50 rounded-md px-3 bg-white dark:bg-slate-900/50">
+                                    <input
+                                      type="checkbox"
+                                      id={`sync-combo-${index}`}
+                                      checked={combo.isSynced ?? false}
+                                      onChange={(e) => {
+                                        const next = [...combos];
+                                        next[index].isSynced = e.target.checked;
+                                        if (e.target.checked && !next[index].syncId) {
+                                          next[index].syncId = 'sync-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                                        }
+                                        setCombos(next);
+                                      }}
+                                      className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                    />
+                                    <Label htmlFor={`sync-combo-${index}`} className="text-xs font-medium cursor-pointer select-none">
+                                      Đồng bộ Combo sang các sản phẩm kèm
+                                    </Label>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Danh sách sản phẩm mua kèm thêm */}
+                              <div className="space-y-2 bg-white dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800 p-3 rounded-lg">
+                                <div className="flex justify-between items-center pb-1">
+                                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Sản phẩm mua kèm thêm (Tối đa 5 sản phẩm)</Label>
+                                  {(combo.mixConfig.items?.length ?? 0) < 5 && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-[11px] gap-1 px-2"
+                                      onClick={() => {
+                                        const next = [...combos];
+                                        const currentItems = next[index].mixConfig.items || [];
+                                        next[index].mixConfig.items = [
+                                          ...currentItems,
+                                          { productId: '', quantity: 1 }
+                                        ];
+                                        setCombos(next);
+                                      }}
+                                    >
+                                      <Plus size={11} /> Thêm sản phẩm kèm
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                {(combo.mixConfig.items?.length ?? 0) === 0 ? (
+                                  <p className="text-xs text-slate-400 py-1 italic">Chưa chọn sản phẩm kèm nào. Vui lòng bấm "Thêm sản phẩm kèm".</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <AnimatePresence initial={false}>
+                                      {combo.mixConfig.items.map((item: any, itemIndex: number) => (
+                                        <motion.div 
+                                          key={itemIndex}
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          exit={{ opacity: 0, x: 10 }}
+                                          transition={{ duration: 0.15 }}
+                                          className="flex gap-2 items-center"
+                                        >
+                                          <select
+                                            value={item.productId}
+                                            onChange={(e) => {
+                                              const next = [...combos];
+                                              next[index].mixConfig.items[itemIndex].productId = e.target.value;
+                                              setCombos(next);
+                                            }}
+                                            className="flex-1 h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-xs"
+                                            required
+                                          >
+                                            <option value="">-- Chọn sản phẩm --</option>
+                                            {allActiveProducts
+                                              .filter((p: any) => p._id !== id) // không chọn chính nó
+                                              .map((p: any) => (
+                                                <option key={p._id} value={p._id}>{p.name}</option>
+                                              ))}
+                                          </select>
+                                          <div className="w-20 shrink-0">
+                                            <Input
+                                              type="number"
+                                              value={item.quantity}
+                                              onChange={(e) => {
+                                                const next = [...combos];
+                                                next[index].mixConfig.items[itemIndex].quantity = Math.max(1, Number(e.target.value));
+                                                setCombos(next);
+                                              }}
+                                              min={1}
+                                              className="h-9 text-xs"
+                                              placeholder="SL"
+                                              required
+                                            />
+                                          </div>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-9 w-9 text-slate-400 hover:text-red-500 shrink-0 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-md"
+                                            onClick={() => {
+                                              const next = [...combos];
+                                              next[index].mixConfig.items = next[index].mixConfig.items.filter((_: any, i: number) => i !== itemIndex);
+                                              setCombos(next);
+                                            }}
+                                          >
+                                            <Trash size={14} />
+                                          </Button>
+                                        </motion.div>
+                                      ))}
+                                    </AnimatePresence>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Hình thức ưu đãi mix */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Hình thức ưu đãi <span className="text-red-500">*</span></Label>
+                                  <select
+                                    value={combo.mixConfig.rewardType}
+                                    onChange={(e) => {
+                                      const next = [...combos];
+                                      next[index].mixConfig.rewardType = e.target.value;
+                                      if (e.target.value === 'gift_other') {
+                                        next[index].mixConfig.giftQty = 1;
+                                        next[index].mixConfig.rewardValue = undefined;
+                                      } else {
+                                        next[index].mixConfig.rewardValue = 10;
+                                        next[index].mixConfig.giftProductId = undefined;
+                                        next[index].mixConfig.giftQty = undefined;
+                                      }
+                                      setCombos(next);
+                                    }}
+                                    className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                                  >
+                                    <option value="discount_percent">Giảm giá theo %</option>
+                                    <option value="discount_amount">Giảm số tiền cụ thể</option>
+                                    <option value="gift_other">Tặng sản phẩm khác</option>
+                                  </select>
+                                </div>
+
+                                {/* Mức giảm giá mix */}
+                                {(combo.mixConfig.rewardType === 'discount_percent' || combo.mixConfig.rewardType === 'discount_amount') && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">
+                                      Mức giảm giá{' '}
+                                      {combo.mixConfig.rewardType === 'discount_percent' ? '(%)' : '(VND)'}
+                                    </Label>
+                                    <Input
+                                      type="number"
+                                      value={combo.mixConfig.rewardValue ?? ''}
+                                      onChange={(e) => {
+                                        const next = [...combos];
+                                        next[index].mixConfig.rewardValue = Number(e.target.value);
+                                        setCombos(next);
+                                      }}
+                                      min={1}
+                                      max={combo.mixConfig.rewardType === 'discount_percent' ? 100 : undefined}
+                                      required
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Tặng sản phẩm khác mix */}
+                                {combo.mixConfig.rewardType === 'gift_other' && (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Sản phẩm tặng kèm <span className="text-red-500">*</span></Label>
+                                      <select
+                                        value={combo.mixConfig.giftProductId ?? ''}
+                                        onChange={(e) => {
+                                          const next = [...combos];
+                                          next[index].mixConfig.giftProductId = e.target.value ? e.target.value : undefined;
+                                          setCombos(next);
+                                        }}
+                                        className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                                        required
+                                      >
+                                        <option value="">-- Chọn sản phẩm tặng --</option>
+                                        {allActiveProducts.map((p: any) => (
+                                          <option key={p._id} value={p._id}>{p.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Số lượng tặng <span className="text-red-500">*</span></Label>
+                                      <Input
+                                        type="number"
+                                        value={combo.mixConfig.giftQty ?? 1}
+                                        onChange={(e) => {
+                                          const next = [...combos];
+                                          next[index].mixConfig.giftQty = Math.max(1, Number(e.target.value));
+                                          setCombos(next);
+                                        }}
+                                        min={1}
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            )}
+                          </>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                    </AnimatePresence>
                   </div>
                 )}
               </CardContent>
@@ -827,7 +2008,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                     {metaTitle.trim() || name || 'Tên sản phẩm'}
                   </div>
                   <div className="text-emerald-600 text-xs">
-                    /products/{slug || 'san-pham'}
+                    /{selectedCategorySlug || 'chua-phan-loai'}/{slug || 'san-pham'}
                   </div>
                   <div className="text-slate-600 text-xs mt-1 line-clamp-2">
                     {metaDescription.trim() || stripHtml(description || '') || 'Mô tả ngắn sẽ hiển thị tại đây.'}
@@ -856,33 +2037,292 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
               </div>
               <div className="space-y-2">
                 <Label>Danh mục <span className="text-red-500">*</span></Label>
-                <ProductCategoryCombobox
-                  categories={categoriesData}
-                  value={categoryId}
-                  onChange={setCategoryId}
-                  onQuickCreate={() => setShowCategoryModal(true)}
-                />
+                {multiCategoryEnabled ? (
+                  <>
+                  <CategoryTagsInput
+                    categories={categoriesData}
+                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
+                    onQuickCreate={() => setShowCategoryModal(true)}
+                    onChange={(ids) => {
+                      setCategoryId(ids[0] ?? '');
+                      setAdditionalCategoryIds(ids.slice(1));
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
+                  {hasTaxonomyConflict && (
+                    <p className="text-xs font-semibold text-red-500 mt-1.5">
+                      Lưu ý: Các danh mục được chọn đang thuộc các kiểu sản phẩm khác nhau. 
+                      Vui lòng chọn các danh mục thuộc cùng một kiểu sản phẩm để đảm bảo bộ lọc thuộc tính đồng nhất.
+                    </p>
+                  )}
+                  </>
+                ) : (
+                  <ProductCategoryCombobox
+                    categories={categoriesData}
+                    value={categoryId}
+                    onChange={setCategoryId}
+                    onQuickCreate={() => setShowCategoryModal(true)}
+                  />
+                )}
               </div>
             </CardContent>
           </Card>
           
+          {enableProductTypes && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Phân loại chuyên sâu</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Kiểu sản phẩm</Label>
+                  <select
+                    value={productTypeId}
+                    onChange={(e) => {
+                      setProductTypeId(e.target.value);
+                      setAttributeTermIds([]); // Reset terms when type changes
+                    }}
+                    className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                  >
+                    <option value="">Chọn kiểu sản phẩm...</option>
+                    {availableProductTypes.map((type) => (
+                      <option key={type._id} value={type._id}>{type.name}</option>
+                    ))}
+                  </select>
+                  {categoryId && categoryProductTypesData && categoryProductTypesData.length > 0 && (
+                    <p className="text-xs text-slate-500">
+                      Đang gợi ý theo danh mục đã chọn. Nếu danh mục chỉ có một kiểu, hệ thống tự chọn để hiện đúng thuộc tính.
+                    </p>
+                  )}
+                </div>
+                {formConfig && formConfig.groups.map(group => {
+                  const isRange = group.filterType === 'range';
+                  const IconComponent = getAttributeIconComponent(group.iconPath);
+                  const iconColor = group.displayConfig?.iconColor || group.displayConfig?.color || '#ea580c';
+                  
+                  const renderLabelWithIcon = () => (
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        {group.iconPath && (
+                          <span style={{ color: iconColor }} className="shrink-0">
+                            <IconComponent size={16} />
+                          </span>
+                        )}
+                        <Label className="text-sm font-semibold">{group.name}</Label>
+                      </div>
+                      {!isRange && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-slate-500 hover:text-[#9B2C3B] hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md shrink-0"
+                          onClick={() => handleAddStandardTerm(group)}
+                          title={`Thêm nhanh giá trị cho ${group.name}`}
+                        >
+                          <Plus size={14} />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                  
+                  if (isRange) {
+                    const currentInput = rangeInputs[group._id] || { value: '', unit: '%' };
+                    const dominantUnit = getDominantUnit(group.terms);
+                    const isUnitDifferent = dominantUnit && currentInput.value && currentInput.unit !== dominantUnit;
+                    const configuredUnits = (group.displayConfig?.units as string[]) || ['%', 'ml', 'kg', 'g'];
+                    const availableUnits = currentInput.unit && !configuredUnits.includes(currentInput.unit)
+                      ? [...configuredUnits, currentInput.unit]
+                      : configuredUnits;
+                    
+                    const handleAddUnit = async () => {
+                      const newUnit = window.prompt(`Nhập đơn vị mới cho nhóm thuộc tính "${group.name}":`);
+                      if (newUnit && newUnit.trim()) {
+                        const trimmedUnit = newUnit.trim();
+                        if (availableUnits.includes(trimmedUnit)) {
+                          toast.error("Đơn vị này đã tồn tại.");
+                          return;
+                        }
+                        const updatedUnits = [...availableUnits, trimmedUnit];
+                        try {
+                          await updateAttributeGroup({
+                            id: group._id,
+                            displayConfig: {
+                              ...group.displayConfig,
+                              units: updatedUnits
+                            }
+                          });
+                          setRangeInputs(prev => ({
+                            ...prev,
+                            [group._id]: { ...prev[group._id], unit: trimmedUnit }
+                          }));
+                          toast.success(`Đã thêm đơn vị "${trimmedUnit}" thành công`);
+                        } catch (err) {
+                          console.error(err);
+                          toast.error("Không thể lưu đơn vị mới");
+                        }
+                      }
+                    };
+
+                    return (
+                      <div key={group._id} className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        {renderLabelWithIcon()}
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input
+                            type="number"
+                            step="any"
+                            placeholder="Nhập giá trị số..."
+                            value={currentInput.value}
+                            onChange={(e) => {
+                              setRangeInputs(prev => ({
+                                ...prev,
+                                [group._id]: { ...(prev[group._id] || { unit: dominantUnit || '%' }), value: e.target.value }
+                              }));
+                            }}
+                            className="flex-1 h-9 text-sm"
+                          />
+                          <select
+                            value={currentInput.unit}
+                            onChange={(e) => {
+                              setRangeInputs(prev => ({
+                                ...prev,
+                                [group._id]: { ...(prev[group._id] || { value: '' }), unit: e.target.value }
+                              }));
+                            }}
+                            className="h-9 w-24 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                          >
+                            {availableUnits.map(unit => (
+                              <option key={unit} value={unit}>{unit}</option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleAddUnit}
+                            className="h-9 w-9 px-0 shrink-0"
+                            title="Thêm đơn vị mới"
+                          >
+                            +
+                          </Button>
+                        </div>
+                        {isUnitDifferent && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                            ⚠️ Đơn vị đang chọn ({currentInput.unit}) khác với đơn vị phổ biến ({dominantUnit}).
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  const hasManyTerms = group.terms.length > 10;
+                  const searchText = searchTerms[group._id] || '';
+                  const filteredTerms = hasManyTerms && searchText.trim()
+                    ? group.terms.filter(term => removeTones(term.name).includes(removeTones(searchText)))
+                    : group.terms;
+
+                  return (
+                    <div key={group._id} className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {renderLabelWithIcon()}
+                      {hasManyTerms && (
+                        <Input
+                          type="text"
+                          placeholder={`Tìm nhanh ${group.name.toLowerCase()}...`}
+                          value={searchText}
+                          onChange={(e) => {
+                            setSearchTerms(prev => ({ ...prev, [group._id]: e.target.value }));
+                          }}
+                          className="h-8 text-xs mb-2 bg-white dark:bg-slate-800"
+                        />
+                      )}
+                      <div className={`grid grid-cols-2 gap-2 mt-1 ${hasManyTerms ? 'max-h-48 overflow-y-auto pr-1' : ''}`}>
+                        {filteredTerms.map(term => {
+                          const isSelected = attributeTermIds.includes(term._id);
+                          const isSingle = group.inputType === 'radio' || group.filterType === 'single';
+
+                          return (
+                            <label
+                              key={term._id}
+                              className={`flex items-center gap-2.5 cursor-pointer px-3 py-2 rounded-lg border transition-all duration-200 select-none shadow-sm active:scale-[0.98] ${
+                                isSelected
+                                  ? 'bg-[#9B2C3B]/5 dark:bg-[#9B2C3B]/10 border-[#9B2C3B] dark:border-[#9B2C3B]'
+                                  : 'bg-slate-50/50 dark:bg-slate-900/40 border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
+                              }`}
+                            >
+                              <input
+                                type={isSingle ? 'radio' : 'checkbox'}
+                                name={`attr_${group._id}`}
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (isSingle) {
+                                    const otherTermIds = group.terms.map(t => t._id).filter(id => id !== term._id);
+                                    setAttributeTermIds(prev => [...prev.filter(id => !otherTermIds.includes(id)), term._id]);
+                                  } else {
+                                    if (e.target.checked) {
+                                      setAttributeTermIds(prev => [...prev, term._id]);
+                                    } else {
+                                      setAttributeTermIds(prev => prev.filter(id => id !== term._id));
+                                    }
+                                  }
+                                }}
+                                className="sr-only"
+                              />
+
+                              {/* Custom Indicator */}
+                              {isSingle ? (
+                                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all bg-white dark:bg-slate-950 shrink-0 ${
+                                  isSelected ? 'border-[#9B2C3B]' : 'border-slate-300 dark:border-slate-700'
+                                }`}>
+                                  {isSelected && (
+                                    <div className="w-2 h-2 rounded-full bg-[#9B2C3B] scale-100 transition-transform duration-200" />
+                                  )}
+                                </div>
+                              ) : (
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0 ${
+                                  isSelected ? 'bg-[#9B2C3B] border-[#9B2C3B]' : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700'
+                                }`}>
+                                  {isSelected && (
+                                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </div>
+                              )}
+
+                              <span className={`text-xs truncate ${
+                                isSelected
+                                  ? 'text-[#9B2C3B] dark:text-[#f43f5e] font-semibold'
+                                  : 'text-slate-700 dark:text-slate-300 font-normal'
+                              }`}>
+                                {term.name}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader><CardTitle className="text-base">Ảnh sản phẩm</CardTitle></CardHeader>
             <CardContent>
-              <ImageUpload
+              <ImageUploader
                 value={image}
                 storageId={imageStorageId}
-                onChange={setImage}
-                onStorageIdChange={setImageStorageId}
+                onChange={(url, storageId) => {
+                  setImage(url);
+                  setImageStorageId(storageId);
+                }}
                 folder="products"
                 naming={{ entityName: slug.trim() || 'product', style: 'slug-index', index: 1 }}
-                enableCrop={enableImageCrop}
+                deleteMode="defer"
+                aspectRatio="square"
                 cropAspectRatio={defaultImageAspectRatio}
               />
             </CardContent>
           </Card>
 
-          {enabledFields.has('images') && (
+          {enabledFields.has('images') && image && (
             <Card>
               <CardHeader><CardTitle className="text-base">Thư viện ảnh</CardTitle></CardHeader>
               <CardContent>
@@ -891,7 +2331,7 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
                   onChange={setGalleryItems}
                   folder="products"
                   naming={{ entityName: slug.trim() || 'product', style: 'slug-index' }}
-                  namingIndexOffset={image ? 1 : 0}
+                  namingIndexOffset={1}
                   deleteMode="defer"
                   imageKey="url"
                   minItems={0}
@@ -927,22 +2367,49 @@ function ProductEditContent({ params }: { params: Promise<{ id: string }> }) {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 lg:left-[280px] right-0 p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
-        <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/products'); }}>Hủy bỏ</Button>
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={isSubmitting || !hasChanges}
-          className={!hasChanges && !isSubmitting
-            ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-            : undefined}
-        >
-          {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-          {isSubmitting || saveStatus === 'saving'
-            ? 'Đang lưu...'
-            : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
-        </Button>
-      </div>
+      <HomeComponentStickyFooter
+        isSubmitting={isSubmitting || saveStatus === 'saving'}
+        hasChanges={hasChanges}
+        onCancel={() =>{  router.push('/admin/products'); }}
+        submitLabel="Lưu thay đổi"
+        disableSave={isSubmitting || hasTaxonomyConflict}
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/products'); }} disabled={isSubmitting}>Hủy bỏ</Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <AiEntityImportDialog
+              kind="product"
+              enabledFields={enabledFields}
+              onApply={handleApplyAiProduct}
+              enableProductTypes={enableProductTypes}
+              enableCombos={enableCombosSetting}
+              formConfig={formConfig}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.open(selectedCategorySlug ? `/${selectedCategorySlug}/${slug}` : `/products/${slug}`, '_blank')}
+              className="gap-2"
+              disabled={!slug.trim()}
+            >
+              <ExternalLink size={16} />
+              Xem trên web
+            </Button>
+            <Button
+              type="submit"
+              variant="accent"
+              disabled={isSubmitting || hasTaxonomyConflict || !hasChanges}
+              className={(!hasChanges || hasTaxonomyConflict) && !isSubmitting
+                ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
+                : undefined}
+            >
+              {isSubmitting || saveStatus === 'saving'
+                ? 'Đang lưu...'
+                : (saveStatus === 'saved' && !hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
     </form>
     </>
   );

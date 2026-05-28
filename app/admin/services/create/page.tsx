@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Briefcase, Plus } from 'lucide-react';
+import { Briefcase, Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../components/ui';
@@ -18,6 +18,8 @@ import {
   normalizeSlotTemplateByWeekday,
 } from '@/lib/bookings/slotTemplate';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
+import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
 
 const MODULE_KEY = 'services';
 
@@ -27,6 +29,8 @@ export default function ServiceCreatePage() {
   const createService = useMutation(api.services.create);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: MODULE_KEY });
+  const bookingsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'bookings' });
+  const isBookingsModuleEnabled = bookingsModule?.enabled ?? false;
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -40,6 +44,7 @@ export default function ServiceCreatePage() {
   const [thumbnail, setThumbnail] = useState<string | undefined>();
   const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | undefined>();
   const [categoryId, setCategoryId] = useState('');
+  const [additionalCategoryIds, setAdditionalCategoryIds] = useState<string[]>([]);
   const [price, setPrice] = useState<number | undefined>();
   const [duration, setDuration] = useState('');
   const [bookingEnabled, setBookingEnabled] = useState(true);
@@ -52,6 +57,7 @@ export default function ServiceCreatePage() {
   const [status, setStatus] = useState<'Draft' | 'Published'>('Draft');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editorResetKey, setEditorResetKey] = useState(0);
 
   useEffect(() => {
     if (settingsData) {
@@ -68,19 +74,58 @@ export default function ServiceCreatePage() {
     return fields;
   }, [fieldsData]);
 
+  const categoryData = categoriesData?.find((c) => c._id === categoryId);
+  const categorySlugPreview = categoryData?.slug || 'chua-phan-loai';
+
+
   const hasMarkdownRender = enabledFields.has('markdownRender');
   const hasHtmlRender = enabledFields.has('htmlRender');
   const showAdvancedRenderCard = hasMarkdownRender || hasHtmlRender;
+  const multiCategoryEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableMultipleCategories')?.value);
 
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setTitle(val);
-    const generatedSlug = val.toLowerCase()
+  const generateSlugFromTitle = (value: string) => value.toLowerCase()
       .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
       .replaceAll(/[đĐ]/g, "d")
       .replaceAll(/[^a-z0-9\s]/g, '')
       .replaceAll(/\s+/g, '-');
-    setSlug(generatedSlug);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setTitle(val);
+    setSlug(generateSlugFromTitle(val));
+  };
+
+  const handleApplyAiService = (item: AiEntityImportPayload) => {
+    const nextTitle = item.title?.trim() || item.name?.trim() || '';
+    if (!nextTitle) {return;}
+
+    setTitle(nextTitle);
+    setSlug(item.slug?.trim() || generateSlugFromTitle(nextTitle));
+    const nextContent = item.content || item.description || item.htmlRender || item.markdownRender || '';
+    setContent(nextContent);
+    if (item.content) {
+      setRenderType('content');
+      setHtmlRender(item.htmlRender || '');
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.htmlRender) {
+      setRenderType('html');
+      setHtmlRender(item.htmlRender);
+      setMarkdownRender(item.markdownRender || '');
+    } else if (item.markdownRender) {
+      setRenderType('markdown');
+      setMarkdownRender(item.markdownRender);
+      setHtmlRender('');
+    }
+    setExcerpt(item.excerpt || item.description || truncateText(stripHtml(nextContent), 180));
+    setMetaTitle(item.metaTitle || truncateText(nextTitle, 60));
+    setMetaDescription(item.metaDescription || truncateText(stripHtml(item.excerpt || nextContent), 160));
+    if (item.thumbnail) {
+      setThumbnail(item.thumbnail);
+      setThumbnailStorageId(undefined);
+    }
+    if (typeof item.price === 'number') {setPrice(item.price);}
+    if (item.duration) {setDuration(item.duration);}
+    setEditorResetKey((prev) => prev + 1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,19 +136,23 @@ export default function ServiceCreatePage() {
     try {
       const resolvedMetaTitle = truncateText(title.trim(), 60);
       const resolvedMetaDescription = truncateText(stripHtml(excerpt || content || ''), 160);
+      const resolvedBookingEnabled = isBookingsModuleEnabled ? bookingEnabled : false;
       await createService({
         categoryId: categoryId as Id<"serviceCategories">,
+        additionalCategoryIds: multiCategoryEnabled
+          ? additionalCategoryIds.filter((id) => id !== categoryId) as Id<"serviceCategories">[]
+          : undefined,
         content,
         renderType,
         markdownRender: markdownRender.trim() || undefined,
         htmlRender: htmlRender.trim() || undefined,
         duration: duration.trim() || undefined,
-        bookingEnabled,
-        bookingDurationMin: bookingEnabled ? bookingDurationMin : undefined,
-        bookingSlotIntervalMin: bookingEnabled ? bookingSlotIntervalMin : undefined,
-        bookingCapacityPerSlot: bookingEnabled ? bookingCapacityPerSlot : undefined,
-        bookingSlotTemplateDefault: bookingEnabled ? normalizeSlotTemplate(bookingSlotTemplateDefault) : undefined,
-        bookingSlotTemplateByWeekday: bookingEnabled ? normalizeSlotTemplateByWeekday(bookingSlotTemplateByWeekday) : undefined,
+        bookingEnabled: resolvedBookingEnabled,
+        bookingDurationMin: resolvedBookingEnabled ? bookingDurationMin : undefined,
+        bookingSlotIntervalMin: resolvedBookingEnabled ? bookingSlotIntervalMin : undefined,
+        bookingCapacityPerSlot: resolvedBookingEnabled ? bookingCapacityPerSlot : undefined,
+        bookingSlotTemplateDefault: resolvedBookingEnabled ? normalizeSlotTemplate(bookingSlotTemplateDefault) : undefined,
+        bookingSlotTemplateByWeekday: resolvedBookingEnabled ? normalizeSlotTemplateByWeekday(bookingSlotTemplateByWeekday) : undefined,
         excerpt: excerpt.trim() || undefined,
         featured,
         metaDescription: enabledFields.has('metaDescription')
@@ -168,60 +217,62 @@ export default function ServiceCreatePage() {
                )}
               <div className="space-y-2">
                  <Label>Nội dung</Label>
-                 <LexicalEditor onChange={setContent} />
+                 <LexicalEditor onChange={setContent} initialContent={content} resetKey={editorResetKey} />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Đặt lịch</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={bookingEnabled}
-                  onChange={(e) =>{  setBookingEnabled(e.target.checked); }}
-                  className="w-4 h-4 rounded border-slate-300"
-                />
-                <span className="text-sm text-slate-700 dark:text-slate-200">Cho phép đặt lịch</span>
-              </label>
+          {isBookingsModuleEnabled && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Đặt lịch</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={bookingEnabled}
+                    onChange={(e) =>{  setBookingEnabled(e.target.checked); }}
+                    className="w-4 h-4 rounded border-slate-300"
+                  />
+                  <span className="text-sm text-slate-700 dark:text-slate-200">Cho phép đặt lịch</span>
+                </label>
 
-              {bookingEnabled && (
-                <div className="space-y-4 rounded-md border border-slate-200 dark:border-slate-700 p-3">
-                  <div className="space-y-2">
-                    <Label>Thời lượng (phút)</Label>
-                    <Input
-                      type="number"
-                      min={15}
-                      step={5}
-                      value={bookingDurationMin}
-                      onChange={(e) =>{  setBookingDurationMin(Number(e.target.value || 60)); }}
-                    />
+                {bookingEnabled && (
+                  <div className="space-y-4 rounded-md border border-slate-200 dark:border-slate-700 p-3">
+                    <div className="space-y-2">
+                      <Label>Thời lượng (phút)</Label>
+                      <Input
+                        type="number"
+                        min={15}
+                        step={5}
+                        value={bookingDurationMin}
+                        onChange={(e) =>{  setBookingDurationMin(Number(e.target.value || 60)); }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Bước lịch (phút)</Label>
+                      <Input
+                        type="number"
+                        min={5}
+                        step={5}
+                        value={bookingSlotIntervalMin}
+                        onChange={(e) =>{  setBookingSlotIntervalMin(Number(e.target.value || 30)); }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Số khách / khung</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={bookingCapacityPerSlot}
+                        onChange={(e) =>{  setBookingCapacityPerSlot(Number(e.target.value || 1)); }}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Bước lịch (phút)</Label>
-                    <Input
-                      type="number"
-                      min={5}
-                      step={5}
-                      value={bookingSlotIntervalMin}
-                      onChange={(e) =>{  setBookingSlotIntervalMin(Number(e.target.value || 30)); }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Số khách / khung</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={bookingCapacityPerSlot}
-                      onChange={(e) =>{  setBookingCapacityPerSlot(Number(e.target.value || 1)); }}
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {showAdvancedRenderCard && (
             <Card>
@@ -305,7 +356,7 @@ export default function ServiceCreatePage() {
                     {metaTitle.trim() || title || 'Tên dịch vụ'}
                   </div>
                   <div className="text-emerald-600 text-xs">
-                    /services/{slug || 'dich-vu'}
+                    /{categorySlugPreview}/{slug || 'dich-vu'}
                   </div>
                   <div className="text-slate-600 text-xs mt-1 line-clamp-2">
                     {metaDescription.trim() || excerpt || 'Mô tả ngắn sẽ hiển thị tại đây.'}
@@ -333,7 +384,21 @@ export default function ServiceCreatePage() {
               </div>
               <div className="space-y-2">
                 <Label>Danh mục <span className="text-red-500">*</span></Label>
-                <div className="flex gap-2">
+                {multiCategoryEnabled ? (
+                  <>
+                  <CategoryTagsInput
+                    categories={categoriesData}
+                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
+                    onQuickCreate={() =>{  setShowCategoryModal(true); }}
+                    onChange={(ids) => {
+                      setCategoryId(ids[0] ?? '');
+                      setAdditionalCategoryIds(ids.slice(1));
+                    }}
+                  />
+                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
+                  </>
+                ) : (
+                  <div className="flex gap-2">
                   <select 
                     value={categoryId} 
                     onChange={(e) =>{  setCategoryId(e.target.value); }}
@@ -354,7 +419,8 @@ export default function ServiceCreatePage() {
                   >
                     <Plus size={16} />
                   </Button>
-                </div>
+                  </div>
+                )}
               </div>
               {enabledFields.has('featured') && (
                 <div className="flex items-center gap-2">
@@ -427,7 +493,18 @@ export default function ServiceCreatePage() {
         onCancel={() =>{  router.push('/admin/services'); }}
         disableSave={isSubmitting}
         submitClassName="bg-teal-600 hover:bg-teal-500"
-      />
+      >
+        <>
+          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/services'); }}>Hủy bỏ</Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <AiEntityImportDialog kind="service" enabledFields={enabledFields} onApply={handleApplyAiService} />
+            <Button type="submit" variant="accent" disabled={isSubmitting || !title.trim() || !categoryId} className="bg-teal-600 hover:bg-teal-500">
+              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
+              Đăng
+            </Button>
+          </div>
+        </>
+      </HomeComponentStickyFooter>
     </form>
     </>
   );

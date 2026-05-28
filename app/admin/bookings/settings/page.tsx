@@ -171,12 +171,14 @@ function BookingSettingsContent() {
   const [activeSlotTemplateScope, setActiveSlotTemplateScope] = useState<SlotTemplateScope>('default');
   const [slotTemplateServiceId, setSlotTemplateServiceId] = useState<string>('global');
   const [isSaving, setIsSaving] = useState(false);
+  const [isFormHydrated, setIsFormHydrated] = useState(false);
 
   React.useEffect(() => {
     setForm(currentValues);
+    setIsFormHydrated(true);
   }, [currentValues]);
 
-  const hasChanges = JSON.stringify(form) !== JSON.stringify(currentValues);
+  const hasChanges = isFormHydrated && JSON.stringify(form) !== JSON.stringify(currentValues);
   const isOvernight = isOvernightWindow(form.dayStartHour, form.dayEndHour);
   const durationHours = resolveWindowDurationHours(form.dayStartHour, form.dayEndHour);
   const isCustomMaxAdvanceDays = !MAX_ADVANCE_DAY_PRESETS.includes(form.maxAdvanceDays as (typeof MAX_ADVANCE_DAY_PRESETS)[number]);

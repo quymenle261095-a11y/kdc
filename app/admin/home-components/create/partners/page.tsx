@@ -1,22 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Image as ImageIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui';
+import { Button } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { useSectionHeaderState } from '../../_shared/hooks/useSectionHeaderState';
+import { HeaderConfigSection } from '../../_shared/components/HeaderConfigSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { PartnersPreview } from '../../partners/_components/PartnersPreview';
-import type { PartnersStyle } from '../../partners/_types';
+import { DEFAULT_PARTNERS_CONFIG, DEFAULT_PARTNERS_CORNER_RADIUS, DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle } from '../../partners/_types';
 import type { ImageItem } from '../../../components/MultiImageUploader';
-import { MultiImageUploader } from '../../../components/MultiImageUploader';
+import { PartnersForm } from '../../partners/_components/PartnersForm';
+import { AiDemoPartnersImport } from '../../product-list/_components/AiDemoProductsImport';
 
-interface PartnerItem extends ImageItem {
-  id: string | number;
-  url: string;
-  link: string;
-  name?: string;
-}
+interface PartnerItem extends ImageItem { id: string | number; url: string; link: string; name?: string; }
 
 export default function PartnersCreatePage() {
   const COMPONENT_TYPE = 'Partners';
@@ -26,16 +24,53 @@ export default function PartnersCreatePage() {
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
 
+  const headerState = useSectionHeaderState(DEFAULT_PARTNERS_CONFIG);
+  const { openSections: headerOpenSections, toggleSection: toggleHeaderSection } = useFormSectionsState(['header'], true);
+
   const [partnersItems, setPartnersItems] = useState<PartnerItem[]>([
     { id: 'item-1', link: '', name: '', url: '' },
     { id: 'item-2', link: '', name: '', url: '' }
   ]);
   const [partnersStyle, setPartnersStyle] = useState<PartnersStyle>('grid');
+  const [displayMode, setDisplayMode] = useState<PartnersDisplayMode>(DEFAULT_PARTNERS_DISPLAY_MODE);
+  const [cornerRadius, setCornerRadius] = useState<PartnersCornerRadius>(DEFAULT_PARTNERS_CORNER_RADIUS);
+  const [logoSize, setLogoSize] = useState<PartnersLogoSize>(DEFAULT_PARTNERS_LOGO_SIZE);
+  const [showBorder, setShowBorder] = useState(DEFAULT_PARTNERS_SHOW_BORDER);
+  const [spacing, setSpacing] = useState<PartnersSpacing>(DEFAULT_PARTNERS_SPACING);
+
+  const DEMO_PARTNERS_ITEMS: PartnerItem[] = [
+    { id: 'demo-1', link: '', name: 'Apex Digital', url: '/demo/partners/partner-1.png' },
+    { id: 'demo-2', link: '', name: 'NexaCore', url: '/demo/partners/partner-2.png' },
+    { id: 'demo-3', link: '', name: 'InfiniLoop', url: '/demo/partners/partner-3.png' },
+    { id: 'demo-4', link: '', name: 'Summit Labs', url: '/demo/partners/partner-4.png' },
+    { id: 'demo-5', link: '', name: 'GreenLeaf', url: '/demo/partners/partner-5.png' },
+    { id: 'demo-6', link: '', name: 'Globex Corp', url: '/demo/partners/partner-6.png' },
+  ];
+
+  const handleUseDemoImages = () => {
+    setPartnersItems(DEMO_PARTNERS_ITEMS);
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     void handleSubmit(e, {
-      items: partnersItems.map((item) => ({ link: item.link, name: item.name, url: item.url })),
+      displayMode,
+      cornerRadius,
+      logoSize,
+      showBorder,
+      spacing,
+      items: partnersItems.map((item) => ({ link: item.link, name: item.name, url: item.url, storageId: item.storageId })),
       style: partnersStyle,
+      // Header fields
+      hideHeader: headerState.hideHeader,
+      showTitle: headerState.showTitle,
+      showSubtitle: headerState.showSubtitle,
+      subtitle: headerState.subtitle,
+      headerAlign: headerState.headerAlign,
+      titleColorPrimary: headerState.titleColorPrimary,
+      subtitleAboveTitle: headerState.subtitleAboveTitle,
+      uppercaseText: headerState.uppercaseText,
+      showBadge: headerState.showBadge,
+      badgeText: headerState.badgeText,
     });
   };
 
@@ -55,85 +90,61 @@ export default function PartnersCreatePage() {
       customFontState={customFontState}
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
+      skipTitleInput={true}
     >
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Logo đối tác</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MultiImageUploader<PartnerItem>
-            items={partnersItems}
-            onChange={setPartnersItems}
-            folder="partners"
-            imageKey="url"
-            extraFields={[{ key: 'link', placeholder: 'Link website đối tác (tùy chọn)', type: 'url' }]}
-            minItems={1}
-            maxItems={20}
-            aspectRatio="video"
-            columns={4}
-            showReorder={true}
-            addButtonText="Thêm logo"
-            emptyText="Chưa có logo nào"
-            layout="vertical"
-          />
-        </CardContent>
-      </Card>
+      <HeaderConfigSection
+        hideHeader={headerState.hideHeader}
+        title={title}
+        showTitle={headerState.showTitle}
+        subtitle={headerState.subtitle}
+        showSubtitle={headerState.showSubtitle}
+        headerAlign={headerState.headerAlign}
+        titleColorPrimary={headerState.titleColorPrimary}
+        subtitleAboveTitle={headerState.subtitleAboveTitle}
+        uppercaseText={headerState.uppercaseText}
+        showBadge={headerState.showBadge}
+        badgeText={headerState.badgeText}
+        onHideHeaderChange={headerState.setHideHeader}
+        onTitleChange={setTitle}
+        onShowTitleChange={headerState.setShowTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onShowSubtitleChange={headerState.setShowSubtitle}
+        onHeaderAlignChange={headerState.setHeaderAlign}
+        onTitleColorPrimaryChange={headerState.setTitleColorPrimary}
+        onSubtitleAboveTitleChange={headerState.setSubtitleAboveTitle}
+        onUppercaseTextChange={headerState.setUppercaseText}
+        onShowBadgeChange={headerState.setShowBadge}
+        onBadgeTextChange={headerState.setBadgeText}
+        expanded={headerOpenSections.header}
+        onExpandedChange={(open) => toggleHeaderSection('header', open)}
+        className="mb-3"
+        titleRequired={true}
+        titleLabel="Tiêu đề hiển thị"
+        titlePlaceholder="Nhập tiêu đề component..."
+      />
 
-      <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-800/50 flex items-center justify-center flex-shrink-0">
-            <ImageIcon size={16} className="text-blue-600 dark:text-blue-400" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">Kích thước logo tối ưu</p>
-            <div className="text-xs text-blue-700 dark:text-blue-300">
-              {partnersStyle === 'grid' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Grid</strong></p>
-                  <p>• Logo: <strong>200×80px</strong> (tỷ lệ 5:2) • PNG nền trong suốt</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: 8 cột desktop, 2 cột mobile</p>
-                </div>
-              )}
-              {partnersStyle === 'marquee' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Marquee</strong></p>
-                  <p>• Logo: <strong>160×60px</strong> (tỷ lệ 8:3) • PNG nền trong suốt</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: Auto scroll. Hover để dừng.</p>
-                </div>
-              )}
-              {partnersStyle === 'mono' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Mono</strong></p>
-                  <p>• Logo: <strong>160×60px</strong> (tỷ lệ 8:3) • PNG nền trong suốt</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: Grayscale mặc định, hover để hiện màu. Scroll chậm.</p>
-                </div>
-              )}
-              {partnersStyle === 'badge' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Badge</strong></p>
-                  <p>• Logo: <strong>120×48px</strong> (tỷ lệ 5:2) • PNG nền trong suốt</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: Compact badges với logo + tên đối tác</p>
-                </div>
-              )}
-              {partnersStyle === 'carousel' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Carousel</strong></p>
-                  <p>• Logo: <strong>200×100px</strong> (tỷ lệ 2:1) • PNG nền trong suốt</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: Cards với navigation. 6 items/trang desktop.</p>
-                </div>
-              )}
-              {partnersStyle === 'featured' && (
-                <div className="space-y-1">
-                  <p><strong className="text-blue-900 dark:text-blue-100">Featured</strong></p>
-                  <p>• Logo nổi bật: <strong>400×200px</strong> (tỷ lệ 2:1)</p>
-                  <p>• Logo khác: <strong>150×75px</strong> (tỷ lệ 2:1)</p>
-                  <p className="text-blue-500 dark:text-blue-400 italic">Layout: 1 đối tác nổi bật lớn + grid nhỏ các đối tác khác</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PartnersForm
+        items={partnersItems}
+        setItems={setPartnersItems}
+        cornerRadius={cornerRadius}
+        setCornerRadius={setCornerRadius}
+        logoSize={logoSize}
+        setLogoSize={setLogoSize}
+        showBorder={showBorder}
+        setShowBorder={setShowBorder}
+        showBorderControl={false}
+        spacing={spacing}
+        setSpacing={setSpacing}
+        className="mb-3"
+        actions={(
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={handleUseDemoImages}>
+              Dùng ảnh demo
+            </Button>
+            <AiDemoPartnersImport buttonClassName="h-8" onApply={setPartnersItems} />
+          </>
+        )}
+      />
 
       <PartnersPreview
         items={partnersItems.map((item, idx) => ({ id: idx + 1, link: item.link, name: item.name, url: item.url }))}
@@ -143,8 +154,25 @@ export default function PartnersCreatePage() {
         selectedStyle={partnersStyle}
         onStyleChange={setPartnersStyle}
         title={title}
+        subheading={headerState.subtitle}
+        align={headerState.headerAlign}
+        displayMode={displayMode}
+        cornerRadius={cornerRadius}
+        logoSize={logoSize}
+        showBorder={showBorder}
+        spacing={spacing}
+        onDisplayModeChange={setDisplayMode}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        hideHeader={headerState.hideHeader}
+        showTitle={headerState.showTitle}
+        showSubtitle={headerState.showSubtitle}
+        headerAlign={headerState.headerAlign}
+        titleColorPrimary={headerState.titleColorPrimary}
+        subtitleAboveTitle={headerState.subtitleAboveTitle}
+        uppercaseText={headerState.uppercaseText}
+        showBadge={headerState.showBadge}
+        badgeText={headerState.badgeText}
       />
     </ComponentFormWrapper>
   );

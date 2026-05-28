@@ -3,17 +3,20 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, X } from 'lucide-react';
+import { cn } from '../../../components/ui';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, type PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { COUNTDOWN_STYLES } from '../_lib/constants';
+import { getSectionSpacingClassName, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 import type { CountdownColorTokens } from '../_lib/colors';
 import type {
   CountdownBrandMode,
   CountdownConfigState,
   CountdownStyle,
 } from '../_types';
+import { getCountdownCornerRadiusClassName, normalizeCountdownCornerRadius } from '../_types';
 
 type CountdownSharedContext = 'preview' | 'site';
 
@@ -217,11 +220,13 @@ const CountdownContent = ({
   const buttonLink = safeHref(config.buttonLink);
   const backgroundImage = config.backgroundImage.trim();
   const style = config.style;
+  const sectionSpacingClassName = getSectionSpacingClassName(normalizeSectionSpacing(config.spacing));
+  const cardRadiusClassName = getCountdownCornerRadiusClassName(normalizeCountdownCornerRadius(config.cornerRadius, config.noBorderRadius));
 
   if (style === 'banner') {
     return (
       <section
-        className="relative w-full py-10 md:py-16 px-4 overflow-hidden"
+        className={cn('relative w-full px-4 overflow-hidden', sectionSpacingClassName, cardRadiusClassName)}
         style={{
           background: backgroundImage
             ? `linear-gradient(rgba(2,6,23,0.62), rgba(2,6,23,0.62)), url(${backgroundImage}) center/cover`
@@ -264,10 +269,10 @@ const CountdownContent = ({
 
   if (style === 'floating') {
     return (
-      <section className="py-8 md:py-12 px-4">
+      <section className={cn('px-4', sectionSpacingClassName)}>
         <div className="max-w-4xl mx-auto">
           <div
-            className="relative rounded-2xl overflow-hidden shadow-2xl"
+            className={cn('relative overflow-hidden shadow-2xl', cardRadiusClassName)}
             style={{
               background: backgroundImage
                 ? `linear-gradient(rgba(2,6,23,0.5), rgba(2,6,23,0.5)), url(${backgroundImage}) center/cover`
@@ -308,9 +313,9 @@ const CountdownContent = ({
 
   if (style === 'minimal') {
     return (
-      <section className="py-10 md:py-14 px-4" style={{ backgroundColor: tokens.neutralBackground }}>
+      <section className={cn('px-4', sectionSpacingClassName)} style={{ backgroundColor: tokens.neutralBackground }}>
         <div className="max-w-4xl mx-auto">
-          <div className="rounded-xl border p-6 md:p-10" style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.neutralBorder }}>
+          <div className={cn('border p-6 md:p-10', cardRadiusClassName)} style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.neutralBorder }}>
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 text-center md:text-left">
                 {discountText ? (
@@ -353,9 +358,9 @@ const CountdownContent = ({
 
   if (style === 'split') {
     return (
-      <section className="py-8 md:py-12 px-4">
+      <section className={cn('px-4', sectionSpacingClassName)}>
         <div className="max-w-5xl mx-auto">
-          <div className="rounded-2xl overflow-hidden shadow-lg grid grid-cols-1 md:grid-cols-2">
+          <div className={cn('overflow-hidden shadow-lg grid grid-cols-1 md:grid-cols-2', cardRadiusClassName)}>
             <div
               className="relative flex items-center justify-center min-h-[220px] md:min-h-[320px]"
               style={{
@@ -407,7 +412,7 @@ const CountdownContent = ({
 
   if (style === 'sticky') {
     return (
-      <section className="w-full py-3 px-4" style={{ backgroundColor: tokens.primary }} role="banner" aria-label="Khuyến mãi có thời hạn">
+      <section className={cn('w-full px-4', sectionSpacingClassName, cardRadiusClassName)} style={{ backgroundColor: tokens.primary }} role="banner" aria-label="Khuyến mãi có thời hạn">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
             <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 text-center md:text-left">
@@ -485,7 +490,7 @@ const CountdownContent = ({
       onClick={dismiss}
     >
       <div
-        className="rounded-2xl shadow-2xl overflow-hidden relative w-full max-w-md animate-in fade-in zoom-in-95 duration-300"
+        className={cn('shadow-2xl overflow-hidden relative w-full max-w-md animate-in fade-in zoom-in-95 duration-300', cardRadiusClassName)}
         style={{ backgroundColor: tokens.neutralSurface }}
         onClick={(event) => { event.stopPropagation(); }}
       >
@@ -540,8 +545,8 @@ const CountdownContent = ({
 
   if (context === 'preview') {
     return (
-      <section className="w-full px-4 py-8" style={{ backgroundColor: tokens.neutralBackground }}>
-        <div className="mx-auto max-w-2xl rounded-xl border overflow-hidden" style={{ borderColor: tokens.neutralBorder }}>
+      <section className={cn('w-full px-4', sectionSpacingClassName)} style={{ backgroundColor: tokens.neutralBackground }}>
+        <div className={cn('mx-auto max-w-2xl border overflow-hidden', cardRadiusClassName)} style={{ borderColor: tokens.neutralBorder }}>
           {popupBody}
         </div>
       </section>

@@ -1,5 +1,9 @@
 'use client';
 
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
 import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,14 +12,14 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { LayoutTemplate, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Label } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
-import { HomepageCategoryHeroForm } from '../../_components/HomepageCategoryHeroForm';
+import { ClearableInput, HomepageCategoryHeroForm, type DemoCategoryDataItem } from '../../_components/HomepageCategoryHeroForm';
 import { HomepageCategoryHeroPreview } from '../../_components/HomepageCategoryHeroPreview';
-import { DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG, normalizeHomepageCategoryHeroCategories } from '../../_lib/constants';
+import { DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG, DEMO_HERO_SLIDES, DEMO_CATEGORY_ITEMS, DEMO_CATEGORIES_DATA, normalizeHomepageCategoryHeroCategories } from '../../_lib/constants';
 import { useHomepageCategoryHeroAutoGenerate } from '../../_lib/useHomepageCategoryHeroAutoGenerate';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import type {
@@ -24,17 +28,46 @@ import type {
   HomepageCategoryHeroBrandMode,
   HomepageCategoryHeroCategoryItem,
   HomepageCategoryHeroConfig,
+  HomepageCategoryHeroCornerRadius,
   HomepageCategoryHeroSelectionMode,
   HomepageCategoryHeroSlide,
 } from '../../_types';
+import { DEFAULT_HOMEPAGE_CATEGORY_HERO_CORNER_RADIUS, normalizeHomepageCategoryHeroCornerRadius } from '../../_types';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
+import { normalizeSectionSpacing, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
 
 const COMPONENT_TYPE = 'HomepageCategoryHero';
 
-export default function HomepageCategoryHeroEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type HomepageCategoryHeroEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function HomepageCategoryHeroEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: HomepageCategoryHeroEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const {
     autoGenerateConfig,
     setAutoGenerateConfig,
@@ -59,7 +92,15 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
   const [ctaText, setCtaText] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaText);
   const [ctaUrl, setCtaUrl] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaUrl);
   const [style, setStyle] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.style);
-  const [heroSlides, setHeroSlides] = useState<HomepageCategoryHeroSlide[]>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.heroSlides);
+  const {
+    state: heroSlides,
+    set: setHeroSlides,
+    undo: undoheroSlides,
+    redo: redoheroSlides,
+    canUndo: canUndoheroSlides,
+    canRedo: canRedoheroSlides,
+    reset: resetheroSlides,
+  } = useUndoRedo<HomepageCategoryHeroSlide[]>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.heroSlides, { maxHistory: 15 });
   const [selectionMode, setSelectionMode] = useState<HomepageCategoryHeroSelectionMode>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.selectionMode);
   const [categoryItems, setCategoryItems] = useState<HomepageCategoryHeroCategoryItem[]>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.categories);
   const [hideEmptyCategories, setHideEmptyCategories] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.hideEmptyCategories);
@@ -72,6 +113,11 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
   const [maxCategoriesMobile, setMaxCategoriesMobile] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.maxCategoriesMobile);
   const [attachToHeader, setAttachToHeader] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.attachToHeader);
   const [tabletBehavior, setTabletBehavior] = useState(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.tabletBehavior);
+  const [cornerRadius, setCornerRadius] = useState<HomepageCategoryHeroCornerRadius>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CORNER_RADIUS);
+  const [noVerticalMargin, setNoVerticalMargin] = useState(false);
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.spacing ?? 'normal');
+  const [bannerImageFit, setBannerImageFit] = useState<'cover' | 'contain'>('cover');
+  const [demoCategoriesData, setDemoCategoriesData] = useState<DemoCategoryDataItem[]>(DEMO_CATEGORIES_DATA);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [initialData, setInitialData] = useState<{
@@ -97,6 +143,11 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
     tabletBehavior: HomepageCategoryHeroConfig['tabletBehavior'];
     autoGenerateConfig: HomepageCategoryHeroAutoGenerateConfig;
     autoGenerateMeta?: HomepageCategoryHeroAutoGenerateMeta;
+    demoCategoriesData: DemoCategoryDataItem[];
+    cornerRadius: HomepageCategoryHeroCornerRadius;
+    noVerticalMargin: boolean;
+    spacing: SectionSpacing;
+    bannerImageFit: 'cover' | 'contain';
   } | null>(null);
 
   useEffect(() => {
@@ -114,7 +165,11 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
     setCtaText(config.ctaText ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaText);
     setCtaUrl(config.ctaUrl ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaUrl);
     setStyle(config.style ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.style);
-    setHeroSlides((config.heroSlides as HomepageCategoryHeroSlide[] | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.heroSlides);
+    const resolvedHeroSlides = ((config.heroSlides as HomepageCategoryHeroSlide[] | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.heroSlides).map((s, i) => ({
+      ...s,
+      id: s.id ?? `slide-${i}`,
+    }));
+    resetheroSlides(resolvedHeroSlides);
     setSelectionMode((config.selectionMode as HomepageCategoryHeroSelectionMode | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.selectionMode);
     const resolvedCategories = normalizeHomepageCategoryHeroCategories(
       (config.categories as HomepageCategoryHeroCategoryItem[] | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.categories
@@ -130,8 +185,15 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
     setMaxCategoriesMobile(config.maxCategoriesMobile ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.maxCategoriesMobile);
     setAttachToHeader(config.attachToHeader ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.attachToHeader);
     setTabletBehavior(config.tabletBehavior ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.tabletBehavior);
+    const resolvedSpacing = config.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(config.spacing);
+    const resolvedCornerRadius = normalizeHomepageCategoryHeroCornerRadius(config.cornerRadius, config.noBorderRadius);
+    setCornerRadius(resolvedCornerRadius);
+    setNoVerticalMargin(resolvedSpacing === 'none');
+    setSpacing(resolvedSpacing);
+    setBannerImageFit((config.bannerImageFit as 'cover' | 'contain' | undefined) ?? 'cover');
     setAutoGenerateConfig((config.autoGenerateConfig as HomepageCategoryHeroAutoGenerateConfig | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.autoGenerateConfig);
     setAutoGenerateMeta((config.autoGenerateMeta as HomepageCategoryHeroAutoGenerateMeta | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.autoGenerateMeta);
+    setDemoCategoriesData((config.demoCategoriesData as DemoCategoryDataItem[] | undefined) ?? DEMO_CATEGORIES_DATA);
 
     setInitialData({
       title: component.title,
@@ -141,7 +203,7 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
       ctaText: config.ctaText ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaText,
       ctaUrl: config.ctaUrl ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.ctaUrl,
       style: config.style ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.style,
-      heroSlides: (config.heroSlides as HomepageCategoryHeroSlide[] | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.heroSlides,
+      heroSlides: resolvedHeroSlides,
       selectionMode: (config.selectionMode as HomepageCategoryHeroSelectionMode | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.selectionMode,
       categories: resolvedCategories,
       hideEmptyCategories: config.hideEmptyCategories ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.hideEmptyCategories,
@@ -156,6 +218,11 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
       tabletBehavior: config.tabletBehavior ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.tabletBehavior,
       autoGenerateConfig: (config.autoGenerateConfig as HomepageCategoryHeroAutoGenerateConfig | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.autoGenerateConfig,
       autoGenerateMeta: (config.autoGenerateMeta as HomepageCategoryHeroAutoGenerateMeta | undefined) ?? DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG.autoGenerateMeta,
+      demoCategoriesData: (config.demoCategoriesData as DemoCategoryDataItem[] | undefined) ?? DEMO_CATEGORIES_DATA,
+      cornerRadius: resolvedCornerRadius,
+      noVerticalMargin: resolvedSpacing === 'none',
+      spacing: resolvedSpacing,
+      bannerImageFit: (config.bannerImageFit as 'cover' | 'contain' | undefined) ?? 'cover',
     });
     setHasChanges(false);
   }, [component, id, router]);
@@ -181,7 +248,12 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
     maxCategoriesMobile,
     attachToHeader,
     tabletBehavior,
+    cornerRadius,
+    noVerticalMargin,
+    spacing,
+    bannerImageFit,
     autoGenerateConfig,
+    demoCategoriesData,
     autoGenerateMeta,
     initialData,
     customState,
@@ -197,13 +269,13 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
 
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
     const resolvedInitialSecondary = resolveSecondaryByMode(initialCustom.mode, initialCustom.primary, initialCustom.secondary);
-    const customChanged = showCustomBlock
+    const customChanged = enableTypeOverrides && showCustomBlock
       ? customState.enabled !== initialCustom.enabled
         || customState.mode !== initialCustom.mode
         || customState.primary !== initialCustom.primary
         || resolvedCustomSecondary !== resolvedInitialSecondary
       : false;
-    const customFontChanged = showFontCustomBlock
+    const customFontChanged = enableTypeOverrides && showFontCustomBlock
       ? customFontState.enabled !== initialFontCustom.enabled
         || customFontState.fontKey !== initialFontCustom.fontKey
       : false;
@@ -228,8 +300,13 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
       || maxCategoriesMobile !== initialData.maxCategoriesMobile
       || attachToHeader !== initialData.attachToHeader
       || tabletBehavior !== initialData.tabletBehavior
+      || cornerRadius !== initialData.cornerRadius
+      || noVerticalMargin !== initialData.noVerticalMargin
+      || spacing !== initialData.spacing
+      || bannerImageFit !== initialData.bannerImageFit
       || JSON.stringify(autoGenerateConfig) !== JSON.stringify(initialData.autoGenerateConfig)
       || JSON.stringify(autoGenerateMeta) !== JSON.stringify(initialData.autoGenerateMeta)
+      || JSON.stringify(demoCategoriesData) !== JSON.stringify(initialData.demoCategoriesData)
       || customChanged
       || customFontChanged;
 
@@ -254,40 +331,61 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
     toast.success(`Đã sinh ${generated.categories.length} danh mục.`);
   };
 
+  const handleLoadDemo = () => {
+    setHeroSlides(DEMO_HERO_SLIDES as typeof heroSlides);
+    setCategoryItems(normalizeHomepageCategoryHeroCategories(DEMO_CATEGORY_ITEMS));
+    setDemoCategoriesData(DEMO_CATEGORIES_DATA);
+    toast.success('Tải dữ liệu demo thành công!');
+  };
+
+  useUnsavedGuard(hasChanges);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) {return;}
 
     setIsSubmitting(true);
     try {
-      await updateMutation({
-        id: id as Id<'homeComponents'>,
-        title,
-        active,
-        config: {
-          heading,
-          subheading,
-          ctaText,
-          ctaUrl,
-          style,
-          heroSlides,
-          selectionMode,
-          categories: normalizeHomepageCategoryHeroCategories(categoryItems),
-          autoGenerateConfig,
-          autoGenerateMeta,
-          hideEmptyCategories,
-          showCategoryImage,
-          categoryVisualMode,
-          categoryImageSize,
-          categoryImageShape,
-          maxCategoriesDesktop,
-          maxCategoriesTablet,
-          maxCategoriesMobile,
-          attachToHeader,
-          tabletBehavior,
-        },
-      });
-      if (showCustomBlock) {
+      const nextConfig = {
+        heading,
+        subheading,
+        ctaText,
+        ctaUrl,
+        style,
+        heroSlides,
+        selectionMode,
+        categories: normalizeHomepageCategoryHeroCategories(categoryItems),
+        autoGenerateConfig,
+        autoGenerateMeta,
+        hideEmptyCategories,
+        showCategoryImage,
+        categoryVisualMode,
+        categoryImageSize,
+        categoryImageShape,
+        maxCategoriesDesktop,
+        maxCategoriesTablet,
+        maxCategoriesMobile,
+        attachToHeader,
+        tabletBehavior,
+        cornerRadius,
+        noBorderRadius: cornerRadius === 'none',
+        noVerticalMargin: spacing === 'none',
+        spacing,
+        bannerImageFit,
+        demoCategoriesData,
+      };
+
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: nextConfig, title });
+      } else {
+        await updateMutation({
+          id: id as Id<'homeComponents'>,
+          title,
+          active,
+          config: nextConfig,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -297,7 +395,7 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -328,8 +426,13 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
         tabletBehavior,
         autoGenerateConfig,
         autoGenerateMeta,
+        demoCategoriesData,
+        cornerRadius,
+        noVerticalMargin: spacing === 'none',
+        spacing,
+        bannerImageFit,
       });
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -337,7 +440,7 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -370,7 +473,8 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
             <LayoutTemplate className="w-5 h-5 text-cyan-600" />
             <h1 className="text-2xl font-bold">Hero khám phá danh mục</h1>
           </div>
-          <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">
+          {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+          <Link href={backHref} className="text-sm text-blue-600 hover:underline">
             ← Quay lại danh sách
           </Link>
         </div>
@@ -387,132 +491,145 @@ export default function HomepageCategoryHeroEditPage({ params }: { params: Promi
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <ClearableInput value={title} onChange={setTitle} required />
             </div>
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'cursor-pointer inline-flex items-center justify-center rounded-full w-8 h-4 transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300'
-                )}
-                onClick={() => setActive(!active)}
-              >
-                <div className={cn('w-3 h-3 bg-white rounded-full transition-transform', active ? 'translate-x-2' : '-translate-x-2')} />
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
+</CardContent>
         </Card>
 
-        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:items-start">
-          <div className="space-y-6">
-            <HomepageCategoryHeroForm
-              heroSlides={heroSlides}
-              setHeroSlides={setHeroSlides}
-              categoryItems={categoryItems}
-              setCategoryItems={setCategoryItems}
-              categoriesData={categoriesData}
-              categoryVisualMode={categoryVisualMode}
-              setCategoryVisualMode={setCategoryVisualMode}
-              categoryImageSize={categoryImageSize}
-              setCategoryImageSize={setCategoryImageSize}
-              categoryImageShape={categoryImageShape}
-              setCategoryImageShape={setCategoryImageShape}
-              autoGenerateConfig={autoGenerateConfig}
-              autoGenerateMeta={autoGenerateMeta}
-              autoGenerateReady={isAutoGenerateReady}
-              autoGenerateLoading={isAutoGenerateLoading}
-              hideEmptyCategories={hideEmptyCategories}
-              setHideEmptyCategories={setHideEmptyCategories}
-              onAutoGenerate={handleAutoGenerate}
-            />
+        <div className="space-y-6">
+          <HomepageCategoryHeroForm
+            heroSlides={heroSlides}
+            setHeroSlides={setHeroSlides}
+            style={style}
+            categoryItems={categoryItems}
+            setCategoryItems={setCategoryItems}
+            categoriesData={categoriesData}
+            categoryVisualMode={categoryVisualMode}
+            setCategoryVisualMode={setCategoryVisualMode}
+            categoryImageSize={categoryImageSize}
+            setCategoryImageSize={setCategoryImageSize}
+            categoryImageShape={categoryImageShape}
+            setCategoryImageShape={setCategoryImageShape}
+            autoGenerateConfig={autoGenerateConfig}
+            autoGenerateMeta={autoGenerateMeta}
+            autoGenerateReady={isAutoGenerateReady}
+            autoGenerateLoading={isAutoGenerateLoading}
+            hideEmptyCategories={hideEmptyCategories}
+            setHideEmptyCategories={setHideEmptyCategories}
+            onAutoGenerate={handleAutoGenerate}
+            onLoadDemo={handleLoadDemo}
+            selectionMode={selectionMode}
+            onSelectionModeChange={setSelectionMode}
+            defaultExpanded={false}
+            demoCategoriesData={demoCategoriesData}
+            setDemoCategoriesData={setDemoCategoriesData}
+            cornerRadius={cornerRadius}
+            setCornerRadius={setCornerRadius}
+            noVerticalMargin={noVerticalMargin}
+            setNoVerticalMargin={setNoVerticalMargin}
+            spacing={spacing}
+            setSpacing={setSpacing}
+            bannerImageFit={bannerImageFit}
+            setBannerImageFit={setBannerImageFit}
+          />
 
-            {showCustomBlock && (
-              <TypeColorOverrideCard
-                title="Màu custom Hero danh mục"
-                enabled={customState.enabled}
-                mode={customState.mode}
-                primary={customState.primary}
-                secondary={customState.secondary}
-                compact
-                toggleLabel="Custom"
-                primaryLabel="Chính"
-                secondaryLabel="Phụ"
-                onEnabledChange={(next) => setCustomState((prev) => ({ ...prev, enabled: next }))}
-                onModeChange={(next) => {
-                  if (next === 'single') {
-                    setCustomState((prev) => ({ ...prev, mode: 'single', secondary: prev.primary }));
-                    return;
-                  }
-                  setCustomState((prev) => ({
-                    ...prev,
-                    mode: 'dual',
-                    secondary: prev.mode === 'single' ? getSuggestedSecondary(prev.primary) : prev.secondary,
-                  }));
-                }}
-                onPrimaryChange={(value) => setCustomState((prev) => ({
+          {enableTypeOverrides && showCustomBlock && (
+            <TypeColorOverrideCard
+              title="Màu custom Hero danh mục"
+              enabled={customState.enabled}
+              mode={customState.mode}
+              primary={customState.primary}
+              secondary={customState.secondary}
+              compact
+              toggleLabel="Custom"
+              primaryLabel="Chính"
+              secondaryLabel="Phụ"
+              onEnabledChange={(next) => setCustomState((prev) => ({ ...prev, enabled: next }))}
+              onModeChange={(next) => {
+                if (next === 'single') {
+                  setCustomState((prev) => ({ ...prev, mode: 'single', secondary: prev.primary }));
+                  return;
+                }
+                setCustomState((prev) => ({
                   ...prev,
-                  primary: value,
-                  secondary: prev.mode === 'single' ? value : prev.secondary,
-                }))}
-                onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
-              />
-            )}
-
-            {showFontCustomBlock && (
-              <TypeFontOverrideCard
-                title="Font custom Hero danh mục"
-                enabled={customFontState.enabled}
-                fontKey={customFontState.fontKey}
-                compact
-                toggleLabel="Custom"
-                fontLabel="Font"
-                onEnabledChange={(next) => setCustomFontState((prev) => ({ ...prev, enabled: next }))}
-                onFontChange={(next) => setCustomFontState((prev) => ({ ...prev, fontKey: next }))}
-              />
-            )}
-          </div>
-
-          <div className="2xl:sticky 2xl:top-6">
-            <HomepageCategoryHeroPreview
-              config={{
-                heading,
-                subheading,
-                ctaText,
-                ctaUrl,
-                style,
-                heroSlides,
-                selectionMode,
-                categories: categoryItems,
-                autoGenerateConfig,
-                autoGenerateMeta,
-                hideEmptyCategories,
-                showCategoryImage,
-                categoryVisualMode,
-                categoryImageSize,
-                categoryImageShape,
-                maxCategoriesDesktop,
-                maxCategoriesTablet,
-                maxCategoriesMobile,
-                attachToHeader,
-                tabletBehavior,
+                  mode: 'dual',
+                  secondary: prev.mode === 'single' ? getSuggestedSecondary(prev.primary) : prev.secondary,
+                }));
               }}
-              brandColor={effectiveColors.primary}
-              secondary={effectiveColors.secondary}
-              mode={brandMode}
-              selectedStyle={style}
-              onStyleChange={setStyle}
-              fontStyle={fontStyle}
-              fontClassName="font-active"
+              onPrimaryChange={(value) => setCustomState((prev) => ({
+                ...prev,
+                primary: value,
+                secondary: prev.mode === 'single' ? value : prev.secondary,
+              }))}
+              onSecondaryChange={(value) => setCustomState((prev) => ({ ...prev, secondary: value }))}
             />
-          </div>
+          )}
+
+          {enableTypeOverrides && showFontCustomBlock && (
+            <TypeFontOverrideCard
+              title="Font custom Hero danh mục"
+              enabled={customFontState.enabled}
+              fontKey={customFontState.fontKey}
+              compact
+              toggleLabel="Custom"
+              fontLabel="Font"
+              onEnabledChange={(next) => setCustomFontState((prev) => ({ ...prev, enabled: next }))}
+              onFontChange={(next) => setCustomFontState((prev) => ({ ...prev, fontKey: next }))}
+            />
+          )}
+
+          <HomepageCategoryHeroPreview
+            config={{
+              heading,
+              subheading,
+              ctaText,
+              ctaUrl,
+              style,
+              heroSlides,
+              selectionMode,
+              categories: categoryItems,
+              autoGenerateConfig,
+              autoGenerateMeta,
+              hideEmptyCategories,
+              showCategoryImage,
+              categoryVisualMode,
+              categoryImageSize,
+              categoryImageShape,
+              maxCategoriesDesktop,
+              maxCategoriesTablet,
+              maxCategoriesMobile,
+              attachToHeader,
+              tabletBehavior,
+              cornerRadius,
+              noBorderRadius: cornerRadius === 'none',
+              noVerticalMargin: spacing === 'none',
+              spacing,
+              bannerImageFit,
+              demoCategoriesData,
+            }}
+            brandColor={effectiveColors.primary}
+            secondary={effectiveColors.secondary}
+            mode={brandMode}
+            selectedStyle={style}
+            onStyleChange={setStyle}
+            fontStyle={fontStyle}
+            fontClassName="font-active"
+          />
         </div>
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() =>{  router.push('/admin/home-components'); }}
+          onCancel={() =>{  router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndoheroSlides,
+          canRedo: canRedoheroSlides,
+          onUndo: undoheroSlides,
+          onRedo: redoheroSlides,
+        }}
         />
       </form>
     </div>

@@ -8,6 +8,7 @@ import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
 import { Loader2, ShieldOff } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { useAdminAuth } from '../../auth/context';
 import {
   ACTION_LABELS,
@@ -271,21 +272,13 @@ function RoleCreateForm({ token }: { token: string | null }) {
           </CardContent>
         </Card>
 
-        <div className="mt-6 flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/roles'); }} disabled={isSubmitting}>
-            Hủy bỏ
-          </Button>
-          <Button type="submit" variant="accent" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 size={16} className="animate-spin mr-2" />
-                Đang tạo...
-              </>
-            ) : (
-              'Tạo vai trò'
-            )}
-          </Button>
-        </div>
+        <HomeComponentStickyFooter
+          isSubmitting={isSubmitting}
+          onCancel={() =>{  router.push('/admin/roles'); }}
+          submitLabel="Tạo vai trò"
+          submittingLabel="Đang tạo..."
+          disableSave={isSubmitting}
+        />
       </form>
     </div>
   );

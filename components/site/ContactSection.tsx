@@ -9,6 +9,7 @@ import { getContactValidationResult } from '@/app/admin/home-components/contact/
 import { normalizeContactConfig } from '@/app/admin/home-components/contact/_lib/normalize';
 import type { ContactBrandMode } from '@/app/admin/home-components/contact/_types';
 import { getContactMapDataFromSettings } from '@/lib/contact/getContactMapData';
+import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 
 interface ContactSectionProps {
   config: Record<string, unknown>;
@@ -16,13 +17,31 @@ interface ContactSectionProps {
   secondary: string;
   mode: ContactBrandMode;
   title: string;
+  snapshotComponentKey?: string;
 }
 
-export function ContactSection({ config, brandColor, secondary, mode, title }: ContactSectionProps) {
+export function ContactSection({ config, brandColor, secondary, mode, title, snapshotComponentKey }: ContactSectionProps) {
+  const snapshotDemo = useSnapshotDemoContext();
   const normalizedConfig = React.useMemo(() => normalizeContactConfig(config), [config]);
   const pathname = usePathname();
   const contactSettings = useQuery(api.settings.listByGroup, { group: 'contact' });
-  const mapData = React.useMemo(() => getContactMapDataFromSettings(contactSettings ?? []), [contactSettings]);
+  const snapshotData = React.useMemo(() => {
+    if (!snapshotDemo || !snapshotComponentKey) {return null;}
+    const data = snapshotDemo.getComponentData(snapshotComponentKey);
+    return data?.kind === 'contact' ? data : null;
+  }, [snapshotDemo, snapshotComponentKey]);
+  const mapData = React.useMemo(() => {
+    if (snapshotData) {
+      return getContactMapDataFromSettings(Object.entries(snapshotData.settings).map(([key, value]) => ({
+        _creationTime: 0,
+        _id: key,
+        group: 'contact',
+        key,
+        value,
+      })));
+    }
+    return getContactMapDataFromSettings(contactSettings ?? []);
+  }, [contactSettings, snapshotData]);
 
   const validation = React.useMemo(() => getContactValidationResult({
     primary: brandColor,

@@ -10,20 +10,24 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  Input,
   Label,
   cn,
 } from '../../../components/ui';
 import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
+import { InputWithClear } from '../../stats/_components/InputWithClear';
+import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
 import { getFooterLayoutColors } from '../_lib/colors';
-import type { FooterBrandMode, FooterConfig, FooterColumn, FooterSocialLink } from '../_types';
 import { generateFooterConfigFromData } from '../_lib/auto-generate';
+import type { FooterBrandMode, FooterConfig, FooterColumn, FooterLogoBackgroundStyle, FooterSocialLink } from '../_types';
+import { AiDemoFooterImport } from '../../product-list/_components/AiDemoProductsImport';
+import { buildCategoryPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 
 interface FooterFormProps {
   value: FooterConfig;
@@ -31,6 +35,8 @@ interface FooterFormProps {
   primary: string;
   secondary: string;
   mode: FooterBrandMode;
+  /** create = mở hết, edit = đóng hết */
+  defaultExpanded?: boolean;
 }
 
 type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục';
@@ -65,6 +71,13 @@ const MAX_WIDTH_OPTIONS = [
   { value: '8xl', label: '8xl' },
   { value: '9xl', label: '9xl' },
 ] as const;
+
+const LOGO_BACKGROUND_OPTIONS: { value: FooterLogoBackgroundStyle; label: string }[] = [
+  { value: 'none', label: 'Không nền' },
+  { value: 'flat-light', label: 'Nền sáng phẳng' },
+  { value: 'flat-dark', label: 'Nền tối phẳng' },
+  { value: 'flat-brand', label: 'Nền brand nhạt' },
+];
 
 const CORE_ROUTE_OPTIONS: QuickRouteOption[] = [
   { label: 'Trang chủ', url: '/', source: 'core', group: 'Trang cơ bản' },
@@ -140,7 +153,10 @@ const buildSuggestedColumns = (quickRouteOptions: QuickRouteOption[], columnCoun
   }));
 };
 
-export function FooterForm({ value, onChange, primary, secondary, mode }: FooterFormProps) {
+const activeSections = ['settings', 'basicInfo', 'bct', 'columns', 'socials'];
+
+export function FooterForm({ value, onChange, primary, secondary, mode, defaultExpanded = true }: FooterFormProps) {
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(activeSections, defaultExpanded);
   const footerSettings = useQuery(api.settings.getMultiple, {
     keys: [...IA_SETTINGS_KEYS, 'contact_zalo', 'site_logo', 'site_name', 'site_tagline', 'social_facebook', 'social_instagram', 'social_tiktok', 'social_youtube'],
   });
@@ -149,10 +165,13 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
   const productCategories = useQuery(api.productCategories.listActive);
   const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
   const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
 
   const columnsWithId = useMemo<FooterColumn[]>(() => value.columns.map((column, index) => ({
     ...column,
     id: column.id ?? index + 1,
+    links: column.links ?? [],
   })), [value.columns]);
 
   const socialsWithId = useMemo<FooterSocialLink[]>(() => value.socialLinks.map((social, index) => ({
@@ -215,7 +234,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
           group: 'Danh mục',
           label: category.name,
           source: 'products',
-          url: `/products?category=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'products' }),
         });
       });
     }
@@ -226,7 +245,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
           group: 'Danh mục',
           label: category.name,
           source: 'posts',
-          url: `/posts?catpost=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'posts' }),
         });
       });
     }
@@ -237,7 +256,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
           group: 'Danh mục',
           label: category.name,
           source: 'services',
-          url: `/services?category=${category.slug}`,
+          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'services' }),
         });
       });
     }
@@ -295,6 +314,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
     updateConfig({
       description: (typeof footerSettings?.site_tagline === 'string' && footerSettings.site_tagline) || value.description,
       logo: (typeof footerSettings?.site_logo === 'string' && footerSettings.site_logo) || value.logo,
+      logoName: (typeof footerSettings?.site_name === 'string' && footerSettings.site_name) || value.logoName,
       socialLinks: newSocialLinks.length > 0 ? newSocialLinks : socialsWithId,
     });
     toast.success('Đã load dữ liệu từ Settings');
@@ -547,6 +567,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
 
   return (
     <>
+      <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
       <div className="mb-4 flex justify-end">
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={handleGenerateFooter}>
@@ -555,189 +576,236 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
           <Button type="button" variant="outline" size="sm" onClick={loadFromSettings}>
             <Download size={14} className="mr-1" /> Load từ Settings
           </Button>
+        <AiDemoFooterImport onApply={(items) => updateConfig({ columns: items as FooterColumn[] })} />
         </div>
       </div>
 
+      {/* ── Card 1: Cài đặt & Hiển thị ──────────────────── */}
       <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Thông tin cơ bản</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Logo</Label>
-            <SettingsImageUploader
-              value={value.logo}
-              onChange={(url) =>{  updateConfig({ logo: url ?? '' }); }}
-              folder="footer"
-              previewSize="sm"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Kích thước logo</Label>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              step={1}
-              value={logoSizeLevel}
-              onChange={(event) =>{  updateConfig({ logoSizeLevel: Number(event.target.value) as FooterConfig['logoSizeLevel'] }); }}
-              className="w-full"
-            />
-            <div className="text-xs font-medium text-slate-600">Nấc {logoSizeLevel}/10</div>
-          </div>
-          <div className="space-y-2">
-            <Label>Độ rộng tối đa</Label>
-            <select
-              value={maxWidth}
-              onChange={(event) =>{  updateConfig({ maxWidth: event.target.value as FooterConfig['maxWidth'] }); }}
-              className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-            >
-              {MAX_WIDTH_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Slogan</Label>
-            <textarea
-              value={value.description}
-              onChange={(e) =>{  updateConfig({ description: e.target.value }); }}
-              placeholder="Đối tác tin cậy cho hành trình số hóa của bạn"
-              className="w-full min-h-[60px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={value.showCopyright !== false}
-                onChange={(e) =>{  updateConfig({ showCopyright: e.target.checked }); }}
-                className="h-4 w-4 rounded"
-              />
-              <Label>Hiển thị Copyright</Label>
-            </div>
-            {value.showCopyright !== false && (
-              <div className="space-y-1">
-                <Input
-                  value={value.copyright}
-                  onChange={(e) =>{  updateConfig({ copyright: e.target.value }); }}
-                  placeholder={`© ${new Date().getFullYear()} Tên Web. All rights reserved.`}
-                />
-                <p className="text-xs text-slate-400">
-                  Để trống = tự động dùng: © {new Date().getFullYear()} Tên web từ Settings. All rights reserved.
-                </p>
+        <CardContent className="p-4 space-y-3">
+          <HomeComponentDisplaySettingsSection
+            open={openSections.settings}
+            onOpenChange={(open) => toggleSection('settings', open)}
+            cornerRadius={value.cornerRadius ?? 'lg'}
+            onCornerRadiusChange={(cornerRadius) => updateConfig({ cornerRadius, noBorderRadius: cornerRadius === 'none' })}
+            spacing={value.spacing ?? 'normal'}
+            onSpacingChange={(spacing) => updateConfig({ spacing, noVerticalMargin: spacing === 'none' })}
+          >
+              <div className="space-y-2">
+                <Label>Độ rộng tối đa</Label>
+                <select
+                  value={maxWidth}
+                  onChange={(event) =>{  updateConfig({ maxWidth: event.target.value as FooterConfig['maxWidth'] }); }}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                >
+                  {MAX_WIDTH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={value.showSocialLinks !== false}
-              onChange={(e) =>{  updateConfig({ showSocialLinks: e.target.checked }); }}
-              className="h-4 w-4 rounded"
-            />
-            <Label>Hiển thị social links</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={value.useOriginalSocialIconColors !== false}
-              onChange={(e) =>{  updateConfig({ useOriginalSocialIconColors: e.target.checked }); }}
-              className="h-4 w-4 rounded"
-            />
-            <Label>Dùng màu icon gốc</Label>
-          </div>
-        </CardContent>
-      </Card>
+          </HomeComponentDisplaySettingsSection>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">Bộ Công Thương</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={value.showBctLogo === true}
-              onChange={(e) =>{  updateConfig({ showBctLogo: e.target.checked }); }}
-              className="h-4 w-4 rounded"
-            />
-            <Label>Hiển thị logo BCT</Label>
-          </div>
-          {value.showBctLogo && (
+          <SubSection
+            icon={LayoutGrid}
+            title="Thông tin cơ bản"
+            open={openSections.basicInfo}
+            onOpenChange={(open) => toggleSection('basicInfo', open)}
+          >
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Loại logo</Label>
-                <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-3 text-sm">
-                    <input
-                      type="radio"
-                      name="bct-logo-type"
-                      value="thong-bao"
-                      checked={bctLogoType === 'thong-bao'}
-                      onChange={() =>{  updateConfig({ bctLogoType: 'thong-bao' }); }}
-                    />
-                    <img src="/images/bct/logo-da-thong-bao-bct.png" alt="Đã thông báo" className="h-8 w-auto" />
-                    <span>Đã thông báo</span>
-                  </label>
-                  <label className="flex items-center gap-3 text-sm">
-                    <input
-                      type="radio"
-                      name="bct-logo-type"
-                      value="dang-ky"
-                      checked={bctLogoType === 'dang-ky'}
-                      onChange={() =>{  updateConfig({ bctLogoType: 'dang-ky' }); }}
-                    />
-                    <img src="/images/bct/logo-da-dang-ky-bct.webp" alt="Đã đăng ký" className="h-8 w-auto" />
-                    <span>Đã đăng ký</span>
-                  </label>
-                </div>
+                <Label>Tên logo hiển thị</Label>
+                <InputWithClear
+                  value={value.logoName}
+                  onChange={(logoName) =>{  updateConfig({ logoName }); }}
+                  placeholder="VD: VietAdmin"
+                />
+                <p className="text-xs text-slate-400">Để trống = ẩn tên cạnh logo.</p>
               </div>
               <div className="space-y-2">
-                <Label>Link xác thực BCT (tuỳ chọn)</Label>
-                <Input
-                  value={value.bctLogoLink ?? ''}
-                  onChange={(e) =>{  updateConfig({ bctLogoLink: e.target.value }); }}
-                  placeholder="https://online.gov.vn/Home/WebSiteDisplay/..."
+                <Label>Logo</Label>
+                <SettingsImageUploader
+                  value={value.logo}
+                  onChange={(url) =>{  updateConfig({ logo: url ?? '' }); }}
+                  folder="footer"
+                  previewSize="sm"
                 />
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span>Preview:</span>
-                <img src={bctLogoSrc} alt="BCT Logo" className="h-8 w-auto" />
+              <div className="space-y-2">
+                <Label>Nền bảo vệ logo</Label>
+                <select
+                  value={value.logoBackgroundStyle ?? 'none'}
+                  onChange={(event) =>{  updateConfig({ logoBackgroundStyle: event.target.value as FooterLogoBackgroundStyle }); }}
+                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                >
+                  {LOGO_BACKGROUND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">Dùng khi logo hòa vào nền footer. Chỉ dùng nền phẳng và viền mảnh, không shadow/3D.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Kích thước logo</Label>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={logoSizeLevel}
+                  onChange={(event) =>{  updateConfig({ logoSizeLevel: Number(event.target.value) as FooterConfig['logoSizeLevel'] }); }}
+                  className="w-full"
+                />
+                <div className="text-xs font-medium text-slate-600">Nấc {logoSizeLevel}/10</div>
+              </div>
+              <div className="space-y-2">
+                <Label>Slogan</Label>
+                <textarea
+                  value={value.description}
+                  onChange={(e) =>{  updateConfig({ description: e.target.value }); }}
+                  placeholder="Đối tác tin cậy cho hành trình số hóa của bạn"
+                  className="w-full min-h-[60px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={value.showCopyright !== false}
+                    onChange={(e) =>{  updateConfig({ showCopyright: e.target.checked }); }}
+                    className="h-4 w-4 rounded"
+                  />
+                  <Label>Hiển thị Copyright</Label>
+                </div>
+                {value.showCopyright !== false && (
+                  <div className="space-y-1">
+                    <InputWithClear
+                      value={value.copyright}
+                      onChange={(v) =>{  updateConfig({ copyright: v }); }}
+                      placeholder={`© ${new Date().getFullYear()} Tên Web. All rights reserved.`}
+                    />
+                    <p className="text-xs text-slate-400">
+                      Để trống = tự động dùng: © {new Date().getFullYear()} Tên web từ Settings. All rights reserved.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={value.showSocialLinks !== false}
+                    onChange={(e) =>{  updateConfig({ showSocialLinks: e.target.checked }); }}
+                    className="h-4 w-4 rounded"
+                  />
+                  <Label>Hiển thị social links</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={value.useOriginalSocialIconColors !== false}
+                    onChange={(e) =>{  updateConfig({ useOriginalSocialIconColors: e.target.checked }); }}
+                    className="h-4 w-4 rounded"
+                  />
+                  <Label>Dùng màu icon gốc</Label>
+                </div>
               </div>
             </div>
-          )}
+          </SubSection>
+
+          <SubSection
+            icon={Share2}
+            title="Bộ Công Thương"
+            open={openSections.bct}
+            onOpenChange={(open) => toggleSection('bct', open)}
+          >
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={value.showBctLogo === true}
+                  onChange={(e) =>{  updateConfig({ showBctLogo: e.target.checked }); }}
+                  className="h-4 w-4 rounded"
+                />
+                <Label>Hiển thị logo BCT</Label>
+              </div>
+              {value.showBctLogo && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Loại logo</Label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-3 text-sm">
+                        <input
+                          type="radio"
+                          name="bct-logo-type"
+                          value="thong-bao"
+                          checked={bctLogoType === 'thong-bao'}
+                          onChange={() =>{  updateConfig({ bctLogoType: 'thong-bao' }); }}
+                        />
+                        <img src="/images/bct/logo-da-thong-bao-bct.png" alt="Đã thông báo" className="h-8 w-auto" />
+                        <span>Đã thông báo</span>
+                      </label>
+                      <label className="flex items-center gap-3 text-sm">
+                        <input
+                          type="radio"
+                          name="bct-logo-type"
+                          value="dang-ky"
+                          checked={bctLogoType === 'dang-ky'}
+                          onChange={() =>{  updateConfig({ bctLogoType: 'dang-ky' }); }}
+                        />
+                        <img src="/images/bct/logo-da-dang-ky-bct.webp" alt="Đã đăng ký" className="h-8 w-auto" />
+                        <span>Đã đăng ký</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Link xác thực BCT (tuỳ chọn)</Label>
+                    <InputWithClear
+                      value={value.bctLogoLink ?? ''}
+                      onChange={(v) =>{  updateConfig({ bctLogoLink: v }); }}
+                      placeholder="https://online.gov.vn/Home/WebSiteDisplay/..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                    <span>Preview:</span>
+                    <img src={bctLogoSrc} alt="BCT Logo" className="h-8 w-auto" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </SubSection>
         </CardContent>
       </Card>
 
+      {/* ── Card 2: Cột menu & Mạng xã hội ──────────────── */}
       <Card className="mb-6">
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">Cột menu ({columnsWithId.length}/4)</CardTitle>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() =>{  applySuggestedColumns(2); }}>
-                Gợi ý 2 cột
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() =>{  applySuggestedColumns(4); }}>
-                Gợi ý 4 cột
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addColumn}
-                disabled={columnsWithId.length >= 4}
-                title={columnsWithId.length >= 4 ? 'Tối đa 4 cột menu' : ''}
-              >
-                <Plus size={14} className="mr-1" /> Thêm cột
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40">
-            Gợi ý lấy từ route module, danh mục và nội dung đang có để giảm nhập tay và hạn chế lệch dữ liệu thực.
-          </div>
+        <CardContent className="p-4 space-y-3">
+          <SubSection
+            icon={LayoutGrid}
+            title={`Cột menu (${columnsWithId.length}/4)`}
+            open={openSections.columns}
+            onOpenChange={(open) => toggleSection('columns', open)}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() =>{  applySuggestedColumns(2); }}>
+                  Gợi ý 2 cột
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() =>{  applySuggestedColumns(4); }}>
+                  Gợi ý 4 cột
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addColumn}
+                  disabled={columnsWithId.length >= 4}
+                  title={columnsWithId.length >= 4 ? 'Tối đa 4 cột menu' : ''}
+                >
+                  <Plus size={14} className="mr-1" /> Thêm cột
+                </Button>
+              </div>
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40">
+                Gợi ý lấy từ route module, danh mục và nội dung đang có để giảm nhập tay và hạn chế lệch dữ liệu thực.
+              </div>
 
           {columnsWithId.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -779,9 +847,9 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
               >
                 <div className="flex items-center gap-3">
                   <GripVertical size={16} className="cursor-grab flex-shrink-0 text-slate-400" />
-                  <Input
+                  <InputWithClear
                     value={column.title}
-                    onChange={(e) =>{  updateColumn(column.id ?? 0, 'title', e.target.value); }}
+                    onChange={(v) =>{  updateColumn(column.id ?? 0, 'title', v); }}
                     placeholder="Tiêu đề cột"
                     className="flex-1"
                   />
@@ -808,15 +876,15 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                   <Label className="text-xs text-slate-500">Links ({column.links.length})</Label>
                   {column.links.map((link, linkIdx) => (
                     <div key={linkIdx} className="flex flex-col gap-2 rounded-lg border border-slate-100 p-2 sm:flex-row sm:items-center dark:border-slate-800">
-                      <Input
+                      <InputWithClear
                         value={link.label}
-                        onChange={(e) =>{  updateLink(column.id ?? 0, linkIdx, 'label', e.target.value); }}
+                        onChange={(v) =>{  updateLink(column.id ?? 0, linkIdx, 'label', v); }}
                         placeholder="Tên link"
                         className="flex-1"
                       />
-                      <Input
+                      <InputWithClear
                         value={link.url}
-                        onChange={(e) =>{  updateLink(column.id ?? 0, linkIdx, 'url', e.target.value); }}
+                        onChange={(v) =>{  updateLink(column.id ?? 0, linkIdx, 'url', v); }}
                         placeholder="/url"
                         className="flex-1"
                       />
@@ -855,94 +923,98 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
+            </div>
+          </SubSection>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Mạng xã hội ({socialsWithId.length}/{SOCIAL_PLATFORMS.length})</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addSocialLink}
-              disabled={socialsWithId.length >= SOCIAL_PLATFORMS.length}
-              title={socialsWithId.length >= SOCIAL_PLATFORMS.length ? 'Đã thêm đủ tất cả mạng xã hội' : ''}
-            >
-              <Plus size={14} className="mr-1" /> Thêm MXH
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {socialsWithId.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div
-                className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.surface, border: `1px solid ${colors.borderSoft}` }}
-              >
-                <Share2 size={24} style={{ color: colors.accent }} />
-              </div>
-              <h3 className="mb-1 font-medium text-slate-900 dark:text-slate-100">Chưa có mạng xã hội</h3>
-              <p className="mb-3 text-sm text-slate-500">Thêm MXH hoặc load từ Settings</p>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={loadFromSettings}>
-                  <Download size={14} className="mr-1" /> Load từ Settings
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={addSocialLink}>
+          <SubSection
+            icon={Share2}
+            title={`Mạng xã hội (${socialsWithId.length}/${SOCIAL_PLATFORMS.length})`}
+            open={openSections.socials}
+            onOpenChange={(open) => toggleSection('socials', open)}
+          >
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addSocialLink}
+                  disabled={socialsWithId.length >= SOCIAL_PLATFORMS.length}
+                  title={socialsWithId.length >= SOCIAL_PLATFORMS.length ? 'Đã thêm đủ tất cả mạng xã hội' : ''}
+                >
                   <Plus size={14} className="mr-1" /> Thêm MXH
                 </Button>
               </div>
-            </div>
-          ) : (
-            socialsWithId.map((social) => (
-              <div
-                key={social.id}
-                draggable
-                onDragStart={() =>{  handleSocialDragStart(social.id ?? 0); }}
-                onDragEnd={handleSocialDragEnd}
-                onDragOver={(e) =>{  handleSocialDragOver(e, social.id ?? 0); }}
-                onDrop={(e) =>{  handleSocialDrop(e, social.id ?? 0); }}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg p-2 transition-all',
-                  draggedSocialId === social.id && 'opacity-50',
-                  dragOverSocialId === social.id && 'bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-900/20'
-                )}
-              >
-                <GripVertical size={16} className="cursor-grab flex-shrink-0 text-slate-400" />
-                <select
-                  value={social.platform}
-                  onChange={(e) =>{  updateSocialLink(social.id ?? 0, 'platform', e.target.value); }}
-                  className="h-9 w-36 rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-                >
-                  {SOCIAL_PLATFORMS.map((p) => (
-                    <option
-                      key={p.key}
-                      value={p.key}
-                      disabled={socialsWithId.some((s) => s.platform === p.key && s.id !== social.id)}
+              {socialsWithId.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div
+                    className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+                    style={{ backgroundColor: colors.surface, border: `1px solid ${colors.borderSoft}` }}
+                  >
+                    <Share2 size={24} style={{ color: colors.accent }} />
+                  </div>
+                  <h3 className="mb-1 font-medium text-slate-900 dark:text-slate-100">Chưa có mạng xã hội</h3>
+                  <p className="mb-3 text-sm text-slate-500">Thêm MXH hoặc load từ Settings</p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={loadFromSettings}>
+                      <Download size={14} className="mr-1" /> Load từ Settings
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={addSocialLink}>
+                      <Plus size={14} className="mr-1" /> Thêm MXH
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                socialsWithId.map((social) => (
+                  <div
+                    key={social.id}
+                    draggable
+                    onDragStart={() =>{  handleSocialDragStart(social.id ?? 0); }}
+                    onDragEnd={handleSocialDragEnd}
+                    onDragOver={(e) =>{  handleSocialDragOver(e, social.id ?? 0); }}
+                    onDrop={(e) =>{  handleSocialDrop(e, social.id ?? 0); }}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg p-2 transition-all',
+                      draggedSocialId === social.id && 'opacity-50',
+                      dragOverSocialId === social.id && 'bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-900/20'
+                    )}
+                  >
+                    <GripVertical size={16} className="cursor-grab flex-shrink-0 text-slate-400" />
+                    <select
+                      value={social.platform}
+                      onChange={(e) =>{  updateSocialLink(social.id ?? 0, 'platform', e.target.value); }}
+                      className="h-9 w-36 rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
                     >
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  value={social.url}
-                  onChange={(e) =>{  updateSocialLink(social.id ?? 0, 'url', e.target.value); }}
-                  placeholder="https://facebook.com/yourpage"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>{  removeSocialLink(social.id ?? 0); }}
-                  className="flex-shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600"
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-            ))
-          )}
+                      {SOCIAL_PLATFORMS.map((p) => (
+                        <option
+                          key={p.key}
+                          value={p.key}
+                          disabled={socialsWithId.some((s) => s.platform === p.key && s.id !== social.id)}
+                        >
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <InputWithClear
+                      value={social.url}
+                      onChange={(v) =>{  updateSocialLink(social.id ?? 0, 'url', v); }}
+                      placeholder="https://facebook.com/yourpage"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>{  removeSocialLink(social.id ?? 0); }}
+                      className="flex-shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </SubSection>
         </CardContent>
       </Card>
 
@@ -957,9 +1029,9 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <Input
+            <InputWithClear
               value={quickRouteSearch}
-              onChange={(e) => setQuickRouteSearch(e.target.value)}
+              onChange={(v) => setQuickRouteSearch(v)}
               placeholder={
                 pickerStep === 1
                   ? 'Tìm theo loại...'
@@ -1060,10 +1132,10 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             className="flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                           >
                             <div className="min-w-0">
-                              <div className="truncate font-semibold text-slate-700 dark:text-slate-200">
+                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
                                 {option.label}
                               </div>
-                              <div className="truncate font-mono text-xs text-slate-500">{option.url}</div>
+                              <div className="break-all font-mono text-xs text-slate-500">{option.url}</div>
                             </div>
                           </button>
                         ))}
@@ -1115,7 +1187,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: post.title,
-                                url: `/posts/${post.slug}`,
+                                url: `/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`,
                                 source: 'posts',
                                 group: 'Module',
                               });
@@ -1123,8 +1195,8 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="truncate font-semibold text-slate-700 dark:text-slate-200">{post.title}</div>
-                              <div className="truncate font-mono text-xs text-slate-500">/posts/{post.slug}</div>
+                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{post.title}</div>
+                              <div className="break-all font-mono text-xs text-slate-500">{`/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`}</div>
                             </div>
                           </button>
                         ))}
@@ -1140,7 +1212,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: product.name,
-                                url: `/products/${product.slug}`,
+                                url: `/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`,
                                 source: 'products',
                                 group: 'Module',
                               });
@@ -1148,8 +1220,8 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="truncate font-semibold text-slate-700 dark:text-slate-200">{product.name}</div>
-                              <div className="truncate font-mono text-xs text-slate-500">/products/{product.slug}</div>
+                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{product.name}</div>
+                              <div className="break-all font-mono text-xs text-slate-500">{`/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`}</div>
                             </div>
                           </button>
                         ))}
@@ -1165,7 +1237,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             onClick={() => {
                               handleSelectQuickRoute({
                                 label: service.title,
-                                url: `/services/${service.slug}`,
+                                url: `/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`,
                                 source: 'services',
                                 group: 'Module',
                               });
@@ -1173,8 +1245,8 @@ export function FooterForm({ value, onChange, primary, secondary, mode }: Footer
                             className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="truncate font-semibold text-slate-700 dark:text-slate-200">{service.title}</div>
-                              <div className="truncate font-mono text-xs text-slate-500">/services/{service.slug}</div>
+                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{service.title}</div>
+                              <div className="break-all font-mono text-xs text-slate-500">{`/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`}</div>
                             </div>
                           </button>
                         ))}

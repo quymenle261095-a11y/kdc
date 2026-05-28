@@ -9,6 +9,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { toast } from 'sonner';
 import { AlertTriangle, Loader2, ShieldOff } from 'lucide-react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { useAdminAuth } from '../../../auth/context';
 import {
   ACTION_LABELS,
@@ -65,7 +66,6 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isInitialized, setIsInitialized] = useState(false);
-  const [shouldRedirect, setShouldRedirect] = useState(false);
 
   const isLoading = roleData === undefined || modulesData === undefined;
 
@@ -97,6 +97,31 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
       .filter(m => m.enabled && isPermissionModule(m.key))
       .map(m => ({ key: m.key, label: m.name }));
   }, [modulesData]);
+
+  const hasChanges = useMemo(() => {
+    if (!roleData || roleData.isSystem) {return false;}
+
+    const normalizePermissions = (value: Record<string, string[]>) => Object.fromEntries(
+      Object.entries(value)
+        .sort(([moduleA], [moduleB]) => moduleA.localeCompare(moduleB))
+        .map(([module, actions]) => [module, [...actions].sort()])
+    );
+
+    const current = {
+      color: showColor ? color : undefined,
+      description: showDescription ? description.trim() : '',
+      name: name.trim(),
+      permissions: normalizePermissions(permissions),
+    };
+    const original = {
+      color: showColor ? (roleData.color ?? '#3b82f6') : undefined,
+      description: showDescription ? roleData.description.trim() : '',
+      name: roleData.name.trim(),
+      permissions: normalizePermissions(roleData.permissions),
+    };
+
+    return JSON.stringify(current) !== JSON.stringify(original);
+  }, [color, description, name, permissions, roleData, showColor, showDescription]);
 
   const togglePermission = (module: string, action: PermissionAction) => {
     setPermissions(prev => {
@@ -144,6 +169,7 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasChanges) {return;}
     if (!validate()) {return;}
     if (!token) {
       toast.error('Thiếu token xác thực');
@@ -161,14 +187,10 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
         token,
       });
       toast.success('Đã cập nhật vai trò');
-      if (shouldRedirect) {
-        router.push('/admin/roles');
-      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật vai trò');
     } finally {
       setIsSubmitting(false);
-      setShouldRedirect(false);
     }
   };
 
@@ -336,25 +358,23 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
           </CardContent>
         </Card>
 
-        <div className="mt-6 flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/roles'); }} disabled={isSubmitting}>
-            {isSystemRole ? 'Đóng' : 'Hủy bỏ'}
-          </Button>
-          {!isSystemRole && (
-            <>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={isSubmitting}
-                onClick={() =>{  setShouldRedirect(true); }}
-              >
-                Lưu & quay lại
-              </Button>
+        <HomeComponentStickyFooter
+          isSubmitting={isSubmitting}
+          hasChanges={hasChanges}
+          submitLabel="Lưu thay đổi"
+          savedLabel="Đã lưu"
+          disableSave={!hasChanges || isSubmitting || isSystemRole}
+          align="end"
+        >
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/roles'); }} disabled={isSubmitting}>
+              {isSystemRole ? 'Đóng' : 'Hủy bỏ'}
+            </Button>
+            {!isSystemRole && (
               <Button
                 type="submit"
                 variant="accent"
-                disabled={isSubmitting}
-                onClick={() =>{  setShouldRedirect(false); }}
+                disabled={!hasChanges || isSubmitting}
               >
                 {isSubmitting ? (
                   <>
@@ -362,12 +382,12 @@ function RoleEditForm({ params, token }: { params: Promise<{ id: string }>; toke
                     Đang lưu...
                   </>
                 ) : (
-                  'Lưu thay đổi'
+                  hasChanges ? 'Lưu thay đổi' : 'Đã lưu'
                 )}
               </Button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        </HomeComponentStickyFooter>
       </form>
     </div>
   );

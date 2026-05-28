@@ -42,6 +42,7 @@ interface SidebarLayoutProps {
   enabledFields: Set<string>;
    showSearch?: boolean;
    showCategories?: boolean;
+  getDetailHref: (service: Service) => string;
 }
 
 function formatPrice(price?: number): string {
@@ -72,6 +73,7 @@ export function SidebarLayout({
   enabledFields,
    showSearch = true,
    showCategories = true,
+  getDetailHref,
 }: SidebarLayoutProps) {
   const ringStyle = (style?: React.CSSProperties) =>
     ({ ...style, ['--tw-ring-color' as string]: tokens.filterRing } as React.CSSProperties);
@@ -205,7 +207,7 @@ export function SidebarLayout({
               return (
                 <Link
                   key={service._id}
-                  href={`/services/${service.slug}`}
+                  href={getDetailHref(service)}
                   className="group block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                   style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
                 >

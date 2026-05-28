@@ -4,9 +4,10 @@ import React, { useMemo, useState } from 'react';
 import { Download, GripVertical, Plus, Trash2 } from 'lucide-react';
 import type { ContactInfoItem } from '../_types';
 import { Button, Input, cn } from '../../../components/ui';
+import { AiDemoContactImport } from '../../product-list/_components/AiDemoProductsImport';
 import { buildDefaultContactItemsFromSettings } from '../_lib/constants';
 import { CONTACT_ICON_OPTIONS, resolveContactIcon } from '../_lib/iconOptions';
-import { IconPickerDialog } from './IconPickerDialog';
+import { IconPopoverPicker } from '../../_shared/components/IconPopoverPicker';
 
 interface ContactInfoItemsManagerProps {
   items: ContactInfoItem[];
@@ -38,8 +39,7 @@ export function ContactInfoItemsManager({
 
   const [draggedId, setDraggedId] = useState<number | string | null>(null);
   const [dragOverId, setDragOverId] = useState<number | string | null>(null);
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
-  const [activeIconItemId, setActiveIconItemId] = useState<number | string | null>(null);
+
 
   const iconLabelMap = useMemo(() => (
     CONTACT_ICON_OPTIONS.reduce<Record<string, string>>((acc, option) => {
@@ -98,6 +98,7 @@ export function ContactInfoItemsManager({
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Dòng thông tin liên hệ</p>
         <div className="flex items-center gap-2">
+          <AiDemoContactImport onApply={(items) => onChange(items as ContactInfoItem[])} />
           <Button type="button" variant="outline" size="sm" onClick={loadFromSettings} disabled={isLoadingSettings}>
             <Download size={14} className="mr-1" /> Load từ Settings
           </Button>
@@ -122,9 +123,9 @@ export function ContactInfoItemsManager({
       ) : (
         <div className="space-y-3">
           {itemsWithId.map((item) => {
-            const Icon = resolveContactIcon(item.icon);
+            const _Icon = resolveContactIcon(item.icon);
             const hasError = validationErrors?.[item.id]?.href;
-            const iconLabel = iconLabelMap[item.icon] ?? item.icon;
+            const _iconLabel = iconLabelMap[item.icon] ?? item.icon;
 
             return (
               <div
@@ -143,24 +144,11 @@ export function ContactInfoItemsManager({
               >
                 <div className="flex items-center gap-3">
                   <GripVertical size={16} className="text-slate-400 cursor-grab flex-shrink-0" />
-                  <div className="flex items-center gap-2">
-                    <div className="h-9 w-9 rounded-md border border-slate-200 dark:border-slate-700 flex items-center justify-center bg-white dark:bg-slate-900">
-                      <Icon size={18} className="text-slate-600 dark:text-slate-300" />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 min-w-[160px] justify-start gap-2"
-                      onClick={() => {
-                        setActiveIconItemId(item.id);
-                        setIconPickerOpen(true);
-                      }}
-                    >
-                      <Icon size={16} className="text-slate-600 dark:text-slate-300" />
-                      <span className="truncate">{iconLabel}</span>
-                    </Button>
-                  </div>
+                    <IconPopoverPicker
+                      value={item.icon}
+                      onChange={(nextValue) => updateItem(item.id, { icon: nextValue })}
+                      options={CONTACT_ICON_OPTIONS}
+                    />
                   <div className="flex-1">
                     <Input
                       value={item.label}
@@ -205,16 +193,7 @@ export function ContactInfoItemsManager({
         </div>
       )}
 
-      <IconPickerDialog
-        open={iconPickerOpen}
-        onOpenChange={setIconPickerOpen}
-        value={itemsWithId.find((item) => item.id === activeIconItemId)?.icon}
-        options={CONTACT_ICON_OPTIONS}
-        onSelect={(nextValue) => {
-          if (activeIconItemId === null) {return;}
-          updateItem(activeIconItemId, { icon: nextValue });
-        }}
-      />
+
     </div>
   );
 }

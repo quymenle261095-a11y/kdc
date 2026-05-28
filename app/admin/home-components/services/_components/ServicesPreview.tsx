@@ -4,30 +4,41 @@ import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import { ServicesSectionCore } from '@/components/site/ServicesSectionCore';
 import { getServicesColors } from '../_lib/colors';
-import type { ServiceItem, ServicesBrandMode, ServicesStyle } from '../_types';
+import { DEFAULT_SERVICES_CORNER_RADIUS, DEFAULT_SERVICES_SPACING, getServicesSectionSpacingClassName, type ServiceItem, type ServiceItemMediaAlign, type ServiceItemMediaPlacement, type ServicesBrandMode, type ServicesCornerRadius, type ServicesSpacing, type ServicesStyle } from '../_types';
 
 const SERVICES_STYLES: Array<{ id: ServicesStyle; label: string }> = [
-  { id: 'elegantGrid', label: 'Elegant Grid' },
-  { id: 'modernList', label: 'Modern List' },
-  { id: 'bigNumber', label: 'Big Number' },
-  { id: 'cards', label: 'Icon Cards' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'timeline', label: 'Timeline' },
+  { id: 'elegantGrid', label: 'Layout 1' },
+  { id: 'modernList', label: 'Layout 2' },
+  { id: 'bigNumber', label: 'Layout 3' },
+  { id: 'cards', label: 'Layout 4' },
+  { id: 'carousel', label: 'Layout 5' },
+  { id: 'timeline', label: 'Layout 6' },
+  { id: 'builderPolicy', label: 'Layout 7' },
+  { id: 'builderFeatureCircle', label: 'Layout 8' },
 ];
-
-const normalizeItems = (items: ServiceItem[]) => {
-  return items.map((item) => ({
-    icon: item.icon || 'Star',
-    title: item.title || '',
-    description: item.description || '',
-  }));
-};
 
 export const ServicesPreview = ({
   items,
+  mediaPlacement = 'top',
+  mediaAlign = 'center',
+  headerAlign = 'left',
+  desktopColumns = 3,
+  subtitle,
+  showTitle = true,
+  showSubtitle = true,
+  showBadge = true,
+  badgeText,
+  hideHeader = false,
+  titleColorPrimary = false,
+  subtitleAboveTitle = false,
+  uppercaseText = false,
+  spacing = DEFAULT_SERVICES_SPACING,
+  cornerRadius = DEFAULT_SERVICES_CORNER_RADIUS,
   brandColor,
   secondary,
   title = 'Dịch vụ',
@@ -38,6 +49,21 @@ export const ServicesPreview = ({
   fontClassName,
 }: {
   items: ServiceItem[];
+  mediaPlacement?: ServiceItemMediaPlacement;
+  mediaAlign?: ServiceItemMediaAlign;
+  headerAlign?: ServiceItemMediaAlign;
+  desktopColumns?: 3 | 4;
+  subtitle?: string;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing  ;
+  cornerRadius?: ServicesCornerRadius;
+  hideHeader?: boolean;
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
   brandColor: string;
   secondary: string;
   title?: string;
@@ -55,8 +81,6 @@ export const ServicesPreview = ({
     [brandColor, secondary, mode],
   );
 
-  const displayItems = React.useMemo(() => normalizeItems(items), [items]);
-
   return (
     <>
       <PreviewWrapper
@@ -68,22 +92,50 @@ export const ServicesPreview = ({
         styles={SERVICES_STYLES}
         info={`${items.length} mục`}
         fontStyle={fontStyle}
-        fontClassName={fontClassName}
+        fontClassName={fontClassName ?? 'font-active'}
         deviceWidthClass={deviceWidths[device]}
       >
         <BrowserFrame>
-          <ServicesSectionCore
-            items={displayItems}
-            style={previewStyle}
-            title={title}
-            colors={colors}
-            device={device}
-            isPreview
-            carouselId={`services-preview-carousel-${device}`}
-          />
+          <div className={getServicesSectionSpacingClassName(spacing as ServicesSpacing)}>
+            <div className="px-4">
+              <SectionHeader
+                title={title}
+                subtitle={subtitle}
+                badgeText={badgeText}
+                hideHeader={hideHeader}
+                showTitle={showTitle}
+                showSubtitle={showSubtitle}
+                showBadge={showBadge}
+                headerAlign={headerAlign}
+                titleColorPrimary={titleColorPrimary}
+                subtitleAboveTitle={subtitleAboveTitle}
+                uppercaseText={uppercaseText}
+                brandColor={brandColor}
+              />
+            </div>
+            <ServicesSectionCore
+              items={items}
+              style={previewStyle}
+              mediaPlacement={mediaPlacement}
+              mediaAlign={mediaAlign}
+              headerAlign={headerAlign}
+              desktopColumns={desktopColumns}
+              subtitle={''}
+              showTitle={false}
+              showSubtitle={false}
+              title={''}
+              colors={colors}
+              device={device}
+              spacing="none"
+              cornerRadius={cornerRadius}
+              isPreview
+              carouselId={`services-preview-carousel-${device}`}
+            />
+          </div>
         </BrowserFrame>
       </PreviewWrapper>
-      {mode === 'dual' ? <ColorInfoPanel brandColor={colors.primary} secondary={colors.secondary} /> : null}
+      <ColorInfoPanel brandColor={colors.primary} secondary={colors.secondary} />
     </>
   );
 };
+

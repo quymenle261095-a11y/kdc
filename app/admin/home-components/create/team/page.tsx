@@ -1,10 +1,15 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { Label, cn } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { HeaderConfigSection } from '../../_shared/components/HeaderConfigSection';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 import { TeamForm } from '../../team/_components/TeamForm';
 import { TeamPreview } from '../../team/_components/TeamPreview';
 import {
@@ -17,8 +22,11 @@ import { getTeamValidationResult } from '../../team/_lib/colors';
 import type {
   TeamBrandMode,
   TeamConfig,
+  TeamCornerRadius,
+  TeamDesktopColumns,
   TeamEditorMember,
   TeamStyle,
+  TeamHeaderAlign,
 } from '../../team/_types';
 
 const createDefaultMembers = (): TeamEditorMember[] => {
@@ -49,6 +57,10 @@ const createDefaultMembers = (): TeamEditorMember[] => {
       facebook: '',
       linkedin: '',
       twitter: '',
+      phone: '',
+      zalo: '',
+      tiktok: '',
+      youtube: '',
       email: '',
     },
     {
@@ -60,6 +72,10 @@ const createDefaultMembers = (): TeamEditorMember[] => {
       facebook: '',
       linkedin: '',
       twitter: '',
+      phone: '',
+      zalo: '',
+      tiktok: '',
+      youtube: '',
       email: '',
     },
   ];
@@ -75,6 +91,23 @@ export default function TeamCreatePage() {
 
   const [members, setMembers] = React.useState<TeamEditorMember[]>(createDefaultMembers);
   const [style, setStyle] = React.useState<TeamStyle>(normalizeTeamStyle(DEFAULT_TEAM_CONFIG.style));
+  const [texts] = React.useState<Record<string, string>>(DEFAULT_TEAM_CONFIG.texts || {});
+
+  // Header config state
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(['header', 'display'], true);
+  const [hideHeader, setHideHeader] = React.useState(DEFAULT_TEAM_CONFIG.hideHeader ?? false);
+  const [showTitle, setShowTitle] = React.useState(DEFAULT_TEAM_CONFIG.showTitle ?? true);
+  const [subtitle, setSubtitle] = React.useState(DEFAULT_TEAM_CONFIG.subtitle ?? '');
+  const [showSubtitle, setShowSubtitle] = React.useState(DEFAULT_TEAM_CONFIG.showSubtitle ?? true);
+  const [headerAlign, setHeaderAlign] = React.useState<TeamHeaderAlign>(DEFAULT_TEAM_CONFIG.headerAlign ?? 'left');
+  const [titleColorPrimary, setTitleColorPrimary] = React.useState(DEFAULT_TEAM_CONFIG.titleColorPrimary ?? false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = React.useState(DEFAULT_TEAM_CONFIG.subtitleAboveTitle ?? false);
+  const [uppercaseText, setUppercaseText] = React.useState(DEFAULT_TEAM_CONFIG.uppercaseText ?? false);
+  const [showBadge, setShowBadge] = React.useState(DEFAULT_TEAM_CONFIG.showBadge ?? true);
+  const [badgeText, setBadgeText] = React.useState(DEFAULT_TEAM_CONFIG.badgeText ?? '');
+  const [spacing, setSpacing] = React.useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
+  const [desktopColumns, setDesktopColumns] = React.useState<TeamDesktopColumns>(DEFAULT_TEAM_CONFIG.desktopColumns ?? 4);
+  const [cornerRadius, setCornerRadius] = React.useState<TeamCornerRadius>(DEFAULT_TEAM_CONFIG.cornerRadius ?? 'lg');
 
   const brandMode: TeamBrandMode = mode === 'single' ? 'single' : 'dual';
 
@@ -84,31 +117,26 @@ export default function TeamCreatePage() {
     mode: brandMode,
   }), [primary, secondary, brandMode]);
 
-  const warningMessages = React.useMemo(() => {
-    if (brandMode !== 'dual') {
-      return [] as string[];
-    }
-
-    const messages: string[] = [];
-
-    if (validation.harmonyStatus.isTooSimilar) {
-      messages.push(`Màu phụ đang gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}).`);
-    }
-
-    if (validation.accessibility.failing.length > 0) {
-      messages.push(`Một số cặp màu chữ/nền chưa đạt APCA (minLc = ${validation.accessibility.minLc.toFixed(1)}).`);
-    }
-
-    return messages;
-  }, [brandMode, validation]);
-
   const onSubmit = (event: React.FormEvent) => {
-    const payload: TeamConfig = {
+    const configWithHeader: TeamConfig = {
       members: toTeamPersistMembers(members),
       style,
+      texts,
+      hideHeader,
+      showTitle,
+      subtitle,
+      showSubtitle,
+      headerAlign,
+      titleColorPrimary,
+      subtitleAboveTitle,
+      uppercaseText,
+      showBadge,
+      badgeText,
+      spacing,
+      desktopColumns,
+      cornerRadius,
     };
-
-    void handleSubmit(event, payload as unknown as Record<string, unknown>);
+    void handleSubmit(event, configWithHeader);
   };
 
   return (
@@ -127,25 +155,81 @@ export default function TeamCreatePage() {
       customFontState={customFontState}
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
+      skipTitleInput={true}
     >
+      <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
+
+      <HeaderConfigSection
+        hideHeader={hideHeader}
+        title={title}
+        showTitle={showTitle}
+        subtitle={subtitle}
+        showSubtitle={showSubtitle}
+        headerAlign={headerAlign}
+        titleColorPrimary={titleColorPrimary}
+        subtitleAboveTitle={subtitleAboveTitle}
+        uppercaseText={uppercaseText}
+        showBadge={showBadge}
+        badgeText={badgeText}
+        onHideHeaderChange={setHideHeader}
+        onTitleChange={setTitle}
+        onShowTitleChange={setShowTitle}
+        onSubtitleChange={setSubtitle}
+        onShowSubtitleChange={setShowSubtitle}
+        onHeaderAlignChange={setHeaderAlign}
+        onTitleColorPrimaryChange={setTitleColorPrimary}
+        onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+        onUppercaseTextChange={setUppercaseText}
+        onShowBadgeChange={setShowBadge}
+        onBadgeTextChange={setBadgeText}
+        expanded={openSections.header}
+        onExpandedChange={(value) => toggleSection('header', value)}
+        titleRequired={true}
+        titleLabel="Tiêu đề hiển thị"
+        titlePlaceholder="Nhập tiêu đề component..."
+      />
+
+      <div className="mb-6">
+        <HomeComponentDisplaySettingsSection
+          open={openSections.display}
+          onOpenChange={(open) => toggleSection('display', open)}
+          cornerRadius={cornerRadius}
+          onCornerRadiusChange={setCornerRadius}
+          spacing={spacing}
+          onSpacingChange={setSpacing}
+        >
+          <div className="space-y-2">
+            <Label>Số cột desktop</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {([3, 4] as const).map((option) => {
+                const selected = desktopColumns === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setDesktopColumns(option)}
+                    className={cn(
+                      'h-9 rounded-md border text-xs transition-colors',
+                      selected
+                        ? 'border-slate-950 bg-slate-950 text-white dark:border-white dark:bg-white dark:text-slate-950'
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                    )}
+                  >
+                    {option} cột
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </HomeComponentDisplaySettingsSection>
+      </div>
+
       <TeamForm
         members={members}
         onChange={setMembers}
         secondary={validation.resolvedSecondary}
+        defaultExpanded={true}
       />
-
-      {brandMode === 'dual' && warningMessages.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <div className="space-y-1">
-              {warningMessages.map((message, idx) => (
-                <p key={`team-create-warning-${idx}`}>{message}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <TeamPreview
         members={members}
@@ -155,8 +239,22 @@ export default function TeamCreatePage() {
         title={title}
         selectedStyle={style}
         onStyleChange={setStyle}
+        texts={texts}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        hideHeader={hideHeader}
+        showTitle={showTitle}
+        showSubtitle={showSubtitle}
+        subtitle={subtitle}
+        headerAlign={headerAlign}
+        titleColorPrimary={titleColorPrimary}
+        subtitleAboveTitle={subtitleAboveTitle}
+        uppercaseText={uppercaseText}
+        showBadge={showBadge}
+        badgeText={badgeText}
+        spacing={spacing}
+        desktopColumns={desktopColumns}
+        cornerRadius={cornerRadius}
       />
     </ComponentFormWrapper>
   );

@@ -244,6 +244,20 @@ export default defineSchema({
     order: v.number(),
     parentId: v.optional(v.id("productCategories")),
     slug: v.string(),
+    filterFooterContent: v.optional(v.string()),
+    productDetailSuffixContent: v.optional(v.string()),
+    productDetailFaqItems: v.optional(
+      v.array(
+        v.object({
+          id: v.union(v.string(), v.number()),
+          question: v.string(),
+          answer: v.string(),
+          order: v.number(),
+        })
+      )
+    ),
+    productDetailFaqStyle: v.optional(v.string()),
+    productDetailFaqEnabled: v.optional(v.boolean()),
   })
     .index("by_slug", ["slug"])
     .index("by_parent", ["parentId"])
@@ -285,6 +299,7 @@ export default defineSchema({
     metaTitle: v.optional(v.string()),
     metaDescription: v.optional(v.string()),
     productType: v.optional(v.union(v.literal("physical"), v.literal("digital"))),
+    productTypeId: v.optional(v.id("productTypes")), // Liên kết đến Loại sản phẩm (hệ thống Phân loại mới)
     digitalDeliveryType: v.optional(
       v.union(
         v.literal("account"),
@@ -301,6 +316,51 @@ export default defineSchema({
       customContent: v.optional(v.string()),
       expiresAt: v.optional(v.number()),
     })),
+    combos: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          price: v.optional(v.number()),
+          type: v.union(v.literal("standard"), v.literal("mix")),
+          syncId: v.optional(v.string()),
+          isSynced: v.optional(v.boolean()),
+          standardConfig: v.optional(
+            v.object({
+              minQty: v.number(),
+              rewardType: v.union(
+                v.literal("discount_percent"),
+                v.literal("discount_amount"),
+                v.literal("gift_self"),
+                v.literal("gift_other")
+              ),
+              rewardValue: v.optional(v.number()),
+              giftProductId: v.optional(v.id("products")),
+              giftQty: v.optional(v.number()),
+            })
+          ),
+          mixConfig: v.optional(
+            v.object({
+              currentProductQty: v.optional(v.number()),
+              items: v.array(
+                v.object({
+                  productId: v.id("products"),
+                  quantity: v.number(),
+                })
+              ),
+              rewardType: v.union(
+                v.literal("discount_percent"),
+                v.literal("discount_amount"),
+                v.literal("gift_other")
+              ),
+              rewardValue: v.optional(v.number()),
+              giftProductId: v.optional(v.id("products")),
+              giftQty: v.optional(v.number()),
+            })
+          ),
+        })
+      )
+    ),
+    effectivePrice: v.optional(v.number()), // Giá tính sẵn (đã tính salePrice/variant) để filter khoảng giá chuẩn và nhanh
   })
     .index("by_sku", ["sku"])
     .index("by_slug", ["slug"])
@@ -310,8 +370,18 @@ export default defineSchema({
     .index("by_status_sales", ["status", "sales"])
     .index("by_status_order", ["status", "order"])
     .index("by_order", ["order"])
+    .index("by_type_status_effectivePrice", ["productTypeId", "status", "effectivePrice"])
     .searchIndex("search_name", { filterFields: ["status", "categoryId"], searchField: "name" })
     .searchIndex("search_sku", { filterFields: ["status", "categoryId"], searchField: "sku" }),
+
+  productCategoryAssignments: defineTable({
+    categoryId: v.id("productCategories"),
+    createdAt: v.number(),
+    productId: v.id("products"),
+  })
+    .index("by_product", ["productId"])
+    .index("by_category", ["categoryId"])
+    .index("by_product_category", ["productId", "categoryId"]),
 
   // 10a. productOptions - Loại option cho variants
   productOptions: defineTable({
@@ -384,78 +454,13 @@ export default defineSchema({
     .index("by_product_status", ["productId", "status"])
     .index("by_product_order", ["productId", "order"]),
 
-  // 10c. productImageFrames - Khung viền ảnh sản phẩm
-  productImageFrames: defineTable({
-    name: v.string(),
-    status: v.union(v.literal("active"), v.literal("inactive")),
-    aspectRatio: v.string(),
-    sourceType: v.union(
-      v.literal("system_preset"),
-      v.literal("uploaded_overlay"),
-      v.literal("line_generator"),
-      v.literal("logo_generator")
-    ),
-    overlayImageUrl: v.optional(v.string()),
-    overlayStorageId: v.optional(v.union(v.id("_storage"), v.null())),
-    lineConfig: v.optional(v.object({
-      strokeWidth: v.number(),
-      inset: v.number(),
-      radius: v.number(),
-      color: v.string(),
-      shadow: v.optional(v.string()),
-      cornerStyle: v.union(
-        v.literal("sharp"),
-        v.literal("rounded"),
-        v.literal("ornamental-light")
-      ),
-    })),
-    logoConfig: v.optional(v.union(
-      v.object({
-        logoUrl: v.string(),
-        scale: v.number(),
-        opacity: v.number(),
-        x: v.number(),
-        y: v.number(),
-      }),
-      v.object({
-        logoUrl: v.string(),
-        placement: v.union(v.literal("center"), v.literal("corners")),
-        scale: v.number(),
-        opacity: v.number(),
-        inset: v.number(),
-      })
-    )),
-    seasonKey: v.optional(v.string()),
-    isSystemPreset: v.boolean(),
-    createdBy: v.optional(v.union(v.id("users"), v.null())),
-    updatedBy: v.optional(v.union(v.id("users"), v.null())),
-    metadata: v.optional(v.union(v.record(v.string(), v.any()), v.null())),
-  })
-    .index("by_aspect_ratio", ["aspectRatio"])
-    .index("by_aspect_ratio_status", ["aspectRatio", "status"])
-    .index("by_source_type", ["sourceType"])
-    .index("by_season_key", ["seasonKey"]),
-
   // 10d. productSupplementalContents - Khung nội dung bổ sung cho chi tiết sản phẩm
   productSupplementalContents: defineTable({
-    name: v.string(),
-    status: v.union(v.literal("active"), v.literal("inactive")),
-    assignmentMode: v.union(v.literal("products"), v.literal("categories")),
-    productIds: v.optional(v.array(v.id("products"))),
-    categoryIds: v.optional(v.array(v.id("productCategories"))),
     preContent: v.optional(v.string()),
     postContent: v.optional(v.string()),
-    faqItems: v.array(v.object({
-      id: v.string(),
-      question: v.string(),
-      answer: v.string(),
-      order: v.number(),
-    })),
     createdBy: v.optional(v.union(v.id("users"), v.null())),
     updatedBy: v.optional(v.union(v.id("users"), v.null())),
-  })
-    .index("by_status", ["status"])
-    .index("by_assignment_mode", ["assignmentMode"]),
+  }),
 
   // 10e. productStats - Counter table cho product statistics (tránh full scan)
   productStats: defineTable({
@@ -463,6 +468,91 @@ export default defineSchema({
     count: v.number(),
     lastOrder: v.number(),
   }).index("by_key", ["key"]),
+
+  // 10f. productTypes - Loại sản phẩm (Được migrate từ Wincellar)
+  productTypes: defineTable({
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    order: v.number(),
+    active: v.boolean(),
+    priceRanges: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          slug: v.string(),
+          minPrice: v.optional(v.number()),
+          maxPrice: v.optional(v.number()),
+        })
+      )
+    ),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_active_order", ["active", "order"]),
+
+  // 10ff. productCategoryTypes - Liên kết Danh mục và Loại sản phẩm (hệ thống Phân loại mới)
+  productCategoryTypes: defineTable({
+    categoryId: v.id("productCategories"),
+    typeId: v.id("productTypes"),
+  })
+    .index("by_category", ["categoryId"])
+    .index("by_type", ["typeId"])
+    .index("by_category_type", ["categoryId", "typeId"])
+    .index("by_type_category", ["typeId", "categoryId"]),
+
+  // 10g. attributeGroups - Nhóm thuộc tính (Ví dụ: Quốc gia, Giống nho)
+  attributeGroups: defineTable({
+    code: v.string(),
+    slug: v.string(),
+    name: v.string(),
+    filterType: v.string(), // e.g. "checkbox", "radio", "select"
+    inputType: v.string(),
+    isFilterable: v.boolean(),
+    isSpecialFilter: v.optional(v.boolean()),
+    order: v.number(),
+    displayConfig: v.optional(v.any()),
+    iconPath: v.optional(v.string()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_code", ["code"])
+    .index("by_isFilterable_order", ["isFilterable", "order"]),
+
+  // 10h. attributeTerms - Giá trị của thuộc tính (Ví dụ: Pháp, Cabernet Sauvignon)
+  attributeTerms: defineTable({
+    groupId: v.id("attributeGroups"),
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    iconType: v.optional(v.string()),
+    iconValue: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    active: v.boolean(),
+    order: v.number(),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_slug", ["slug"])
+    .index("by_group_active_order", ["groupId", "active", "order"]),
+
+  // 10i. productTypeAttributeGroups - Liên kết ProductType và AttributeGroup
+  productTypeAttributeGroups: defineTable({
+    typeId: v.id("productTypes"),
+    groupId: v.id("attributeGroups"),
+    order: v.number(),
+  })
+    .index("by_type", ["typeId"])
+    .index("by_group", ["groupId"])
+    .index("by_type_order", ["typeId", "order"]),
+
+  // 10j. productAttributeTerms - Liên kết Sản phẩm và AttributeTerm
+  productAttributeTerms: defineTable({
+    productId: v.id("products"),
+    termId: v.id("attributeTerms"),
+    order: v.number(),
+    extra: v.optional(v.any()),
+  })
+    .index("by_product", ["productId"])
+    .index("by_term", ["termId"])
+    .index("by_product_order", ["productId", "order"]),
 
   // 11. postCategories - Danh mục bài viết (Hierarchical)
   postCategories: defineTable({
@@ -516,6 +606,15 @@ export default defineSchema({
     .index("by_status_views", ["status", "views"])
     .searchIndex("search_title", { filterFields: ["status", "categoryId"], searchField: "title" }),
 
+  postCategoryAssignments: defineTable({
+    categoryId: v.id("postCategories"),
+    createdAt: v.number(),
+    postId: v.id("posts"),
+  })
+    .index("by_post", ["postId"])
+    .index("by_category", ["categoryId"])
+    .index("by_post_category", ["postId", "categoryId"]),
+
   // 13. comments - Bình luận (Polymorphic) - SVC-011: Added "service" targetType
   comments: defineTable({
     authorEmail: v.optional(v.string()),
@@ -546,14 +645,26 @@ export default defineSchema({
     filename: v.string(),
     folder: v.optional(v.string()),
     height: v.optional(v.number()),
+    isOrphan: v.optional(v.boolean()),
     mimeType: v.string(),
     size: v.number(),
     storageId: v.id("_storage"),
     uploadedBy: v.optional(v.id("users")),
+    usageCheckedAt: v.optional(v.number()),
+    usageCount: v.optional(v.number()),
+    urlStorageKey: v.optional(v.string()),
+    usages: v.optional(v.array(v.object({
+      field: v.string(),
+      label: v.optional(v.string()),
+      recordId: v.string(),
+      table: v.string(),
+    }))),
     width: v.optional(v.number()),
   })
     .index("by_folder", ["folder"])
     .index("by_mimeType", ["mimeType"])
+    .index("by_storageId", ["storageId"])
+    .index("by_urlStorageKey", ["urlStorageKey"])
     .index("by_uploadedBy", ["uploadedBy"]),
 
   // 14a. mediaStats - Counter table cho media statistics (tránh full scan)
@@ -568,6 +679,36 @@ export default defineSchema({
     count: v.number(),
     name: v.string(),
   }).index("by_name", ["name"]),
+
+  // 14c. fileReferences - Source of truth cho file đang được business records sử dụng
+  fileReferences: defineTable({
+    createdAt: v.number(),
+    mediaId: v.optional(v.id("images")),
+    ownerField: v.string(),
+    ownerId: v.string(),
+    ownerTable: v.string(),
+    purpose: v.optional(v.string()),
+    storageId: v.id("_storage"),
+    updatedAt: v.number(),
+  })
+    .index("by_storageId", ["storageId"])
+    .index("by_owner", ["ownerTable", "ownerId"])
+    .index("by_owner_field", ["ownerTable", "ownerId", "ownerField"]),
+
+  // 14d. fileDraftUploads - File đã upload nhưng chưa được commit vào business record
+  fileDraftUploads: defineTable({
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    folder: v.optional(v.string()),
+    mediaId: v.optional(v.id("images")),
+    ownerKey: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("committed"), v.literal("cleaned")),
+    storageId: v.id("_storage"),
+    updatedAt: v.number(),
+  })
+    .index("by_storageId", ["storageId"])
+    .index("by_ownerKey", ["ownerKey"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
 
   // 15. menus - Menu động
   menus: defineTable({
@@ -605,11 +746,48 @@ export default defineSchema({
 
   // 17a. homeComponentSnapshots - Snapshot bộ homepage để tái sử dụng liên dự án
   homeComponentSnapshots: defineTable({
+    address: v.optional(v.string()),
+    brandMode: v.optional(v.string()),
+    brandName: v.optional(v.string()),
+    brandPrimary: v.optional(v.string()),
+    brandSecondary: v.optional(v.string()),
+    category: v.optional(v.string()), // "spa", "restaurant", "education", "tech", "retail", "medical", "other"
+    componentCount: v.optional(v.number()),
+    componentTypes: v.optional(v.array(v.string())),
     createdAt: v.number(),
     label: v.string(),
-    payload: v.any(),
+    logo: v.optional(v.string()),
+    payload: v.optional(v.any()), // Deprecated: dữ liệu cũ, mới dùng homeComponentSnapshotPayloads
+    phone: v.optional(v.string()),
+    publicEnabled: v.optional(v.boolean()),
+    sectionTitles: v.optional(v.array(v.string())),
+    slug: v.optional(v.string()),
+    tagline: v.optional(v.string()),
+    thumbnails: v.optional(v.array(v.string())),
     version: v.string(),
-  }).index("by_createdAt", ["createdAt"]),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_slug", ["slug"])
+    .index("by_category", ["category"])
+    .index("by_publicEnabled_and_createdAt", ["publicEnabled", "createdAt"]),
+
+  // 17a-payload. homeComponentSnapshotPayloads - Payload tách riêng để list metadata không phải đọc doc lớn
+  // Convex không có column projection: mỗi query đọc toàn doc → tách payload sang bảng riêng
+  homeComponentSnapshotPayloads: defineTable({
+    snapshotId: v.id("homeComponentSnapshots"),
+    payload: v.any(),
+  }).index("by_snapshotId", ["snapshotId"]),
+
+
+  // 17b. snapshotCategories - Danh mục snapshot (user-defined, CRUD)
+  snapshotCategories: defineTable({
+    color: v.optional(v.string()),   // hex color, e.g. "#ec4899"
+    isSystem: v.boolean(),           // true = "Khác" built-in, không xóa được
+    name: v.string(),
+    order: v.number(),
+  })
+    .index("by_order", ["order"])
+    .index("by_name", ["name"]),
 
   // 18. settings - Cấu hình hệ thống (Key-Value)
   settings: defineTable({
@@ -886,6 +1064,14 @@ export default defineSchema({
     .index("by_path", ["path"])
     .index("by_session", ["sessionId"]),
 
+  pageViewSessionBuckets: defineTable({
+    bucketStart: v.number(),
+    bucketType: v.union(v.literal("day"), v.literal("hour")),
+    sessionId: v.string(),
+  })
+    .index("by_bucketType_and_bucketStart", ["bucketType", "bucketStart"])
+    .index("by_sessionId_and_bucketType_and_bucketStart", ["sessionId", "bucketType", "bucketStart"]),
+
   // 26. serviceCategories - Danh mục dịch vụ (Hierarchical)
   serviceCategories: defineTable({
     active: v.boolean(),
@@ -946,6 +1132,15 @@ export default defineSchema({
     .index("by_status_featured", ["status", "featured"])
     .index("by_booking_enabled", ["bookingEnabled"])
     .searchIndex("search_title", { filterFields: ["status", "categoryId"], searchField: "title" }),
+
+  serviceCategoryAssignments: defineTable({
+    categoryId: v.id("serviceCategories"),
+    createdAt: v.number(),
+    serviceId: v.id("services"),
+  })
+    .index("by_service", ["serviceId"])
+    .index("by_category", ["categoryId"])
+    .index("by_service_category", ["serviceId", "categoryId"]),
 
   // 27a. bookings - Đặt lịch
   bookings: defineTable({

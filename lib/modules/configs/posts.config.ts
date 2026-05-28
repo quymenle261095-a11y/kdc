@@ -19,6 +19,12 @@ export const postsModule = defineModuleWithRuntime({
    
    settings: [
      { key: 'postsPerPage', label: 'Số bài / trang', type: 'number', default: 10 },
+     {
+       key: 'enableMultipleCategories',
+       label: 'Cho phép nhiều danh mục',
+       type: 'toggle',
+       default: false,
+     },
      { 
        key: 'defaultStatus', 
        label: 'Trạng thái mặc định', 

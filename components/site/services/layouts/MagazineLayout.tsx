@@ -41,6 +41,7 @@ interface MagazineLayoutProps {
   onSortChange: (sort: ServiceSortOption) => void;
   featuredServices: Service[];
   enabledFields: Set<string>;
+  getDetailHref: (service: Service) => string;
 }
 
 function formatPrice(price?: number): string {
@@ -70,6 +71,7 @@ export function MagazineLayout({
   onSortChange,
   featuredServices,
   enabledFields,
+  getDetailHref,
 }: MagazineLayoutProps) {
   const ringStyle = { '--tw-ring-color': tokens.filterRing } as React.CSSProperties;
   const showExcerpt = enabledFields.has('excerpt');
@@ -108,7 +110,7 @@ export function MagazineLayout({
         <section className="grid lg:grid-cols-3 gap-4">
           {/* Main Featured - Large Card */}
           <Link
-            href={`/services/${mainFeatured.slug}`}
+            href={getDetailHref(mainFeatured)}
             className="lg:col-span-2 group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
             style={ringStyle}
           >
@@ -174,7 +176,7 @@ export function MagazineLayout({
             {secondaryFeatured.map((service) => (
               <Link
                 key={service._id}
-                href={`/services/${service.slug}`}
+                href={getDetailHref(service)}
                 className="group flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={ringStyle}
               >
@@ -282,7 +284,7 @@ export function MagazineLayout({
             {trendingServices.map((service, index) => (
               <Link
                 key={service._id}
-                href={`/services/${service.slug}`}
+                href={getDetailHref(service)}
                 className="group flex gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={ringStyle}
                 aria-label={`Xem dịch vụ ${service.title}`}
@@ -326,7 +328,7 @@ export function MagazineLayout({
             {services.map((service) => (
               <Link
                 key={service._id}
-                href={`/services/${service.slug}`}
+                href={getDetailHref(service)}
                 className="group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                 style={ringStyle}
               >

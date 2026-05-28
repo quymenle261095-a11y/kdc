@@ -188,72 +188,6 @@ export const resolveSecondaryForMode = (
   return getHarmonyColor(normalizedPrimary, harmony);
 };
 
-const buildHarmonyFallbackOrder = (harmony: GalleryHarmony): GalleryHarmony[] => {
-  const order: GalleryHarmony[] = [harmony, 'complementary', 'triadic', 'analogous'];
-  return Array.from(new Set(order));
-};
-
-const resolveSecondaryWithHarmonyFallback = (
-  primary: string,
-  secondary: string,
-  mode: GalleryBrandMode,
-  harmony: GalleryHarmony,
-): GalleryAutoHealInfo => {
-  const normalizedPrimary = normalizeHex(primary, DEFAULT_BRAND_COLOR);
-  const harmonyResolved = normalizeGalleryHarmony(harmony);
-
-  if (mode === 'single') {
-    return {
-      didAutoHealHarmony: false,
-      didAutoHealText: false,
-      isStillSimilar: false,
-      resolvedSecondary: normalizedPrimary,
-      harmonyUsed: harmonyResolved,
-    };
-  }
-
-  const initialSecondary = isValidHexColor(secondary)
-    ? normalizeHex(secondary, normalizedPrimary)
-    : getHarmonyColor(normalizedPrimary, harmonyResolved);
-  const initialStatus = getHarmonyStatus(normalizedPrimary, initialSecondary);
-
-  if (!initialStatus.isTooSimilar) {
-    return {
-      didAutoHealHarmony: false,
-      didAutoHealText: false,
-      isStillSimilar: false,
-      resolvedSecondary: initialSecondary,
-      harmonyUsed: harmonyResolved,
-    };
-  }
-
-  let fallbackSecondary = initialSecondary;
-  let fallbackHarmony = harmonyResolved;
-  for (const scheme of buildHarmonyFallbackOrder(harmonyResolved)) {
-    const candidate = getHarmonyColor(normalizedPrimary, scheme);
-    const status = getHarmonyStatus(normalizedPrimary, candidate);
-    fallbackSecondary = candidate;
-    fallbackHarmony = scheme;
-    if (!status.isTooSimilar) {
-      return {
-        didAutoHealHarmony: true,
-        didAutoHealText: false,
-        isStillSimilar: false,
-        resolvedSecondary: candidate,
-        harmonyUsed: scheme,
-      };
-    }
-  }
-
-  return {
-    didAutoHealHarmony: true,
-    didAutoHealText: false,
-    isStillSimilar: true,
-    resolvedSecondary: fallbackSecondary,
-    harmonyUsed: fallbackHarmony,
-  };
-};
-
 const autoFixTextTokensForAPCA = (tokens: GalleryColorTokens, mode: GalleryBrandMode) => {
   const heading = ensureAPCATextColor(tokens.primary, tokens.neutralSurface, 24, 700);
   const subheading = ensureAPCATextColor(tokens.secondary, tokens.neutralSurface, 18, 600);
@@ -326,8 +260,18 @@ export const getGalleryColorTokensWithMeta = ({
   harmony?: GalleryHarmony;
 }): { tokens: GalleryColorTokens; autoHeal: GalleryAutoHealInfo } => {
   const primaryResolved = normalizeHex(primary, DEFAULT_BRAND_COLOR);
-  const autoHeal = resolveSecondaryWithHarmonyFallback(primaryResolved, secondary, mode, harmony);
-  const secondaryResolved = autoHeal.resolvedSecondary;
+  const harmonyResolved = normalizeGalleryHarmony(harmony);
+  const secondaryResolved = resolveSecondaryForMode(primaryResolved, secondary, mode, harmonyResolved);
+  const harmonyStatus = getHarmonyStatus(primaryResolved, secondaryResolved);
+
+  const autoHeal: GalleryAutoHealInfo = {
+    didAutoHealHarmony: false,
+    didAutoHealText: false,
+    isStillSimilar: harmonyStatus.isTooSimilar,
+    resolvedSecondary: secondaryResolved,
+    harmonyUsed: harmonyResolved,
+  };
+
   const neutralBackground = '#f8fafc';
   const neutralSurface = '#ffffff';
   const neutralBorder = '#e2e8f0';
@@ -336,33 +280,33 @@ export const getGalleryColorTokensWithMeta = ({
 
   const _primaryTint = getSolidTint(primaryResolved, 0.42);
   const secondaryTint = getSolidTint(secondaryResolved, 0.42);
-  const accentSurface = getSolidTint(secondaryResolved, 0.5);
+  const accentSurface = getSolidTint(primaryResolved, 0.5);
   const accentBorder = neutralBorder;
   const sectionAccentBar = primaryResolved;
-  const cardHoverBorder = secondaryResolved;
+  const cardHoverBorder = primaryResolved;
   const sectionAccentBarByStyle: Record<GalleryStyle, string> = {
-    spotlight: secondaryResolved,
-    explore: secondaryResolved,
-    stories: secondaryResolved,
-    grid: secondaryResolved,
-    marquee: secondaryResolved,
-    masonry: secondaryResolved,
+    spotlight: primaryResolved,
+    explore: primaryResolved,
+    stories: primaryResolved,
+    grid: primaryResolved,
+    marquee: primaryResolved,
+    masonry: primaryResolved,
   };
   const lightboxControlBg = '#111827';
-  const lightboxControlBorder = secondaryResolved;
+  const lightboxControlBorder = primaryResolved;
   const lightboxControlIcon = ensureAPCATextColor(primaryResolved, lightboxControlBg, 16, 600);
-  const lightboxCounterBg = secondaryTint;
+  const lightboxCounterBg = _primaryTint;
   const lightboxCounterText = getAPCATextColor(lightboxCounterBg, 12, 600);
-  const counterBg = secondaryTint;
+  const counterBg = _primaryTint;
   const counterText = getAPCATextColor(counterBg, 11, 600);
   const counterBorder = neutralBorder;
-  const focusRing = secondaryResolved;
-  const focusRingHover = primaryResolved;
-  const progressTrack = getSolidTint(secondaryResolved, 0.5);
+  const focusRing = primaryResolved;
+  const focusRingHover = secondaryResolved;
+  const progressTrack = getSolidTint(primaryResolved, 0.5);
   const progressFill = primaryResolved;
   const dotInactive = neutralBorder;
-  const dotActive = secondaryResolved;
-  const dotHover = primaryResolved;
+  const dotActive = primaryResolved;
+  const dotHover = secondaryResolved;
 
   const tokens = {
     primary: primaryResolved,
@@ -421,6 +365,27 @@ export const getGalleryColorTokens = (input: {
   mode: GalleryBrandMode;
   harmony?: GalleryHarmony;
 }): GalleryColorTokens => getGalleryColorTokensWithMeta(input).tokens;
+
+export const getTrustBadgesNeutralColorTokens = (tokens: GalleryColorTokens): GalleryColorTokens => ({
+  ...tokens,
+  heading: '#0f172a',
+  subheading: '#334155',
+  iconBg: '#f8fafc',
+  iconColor: '#0f172a',
+  badgeBg: '#0f172a',
+  badgeText: '#ffffff',
+  badgeBorder: '#cbd5e1',
+  accentSurface: '#f8fafc',
+  accentBorder: '#cbd5e1',
+  sectionAccentBar: '#0f172a',
+  cardHoverBorder: '#0f172a',
+  placeholderIcon: '#334155',
+  focusRing: '#0f172a',
+  focusRingHover: '#334155',
+  progressFill: '#0f172a',
+  dotActive: '#0f172a',
+  dotHover: '#334155',
+});
 
 export const getGalleryPersistSafeColors = (input: {
   primary: string;

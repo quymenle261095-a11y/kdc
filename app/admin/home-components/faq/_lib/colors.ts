@@ -258,6 +258,7 @@ const FAQ_ACCENT_BALANCE_BY_STYLE: Record<FaqStyle, { primary: number; secondary
   minimal: { primary: 25, secondary: 12, neutral: 63 },
   timeline: { primary: 25, secondary: 13, neutral: 62 },
   tabbed: { primary: 26, secondary: 14, neutral: 60 },
+  'wine-list': { primary: 24, secondary: 14, neutral: 62 },
 };
 
 export const calculateFaqAccentBalance = (style: FaqStyle): FaqAccentBalance => {
@@ -420,6 +421,32 @@ export const getFaqColors = ({
       badgeBorder: '#e2e8f0',
       badgeText: ensureAPCATextColor(secondaryPalette.textInteractive, secondaryPalette.surface, 12, 700),
       panelBorderStrong: secondaryPalette.solid,
+    };
+  }
+
+  if (style === 'wine-list') {
+    const wineSurface = '#fbfaf7';
+    const wineBorder = '#e7e5df';
+    const wineText = '#1f2933';
+    const wineBody = '#4b5563';
+
+    return {
+      ...base,
+      sectionBg: '#ffffff',
+      heading: wineText,
+      body: ensureAPCATextColor(wineBody, wineSurface, 16, 500),
+      questionText: ensureAPCATextColor(wineText, wineSurface, 18, 500),
+      panelTitleText: ensureAPCATextColor(wineText, wineSurface, 18, 500),
+      panelBg: wineSurface,
+      panelBgMuted: wineSurface,
+      panelBorder: wineBorder,
+      panelBorderStrong: wineBorder,
+      chevron: ensureAPCATextColor(primaryPalette.solid, wineSurface, 14, 700),
+      badgeBg: '#ffffff',
+      badgeBorder: wineBorder,
+      badgeText: wineText,
+      iconBg: wineSurface,
+      iconText: ensureAPCATextColor(primaryPalette.solid, wineSurface, 14, 700),
     };
   }
 

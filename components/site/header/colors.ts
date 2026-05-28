@@ -76,6 +76,13 @@ const ensureAPCATextColor = (
 };
 
 export type MenuColorMode = 'single' | 'dual';
+export type MenuLayerColorChoice = 'white' | 'primary' | 'secondary';
+
+export type MenuLayerColorConfig = {
+  topnav?: MenuLayerColorChoice;
+  navbar?: MenuLayerColorChoice;
+  menu?: MenuLayerColorChoice;
+};
 
 export const resolveSecondaryForMode = (
   primary: string,
@@ -156,6 +163,18 @@ export type MenuColors = {
   patternStripe: string;
   placeholderBg: string;
   placeholderText: string;
+};
+
+export type MenuLayerResolvedColors = {
+  bg: string;
+  text: string;
+  border: string;
+};
+
+export type MenuLayerColorTokens = {
+  topnav: MenuLayerResolvedColors;
+  navbar: MenuLayerResolvedColors;
+  menu: MenuLayerResolvedColors;
 };
 
 export const getMenuColors = (
@@ -243,3 +262,38 @@ export const getMenuColors = (
     placeholderText: textSubtle,
   };
 };
+
+export const resolveMenuLayerChoice = (
+  choice: MenuLayerColorChoice | undefined,
+  mode: MenuColorMode
+): MenuLayerColorChoice => {
+  if (choice === 'primary') {return 'primary';}
+  if (choice === 'secondary' && mode === 'dual') {return 'secondary';}
+  return 'white';
+};
+
+const resolveLayerColors = (
+  choice: MenuLayerColorChoice | undefined,
+  tokens: MenuColors,
+  mode: MenuColorMode
+): MenuLayerResolvedColors => {
+  const resolvedChoice = resolveMenuLayerChoice(choice, mode);
+  if (resolvedChoice === 'primary') {
+    return { bg: tokens.primary, text: getAPCATextColor(tokens.primary, 14, 600), border: tokens.primary };
+  }
+  if (resolvedChoice === 'secondary') {
+    return { bg: tokens.secondary, text: getAPCATextColor(tokens.secondary, 14, 600), border: tokens.secondary };
+  }
+
+  return { bg: tokens.surface, text: tokens.textPrimary, border: tokens.border };
+};
+
+export const resolveMenuLayerColors = (
+  layerConfig: MenuLayerColorConfig | undefined,
+  tokens: MenuColors,
+  mode: MenuColorMode
+): MenuLayerColorTokens => ({
+  topnav: resolveLayerColors(layerConfig?.topnav ?? 'primary', tokens, mode),
+  navbar: resolveLayerColors(layerConfig?.navbar ?? 'white', tokens, mode),
+  menu: resolveLayerColors(layerConfig?.menu ?? 'white', tokens, mode),
+});

@@ -5,17 +5,18 @@ import { AdminImage as Image } from '@/app/admin/components/AdminImage';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ImageOff, Loader2, Upload, X } from 'lucide-react';
+import { ClipboardPaste, ImageOff, Loader2, Pencil, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, cn } from './ui';
+import { Button, cn } from './ui';
 import { prepareImageForUpload, type ImageCropSelection, validateImageFile } from '@/lib/image/uploadPipeline';
 import { resolveNamingContext, type ImageNamingContext } from '@/lib/image/uploadNaming';
+import { ImageEditorDialog } from './ImageEditorDialog';
 import {
   DEFAULT_PRODUCT_IMAGE_ASPECT_RATIO,
   getProductImageAspectRatioCssValue,
-  getProductImageAspectRatioValue,
   type ProductImageAspectRatio,
 } from '@/lib/products/image-aspect-ratio';
+import { useFileDraftUploads } from './useFileDraftUploads';
 
 interface ImageUploadProps {
   value?: string;
@@ -29,8 +30,6 @@ interface ImageUploadProps {
   cropAspectRatio?: ProductImageAspectRatio;
   deleteMode?: 'immediate' | 'defer';
 }
-
-const CROP_VIEW_MAX_SIZE = 320;
 
 export function ImageUpload({
   value,
@@ -48,30 +47,15 @@ export function ImageUpload({
   const [hasError, setHasError] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropPreviewUrl, setCropPreviewUrl] = useState<string | null>(null);
-  const [cropScale, setCropScale] = useState(1);
-  const [cropXPercent, setCropXPercent] = useState(0.5);
-  const [cropYPercent, setCropYPercent] = useState(0.5);
-  const [sourceDimensions, setSourceDimensions] = useState<{ width: number; height: number } | null>(null);
   const [currentStorageId, setCurrentStorageId] = useState<Id<'_storage'> | undefined>();
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
   const saveImage = useMutation(api.storage.saveImage);
   const deleteImage = useMutation(api.storage.deleteImage);
+  const { trackDraftUpload } = useFileDraftUploads(`image-upload:${folder}`);
   const inputId = useMemo(() => `image-upload-input-${Math.random().toString(36).slice(2, 9)}`, []);
   const isCropOpen = Boolean(cropFile && cropPreviewUrl);
-  const cropRatioValue = getProductImageAspectRatioValue(cropAspectRatio);
-  const cropFrame = useMemo(() => {
-    if (cropRatioValue >= 1) {
-      return {
-        width: CROP_VIEW_MAX_SIZE,
-        height: Math.round(CROP_VIEW_MAX_SIZE / cropRatioValue),
-      };
-    }
-    return {
-      width: Math.round(CROP_VIEW_MAX_SIZE * cropRatioValue),
-      height: CROP_VIEW_MAX_SIZE,
-    };
-  }, [cropRatioValue]);
 
   useEffect(() => {
     setHasError(false);
@@ -114,6 +98,7 @@ export function ImageUpload({
         storageId: storageId as Id<"_storage">,
         width: prepared.width,
       });
+      await trackDraftUpload(storageId as Id<'_storage'>, folder);
 
       if (result.url) {
       setCurrentStorageId(storageId as Id<'_storage'>);
@@ -127,7 +112,7 @@ export function ImageUpload({
     } finally {
       setIsUploading(false);
     }
-  }, [generateUploadUrl, saveImage, folder, onChange, naming, onStorageIdChange]);
+  }, [generateUploadUrl, saveImage, folder, onChange, naming, onStorageIdChange, trackDraftUpload]);
 
   const resetCropState = useCallback(() => {
     if (cropPreviewUrl) {
@@ -135,10 +120,6 @@ export function ImageUpload({
     }
     setCropFile(null);
     setCropPreviewUrl(null);
-    setSourceDimensions(null);
-    setCropScale(1);
-    setCropXPercent(0.5);
-    setCropYPercent(0.5);
   }, [cropPreviewUrl]);
 
   const openCropper = useCallback((file: File) => {
@@ -154,10 +135,6 @@ export function ImageUpload({
 
     setCropFile(file);
     setCropPreviewUrl(URL.createObjectURL(file));
-    setSourceDimensions(null);
-    setCropScale(1);
-    setCropXPercent(0.5);
-    setCropYPercent(0.5);
   }, [cropPreviewUrl]);
 
   const handleSelectedFile = useCallback((file: File) => {
@@ -195,6 +172,31 @@ export function ImageUpload({
     e.preventDefault();
   };
 
+  // Đọc ảnh từ clipboard
+  const handleClipboardPaste = useCallback(async () => {
+    if (isUploading) return;
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const ext = imageType.split('/')[1] || 'png';
+          const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: imageType });
+          handleSelectedFile(file);
+          return;
+        }
+      }
+      toast.error('Clipboard không có ảnh. Hãy copy ảnh trước.');
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        toast.error('Trình duyệt chặn quyền đọc clipboard.');
+      } else {
+        toast.error('Không đọc được clipboard. Hãy copy ảnh trước.');
+      }
+    }
+  }, [isUploading, handleSelectedFile]);
+
   const handleRemove = async () => {
     if (deleteMode === 'immediate' && currentStorageId) {
       try {
@@ -208,50 +210,9 @@ export function ImageUpload({
     setCurrentStorageId(undefined);
   };
 
-  const renderedSize = useMemo(() => {
-    if (!sourceDimensions) {
-      return null;
-    }
-
-    const coverScale = Math.max(cropFrame.width / sourceDimensions.width, cropFrame.height / sourceDimensions.height);
-    return {
-      width: sourceDimensions.width * coverScale * cropScale,
-      height: sourceDimensions.height * coverScale * cropScale,
-    };
-  }, [sourceDimensions, cropFrame.height, cropFrame.width, cropScale]);
-
-  const previewStyle = useMemo(() => {
-    if (!renderedSize) {
-      return undefined;
-    }
-
-    const maxOffsetX = Math.max(0, renderedSize.width - cropFrame.width);
-    const maxOffsetY = Math.max(0, renderedSize.height - cropFrame.height);
-
-    return {
-      height: renderedSize.height,
-      left: -(maxOffsetX * cropXPercent),
-      top: -(maxOffsetY * cropYPercent),
-      width: renderedSize.width,
-    };
-  }, [renderedSize, cropFrame.height, cropFrame.width, cropXPercent, cropYPercent]);
-
-  const handleConfirmCrop = async () => {
-    if (!cropFile) {
-      return;
-    }
-
-    await handleUpload(cropFile, {
-      scale: cropScale,
-      xPercent: cropXPercent,
-      yPercent: cropYPercent,
-      aspectRatio: cropAspectRatio,
-    });
-    resetCropState();
-  };
-
   if (value) {
     return (
+      <>
       <div
         className={cn(enableCrop ? "relative w-full max-w-[320px]" : "relative h-40 w-full", className)}
         style={enableCrop ? { aspectRatio: getProductImageAspectRatioCssValue(cropAspectRatio) } : undefined}
@@ -270,12 +231,26 @@ export function ImageUpload({
             <ImageOff size={24} />
           </div>
         )}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 shadow-sm"
+            className="h-8 w-8 bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 shadow-sm"
+            title="Cắt / Xoá nền"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsEditorOpen(true);
+            }}
+          >
+            <Pencil size={14} className="text-slate-600" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 bg-white/90 dark:bg-slate-800/90 hover:bg-white dark:hover:bg-slate-800 shadow-sm"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -286,6 +261,18 @@ export function ImageUpload({
           </Button>
         </div>
       </div>
+      {/* Image Editor Dialog (Crop + Remove BG) */}
+      {isEditorOpen && (
+        <ImageEditorDialog
+          imageUrl={value}
+          onClose={() => setIsEditorOpen(false)}
+          onApply={(editedFile) => {
+            setIsEditorOpen(false);
+            void handleUpload(editedFile);
+          }}
+        />
+      )}
+      </>
     );
   }
 
@@ -327,85 +314,27 @@ export function ImageUpload({
           </>
         )}
       </div>
+      <button
+        type="button"
+        onClick={handleClipboardPaste}
+        disabled={isUploading}
+        className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-400 disabled:opacity-50"
+        title="Copy ảnh rồi click vào đây"
+      >
+        <ClipboardPaste size={14} /> Dán ảnh từ clipboard
+      </button>
 
-      <Dialog open={isCropOpen} onOpenChange={(open) => { if (!open) {resetCropState();} }}>
-        <DialogContent className="max-w-[92vw] w-[560px]">
-          <DialogHeader>
-            <DialogTitle>Cắt ảnh theo tỉ lệ</DialogTitle>
-            <DialogDescription>Điều chỉnh vùng cắt trước khi tải lên.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div
-              className="mx-auto relative overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800"
-              style={{ height: cropFrame.height, width: cropFrame.width }}
-            >
-              {cropPreviewUrl && (
-                <img
-                  src={cropPreviewUrl}
-                  alt="Crop preview"
-                  className="absolute max-w-none"
-                  style={previewStyle}
-                  onLoad={(event) => {
-                    const image = event.currentTarget;
-                    setSourceDimensions({
-                      width: image.naturalWidth,
-                      height: image.naturalHeight,
-                    });
-                  }}
-                />
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-sm text-slate-600 dark:text-slate-300">
-                Zoom ({cropScale.toFixed(1)}x)
-                <input
-                  type="range"
-                  min={1}
-                  max={3}
-                  step={0.1}
-                  value={cropScale}
-                  onChange={(e) => setCropScale(Number(e.target.value))}
-                  className="mt-1 w-full"
-                />
-              </label>
-              <label className="block text-sm text-slate-600 dark:text-slate-300">
-                Dịch ngang
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={cropXPercent}
-                  onChange={(e) => setCropXPercent(Number(e.target.value))}
-                  className="mt-1 w-full"
-                />
-              </label>
-              <label className="block text-sm text-slate-600 dark:text-slate-300">
-                Dịch dọc
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={cropYPercent}
-                  onChange={(e) => setCropYPercent(Number(e.target.value))}
-                  className="mt-1 w-full"
-                />
-              </label>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={resetCropState} disabled={isUploading}>Hủy</Button>
-            <Button type="button" variant="accent" onClick={() => { void handleConfirmCrop(); }} disabled={isUploading || !sourceDimensions}>
-              {isUploading && <Loader2 size={16} className="animate-spin mr-2" />}
-              Dùng ảnh đã cắt
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {isCropOpen && cropPreviewUrl && (
+        <ImageEditorDialog
+          imageUrl={cropPreviewUrl}
+          preferredCropAspectRatio={cropAspectRatio}
+          onClose={resetCropState}
+          onApply={(editedFile) => {
+            resetCropState();
+            void handleUpload(editedFile);
+          }}
+        />
+      )}
     </>
   );
 }

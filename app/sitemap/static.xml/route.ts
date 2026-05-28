@@ -45,24 +45,6 @@ export async function GET(): Promise<Response> {
       url: baseUrl,
     },
     {
-      changeFrequency: 'daily' as const,
-      lastModified: resolveLatestTimestamp([latestPostTimestamp, latestLandingTimestamp]) ?? fallbackTimestamp,
-      priority: 0.8,
-      url: `${baseUrl}/posts`,
-    },
-    {
-      changeFrequency: 'daily' as const,
-      lastModified: resolveLatestTimestamp([latestProductTimestamp, latestLandingTimestamp]) ?? fallbackTimestamp,
-      priority: 0.8,
-      url: `${baseUrl}/products`,
-    },
-    {
-      changeFrequency: 'weekly' as const,
-      lastModified: resolveLatestTimestamp([latestServiceTimestamp, latestLandingTimestamp]) ?? fallbackTimestamp,
-      priority: 0.8,
-      url: `${baseUrl}/services`,
-    },
-    {
       changeFrequency: 'weekly' as const,
       lastModified: latestLandingTimestamp ? new Date(latestLandingTimestamp) : fallbackTimestamp,
       priority: 0.7,

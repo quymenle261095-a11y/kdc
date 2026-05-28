@@ -8,6 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import {
   getServiceListColorTokens,
 } from '@/app/admin/home-components/service-list/_lib/colors';
+import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
 import { ServiceListSectionShared } from '@/app/admin/home-components/service-list/_components/ServiceListSectionShared';
 import type {
   ServiceListBrandMode,
@@ -15,6 +16,12 @@ import type {
   ServiceListPreviewItem,
   ServiceListStyle,
 } from '@/app/admin/home-components/service-list/_types';
+import {
+  normalizeServiceListCardRadius,
+  normalizeServiceListDesktopColumns,
+} from '@/app/admin/home-components/service-list/_types';
+import { buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 
 interface ServiceListSectionProps {
   config: Record<string, unknown>;
@@ -22,6 +29,7 @@ interface ServiceListSectionProps {
   secondary: string;
   mode: ServiceListBrandMode;
   title: string;
+  snapshotComponentKey?: string;
 }
 
 type ServiceRecord = {
@@ -33,19 +41,29 @@ type ServiceRecord = {
   status?: string;
   price?: number;
   views: number;
+  categoryId: Id<'serviceCategories'>;
 };
 
 const mapServiceToPreview = (
   service: ServiceRecord,
   index: number,
+  params: {
+    routeMode: 'unified' | 'namespace';
+    categorySlugMap: Map<string, string>;
+  },
 ): ServiceListPreviewItem & { href: string } => ({
   id: service._id,
   name: service.title,
   image: service.thumbnail,
   description: service.excerpt,
   price: service.price,
-  tag: index === 0 ? 'hot' : (index === 1 ? 'new' : undefined),
-  href: service.slug ? `/services/${service.slug}` : '/services',
+  tag: (service as any).tag, // Fallback if tag is passed through somehow, otherwise undefined
+  href: service.slug ? buildDetailPath({
+    categorySlug: params.categorySlugMap.get(service.categoryId),
+    mode: params.routeMode,
+    moduleKey: 'services',
+    recordSlug: service.slug,
+  }) : '/services',
 });
 
 export function ServiceListSection({
@@ -54,26 +72,81 @@ export function ServiceListSection({
   secondary,
   mode,
   title,
+  snapshotComponentKey,
 }: ServiceListSectionProps) {
+  const snapshotDemo = useSnapshotDemoContext();
   const safeConfig = config as Partial<ServiceListConfig>;
 
   const style = (safeConfig.style as ServiceListStyle) ?? 'grid';
+  const cardRadius = normalizeServiceListCardRadius(safeConfig.cardRadius);
+  const desktopColumns = normalizeServiceListDesktopColumns(safeConfig.desktopColumns);
   const itemCount = Math.min(Math.max(Number(safeConfig.itemCount) || 8, 1), 20);
   const selectionMode = safeConfig.selectionMode ?? 'auto';
+  const headerConfig = extractSectionHeaderConfig(config);
+
   const selectedServiceIds = React.useMemo(() => (
     Array.isArray(safeConfig.selectedServiceIds)
       ? safeConfig.selectedServiceIds
       : []
   ), [safeConfig.selectedServiceIds]);
 
+  const demoServices = React.useMemo(() => (config.demoServices as Array<{ id: string; name: string; image?: string; price?: string; description?: string; tag?: string }>) || [], [config.demoServices]);
+
   const servicesData = useQuery(
     api.services.listAll,
-    selectionMode === 'auto' ? { limit: Math.min(itemCount, 20) } : { limit: 100 },
+    selectionMode === 'demo' ? 'skip' : (selectionMode === 'auto' ? { limit: Math.min(itemCount, 20) } : { limit: 100 }),
   );
+  const categories = useQuery(api.serviceCategories.listActive, selectionMode === 'demo' ? 'skip' : { limit: 100 });
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const snapshotData = React.useMemo(() => {
+    if (!snapshotDemo || !snapshotComponentKey) {return null;}
+    const data = snapshotDemo.getComponentData(snapshotComponentKey);
+    return data?.kind === 'service-list' ? data : null;
+  }, [snapshotDemo, snapshotComponentKey]);
+  const routeMode = React.useMemo(
+    () => normalizeRouteMode(snapshotData?.settings?.iaRouteMode ?? routeModeSetting),
+    [routeModeSetting, snapshotData?.settings]
+  );
+  const categorySlugMap = React.useMemo(() => {
+    if (snapshotData) {
+      return new Map(snapshotData.categories.map((category) => [category.id, category.slug ?? '']));
+    }
+    if (!categories) {return new Map<string, string>();}
+    return new Map(categories.map((category) => [category._id, category.slug]));
+  }, [categories, snapshotData]);
 
   const sortBy = safeConfig.sortBy ?? 'newest';
 
   const services = React.useMemo(() => {
+    // Demo mode: use inline demo data directly, no DB query needed
+    if (selectionMode === 'demo' && demoServices.length > 0) {
+      return demoServices.map((item) => ({
+        _id: item.id as Id<'services'>,
+        categoryId: '' as Id<'serviceCategories'>,
+        excerpt: item.description,
+        price: item.price ? Number(item.price.replace(/[^\d]/g, '')) || 0 : undefined,
+        slug: undefined,
+        status: 'Published',
+        thumbnail: item.image,
+        title: item.name,
+        views: 0,
+        tag: item.tag,
+      }));
+    }
+
+    if (snapshotData) {
+      return snapshotData.items.slice(0, itemCount).map((item) => ({
+        _id: item.id as Id<'services'>,
+        categoryId: (item.categoryId ?? '') as Id<'serviceCategories'>,
+        excerpt: item.excerpt,
+        price: item.price,
+        slug: item.slug,
+        status: 'Published',
+        thumbnail: item.image,
+        title: item.title,
+        views: item.views ?? 0,
+      }));
+    }
     if (!servicesData) {return [];}
 
     const published = servicesData
@@ -98,9 +171,9 @@ export function ServiceListSection({
     }
 
     return sorted.slice(0, itemCount);
-  }, [servicesData, selectionMode, selectedServiceIds, itemCount, sortBy]);
+  }, [servicesData, selectionMode, selectedServiceIds, itemCount, sortBy, snapshotData, demoServices]);
 
-  if (servicesData === undefined) {
+  if (selectionMode !== 'demo' && !snapshotData && servicesData === undefined) {
     return (
       <section className="py-12 md:py-16 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-center min-h-[200px]">
@@ -116,12 +189,25 @@ export function ServiceListSection({
     mode,
   });
 
-  const items = services.map((service, index) => mapServiceToPreview(service, index));
+  const items = services.map((service, index) => mapServiceToPreview(service, index, { categorySlugMap, routeMode }));
 
   return (
     <ServiceListSectionShared
       context="site"
       mode={mode}
+      hideHeader={headerConfig.hideHeader}
+      showTitle={headerConfig.showTitle}
+      showSubtitle={headerConfig.showSubtitle}
+      subtitle={headerConfig.subtitle}
+      headerAlign={headerConfig.headerAlign}
+      titleColorPrimary={headerConfig.titleColorPrimary}
+      subtitleAboveTitle={headerConfig.subtitleAboveTitle}
+      uppercaseText={headerConfig.uppercaseText}
+      showBadge={headerConfig.showBadge}
+      badgeText={headerConfig.badgeText}
+      spacing={headerConfig.spacing}
+      cardRadius={cardRadius}
+      desktopColumns={desktopColumns}
       style={style}
       sectionTitle={title}
       items={items}

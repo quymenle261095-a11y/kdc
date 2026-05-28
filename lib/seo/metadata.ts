@@ -140,7 +140,7 @@ export const buildMetadata = (params: {
 }): Metadata => {
   const resolvedImage = params.image || params.context.image;
   const resolvedKeywords = params.keywords ?? params.context.keywords;
-  const openGraphTitle = params.useTitleTemplate
+  const openGraphTitle = params.useTitleTemplate || params.title === params.context.siteName
     ? params.title
     : `${params.title} | ${params.context.siteName}`;
   const twitterSite = resolveTwitterHandle(params.twitterSite);
@@ -248,7 +248,7 @@ export const buildSeoMetadata = (params: {
     seo: params.seo,
   });
 
-  const openGraphTitle = params.useTitleTemplate ? title : `${title} | ${siteName}`;
+  const openGraphTitle = params.useTitleTemplate || title === siteName ? title : `${title} | ${siteName}`;
   const twitterSite = resolveTwitterHandle(params.social?.social_twitter);
   const twitterCreator = resolveTwitterHandle(params.social?.social_twitter);
   const openGraphImage = image

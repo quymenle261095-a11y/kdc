@@ -237,12 +237,14 @@ export const calculateClientsAccentBalance = (
   style: ClientsStyle,
 ): ClientsAccentBalance => {
   const distributions: Record<ClientsStyle, { primary: number; secondary: number }> = {
-    simpleGrid: { primary: 30, secondary: 8 },
-    compactInline: { primary: 28, secondary: 12 },
-    subtleMarquee: { primary: 25, secondary: 8 },
-    grid: { primary: 30, secondary: 10 },
-    carousel: { primary: 28, secondary: 12 },
-    featured: { primary: 32, secondary: 8 },
+    layout01: { primary: 32, secondary: 8 },
+    layout02: { primary: 30, secondary: 8 },
+    layout03: { primary: 30, secondary: 10 },
+    layout04: { primary: 28, secondary: 12 },
+    layout05: { primary: 30, secondary: 10 },
+    layout06: { primary: 32, secondary: 8 },
+    layout07: { primary: 30, secondary: 10 },
+    layout08: { primary: 30, secondary: 10 },
   };
 
   const dist = distributions[style];

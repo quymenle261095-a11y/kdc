@@ -20,6 +20,11 @@ export function CtaRuntimeSection({ config, brandColor, secondary, mode }: HomeC
         description: ctaConfig.description ?? '',
         secondaryButtonLink: ctaConfig.secondaryButtonLink ?? '',
         secondaryButtonText: ctaConfig.secondaryButtonText ?? '',
+        spacing: ctaConfig.spacing,
+        cornerRadius: ctaConfig.cornerRadius,
+        noBorderRadius: ctaConfig.noBorderRadius,
+        noVerticalMargin: ctaConfig.noVerticalMargin,
+        containerWidth: ctaConfig.containerWidth,
         title: ctaConfig.title ?? '',
       }}
       style={style}

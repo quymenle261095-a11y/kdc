@@ -32,6 +32,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 
   return (
     <button
+      type="button"
       onClick={() => !disabled && onChange()}
       disabled={disabled}
       className={`relative w-10 h-5 rounded-full transition-colors ${stateClass} ${trackColorClass}`}

@@ -299,6 +299,10 @@ export const getSpeedDialColorTokens = ({
   const mainButtonRing = getSolidTint(primaryResolved, 0.42);
   const glassSurface = 'rgba(255,255,255,0.65)';
   const glassBorder = 'rgba(148,163,184,0.45)';
+  const dockActionBg = secondaryResolved;
+  const dockActionText = getAPCATextColor(dockActionBg, 14, 600);
+  const builderBarBg = mainButtonBg;
+  const builderBarText = mainButtonText;
 
   return {
     primary: primaryResolved,
@@ -324,16 +328,18 @@ export const getSpeedDialColorTokens = ({
       sidebar: secondaryResolved,
       pills: secondaryResolved,
       stack: secondaryResolved,
-      dock: secondaryResolved,
+      dock: dockActionBg,
       minimal: neutralSurface,
+      'builder-bar': builderBarBg,
     },
     actionStyleText: {
       fab: getAPCATextColor(secondaryResolved, 14, 600),
       sidebar: getAPCATextColor(secondaryResolved, 14, 600),
       pills: getAPCATextColor(secondaryResolved, 14, 600),
       stack: getAPCATextColor(secondaryResolved, 14, 600),
-      dock: getAPCATextColor(secondaryResolved, 14, 600),
+      dock: dockActionText,
       minimal: getAPCATextColor(neutralSurface, 14, 600),
+      'builder-bar': builderBarText,
     },
     actionStyleBorder: {
       fab: neutralBorder,
@@ -342,6 +348,7 @@ export const getSpeedDialColorTokens = ({
       stack: neutralBorder,
       dock: neutralBorder,
       minimal: neutralBorder,
+      'builder-bar': neutralBorder,
     },
     labelPillBg: tooltipBg,
     labelPillText: tooltipText,

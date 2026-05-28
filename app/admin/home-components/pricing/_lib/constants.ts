@@ -3,6 +3,8 @@ import type {
   PricingPlan,
   PricingStyle,
 } from '../_types';
+import { DEFAULT_PRICING_CORNER_RADIUS, normalizePricingCornerRadius } from '../_types';
+import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const PRICING_STYLES: Array<{ id: PricingStyle; label: string }> = [
   { id: 'cards', label: 'Cards' },
@@ -11,6 +13,8 @@ export const PRICING_STYLES: Array<{ id: PricingStyle; label: string }> = [
   { id: 'comparison', label: 'So sánh' },
   { id: 'featured', label: 'Nổi bật' },
   { id: 'compact', label: 'Gọn' },
+  { id: 'tabbed', label: 'Tabs chi tiết' },
+  { id: 'construction', label: 'Thi công' },
 ];
 
 const DEFAULT_PRICING_STYLE: PricingStyle = 'cards';
@@ -50,6 +54,19 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   yearlyLabel: 'Hàng năm',
   yearlySavingText: 'Tiết kiệm 17%',
   texts: DEFAULT_PRICING_TEXTS,
+  // Shared header config
+  hideHeader: false,
+  showTitle: true,
+  showSubtitle: true,
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+  spacing: DEFAULT_SECTION_SPACING,
+  gridCols: 3,
+  cornerRadius: DEFAULT_PRICING_CORNER_RADIUS,
 };
 
 const isPricingStyle = (value: unknown): value is PricingStyle => (
@@ -59,6 +76,8 @@ const isPricingStyle = (value: unknown): value is PricingStyle => (
   || value === 'comparison'
   || value === 'featured'
   || value === 'compact'
+  || value === 'tabbed'
+  || value === 'construction'
 );
 
 const normalizeFeatureList = (value: unknown) => {
@@ -109,5 +128,22 @@ export const normalizePricingConfig = (value: unknown): PricingConfig => {
     plans: Array.isArray(raw.plans)
       ? raw.plans.map((plan, index) => normalizePricingPlan(plan, index))
       : DEFAULT_PRICING_CONFIG.plans.map((plan, index) => normalizePricingPlan(plan, index)),
+    // Shared header config
+    hideHeader: typeof raw.hideHeader === 'boolean' ? raw.hideHeader : (DEFAULT_PRICING_CONFIG.hideHeader ?? false),
+    showTitle: typeof raw.showTitle === 'boolean' ? raw.showTitle : (DEFAULT_PRICING_CONFIG.showTitle ?? true),
+    showSubtitle: typeof raw.showSubtitle === 'boolean' ? raw.showSubtitle : (DEFAULT_PRICING_CONFIG.showSubtitle ?? true),
+    headerAlign: raw.headerAlign === 'center' || raw.headerAlign === 'right' ? raw.headerAlign : (DEFAULT_PRICING_CONFIG.headerAlign ?? 'left'),
+    titleColorPrimary: typeof raw.titleColorPrimary === 'boolean' ? raw.titleColorPrimary : (DEFAULT_PRICING_CONFIG.titleColorPrimary ?? false),
+    subtitleAboveTitle: typeof raw.subtitleAboveTitle === 'boolean' ? raw.subtitleAboveTitle : (DEFAULT_PRICING_CONFIG.subtitleAboveTitle ?? false),
+    uppercaseText: typeof raw.uppercaseText === 'boolean' ? raw.uppercaseText : (DEFAULT_PRICING_CONFIG.uppercaseText ?? false),
+    showBadge: typeof raw.showBadge === 'boolean' ? raw.showBadge : (DEFAULT_PRICING_CONFIG.showBadge ?? true),
+    badgeText: typeof raw.badgeText === 'string' ? raw.badgeText : (DEFAULT_PRICING_CONFIG.badgeText ?? ''),
+    spacing: normalizePricingSpacing(raw.spacing, raw.noVerticalMargin),
+    gridCols: raw.gridCols === 4 ? 4 : 3,
+    cornerRadius: normalizePricingCornerRadius(raw.cornerRadius, raw.noBorderRadius),
   };
 };
+
+export const normalizePricingSpacing = (value: unknown, noVerticalMargin?: unknown): SectionSpacing => (
+  noVerticalMargin === true ? 'none' : normalizeSectionSpacing(value)
+);

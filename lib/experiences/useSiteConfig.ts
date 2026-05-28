@@ -155,6 +155,7 @@ export function useBookingConfig(): BookingExperienceConfig {
 type ProductsListConfig = {
   layoutStyle: 'grid' | 'sidebar' | 'list';
   paginationType: PaginationType;
+  cornerRadius: 'none' | 'sm' | 'lg';
   showSearch: boolean;
   showCategories: boolean;
   hideEmptyCategories: boolean;
@@ -187,6 +188,7 @@ export function useProductsListConfig(): ProductsListConfig {
       showBuyNowButton?: boolean;
       showPromotionBadge?: boolean;
       enableQuickAddVariant?: boolean;
+      cornerRadius?: ProductsListConfig['cornerRadius'];
     } | undefined;
 
     const rawLayout = raw?.layoutStyle;
@@ -204,6 +206,7 @@ export function useProductsListConfig(): ProductsListConfig {
     return {
       layoutStyle,
       paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType ?? layoutConfig?.showPagination ?? raw?.showPagination),
+      cornerRadius: raw?.cornerRadius ?? 'lg',
       showSearch: layoutConfig?.showSearch ?? raw?.showSearch ?? true,
       showCategories: layoutConfig?.showCategories ?? raw?.showCategories ?? true,
       hideEmptyCategories: raw?.hideEmptyCategories ?? true,

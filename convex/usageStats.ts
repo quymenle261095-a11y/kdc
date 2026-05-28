@@ -1,5 +1,8 @@
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { countPageViewBuckets } from "./lib/aggregates/pageViews";
+import { consumeRateLimit } from "./lib/rateLimit";
 
 // Average document sizes (in KB) - estimates based on typical data
 const AVG_DOC_SIZES: Record<string, number> = {
@@ -27,6 +30,10 @@ function getDateNDaysAgo(n: number): string {
   const date = new Date();
   date.setDate(date.getDate() - n);
   return date.toISOString().split("T")[0];
+}
+
+function getDateFromTimestamp(timestamp: number): string {
+  return new Date(timestamp).toISOString().split("T")[0];
 }
 
 // Track a database read operation
@@ -197,6 +204,11 @@ export const track = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const rateLimit = await consumeRateLimit(ctx, `${args.type}:${args.table ?? "default"}`, "usageTrack");
+    if (!rateLimit.allowed) {
+      return null;
+    }
+
     const date = getTodayDate();
     const count = args.count ?? 1;
 
@@ -248,8 +260,15 @@ export const track = mutation({
 
 // Average sizes for bandwidth estimation (in KB)
 const PAGEVIEW_SIZE_KB = 0.5; // ~500 bytes per pageview record
-const ACTIVITY_LOG_SIZE_KB = 1; // ~1KB per activity log
-const FILE_AVG_SIZE_KB = 200; // Average file size for media operations
+const PAGE_VIEW_AGGREGATES_READY_KEY = "pageViewsAggregatesReady";
+
+async function isPageViewAggregateReady(ctx: QueryCtx) {
+  const setting = await ctx.db
+    .query("settings")
+    .withIndex("by_key", (q) => q.eq("key", PAGE_VIEW_AGGREGATES_READY_KEY))
+    .unique();
+  return setting?.value === true;
+}
 
 // Get bandwidth data for chart - aggregates from pageViews + activityLogs
 export const getBandwidthData = query({
@@ -299,50 +318,39 @@ export const getBandwidthData = query({
 
     const config = configs[args.range];
     const startTime = now - config.days * 24 * 60 * 60 * 1000;
-
-    // Fetch pageViews in range (limit to prevent bandwidth explosion)
-    const pageViews = await ctx.db
-      .query("pageViews")
-      .order("desc")
-      .take(10_000);
-    const pageViewsInRange = pageViews.filter((pv) => pv._creationTime >= startTime);
-
-    // Fetch activityLogs in range
-    const activityLogs = await ctx.db
-      .query("activityLogs")
-      .order("desc")
-      .take(5000);
-    const activityLogsInRange = activityLogs.filter((al) => al._creationTime >= startTime);
-
-    // Count media-related activities for file bandwidth
-    const mediaActivities = activityLogsInRange.filter(
-      (al) => al.targetType === "media" || al.targetType === "images"
-    );
+    const intervalMs = (config.days * 24 * 60 * 60 * 1000) / config.points;
+    const buckets = Array.from({ length: config.points }, (_, index) => {
+      const reverseIndex = config.points - 1 - index;
+      const periodEnd = now - reverseIndex * intervalMs;
+      return {
+        endDate: periodEnd,
+        periodEnd,
+        periodStart: periodEnd - intervalMs,
+        startDate: periodEnd - intervalMs,
+      };
+    });
+    const aggregateReady = await isPageViewAggregateReady(ctx);
+    const aggregatePageViewCounts = aggregateReady
+      ? await countPageViewBuckets(ctx, buckets)
+      : [];
+    const usageRows = await ctx.db
+      .query("usageStats")
+      .withIndex("by_date", (q) => q.gte("date", getDateFromTimestamp(startTime)))
+      .collect();
 
     // Group by time periods
-    const intervalMs = (config.days * 24 * 60 * 60 * 1000) / config.points;
     const result: { time: string; dbBandwidth: number; fileBandwidth: number }[] = [];
 
-    for (let i = config.points - 1; i >= 0; i--) {
-      const periodEnd = now - i * intervalMs;
-      const periodStart = periodEnd - intervalMs;
-
-      // Count items in this period
-      const pvCount = pageViewsInRange.filter(
-        (pv) => pv._creationTime >= periodStart && pv._creationTime < periodEnd
-      ).length;
-
-      const alCount = activityLogsInRange.filter(
-        (al) => al._creationTime >= periodStart && al._creationTime < periodEnd
-      ).length;
-
-      const mediaCount = mediaActivities.filter(
-        (al) => al._creationTime >= periodStart && al._creationTime < periodEnd
-      ).length;
-
-      // Calculate bandwidth (convert to MB)
-      const dbBandwidthKB = pvCount * PAGEVIEW_SIZE_KB + alCount * ACTIVITY_LOG_SIZE_KB;
-      const fileBandwidthKB = mediaCount * FILE_AVG_SIZE_KB;
+    buckets.forEach(({ periodEnd, periodStart }, index) => {
+      const bucketUsageRows = usageRows.filter((row) => {
+        const rowTime = new Date(row.date).getTime();
+        return rowTime >= periodStart && rowTime < periodEnd;
+      });
+      const trackedDbBandwidthKB = bucketUsageRows.reduce((sum, row) => sum + row.estimatedDbBandwidth, 0);
+      const trackedFileBandwidthKB = bucketUsageRows.reduce((sum, row) => sum + row.estimatedFileBandwidth, 0);
+      const aggregateDbBandwidthKB = aggregateReady ? (aggregatePageViewCounts[index] ?? 0) * PAGEVIEW_SIZE_KB : 0;
+      const dbBandwidthKB = trackedDbBandwidthKB + aggregateDbBandwidthKB;
+      const fileBandwidthKB = trackedFileBandwidthKB;
 
       const date = new Date(periodEnd);
       result.push({
@@ -350,11 +358,13 @@ export const getBandwidthData = query({
         dbBandwidth: Math.round(dbBandwidthKB / 1024 * 100) / 100, // MB with 2 decimals
         fileBandwidth: Math.round(fileBandwidthKB / 1024 * 100) / 100,
       });
-    }
+    });
 
     const totalDbBandwidth = Math.round(result.reduce((sum, d) => sum + d.dbBandwidth, 0) * 100) / 100;
     const totalFileBandwidth = Math.round(result.reduce((sum, d) => sum + d.fileBandwidth, 0) * 100) / 100;
-    const hasData = pageViewsInRange.length > 0 || activityLogsInRange.length > 0;
+    const hasData = (aggregateReady
+      ? aggregatePageViewCounts.some((count) => count > 0)
+      : false) || usageRows.length > 0;
 
     return {
       data: result,
@@ -418,17 +428,16 @@ export const cleanup = internalMutation({
   args: {},
   handler: async (ctx) => {
     const cutoffDate = getDateNDaysAgo(400);
+    // Filter ở DB — tránh collect() toàn bảng rồi filter JS-side
     const oldStats = await ctx.db
       .query("usageStats")
-      .withIndex("by_date")
+      .withIndex("by_date", (q) => q.lt("date", cutoffDate))
       .collect();
 
     let deleted = 0;
     for (const stat of oldStats) {
-      if (stat.date < cutoffDate) {
-        await ctx.db.delete(stat._id);
-        deleted++;
-      }
+      await ctx.db.delete(stat._id);
+      deleted++;
     }
     return deleted;
   },

@@ -4,6 +4,7 @@ import React from 'react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
 import { CountdownForm } from '../../countdown/_components/CountdownForm';
 import { CountdownPreview } from '../../countdown/_components/CountdownPreview';
 import { DEFAULT_COUNTDOWN_CONFIG } from '../../countdown/_lib/constants';
@@ -19,6 +20,7 @@ export default function CountdownCreatePage() {
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
 
   const [config, setConfig] = React.useState<CountdownConfigState>(() => normalizeCountdownConfig(DEFAULT_COUNTDOWN_CONFIG));
+  const [displayOpen, setDisplayOpen] = React.useState(true);
 
   const onSubmit = (event: React.FormEvent) => {
     void handleSubmit(event, toCountdownPersistConfig(config));
@@ -41,6 +43,17 @@ export default function CountdownCreatePage() {
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
     >
+      <div className="mb-6">
+        <HomeComponentDisplaySettingsSection
+          open={displayOpen}
+          onOpenChange={setDisplayOpen}
+          cornerRadius={config.cornerRadius}
+          onCornerRadiusChange={(cornerRadius) => setConfig((prev) => ({ ...prev, cornerRadius }))}
+          spacing={config.spacing ?? 'normal'}
+          onSpacingChange={(spacing) => setConfig((prev) => ({ ...prev, spacing }))}
+        />
+      </div>
+
       <CountdownForm
         value={config}
         onChange={setConfig}

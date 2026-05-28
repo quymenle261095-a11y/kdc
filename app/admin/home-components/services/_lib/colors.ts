@@ -64,6 +64,11 @@ const getSolidTint = (hex: string, lightnessIncrease = 0.42) => {
   return formatHex(oklch({ ...color, l: clampLightness((color.l ?? 0.6) + lightnessIncrease) }));
 };
 
+const getSolidShade = (hex: string, lightnessDecrease = 0.12) => {
+  const color = safeParseOklch(hex, DEFAULT_BRAND_COLOR);
+  return formatHex(oklch({ ...color, l: clampLightness((color.l ?? 0.6) - lightnessDecrease) }));
+};
+
 const getAutoSecondary = (primary: string) => {
   const color = safeParseOklch(primary, DEFAULT_BRAND_COLOR);
   return formatHex(oklch({ ...color, h: ((color.h ?? 0) + 30) % 360 }));
@@ -142,7 +147,8 @@ export const getServicesColors = (
   return {
     primary: primaryResolved,
     secondary: secondaryResolved,
-    heading: primaryResolved,
+    heading: getSolidShade(primaryResolved, 0.12),
+    subheading: secondaryResolved,
     sectionAccent: primaryResolved,
     iconColor: primaryResolved,
     bodyText: neutralText,

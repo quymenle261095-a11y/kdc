@@ -2,7 +2,7 @@ import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { consumeRateLimit, getClientIdentifier } from "./lib/rateLimit";
+import { consumeRateLimit } from "./lib/rateLimit";
 
 const contactStatus = v.union(
   v.literal("new"),
@@ -36,6 +36,20 @@ const statsDoc = v.object({
 
 const sanitizeText = (value: string, max: number) => value.trim().slice(0, max);
 const MAX_ADMIN_SELECTION = 5000;
+
+function getContactRateLimitKey(args: {
+  email?: string;
+  name: string;
+  phone?: string;
+  sourcePath?: string;
+}) {
+  const identity = args.email?.trim().toLowerCase()
+    || args.phone?.trim().toLowerCase()
+    || args.name.trim().toLowerCase()
+    || "anonymous";
+  const source = args.sourcePath?.trim().slice(0, 120) || "/contact";
+  return `${identity}:${source}`;
+}
 
 async function adjustStat(ctx: MutationCtx, key: string, delta: number) {
   const existing = await ctx.db
@@ -109,7 +123,7 @@ export const submitContactInquiry = mutation({
     subject: v.string(),
   },
   handler: async (ctx, args) => {
-    const rateLimit = await consumeRateLimit(ctx, `contact:${getClientIdentifier()}`, "mutation");
+    const rateLimit = await consumeRateLimit(ctx, getContactRateLimitKey(args), "contactSubmit");
     if (!rateLimit.allowed) {
       throw new Error("Bạn gửi quá nhanh. Vui lòng thử lại sau.");
     }

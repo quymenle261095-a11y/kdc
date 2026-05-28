@@ -16,7 +16,9 @@ export const buildInternalLinks = ({
   saleMode: SaleMode;
 }): InternalLinkItem[] => {
   const limit = densityMap[density] ?? 4;
-  type LinkableProduct = Pick<GeneratorProduct, 'name' | 'slug' | 'affiliateLink'> | Pick<GeneratorRelatedProduct, 'name' | 'slug' | 'affiliateLink'>;
+  type LinkableProduct =
+    | Pick<GeneratorProduct, 'name' | 'slug' | 'affiliateLink' | 'categorySlug'>
+    | Pick<GeneratorRelatedProduct, 'name' | 'slug' | 'affiliateLink' | 'categorySlug'>;
   const related = products.flatMap((product) => product.relatedProducts ?? []);
   const merged: LinkableProduct[] = [...products, ...related];
   const unique = new Map<string, LinkableProduct>();
@@ -32,7 +34,7 @@ export const buildInternalLinks = ({
         const link = product.affiliateLink?.trim();
         return link ? { label: product.name, href: link } : null;
       }
-      return { label: product.name, href: `/products/${product.slug}` };
+      return { label: product.name, href: product.categorySlug ? `/${product.categorySlug}/${product.slug}` : `/products/${product.slug}` };
     })
     .filter(Boolean) as InternalLinkItem[];
 };

@@ -1,33 +1,47 @@
 'use client';
 
-import React, { use, useEffect, useMemo, useState } from 'react';
+import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
+
+import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
+
+import React, { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { AlertTriangle, Eye, GripVertical, Loader2, Package, Plus, Tag, Trash2 } from 'lucide-react';
+import { GripVertical, Loader2, Package, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../../components/ui';
+import { Button, Input, Label, cn } from '../../../../components/ui';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
+import { HeaderConfigSection } from '../../../_shared/components/HeaderConfigSection';
+import { CollapsibleSubSection as SubSection } from '../../../_shared/components/CollapsibleSubSection';
+import { HomeComponentDisplaySettingsSection } from '../../../_shared/components/HomeComponentDisplaySettingsSection';
+import { useFormSectionsState } from '../../../_shared/hooks/useFormSectionsState';
+import { FormSectionsToggleAllButton } from '../../../_shared/components/FormSectionsToggleAllButton';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
+import { extractSectionHeaderConfig } from '../../../_shared/hooks/useSectionHeaderState';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../../_shared/hooks/useTypeFontOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
 import { PricingPreview } from '../../_components/PricingPreview';
-import { TextsForm } from '../../_components/TextsForm';
+
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import {
   DEFAULT_PRICING_CONFIG,
   DEFAULT_PRICING_TEXTS,
+  normalizePricingSpacing,
   normalizePricingConfig,
 } from '../../_lib/constants';
-import { getPricingValidationResult } from '../../_lib/colors';
 import type {
   PricingConfig,
+  PricingCornerRadius,
   PricingEditorPlan,
+  PricingHeaderAlign,
   PricingStyle,
 } from '../../_types';
+import { AiDemoPricingImport } from '../../../product-list/_components/AiDemoProductsImport';
 
 const sanitizeFeatures = (value: string) => (
   value
@@ -38,7 +52,7 @@ const sanitizeFeatures = (value: string) => (
 
 type PricingMetaConfig = Pick<
   PricingConfig,
-  'subtitle' | 'showBillingToggle' | 'monthlyLabel' | 'yearlyLabel' | 'yearlySavingText'
+  'showBillingToggle' | 'monthlyLabel' | 'yearlyLabel' | 'yearlySavingText' | 'gridCols' | 'cornerRadius'
 >;
 
 const toEditorPlan = (plan: PricingConfig['plans'][number], index: number): PricingEditorPlan => ({
@@ -54,22 +68,24 @@ const toEditorPlan = (plan: PricingConfig['plans'][number], index: number): Pric
 });
 
 const normalizeMetaConfig = (config: PricingConfig): PricingMetaConfig => ({
-  subtitle: config.subtitle ?? DEFAULT_PRICING_CONFIG.subtitle,
   showBillingToggle: config.showBillingToggle !== false,
   monthlyLabel: config.monthlyLabel ?? DEFAULT_PRICING_CONFIG.monthlyLabel,
   yearlyLabel: config.yearlyLabel ?? DEFAULT_PRICING_CONFIG.yearlyLabel,
   yearlySavingText: config.yearlySavingText ?? DEFAULT_PRICING_CONFIG.yearlySavingText,
+  gridCols: config.gridCols === 4 ? 4 : 3,
+  cornerRadius: config.cornerRadius ?? DEFAULT_PRICING_CONFIG.cornerRadius,
 });
 
 const toSnapshot = (payload: {
   title: string;
   active: boolean;
   style: PricingStyle;
-  subtitle: string;
   showBillingToggle: boolean;
   monthlyLabel: string;
   yearlyLabel: string;
   yearlySavingText: string;
+  gridCols: 3 | 4;
+  cornerRadius: PricingCornerRadius;
   texts: Record<string, string>;
   plans: Array<{
     name: string;
@@ -81,30 +97,77 @@ const toSnapshot = (payload: {
     buttonText: string;
     buttonLink: string;
   }>;
+  // Header config
+  hideHeader: boolean;
+  showTitle: boolean;
+  headerSubtitle: string;
+  showSubtitle: boolean;
+  headerAlign: PricingHeaderAlign;
+  titleColorPrimary: boolean;
+  subtitleAboveTitle: boolean;
+  uppercaseText: boolean;
+  showBadge: boolean;
+  badgeText: string;
+  spacing: SectionSpacing;
 }) => JSON.stringify(payload);
 
 const COMPONENT_TYPE = 'Pricing';
 
-export default function PricingEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+type SnapshotEditableComponent = {
+  _id: string;
+  active: boolean;
+  config?: Record<string, any>;
+  title: string;
+  type: string;
+};
+
+type PricingEditPageProps = {
+  backHref?: string;
+  enableTypeOverrides?: boolean;
+  onSnapshotSave?: (next: { active: boolean; config: Record<string, any>; title: string }) => Promise<void>;
+  params?: Promise<{ id: string }>;
+  snapshotComponent?: SnapshotEditableComponent;
+  snapshotLabel?: string;
+};
+
+export default function PricingEditPage({
+  backHref = '/admin/home-components',
+  enableTypeOverrides = true,
+  onSnapshotSave,
+  params,
+  snapshotComponent,
+  snapshotLabel,
+}: PricingEditPageProps) {
+  const routeParams = snapshotComponent ? null : use(params!);
+  const id = snapshotComponent?._id ?? routeParams?.id ?? '';
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
-  const component = useQuery(api.homeComponents.getById, { id: id as Id<'homeComponents'> });
+  const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
+  const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
   const [pricingStyle, setPricingStyle] = useState<PricingStyle>('cards');
-  const [pricingPlans, setPricingPlans] = useState<PricingEditorPlan[]>([]);
+  const {
+    state: pricingPlans,
+    set: setPricingPlans,
+    undo: undopricingPlans,
+    redo: redopricingPlans,
+    canUndo: canUndopricingPlans,
+    canRedo: canRedopricingPlans,
+    reset: resetpricingPlans,
+  } = useUndoRedo<PricingEditorPlan[]>([], { maxHistory: 15 });
   const [pricingConfig, setPricingConfig] = useState<PricingMetaConfig>({
+    gridCols: DEFAULT_PRICING_CONFIG.gridCols ?? 3,
     monthlyLabel: DEFAULT_PRICING_CONFIG.monthlyLabel,
     showBillingToggle: DEFAULT_PRICING_CONFIG.showBillingToggle,
-    subtitle: DEFAULT_PRICING_CONFIG.subtitle,
     yearlyLabel: DEFAULT_PRICING_CONFIG.yearlyLabel,
     yearlySavingText: DEFAULT_PRICING_CONFIG.yearlySavingText,
+    cornerRadius: DEFAULT_PRICING_CONFIG.cornerRadius,
   });
   const [texts, setTexts] = useState<Record<string, string>>(DEFAULT_PRICING_TEXTS);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -112,11 +175,25 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
 
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  
+  // Header config state
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(['header', 'pricing', 'plans'], false);
+  const [hideHeader, setHideHeader] = useState(false);
+  const [showTitle, setShowTitle] = useState(DEFAULT_PRICING_CONFIG.showTitle ?? true);
+  const [subtitle, setSubtitle] = useState('');
+  const [showSubtitle, setShowSubtitle] = useState(DEFAULT_PRICING_CONFIG.showSubtitle ?? true);
+  const [headerAlign, setHeaderAlign] = useState<PricingHeaderAlign>(DEFAULT_PRICING_CONFIG.headerAlign ?? 'left');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(false);
+  const [uppercaseText, setUppercaseText] = useState(false);
+  const [showBadge, setShowBadge] = useState(true);
+  const [badgeText, setBadgeText] = useState('');
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
 
   useEffect(() => {
     if (!component) {return;}
 
-    if (component.type !== 'Pricing') {
+    if (!snapshotComponent && component.type !== 'Pricing') {
       router.replace(`/admin/home-components/${id}/edit`);
       return;
     }
@@ -129,21 +206,38 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
     setPricingPlans(normalizedConfig.plans.map((plan, index) => toEditorPlan(plan, index)));
     setPricingConfig(normalizeMetaConfig(normalizedConfig));
     setTexts(normalizedConfig.texts ?? DEFAULT_PRICING_TEXTS);
+    
+    // Load header config
+    const headerConfig = extractSectionHeaderConfig(component.config ?? {});
+    setHideHeader(headerConfig.hideHeader ?? false);
+    setShowTitle(headerConfig.showTitle ?? true);
+    setSubtitle(headerConfig.subtitle ?? '');
+    setShowSubtitle(headerConfig.showSubtitle ?? true);
+    setHeaderAlign((headerConfig.headerAlign ?? 'left') as PricingHeaderAlign);
+    setTitleColorPrimary(headerConfig.titleColorPrimary ?? false);
+    setSubtitleAboveTitle(headerConfig.subtitleAboveTitle ?? false);
+    setUppercaseText(headerConfig.uppercaseText ?? false);
+    setShowBadge(headerConfig.showBadge ?? true);
+    setBadgeText(headerConfig.badgeText ?? '');
+    setSpacing(normalizedConfig.spacing ?? DEFAULT_SECTION_SPACING);
   }, [component, id, router]);
 
   useEffect(() => {
     if (!component) {return;}
 
     const normalizedConfig = normalizePricingConfig(component.config ?? {});
+    const headerConfig = extractSectionHeaderConfig(component.config ?? {});
+    
     const snapshot = toSnapshot({
       title: component.title,
       active: component.active,
       style: normalizedConfig.style,
-      subtitle: String(normalizedConfig.subtitle ?? DEFAULT_PRICING_CONFIG.subtitle),
       showBillingToggle: normalizedConfig.showBillingToggle !== false,
       monthlyLabel: String(normalizedConfig.monthlyLabel ?? DEFAULT_PRICING_CONFIG.monthlyLabel),
       yearlyLabel: String(normalizedConfig.yearlyLabel ?? DEFAULT_PRICING_CONFIG.yearlyLabel),
       yearlySavingText: String(normalizedConfig.yearlySavingText ?? DEFAULT_PRICING_CONFIG.yearlySavingText),
+      gridCols: normalizedConfig.gridCols === 4 ? 4 : 3,
+      cornerRadius: normalizedConfig.cornerRadius ?? DEFAULT_PRICING_CONFIG.cornerRadius ?? 'lg',
       texts: normalizedConfig.texts ?? DEFAULT_PRICING_TEXTS,
       plans: normalizedConfig.plans.map((plan) => ({
         name: plan.name,
@@ -155,6 +249,18 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
         buttonText: plan.buttonText,
         buttonLink: plan.buttonLink,
       })),
+      // Header config
+      hideHeader: headerConfig.hideHeader ?? false,
+      showTitle: headerConfig.showTitle ?? true,
+      headerSubtitle: headerConfig.subtitle ?? '',
+      showSubtitle: headerConfig.showSubtitle ?? true,
+      headerAlign: (headerConfig.headerAlign ?? 'left') as PricingHeaderAlign,
+      titleColorPrimary: headerConfig.titleColorPrimary ?? false,
+      subtitleAboveTitle: headerConfig.subtitleAboveTitle ?? false,
+      uppercaseText: headerConfig.uppercaseText ?? false,
+      showBadge: headerConfig.showBadge ?? true,
+      badgeText: headerConfig.badgeText ?? '',
+      spacing: normalizePricingSpacing(headerConfig.spacing, (component.config as Partial<PricingConfig> | undefined)?.noVerticalMargin),
     });
 
     setInitialSnapshot(snapshot);
@@ -164,11 +270,12 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
     title,
     active,
     style: pricingStyle,
-    subtitle: String(pricingConfig.subtitle ?? ''),
     showBillingToggle: pricingConfig.showBillingToggle !== false,
     monthlyLabel: String(pricingConfig.monthlyLabel ?? ''),
     yearlyLabel: String(pricingConfig.yearlyLabel ?? ''),
     yearlySavingText: String(pricingConfig.yearlySavingText ?? ''),
+    gridCols: pricingConfig.gridCols === 4 ? 4 : 3,
+    cornerRadius: pricingConfig.cornerRadius ?? 'lg',
     texts,
     plans: pricingPlans.map((plan) => ({
       name: plan.name,
@@ -180,36 +287,32 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
       buttonText: plan.buttonText,
       buttonLink: plan.buttonLink,
     })),
+    // Header config
+    hideHeader,
+    showTitle,
+    headerSubtitle: subtitle,
+    showSubtitle,
+    headerAlign,
+    titleColorPrimary,
+    subtitleAboveTitle,
+    uppercaseText,
+    showBadge,
+    badgeText,
+    spacing,
   });
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
-  const customChanged = showCustomBlock
+  const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
       || customState.mode !== initialCustom.mode
       || customState.primary !== initialCustom.primary
       || resolvedCustomSecondary !== initialCustom.secondary
     : false;
-  const customFontChanged = showFontCustomBlock
+  const customFontChanged = enableTypeOverrides && showFontCustomBlock
     ? customFontState.enabled !== initialFontCustom.enabled
       || customFontState.fontKey !== initialFontCustom.fontKey
     : false;
   const hasChanges = initialSnapshot !== null && (currentSnapshot !== initialSnapshot || customChanged || customFontChanged);
-
-  const validation = useMemo(() => getPricingValidationResult({
-    primary: effectiveColors.primary,
-    secondary: effectiveColors.secondary,
-    mode: effectiveColors.mode,
-  }), [effectiveColors]);
-
-  const warningMessages = useMemo(() => {
-    const messages: string[] = [];
-
-    if (effectiveColors.mode === 'dual' && validation.harmonyStatus.isTooSimilar) {
-      messages.push(`Màu phụ đang khá gần màu chính (deltaE = ${validation.harmonyStatus.deltaE}). Nên tăng độ tách biệt.`);
-    }
-
-    return messages;
-  }, [effectiveColors.mode, validation]);
 
   const dragProps = (planId: number) => ({
     draggable: true,
@@ -237,13 +340,14 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
 
       const [moved] = nextPlans.splice(draggedIndex, 1);
       nextPlans.splice(dropIndex, 0, moved);
-      setPricingPlans(nextPlans);
+      resetpricingPlans(nextPlans);
       setDraggedId(null);
       setDragOverId(null);
     },
   });
 
   const addPlan = () => {
+    if (pricingPlans.length >= 4) {return;}
     setPricingPlans((prev) => ([
       ...prev,
       {
@@ -272,6 +376,8 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
     setPricingPlans((prev) => prev.filter((plan) => plan.id !== planId));
   };
 
+  useUnsavedGuard(hasChanges);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isSubmitting) {return;}
@@ -292,15 +398,33 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
         style: pricingStyle,
         texts,
         ...pricingConfig,
+        noBorderRadius: pricingConfig.cornerRadius === 'none',
+        // Header config
+        hideHeader,
+        showTitle,
+        subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
+        noVerticalMargin: spacing === 'none',
       };
 
-      await updateMutation({
-        active,
-        config: payload,
-        id: id as Id<'homeComponents'>,
-        title,
-      });
-      if (showCustomBlock) {
+      if (onSnapshotSave) {
+        await onSnapshotSave({ active, config: payload as Record<string, any>, title });
+      } else {
+        await updateMutation({
+          active,
+          config: payload,
+          id: id as Id<'homeComponents'>,
+          title,
+        });
+      }
+      if (enableTypeOverrides && showCustomBlock) {
         const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
         await setTypeColorOverride({
           enabled: customState.enabled,
@@ -310,7 +434,7 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
           type: COMPONENT_TYPE,
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         await setTypeFontOverride({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -322,11 +446,12 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
         title,
         active,
         style: payload.style,
-        subtitle: String(payload.subtitle ?? ''),
         showBillingToggle: payload.showBillingToggle !== false,
         monthlyLabel: String(payload.monthlyLabel ?? ''),
         yearlyLabel: String(payload.yearlyLabel ?? ''),
         yearlySavingText: String(payload.yearlySavingText ?? ''),
+        gridCols: payload.gridCols === 4 ? 4 : 3,
+        cornerRadius: payload.cornerRadius ?? 'lg',
         texts: payload.texts ?? DEFAULT_PRICING_TEXTS,
         plans: payload.plans.map((plan) => ({
           name: plan.name,
@@ -338,9 +463,21 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
           buttonText: plan.buttonText,
           buttonLink: plan.buttonLink,
         })),
+        // Header config
+        hideHeader,
+        showTitle,
+        headerSubtitle: subtitle,
+        showSubtitle,
+        headerAlign,
+        titleColorPrimary,
+        subtitleAboveTitle,
+        uppercaseText,
+        showBadge,
+        badgeText,
+        spacing,
       }));
 
-      if (showCustomBlock) {
+      if (enableTypeOverrides && showCustomBlock) {
         setInitialCustom({
           enabled: customState.enabled,
           mode: customState.mode,
@@ -348,7 +485,7 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
           secondary: resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary),
         });
       }
-      if (showFontCustomBlock) {
+      if (enableTypeOverrides && showFontCustomBlock) {
         setInitialFontCustom({
           enabled: customFontState.enabled,
           fontKey: customFontState.fontKey,
@@ -381,61 +518,51 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
     <div className="mx-auto max-w-5xl space-y-6 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Pricing</h1>
-        <Link href="/admin/home-components" className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
+        {snapshotLabel ? <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {snapshotLabel}</p> : null}
+        <Link href={backHref} className="text-sm text-blue-600 hover:underline">Quay lại danh sách</Link>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Tag size={20} />
-              Pricing
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
-                value={title}
-                onChange={(event) => { setTitle(event.target.value); }}
-                required
-                placeholder="Nhập tiêu đề component..."
-              />
-            </div>
+        <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
+        <HeaderConfigSection
+          hideHeader={hideHeader}
+          title={title}
+          showTitle={showTitle}
+          subtitle={subtitle}
+          showSubtitle={showSubtitle}
+          headerAlign={headerAlign}
+          titleColorPrimary={titleColorPrimary}
+          subtitleAboveTitle={subtitleAboveTitle}
+          uppercaseText={uppercaseText}
+          showBadge={showBadge}
+          badgeText={badgeText}
+          onHideHeaderChange={setHideHeader}
+          onTitleChange={setTitle}
+          onShowTitleChange={setShowTitle}
+          onSubtitleChange={setSubtitle}
+          onShowSubtitleChange={setShowSubtitle}
+          onHeaderAlignChange={setHeaderAlign}
+          onTitleColorPrimaryChange={setTitleColorPrimary}
+          onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+          onUppercaseTextChange={setUppercaseText}
+          onShowBadgeChange={setShowBadge}
+          onBadgeTextChange={setBadgeText}
+          expanded={openSections.header}
+          onExpandedChange={(value) => toggleSection('header', value)}
+          titleRequired={true}
+          titleLabel="Tiêu đề hiển thị"
+          titlePlaceholder="Nhập tiêu đề component..."
+        />
 
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div
-                className={cn(
-                  'inline-flex h-6 w-12 cursor-pointer items-center justify-center rounded-full transition-colors',
-                  active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600',
-                )}
-                onClick={() => { setActive(!active); }}
-              >
-                <div className={cn(
-                  'h-5 w-5 rounded-full bg-white shadow transition-transform',
-                  active ? 'translate-x-2.5' : '-translate-x-2.5',
-                )}></div>
-              </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Cấu hình bảng giá</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label>Mô tả ngắn (subtitle)</Label>
-              <Input
-                placeholder="Chọn gói phù hợp với nhu cầu của bạn"
-                value={pricingConfig.subtitle ?? ''}
-                onChange={(event) => { setPricingConfig({ ...pricingConfig, subtitle: event.target.value }); }}
-              />
-            </div>
-
+        <div className="mb-3">
+          <HomeComponentDisplaySettingsSection
+            open={openSections.pricing}
+            onOpenChange={(value) => toggleSection('pricing', value)}
+            cornerRadius={pricingConfig.cornerRadius ?? 'lg'}
+            onCornerRadiusChange={(cornerRadius) => setPricingConfig((prev) => ({ ...prev, cornerRadius }))}
+            spacing={spacing}
+            onSpacingChange={setSpacing}
+          >
             <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
@@ -448,8 +575,32 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
               </label>
             </div>
 
+              <div className="space-y-2">
+                <Label>Số cột desktop</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[3, 4].map((option) => {
+                    const selected = pricingConfig.gridCols === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setPricingConfig((prev) => ({ ...prev, gridCols: option as 3 | 4 }))}
+                        className={cn(
+                          'h-9 rounded-md border text-xs transition-colors',
+                          selected
+                            ? 'border-slate-950 bg-slate-950 text-white dark:border-white dark:bg-white dark:text-slate-950'
+                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        {option} cột
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
             {pricingConfig.showBillingToggle && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-3">
                 <div>
                   <Label className="text-xs">Label tháng</Label>
                   <Input
@@ -476,26 +627,27 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </HomeComponentDisplaySettingsSection>
+        </div>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Tùy chỉnh Text</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TextsForm texts={texts} onUpdate={setTexts} />
-          </CardContent>
-        </Card>
 
-        <Card className="mb-6">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Các gói dịch vụ ({pricingPlans.length})</CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={addPlan} className="gap-2">
-              <Plus size={14} /> Thêm gói
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
+
+        <div className="mb-6">
+          <SubSection
+            icon={Package}
+            title={`Các gói dịch vụ (${pricingPlans.length})`}
+            open={openSections.plans}
+            onOpenChange={(value) => toggleSection('plans', value)}
+            actions={(
+              <>
+              <AiDemoPricingImport onApply={(items) => setPricingPlans(items as PricingEditorPlan[])} />
+              <Button type="button" variant="outline" size="sm" onClick={addPlan} className="gap-2" disabled={pricingPlans.length >= 4}>
+                <Plus size={14} /> Thêm gói {pricingPlans.length >= 4 && '(tối đa 4)'}
+              </Button>
+              </>
+            )}
+          >
+          <div className="space-y-4">
             {pricingPlans.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
@@ -503,7 +655,7 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
                 </div>
                 <h3 className="mb-1 font-medium text-slate-900 dark:text-slate-100">Chưa có gói nào</h3>
                 <p className="mb-4 text-sm text-slate-500">Thêm gói đầu tiên để bắt đầu</p>
-                <Button type="button" variant="outline" size="sm" onClick={addPlan} className="gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={addPlan} className="gap-2" disabled={pricingPlans.length >= 4}>
                   <Plus size={14} /> Thêm gói
                 </Button>
               </div>
@@ -515,7 +667,7 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
                   className={cn(
                     'space-y-3 rounded-lg bg-slate-50 p-4 transition-all dark:bg-slate-800',
                     draggedId === plan.id && 'scale-95 opacity-50',
-                    dragOverId === plan.id && 'ring-2 ring-blue-500',
+                    dragOverId === plan.id && 'ring-2 ring-slate-950 dark:ring-white',
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -569,7 +721,7 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
 
                   <Input
                     placeholder="Tính năng (phân cách bởi dấu phẩy)"
-                    value={plan.features.join(', ')}
+                    value={(plan.features || []).join(', ')}
                     onChange={(event) => { updatePlan(plan.id, { features: sanitizeFeatures(event.target.value) }); }}
                   />
 
@@ -588,33 +740,19 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
                 </div>
               ))
             )}
-          </CardContent>
-        </Card>
-
-        {warningMessages.length > 0 && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <div className="space-y-2">
-              {warningMessages.map((message) => (
-                <div key={message} className="flex items-start gap-2">
-                  {message.includes('deltaE') ? <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> : <Eye size={14} className="mt-0.5 flex-shrink-0" />}
-                  <p>{message}</p>
-                </div>
-              ))}
-            </div>
           </div>
-        )}
+          </SubSection>
+        </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr,420px]">
-          <div></div>
-          <div className="lg:sticky lg:top-6 lg:self-start space-y-4">
-            {showCustomBlock && (
-              <TypeColorOverrideCard
-                title="Màu custom cho Pricing"
-                enabled={customState.enabled}
-                mode={customState.mode}
-                primary={customState.primary}
-                secondary={customState.secondary}
-                onEnabledChange={(next) => setCustomState((prev) => ({ ...prev, enabled: next }))}
+        <div className="space-y-4">
+          {enableTypeOverrides && showCustomBlock && (
+            <TypeColorOverrideCard
+              title="Màu custom cho Pricing"
+              enabled={customState.enabled}
+              mode={customState.mode}
+              primary={customState.primary}
+              secondary={customState.secondary}
+              onEnabledChange={(next) => setCustomState((prev) => ({ ...prev, enabled: next }))}
               onModeChange={(next) => setCustomState((prev) => {
                 if (next === 'single') {
                   return { ...prev, mode: next, secondary: prev.primary };
@@ -633,40 +771,62 @@ export default function PricingEditPage({ params }: { params: Promise<{ id: stri
                 ...prev,
                 secondary: prev.mode === 'single' ? prev.primary : value,
               }))}
-              />
-            )}
-            {showFontCustomBlock && (
-              <TypeFontOverrideCard
-                title="Font custom cho Pricing"
-                enabled={customFontState.enabled}
-                fontKey={customFontState.fontKey}
-                compact
-                toggleLabel="Custom"
-                fontLabel="Font"
-                onEnabledChange={(next) => setCustomFontState((prev) => ({ ...prev, enabled: next }))}
-                onFontChange={(next) => setCustomFontState((prev) => ({ ...prev, fontKey: next }))}
-              />
-            )}
-            <PricingPreview
-              title={title}
-              plans={pricingPlans}
-              brandColor={effectiveColors.primary}
-              secondary={effectiveColors.secondary}
-              mode={effectiveColors.mode}
-              selectedStyle={pricingStyle}
-              onStyleChange={setPricingStyle}
-              config={{ ...pricingConfig, texts }}
-              fontStyle={fontStyle}
-              fontClassName="font-active"
             />
-          </div>
+          )}
+          {enableTypeOverrides && showFontCustomBlock && (
+            <TypeFontOverrideCard
+              title="Font custom cho Pricing"
+              enabled={customFontState.enabled}
+              fontKey={customFontState.fontKey}
+              compact
+              toggleLabel="Custom"
+              fontLabel="Font"
+              onEnabledChange={(next) => setCustomFontState((prev) => ({ ...prev, enabled: next }))}
+              onFontChange={(next) => setCustomFontState((prev) => ({ ...prev, fontKey: next }))}
+            />
+          )}
+          <PricingPreview
+            title={title}
+            plans={pricingPlans}
+            brandColor={effectiveColors.primary}
+            secondary={effectiveColors.secondary}
+            mode={effectiveColors.mode}
+            selectedStyle={pricingStyle}
+            onStyleChange={setPricingStyle}
+            config={{ ...pricingConfig, texts }}
+            fontStyle={fontStyle}
+            fontClassName="font-active"
+            headerConfig={{
+              subtitle,
+              hideHeader,
+              showTitle,
+              showSubtitle,
+              headerAlign,
+              titleColorPrimary,
+              subtitleAboveTitle,
+              uppercaseText,
+              showBadge,
+              badgeText,
+              spacing,
+            }}
+            gridCols={pricingConfig.gridCols}
+          />
         </div>
 
         <HomeComponentStickyFooter
           isSubmitting={isSubmitting}
           hasChanges={hasChanges}
-          onCancel={() => { router.push('/admin/home-components'); }}
+          onCancel={() => { router.push(backHref); }}
           submitLabel="Lưu thay đổi"
+        active={active}
+        onActiveChange={setActive}
+        
+        undoRedo={{
+          canUndo: canUndopricingPlans,
+          canRedo: canRedopricingPlans,
+          onUndo: undopricingPlans,
+          onRedo: redopricingPlans,
+        }}
         />
       </form>
     </div>

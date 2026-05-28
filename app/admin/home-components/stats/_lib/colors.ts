@@ -102,6 +102,11 @@ export const getHorizontalColors = (primary: string, secondary: string, mode: St
 
   return {
     border: getTint(secondaryResolved, 0.35, primary),
+    sectionBg: '#f5f1ed',
+    iconBg: getTint(secondaryResolved, 0.22, primary),
+    iconColor: secondaryResolved,
+    valueColor: '#1e3a5f',
+    labelColor: '#4a5568',
   };
 };
 
@@ -109,8 +114,12 @@ export const getCardsColors = (primary: string, secondary: string, mode: StatsBr
   const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
 
   return {
-    border: getTint(secondaryResolved, 0.35, primary),
+    border: '#e5e7eb',
     accent: secondaryResolved,
+    iconColor: secondaryResolved,
+    valueColor: secondaryResolved,
+    labelColor: '#1f2937',
+    dividerColor: '#e5e7eb',
   };
 };
 
@@ -147,12 +156,55 @@ export const getMinimalColors = (primary: string, secondary: string, mode: Stats
   };
 };
 
-export const getCounterColors = (primary: string, secondary: string, mode: StatsBrandMode) => {
-  const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
+export const getCounterColors = (primary: string, _secondary: string, _mode: StatsBrandMode) => {
+  // Counter luôn dùng màu chính (primary), không phải secondary
+  // Background: màu chính đậm hơn một chút
+  const bgColor = getTint(primary, -0.08, primary);
+  // Text color: trắng hoặc đen tùy contrast
+  const textColor = getAPCATextColor(bgColor, 32, 700);
+  const labelColor = getAPCATextColor(bgColor, 14, 500);
+  const accentColor = getAPCATextColor(bgColor, 20, 500);
 
   return {
-    border: getTint(secondaryResolved, 0.35, primary),
-    progress: secondaryResolved,
-    value: ensureAPCATextColor(primary, '#ffffff', 32, 700),
+    border: getTint(primary, -0.12, primary),
+    progress: primary,
+    value: textColor,
+    label: labelColor,
+    accent: accentColor,
+    background: bgColor,
+  };
+};
+
+export const getSolarHeroColors = (primary: string, secondary: string, mode: StatsBrandMode) => {
+  const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
+  const cardSurface = '#ffffff';
+  const descriptionBg = secondaryResolved;
+
+  return {
+    sectionBg: '#ffffff',
+    cardSurface,
+    value: ensureAPCATextColor(primary, cardSurface, 38, 700),
+    label: ensureAPCATextColor('#111827', cardSurface, 14, 500),
+    icon: primary,
+    descriptionBg,
+    descriptionText: getAPCATextColor(descriptionBg, 14, 500),
+    border: '#e5e7eb',
+  };
+};
+
+export const getBuilderOverlayColors = (primary: string, secondary: string, mode: StatsBrandMode) => {
+  const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
+  const surface = mode === 'dual' ? primary : getTint(primary, -0.18, primary);
+  const accent = mode === 'dual'
+    ? ensureAPCATextColor(secondaryResolved, surface, 36, 700)
+    : getAPCATextColor(surface, 36, 700);
+  const text = getAPCATextColor(surface, 16, 500);
+
+  return {
+    accent,
+    border: `${text}66`,
+    icon: accent,
+    label: text,
+    surface,
   };
 };

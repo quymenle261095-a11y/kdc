@@ -1,50 +1,111 @@
 import type {
+  ClientEditorItem,
   ClientsConfig,
+  ClientsHeaderAlign,
   ClientsStyle,
 } from '../_types';
+import { DEFAULT_CLIENTS_CORNER_RADIUS } from '../_types';
 
 export const CLIENTS_STYLES: Array<{ id: ClientsStyle; label: string }> = [
-  { id: 'simpleGrid', label: 'Simple Grid' },
-  { id: 'compactInline', label: 'Compact Inline' },
-  { id: 'subtleMarquee', label: 'Subtle Marquee' },
-  { id: 'grid', label: 'Grid' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'featured', label: 'Featured' },
+  { id: 'layout01', label: 'Layout 01 — 1 lớn + 3 phụ' },
+  { id: 'layout02', label: 'Layout 02 — Banner full-width' },
+  { id: 'layout03', label: 'Layout 03 — 1 trên + 2 dưới' },
+  { id: 'layout04', label: 'Layout 04 — 2 banner ngang' },
+  { id: 'layout05', label: 'Layout 05 — 3 banner landscape' },
+  { id: 'layout06', label: 'Layout 06 — 4 banner dọc' },
+  { id: 'layout07', label: 'Layout 07 — Grid 2×2 ngang' },
+  { id: 'layout08', label: 'Layout 08 — Vuốt carousel' },
 ];
+
+export const CLIENTS_HEADER_ALIGN_OPTIONS: Array<{ value: ClientsHeaderAlign; label: string }> = [
+  { value: 'left', label: 'Trái' },
+  { value: 'center', label: 'Giữa' },
+  { value: 'right', label: 'Phải' },
+];
+
+export const CLIENTS_CROP_ASPECT_RATIO_BY_STYLE: Record<ClientsStyle, { cssValue?: string; label: string; value: number }> = {
+  layout01: { cssValue: '1 / 1', label: 'Vuông (1:1)', value: 1 },
+  layout02: { cssValue: '8 / 3', label: 'Banner rộng (8:3)', value: 8 / 3 },
+  layout03: { cssValue: '8 / 3', label: 'Banner rộng (8:3)', value: 8 / 3 },
+  layout04: { cssValue: '8 / 3', label: 'Banner rộng (8:3)', value: 8 / 3 },
+  layout05: { cssValue: '16 / 9', label: 'Ngang (16:9)', value: 16 / 9 },
+  layout06: { cssValue: '3 / 4', label: 'Dọc (3:4)', value: 3 / 4 },
+  layout07: { cssValue: '24 / 9', label: 'Ngang rộng (24:9)', value: 24 / 9 },
+  layout08: { cssValue: '16 / 9', label: 'Ngang (16:9)', value: 16 / 9 },
+};
+
+export const CLIENTS_DEMO_ITEMS_BY_STYLE: Record<ClientsStyle, ClientEditorItem[]> = {
+  layout01: [
+    { id: 'demo-layout01-1', inputMode: 'upload', link: '', url: '/demo/clients/square-kitchen-1.png' },
+    { id: 'demo-layout01-2', inputMode: 'upload', link: '', url: '/demo/clients/square-kitchen-2.png' },
+    { id: 'demo-layout01-3', inputMode: 'upload', link: '', url: '/demo/clients/square-kitchen-3.png' },
+    { id: 'demo-layout01-4', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-1.png' },
+  ],
+  layout02: [
+    { id: 'demo-layout02-1', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-1.png' },
+    { id: 'demo-layout02-2', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-2.png' },
+    { id: 'demo-layout02-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout02-4', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+  ],
+  layout03: [
+    { id: 'demo-layout03-1', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-2.png' },
+    { id: 'demo-layout03-2', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout03-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+    { id: 'demo-layout03-4', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-3.png' },
+  ],
+  layout04: [
+    { id: 'demo-layout04-1', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-1.png' },
+    { id: 'demo-layout04-2', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-2.png' },
+    { id: 'demo-layout04-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout04-4', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+  ],
+  layout05: [
+    { id: 'demo-layout05-1', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout05-2', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+    { id: 'demo-layout05-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-3.png' },
+    { id: 'demo-layout05-4', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-1.png' },
+  ],
+  layout06: [
+    { id: 'demo-layout06-1', inputMode: 'upload', link: '', url: '/demo/clients/portrait-kitchen-1.png' },
+    { id: 'demo-layout06-2', inputMode: 'upload', link: '', url: '/demo/clients/portrait-kitchen-2.png' },
+    { id: 'demo-layout06-3', inputMode: 'upload', link: '', url: '/demo/clients/portrait-kitchen-3.png' },
+    { id: 'demo-layout06-4', inputMode: 'upload', link: '', url: '/demo/clients/portrait-kitchen-4.png' },
+  ],
+  layout07: [
+    { id: 'demo-layout07-1', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout07-2', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+    { id: 'demo-layout07-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-3.png' },
+    { id: 'demo-layout07-4', inputMode: 'upload', link: '', url: '/demo/clients/square-kitchen-1.png' },
+  ],
+  layout08: [
+    { id: 'demo-layout08-1', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-1.png' },
+    { id: 'demo-layout08-2', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-2.png' },
+    { id: 'demo-layout08-3', inputMode: 'upload', link: '', url: '/demo/clients/landscape-kitchen-3.png' },
+    { id: 'demo-layout08-4', inputMode: 'upload', link: '', url: '/demo/clients/wide-kitchen-1.png' },
+  ],
+};
 
 export const DEFAULT_CLIENTS_CONFIG: ClientsConfig = {
   items: [
     {
       link: '',
-      name: '',
       url: '',
     },
   ],
-  style: 'simpleGrid',
-  texts: {
-    simpleGrid: {
-      subtitle: 'Được tin tưởng bởi',
-      heading: 'Khách hàng tin tưởng',
-    },
-    compactInline: {
-      heading: 'Khách hàng tin tưởng',
-    },
-    subtleMarquee: {
-      heading: 'Khách hàng tin tưởng',
-      subtitle: 'Đối tác',
-    },
-    grid: {
-      heading: 'Khách hàng tin tưởng',
-      countLabel: 'đối tác',
-    },
-    carousel: {
-      heading: 'Khách hàng tin tưởng',
-      scrollHint: 'Vuốt để xem thêm',
-    },
-    featured: {
-      heading: 'Khách hàng tin tưởng',
-      subtitle: 'Được tin tưởng bởi các thương hiệu hàng đầu',
-      othersLabel: 'Và nhiều đối tác khác',
-    },
-  } as Record<ClientsStyle, Record<string, string>>,
+  style: 'layout02',
+  // Shared header config
+  hideHeader: false,
+  showTitle: true,
+  subtitle: '',
+  showSubtitle: true,
+  headerAlign: 'left',
+  titleColorPrimary: false,
+  subtitleAboveTitle: false,
+  uppercaseText: false,
+  showBadge: true,
+  badgeText: '',
+  spacing: 'normal',
+  cornerRadius: DEFAULT_CLIENTS_CORNER_RADIUS,
+  noBorderRadius: false,
+  noVerticalMargin: false,
 };

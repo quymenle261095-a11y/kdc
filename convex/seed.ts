@@ -28,7 +28,7 @@ export const seedModules = mutation({
       { category: "commerce" as const, dependencies: ["products"], dependencyType: "all" as const, description: "Chức năng giỏ hàng cho khách đã đăng nhập", enabled: true, icon: "ShoppingCart", isCore: false, key: "cart", name: "Giỏ hàng", order: 6 },
       { category: "commerce" as const, dependencies: ["products", "customers"], dependencyType: "all" as const, description: "Danh sách sản phẩm yêu thích của khách", enabled: false, icon: "Heart", isCore: false, key: "wishlist", name: "Sản phẩm yêu thích", order: 7 },
       
-      { category: "user" as const, description: "Quản lý thông tin khách hàng", enabled: true, icon: "Users", isCore: true, key: "customers", name: "Khách hàng", order: 8 },
+      { category: "user" as const, description: "Quản lý thông tin khách hàng", enabled: true, icon: "Users", isCore: false, key: "customers", name: "Khách hàng", order: 8 },
       { category: "user" as const, description: "Quản lý tài khoản admin", enabled: true, icon: "UserCog", isCore: true, key: "users", name: "Người dùng Admin", order: 9 },
       { category: "user" as const, description: "Phân quyền và quản lý vai trò", enabled: true, icon: "Shield", isCore: true, key: "roles", name: "Vai trò & Quyền", order: 10 },
       
@@ -409,7 +409,7 @@ export const seedAll = mutation({
         { category: "commerce" as const, dependencies: ["products", "customers"], dependencyType: "all" as const, description: "Quản lý đơn hàng, vận chuyển", enabled: true, icon: "ShoppingBag", isCore: false, key: "orders", name: "Đơn hàng", order: 5 },
         { category: "commerce" as const, dependencies: ["products"], dependencyType: "all" as const, description: "Chức năng giỏ hàng cho khách", enabled: true, icon: "ShoppingCart", isCore: false, key: "cart", name: "Giỏ hàng", order: 6 },
         { category: "commerce" as const, dependencies: ["products"], dependencyType: "all" as const, description: "Danh sách sản phẩm yêu thích của khách", enabled: false, icon: "Heart", isCore: false, key: "wishlist", name: "Sản phẩm yêu thích", order: 7 },
-        { category: "user" as const, description: "Quản lý thông tin khách hàng", enabled: true, icon: "Users", isCore: true, key: "customers", name: "Khách hàng", order: 8 },
+        { category: "user" as const, description: "Quản lý thông tin khách hàng", enabled: true, icon: "Users", isCore: false, key: "customers", name: "Khách hàng", order: 8 },
         { category: "user" as const, description: "Quản lý tài khoản admin", enabled: true, icon: "UserCog", isCore: true, key: "users", name: "Người dùng Admin", order: 9 },
         { category: "user" as const, description: "Phân quyền và quản lý vai trò", enabled: true, icon: "Shield", isCore: true, key: "roles", name: "Vai trò & Quyền", order: 10 },
         { category: "system" as const, description: "Cấu hình website và hệ thống", enabled: true, icon: "Settings", isCore: true, key: "settings", name: "Cài đặt hệ thống", order: 11 },
@@ -1818,6 +1818,7 @@ export const seedSettingsModule = mutation({
         { group: "seo", key: "seo_og_image", value: "" },
         { group: "seo", key: "seo_google_verification", value: "" },
         { group: "seo", key: "seo_bing_verification", value: "" },
+        { group: "advanced", key: "product_image_placeholder", value: "" },
         
         // Social settings
         { group: "social", key: "social_facebook", value: "" },
@@ -1913,6 +1914,7 @@ export const seedSettingsModule = mutation({
         { description: "Quản lý email, phone, địa chỉ", enabled: true, featureKey: "enableContact", moduleKey: "settings", name: "Thông tin liên hệ" },
         { description: "Meta title, description, keywords", enabled: true, featureKey: "enableSEO", moduleKey: "settings", name: "SEO cơ bản" },
         { description: "Links Facebook, Instagram, Youtube...", enabled: true, featureKey: "enableSocial", moduleKey: "settings", name: "Mạng xã hội" },
+        { description: "Bật/tắt nhóm Trang tin cậy", enabled: true, featureKey: "enableTrustPages", moduleKey: "settings", name: "Trang tin cậy" },
         { description: "Sinh tự động Trust Pages từ dữ liệu thực", enabled: false, featureKey: "enableTrustPagesAutoGenerate", moduleKey: "settings", name: "Tự sinh Trust Pages" },
       ];
       for (const feature of features) {
@@ -1947,6 +1949,7 @@ export const seedSettingsModule = mutation({
         { enabled: true, fieldKey: "seo_og_image", group: "seo", isSystem: false, linkedFeature: "enableSEO", moduleKey: "settings", name: "OG Image", order: 13, required: false, type: "image" as const },
         { enabled: true, fieldKey: "seo_google_verification", group: "seo", isSystem: false, linkedFeature: "enableSEO", moduleKey: "settings", name: "Google Verification", order: 14, required: false, type: "text" as const },
         { enabled: true, fieldKey: "seo_bing_verification", group: "seo", isSystem: false, linkedFeature: "enableSEO", moduleKey: "settings", name: "Bing Verification", order: 15, required: false, type: "text" as const },
+        { enabled: true, fieldKey: "product_image_placeholder", group: "advanced", isSystem: false, moduleKey: "settings", name: "Ảnh placeholder sản phẩm", order: 20, required: false, type: "image" as const },
         // Social fields
         { enabled: true, fieldKey: "social_facebook", group: "social", isSystem: false, linkedFeature: "enableSocial", moduleKey: "settings", name: "Facebook", order: 16, required: false, type: "text" as const },
         { enabled: true, fieldKey: "social_instagram", group: "social", isSystem: false, linkedFeature: "enableSocial", moduleKey: "settings", name: "Instagram", order: 17, required: false, type: "text" as const },

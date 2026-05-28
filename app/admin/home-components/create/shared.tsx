@@ -8,11 +8,11 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import {
   AlertCircle, Award, Briefcase, Check, FileText, FolderTree,
-  Grid, HelpCircle, Image as ImageIcon, LayoutTemplate, MousePointerClick,
+  Grid, HelpCircle, Image as ImageIcon, LayoutTemplate, MessageSquare, MousePointerClick,
   Package, Phone, ShoppingBag, Star, Tag, UserCircle, User as UserIcon, Users, Zap
 } from 'lucide-react';
 import { formatHex, oklch } from 'culori';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../components/ui';
 import { HOME_COMPONENT_BASE_TYPES, HOME_COMPONENT_TYPE_VALUES as BASE_COMPONENT_TYPE_VALUES } from '@/lib/home-components/componentTypes';
 import { HomeComponentStickyFooter } from '../_shared/components/HomeComponentStickyFooter';
 import { TypeColorOverrideCard } from '../_shared/components/TypeColorOverrideCard';
@@ -39,7 +39,9 @@ const ICON_MAP: Record<string, typeof LayoutTemplate> = {
   Gallery: ImageIcon,
   Hero: LayoutTemplate,
   HomepageCategoryHero: LayoutTemplate,
+  Marquee: LayoutTemplate,
   Partners: Users,
+  Popup: MessageSquare,
   Pricing: Tag,
   Process: LayoutTemplate,
   ProductCategories: FolderTree,
@@ -137,13 +139,14 @@ export function ComponentFormWrapper({
   customFontState: customFontStateProp,
   showFontCustomBlock: showFontCustomBlockProp,
   setCustomFontState: setCustomFontStateProp,
+  skipTitleInput = false,
 }: { 
   type: string;
   title: string;
   setTitle: (v: string) => void;
   active: boolean;
   setActive: (v: boolean) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (e: React.FormEvent) => void | Promise<void>;
   isSubmitting?: boolean;
   children: React.ReactNode;
   customState?: ColorOverrideState;
@@ -153,6 +156,7 @@ export function ComponentFormWrapper({
   customFontState?: FontOverrideState;
   showFontCustomBlock?: boolean;
   setCustomFontState?: React.Dispatch<React.SetStateAction<FontOverrideState>>;
+  skipTitleInput?: boolean;
 }) {
   const router = useRouter();
   const typeInfo = getComponentType(type);
@@ -208,7 +212,7 @@ export function ComponentFormWrapper({
         }
       }
 
-      onSubmit(event);
+      await onSubmit(event);
     })();
   };
 
@@ -224,41 +228,27 @@ export function ComponentFormWrapper({
       </div>
 
       <form onSubmit={handleFormSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <TypeIcon size={20} />
-              Cấu hình {typeInfo?.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input 
-                value={title} 
-                onChange={(e) =>{  setTitle(e.target.value); }} 
-                required 
-                placeholder="Nhập tiêu đề component..." 
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Label>Trạng thái:</Label>
-              <div 
-                className={cn(
-                  "cursor-pointer inline-flex items-center justify-center rounded-full w-8 h-4 transition-colors",
-                  active ? "bg-green-500" : "bg-slate-300"
-                )} 
-                onClick={() =>{  setActive(!active); }}
-              >
-                <div className={cn(
-                  "w-3 h-3 bg-white rounded-full transition-transform",
-                  active ? "translate-x-2" : "-translate-x-2"
-                )}></div>
+        {!skipTitleInput && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TypeIcon size={20} />
+                {typeInfo?.label ?? 'Component'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Tên hiển thị <span className="text-red-500">*</span></Label>
+                <Input 
+                  value={title} 
+                  onChange={(e) =>{ setTitle(e.target.value); }} 
+                  required 
+                  placeholder="Nhập tiêu đề component..." 
+                />
               </div>
-              <span className="text-sm text-slate-500">{active ? 'Bật' : 'Tắt'}</span>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {children}
 
@@ -319,6 +309,8 @@ export function ComponentFormWrapper({
           submitLabel="Tạo Component"
           submittingLabel="Đang tạo..."
           disableSave={isSubmitting}
+          active={active}
+          onActiveChange={setActive}
         />
       </form>
     </div>
@@ -332,23 +324,27 @@ export function useComponentForm(defaultTitle: string, componentType: string) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const createMutation = useMutation(api.homeComponents.create);
 
-  const handleSubmit = async (e: React.FormEvent, config: object = {}) => {
+  const handleSubmit = async (e: React.FormEvent, config: object = {}, options?: { redirect?: boolean }) => {
     e.preventDefault();
-    if (isSubmitting) {return;}
+    if (isSubmitting) {return null;}
 
     setIsSubmitting(true);
     try {
-      await createMutation({
+      const id = await createMutation({
         active,
         config: config as Record<string, unknown>,
         title,
         type: componentType,
       });
       toast.success('Đã thêm component mới');
-      router.push('/admin/home-components');
+      if (options?.redirect !== false) {
+        router.push('/admin/home-components');
+      }
+      return id;
     } catch (error) {
       toast.error('Lỗi khi tạo component');
       console.error(error);
+      return null;
     } finally {
       setIsSubmitting(false);
     }

@@ -5,12 +5,17 @@ import { AlertTriangle } from 'lucide-react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
+import { HeaderConfigSection } from '../../_shared/components/HeaderConfigSection';
+import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
+import { DEFAULT_SECTION_SPACING, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 import { BenefitsForm } from '../../benefits/_components/BenefitsForm';
 import { BenefitsPreview } from '../../benefits/_components/BenefitsPreview';
 import { DEFAULT_BENEFITS_EDITOR_STATE, DEFAULT_BENEFITS_HARMONY } from '../../benefits/_lib/constants';
 import {
   buildBenefitsWarningMessages,
   getBenefitsValidationResult,
+  normalizeBenefitsStyle,
 } from '../../benefits/_lib/colors';
 import type {
   BenefitItem,
@@ -18,6 +23,7 @@ import type {
   BenefitsBrandMode,
   BenefitsEditorState,
   BenefitsConfig,
+  BenefitsHeaderAlign,
 } from '../../benefits/_types';
 
 const createUiId = (item: BenefitPersistItem, idx: number) => {
@@ -69,11 +75,40 @@ const toPersistConfig = (state: BenefitsEditorState): BenefitsConfig => ({
   gridColumnsDesktop: state.gridColumnsDesktop,
   gridColumnsMobile: state.gridColumnsMobile,
   headerAlign: state.headerAlign,
+  highlightIndex: state.highlightIndex,
+  cornerRadius: state.cornerRadius,
   harmony: state.harmony,
   heading: state.heading,
   items: state.items.map(toPersistItem),
-  style: state.style,
+  showDecorativeVisuals: state.showDecorativeVisuals,
+  showItemNumbers: state.showItemNumbers,
+  style: normalizeBenefitsStyle(state.style),
   subHeading: state.subHeading,
+  visualImage: state.visualImage,
+  // Shared header config
+  hideHeader: state.hideHeader,
+  showTitle: state.showTitle,
+  showSubtitle: state.showSubtitle,
+  subtitle: state.subtitle,
+  titleColorPrimary: state.titleColorPrimary,
+  subtitleAboveTitle: state.subtitleAboveTitle,
+  uppercaseText: state.uppercaseText,
+  showBadge: state.showBadge,
+  badgeText: state.badgeText,
+});
+
+const buildPreviewConfig = ({
+  state,
+  header,
+}: {
+  state: BenefitsEditorState;
+  header: Pick<
+    BenefitsConfig,
+    'hideHeader' | 'showTitle' | 'subtitle' | 'showSubtitle' | 'headerAlign' | 'titleColorPrimary' | 'subtitleAboveTitle' | 'uppercaseText' | 'showBadge' | 'badgeText' | 'spacing'
+  >;
+}): BenefitsConfig => ({
+  ...toPersistConfig(state),
+  ...header,
 });
 
 export default function BenefitsCreatePage() {
@@ -86,24 +121,47 @@ export default function BenefitsCreatePage() {
   const brandMode: BenefitsBrandMode = mode === 'single' ? 'single' : 'dual';
 
   const [editorState, setEditorState] = useState<BenefitsEditorState>(normalizeCreateState);
+  
+  // Header config state
+  const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(['header'], true);
+  const [hideHeader, setHideHeader] = useState(DEFAULT_BENEFITS_EDITOR_STATE.hideHeader ?? false);
+  const [showTitle, setShowTitle] = useState(DEFAULT_BENEFITS_EDITOR_STATE.showTitle ?? true);
+  const [subtitle, setSubtitle] = useState(DEFAULT_BENEFITS_EDITOR_STATE.subtitle ?? '');
+  const [showSubtitle, setShowSubtitle] = useState(DEFAULT_BENEFITS_EDITOR_STATE.showSubtitle ?? true);
+  const [headerAlign, setHeaderAlign] = useState<BenefitsHeaderAlign>(DEFAULT_BENEFITS_EDITOR_STATE.headerAlign ?? 'left');
+  const [titleColorPrimary, setTitleColorPrimary] = useState(DEFAULT_BENEFITS_EDITOR_STATE.titleColorPrimary ?? false);
+  const [subtitleAboveTitle, setSubtitleAboveTitle] = useState(DEFAULT_BENEFITS_EDITOR_STATE.subtitleAboveTitle ?? false);
+  const [uppercaseText, setUppercaseText] = useState(DEFAULT_BENEFITS_EDITOR_STATE.uppercaseText ?? false);
+  const [showBadge, setShowBadge] = useState(DEFAULT_BENEFITS_EDITOR_STATE.showBadge ?? true);
+  const [badgeText, setBadgeText] = useState(DEFAULT_BENEFITS_EDITOR_STATE.badgeText ?? '');
+  const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
 
-  const warningMessages = useMemo(() => {
-    const validation = getBenefitsValidationResult({
-      harmony: editorState.harmony,
-      mode: brandMode,
-      primary,
-      secondary,
-      style: editorState.style,
-    });
+  const validation = useMemo(() => getBenefitsValidationResult({
+    primary,
+    secondary,
+    mode: brandMode,
+    harmony: editorState.harmony,
+    style: editorState.style,
+  }), [primary, secondary, brandMode, editorState.harmony, editorState.style]);
 
-    return buildBenefitsWarningMessages({ mode: brandMode, validation });
-  }, [primary, secondary, brandMode, editorState.harmony, editorState.style]);
+  const warningMessages = useMemo(() => buildBenefitsWarningMessages({ mode: brandMode, validation }), [brandMode, validation]);
 
   const onSubmit = (event: React.FormEvent) => {
-    const payload: Record<string, unknown> = {
+    const configWithHeader = {
       ...toPersistConfig(editorState),
+      hideHeader,
+      showTitle,
+      subtitle,
+      showSubtitle,
+      headerAlign,
+      titleColorPrimary,
+      subtitleAboveTitle,
+      uppercaseText,
+      showBadge,
+      badgeText,
+      spacing,
     };
-    void handleSubmit(event, payload);
+    void handleSubmit(event, configWithHeader);
   };
 
   return (
@@ -122,31 +180,67 @@ export default function BenefitsCreatePage() {
       customFontState={customFontState}
       showFontCustomBlock={showFontCustomBlock}
       setCustomFontState={setCustomFontState}
+      skipTitleInput={true}
     >
-      <BenefitsForm
-        state={editorState}
-        onChange={(updater) => { setEditorState((prev) => updater(prev)); }}
-        mode={brandMode}
+      <FormSectionsToggleAllButton hasClosedSection={hasClosedSection} onToggleAll={handleToggleAll} />
+
+      <HeaderConfigSection
+        hideHeader={hideHeader}
+        title={title}
+        showTitle={showTitle}
+        subtitle={subtitle}
+        showSubtitle={showSubtitle}
+        headerAlign={headerAlign}
+        titleColorPrimary={titleColorPrimary}
+        subtitleAboveTitle={subtitleAboveTitle}
+        uppercaseText={uppercaseText}
+        showBadge={showBadge}
+        badgeText={badgeText}
+        onHideHeaderChange={setHideHeader}
+        onTitleChange={setTitle}
+        onShowTitleChange={setShowTitle}
+        onSubtitleChange={setSubtitle}
+        onShowSubtitleChange={setShowSubtitle}
+        onHeaderAlignChange={setHeaderAlign}
+        onTitleColorPrimaryChange={setTitleColorPrimary}
+        onSubtitleAboveTitleChange={setSubtitleAboveTitle}
+        onUppercaseTextChange={setUppercaseText}
+        onShowBadgeChange={setShowBadge}
+        onBadgeTextChange={setBadgeText}
+        expanded={openSections.header}
+        onExpandedChange={(value) => toggleSection('header', value)}
+        className="mb-3"
+        titleRequired={true}
+        titleLabel="Tiêu đề hiển thị"
+        titlePlaceholder="Nhập tiêu đề component..."
       />
 
-      {brandMode === 'dual' && warningMessages.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-            <div className="space-y-1">
-              {warningMessages.map((message, idx) => (
-                <p key={`benefits-create-warning-${idx}`}>{message}</p>
-              ))}
+      <BenefitsForm
+        state={editorState}
+        onChange={setEditorState}
+        mode={brandMode}
+        spacing={spacing}
+        onSpacingChange={setSpacing}
+        className="mb-4"
+      />
+
+      {warningMessages.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {warningMessages.map((message) => (
+            <div
+              key={message}
+              className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700"
+            >
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <p>{message}</p>
             </div>
-          </div>
+          ))}
         </div>
-      ) : null}
+      )}
 
       <BenefitsPreview
         items={editorState.items}
-        brandColor={primary}
-        secondary={secondary}
-        mode={brandMode}
+        title={title}
         selectedStyle={editorState.style}
         onStyleChange={(style) => {
           setEditorState((prev) => ({
@@ -154,13 +248,25 @@ export default function BenefitsCreatePage() {
             style,
           }));
         }}
-        config={{
-          buttonLink: editorState.buttonLink,
-          buttonText: editorState.buttonText,
-          harmony: editorState.harmony,
-          heading: editorState.heading,
-          subHeading: editorState.subHeading,
-        }}
+        config={buildPreviewConfig({
+          state: editorState,
+          header: {
+            hideHeader,
+            showTitle,
+            subtitle,
+            showSubtitle,
+            headerAlign,
+            titleColorPrimary,
+            subtitleAboveTitle,
+            uppercaseText,
+            showBadge,
+            badgeText,
+            spacing,
+          },
+        })}
+        brandColor={primary}
+        secondary={secondary}
+        mode={brandMode}
         fontStyle={fontStyle}
         fontClassName="font-active"
       />

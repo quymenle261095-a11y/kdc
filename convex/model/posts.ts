@@ -1,6 +1,11 @@
 import { resolveUniqueSlug } from "../lib/iaSlugs";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  deletePostAggregates,
+  recordPostAggregates,
+  replacePostAggregates,
+} from "../lib/aggregates/publicContent";
 
 // ============================================================
 // HELPER FUNCTIONS - Posts Model Layer
@@ -184,7 +189,7 @@ export async function create(
     }
   }
 
-  return  ctx.db.insert("posts", {
+  const id = await ctx.db.insert("posts", {
     authorName: args.authorName,
     categoryId: args.categoryId,
     content: args.content,
@@ -203,6 +208,11 @@ export async function create(
     title: args.title,
     views: 0,
   });
+  const post = await ctx.db.get(id);
+  if (post) {
+    await recordPostAggregates(ctx, post);
+  }
+  return id;
 }
 
 /**
@@ -264,6 +274,10 @@ export async function update(
   }
 
   await ctx.db.patch(id, patchData);
+  const updatedPost = await ctx.db.get(id);
+  if (updatedPost) {
+    await replacePostAggregates(ctx, post, updatedPost);
+  }
 }
 
 /**
@@ -273,6 +287,7 @@ export async function remove(
   ctx: MutationCtx,
   { cascade, id }: { cascade?: boolean; id: Id<"posts"> }
 ): Promise<void> {
+  const post = await getByIdOrThrow(ctx, { id });
   const preview = await ctx.db
     .query("comments")
     .withIndex("by_target_status", (q) =>
@@ -295,6 +310,7 @@ export async function remove(
   }
 
   await ctx.db.delete(id);
+  await deletePostAggregates(ctx, post);
 }
 
 export async function getDeleteInfo(

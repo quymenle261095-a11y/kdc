@@ -36,6 +36,10 @@ const PricingSection = dynamic(
   () => import('../PricingSection').then((mod) => ({ default: mod.PricingSection })),
   { ssr: false, loading: () => null }
 );
+const PopupSection = dynamic(
+  () => import('../PopupSection').then((mod) => ({ default: mod.PopupSection })),
+  { ssr: false, loading: () => null }
+);
 const ProductListSection = dynamic(
   () => import('../ProductListSection').then((mod) => ({ default: mod.ProductListSection })),
   { ssr: false, loading: () => null }
@@ -52,10 +56,6 @@ const TeamSection = dynamic(
   () => import('../TeamSection').then((mod) => ({ default: mod.TeamSection })),
   { ssr: false, loading: () => null }
 );
-const VideoSection = dynamic(
-  () => import('../VideoSection').then((mod) => ({ default: mod.VideoSection })),
-  { ssr: false, loading: () => null }
-);
 const VoucherPromotionsSection = dynamic(
   () => import('../VoucherPromotionsSection').then((mod) => ({ default: mod.VoucherPromotionsSection })),
   { ssr: false, loading: () => null }
@@ -66,6 +66,10 @@ const BenefitsRuntimeSection = dynamic(
 );
 const StatsRuntimeSection = dynamic(
   () => import('./sections/StatsRuntimeSection').then((mod) => ({ default: mod.StatsRuntimeSection })),
+  { ssr: false, loading: () => null }
+);
+const ProductGridSection = dynamic(
+  () => import('../ProductGridSection').then((mod) => ({ default: mod.ProductGridSection })),
   { ssr: false, loading: () => null }
 );
 const FaqRuntimeSection = dynamic(
@@ -84,6 +88,14 @@ const ClientsRuntimeSection = dynamic(
   () => import('./sections/ClientsRuntimeSection').then((mod) => ({ default: mod.ClientsRuntimeSection })),
   { ssr: false, loading: () => null }
 );
+const VideoRuntimeSection = dynamic(
+  () => import('./sections/VideoRuntimeSection').then((mod) => ({ default: mod.VideoRuntimeSection })),
+  { ssr: false, loading: () => null }
+);
+const ProcessRuntimeSection = dynamic(
+  () => import('./sections/ProcessRuntimeSection').then((mod) => ({ default: mod.ProcessRuntimeSection })),
+  { ssr: false, loading: () => null }
+);
 
 export const homeComponentRegistry: Record<string, ComponentType<any>> = {
   About: AboutSection,
@@ -100,12 +112,14 @@ export const homeComponentRegistry: Record<string, ComponentType<any>> = {
   Hero: HeroRuntimeSection,
   HomepageCategoryHero: HomepageCategoryHeroSection,
   Pricing: PricingSection,
+  Popup: PopupSection,
+  Process: ProcessRuntimeSection,
   Stats: StatsRuntimeSection,
-  ProductGrid: ProductListSection,
+  ProductGrid: ProductGridSection,
   ProductList: ProductListSection,
   ServiceList: ServiceListSection,
   SpeedDial: SpeedDialSection,
   Team: TeamSection,
-  Video: VideoSection,
+  Video: VideoRuntimeSection,
   VoucherPromotions: VoucherPromotionsSection,
 };

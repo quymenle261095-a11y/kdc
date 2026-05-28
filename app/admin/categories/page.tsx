@@ -5,13 +5,14 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ChevronDown, Edit, ExternalLink, FolderTree, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit, ExternalLink, FolderTree, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
 import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
+import { buildCategoryPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 
 export default function CategoriesListPage() {
   return (
@@ -25,7 +26,10 @@ function CategoriesContent() {
   const productsData = useQuery(api.products.listAll, { limit: 1000 });
   const categoriesAllData = useQuery(api.productCategories.listAll, { limit: 1000 });
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: 'products' });
+  const enableProductTypesSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'enableProductTypes' });
   const deleteCategory = useMutation(api.productCategories.remove);
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -85,6 +89,8 @@ function CategoriesContent() {
     search: debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined,
   });
 
+  const enableProductTypes = enableProductTypesSetting?.value === true;
+
   const selectAllData = useQuery(
     api.productCategories.listAdminIds,
     isSelectAllActive
@@ -92,11 +98,19 @@ function CategoriesContent() {
       : 'skip'
   );
 
-  const isLoading = categoriesData === undefined
+  const categoryIds = useMemo(() => categoriesData?.map(category => category._id) ?? [], [categoriesData]);
+  const assignedProductTypesData = useQuery(
+    api.productTypes.listAssignedTypesForCategories,
+    enableProductTypes && categoryIds.length > 0 ? { categoryIds } : 'skip'
+  );
+
+  const isTableLoading = categoriesData === undefined
     || totalCountData === undefined
     || productsData === undefined
     || categoriesAllData === undefined
-    || featuresData === undefined;
+    || featuresData === undefined
+    || enableProductTypesSetting === undefined
+    || (enableProductTypes && categoryIds.length > 0 && assignedProductTypesData === undefined);
 
   useEffect(() => {
     if (selectAllData?.hasMore) {
@@ -104,15 +118,36 @@ function CategoriesContent() {
     }
   }, [selectAllData?.hasMore]);
 
-  const columns = [
+  const columns = useMemo(() => [
     { key: 'select', label: 'Chọn' },
     { key: 'name', label: 'Tên danh mục', required: true },
     { key: 'slug', label: 'Slug' },
+    ...(enableProductTypes ? [{ key: 'productTypes', label: 'Product Type' }] : []),
     { key: 'count', label: 'Số sản phẩm' },
     { key: 'status', label: 'Trạng thái' },
     { key: 'actions', label: 'Hành động', required: true }
-  ];
-  const resolvedVisibleColumns = visibleColumns.length > 0 ? visibleColumns : columns.map(c => c.key);
+  ], [enableProductTypes]);
+  const columnKeys = useMemo(() => columns.map(c => c.key), [columns]);
+  const resolvedVisibleColumns = (visibleColumns.length > 0 ? visibleColumns : columnKeys)
+    .filter(key => columnKeys.includes(key));
+
+  useEffect(() => {
+    if (!enableProductTypes || visibleColumns.length === 0 || visibleColumns.includes('productTypes') || typeof window === 'undefined') {
+      return;
+    }
+    const migrationKey = 'admin_categories_product_types_column_seen';
+    if (window.localStorage.getItem(migrationKey) === 'true') {
+      return;
+    }
+    setVisibleColumns(prev => {
+      const base = prev.length > 0 ? prev : columnKeys;
+      const statusIndex = base.indexOf('status');
+      const next = [...base];
+      next.splice(statusIndex >= 0 ? statusIndex : next.length, 0, 'productTypes');
+      return next;
+    });
+    window.localStorage.setItem(migrationKey, 'true');
+  }, [columnKeys, enableProductTypes, visibleColumns]);
 
   const productCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -129,6 +164,14 @@ function CategoriesContent() {
     });
     return map;
   }, [categoriesAllData]);
+
+  const categoryProductTypesMap = useMemo(() => {
+    const map: Record<string, { _id: Id<"productTypes">; name: string }[]> = {};
+    assignedProductTypesData?.forEach(row => {
+      map[row.categoryId] = row.types.map(type => ({ _id: type._id, name: type.name }));
+    });
+    return map;
+  }, [assignedProductTypesData]);
 
   const hierarchyEnabled = featuresData
     ?.find(feature => feature.featureKey === 'enableCategoryHierarchy')
@@ -260,16 +303,8 @@ function CategoriesContent() {
   };
 
   const openFrontend = (slug: string) => {
-    window.open(`/products?category=${encodeURIComponent(slug)}`, '_blank');
+    window.open(buildCategoryPath({ categorySlug: slug, mode: routeMode, moduleKey: 'products' }), '_blank');
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -316,14 +351,25 @@ function CategoriesContent() {
               {resolvedVisibleColumns.includes('select') && <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>}
               {resolvedVisibleColumns.includes('name') && <SortableHeader label="Tên danh mục" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
               {resolvedVisibleColumns.includes('slug') && <SortableHeader label="Slug" sortKey="slug" sortConfig={sortConfig} onSort={handleSort} />}
+              {resolvedVisibleColumns.includes('productTypes') && <TableHead>Product Type</TableHead>}
               {resolvedVisibleColumns.includes('count') && <SortableHeader label="Số sản phẩm" sortKey="count" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
               {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="active" sortConfig={sortConfig} onSort={handleSort} />}
               {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.map(cat => (
-              <TableRow key={cat.id} className={selectedIds.includes(cat.id) ? 'bg-orange-500/5' : ''}>
+            {isTableLoading ? (
+              Array.from({ length: resolvedPageSize }).map((_, index) => (
+                <TableRow key={`loading-${index}`}>
+                  <TableCell colSpan={tableColumnCount}>
+                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <>
+                {paginatedData.map(cat => (
+                  <TableRow key={cat.id} className={selectedIds.includes(cat.id) ? 'bg-orange-500/5' : ''}>
                 {resolvedVisibleColumns.includes('select') && <TableCell><SelectCheckbox checked={selectedIds.includes(cat.id)} onChange={() =>{  toggleSelectItem(cat.id); }} /></TableCell>}
                 {resolvedVisibleColumns.includes('name') && (
                   <TableCell className="font-medium">
@@ -344,6 +390,21 @@ function CategoriesContent() {
                   </TableCell>
                 )}
                 {resolvedVisibleColumns.includes('slug') && <TableCell className="text-slate-500 font-mono text-sm">{cat.slug}</TableCell>}
+                {resolvedVisibleColumns.includes('productTypes') && (
+                  <TableCell>
+                    <div className="flex max-w-[260px] flex-wrap gap-1">
+                      {(categoryProductTypesMap[cat.id] ?? []).length > 0 ? (
+                        categoryProductTypesMap[cat.id].map(type => (
+                          <Badge key={type._id} variant="outline" className="text-xs font-normal">
+                            {type.name}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
+                      )}
+                    </div>
+                  </TableCell>
+                )}
                 {resolvedVisibleColumns.includes('count') && <TableCell className="text-center"><Badge variant="secondary">{cat.count}</Badge></TableCell>}
                 {resolvedVisibleColumns.includes('status') && (
                   <TableCell>
@@ -359,9 +420,11 @@ function CategoriesContent() {
                     </div>
                   </TableCell>
                 )}
-              </TableRow>
-            ))}
-            {paginatedData.length === 0 && (
+                  </TableRow>
+                ))}
+              </>
+            )}
+            {!isTableLoading && paginatedData.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
                   {searchTerm ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có danh mục nào.'}
@@ -370,7 +433,7 @@ function CategoriesContent() {
             )}
           </TableBody>
         </Table>
-        {totalCount > 0 && !isLoading && (
+        {totalCount > 0 && !isTableLoading && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
               <div className="flex items-center gap-2">

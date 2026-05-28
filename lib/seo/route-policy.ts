@@ -127,7 +127,8 @@ export const resolveRouteType = (pathname: string): RouteType => {
   if (
     pathname.match(/^\/posts\/[^/]+$/) ||
     pathname.match(/^\/products\/[^/]+$/) ||
-    pathname.match(/^\/services\/[^/]+$/)
+    pathname.match(/^\/services\/[^/]+$/) ||
+    pathname.match(/^\/[^/]+\/[^/]+$/)
   ) {
     return 'detail';
   }

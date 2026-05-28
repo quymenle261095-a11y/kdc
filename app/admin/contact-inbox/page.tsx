@@ -114,8 +114,8 @@ function ContactInboxContent() {
       : 'skip'
   );
 
-  const isLoading = shouldLoadInbox && (inquiries === undefined || stats === undefined || totalCountData === undefined);
-  const safeInquiries = inquiries ?? [];
+  const isTableLoading = shouldLoadInbox && (inquiries === undefined || totalCountData === undefined);
+  const safeInquiries = useMemo(() => inquiries ?? [], [inquiries]);
   const safeStats = stats ?? { total: 0, new: 0, in_progress: 0, resolved: 0, spam: 0 };
   const totalCount = totalCountData?.count ?? 0;
   const totalPages = totalCount ? Math.ceil(totalCount / resolvedPageSize) : 1;
@@ -168,16 +168,8 @@ function ContactInboxContent() {
   if (!inboxAdminFeature?.enabled) {
     return (
       <Card className="p-6 text-center text-slate-500">
-        Tính năng quản trị tin nhắn liên hệ đang tắt. Hãy bật tại /system/modules/contactInbox.
+        Tính năng quản trị tin nhắn liên hệ đang tắt. Vui lòng liên hệ quản trị viên hệ thống để bật tính năng này.
       </Card>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={28} className="animate-spin text-slate-400" />
-      </div>
     );
   }
 
@@ -360,8 +352,18 @@ function ContactInboxContent() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedData.map((inquiry) => (
-              <TableRow key={inquiry._id} className={selectedIds.includes(inquiry._id) ? 'bg-blue-500/5' : ''}>
+            {isTableLoading ? (
+              Array.from({ length: resolvedPageSize }).map((_, index) => (
+                <TableRow key={`loading-${index}`}>
+                  <TableCell colSpan={tableColumnCount}>
+                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <>
+                {sortedData.map((inquiry) => (
+                  <TableRow key={inquiry._id} className={selectedIds.includes(inquiry._id) ? 'bg-blue-500/5' : ''}>
                 {visibleColumns.includes('select') && (
                   <TableCell>
                     <SelectCheckbox checked={selectedIds.includes(inquiry._id)} onChange={() =>{  toggleSelectItem(inquiry._id); }} />
@@ -427,9 +429,11 @@ function ContactInboxContent() {
                     </div>
                   </TableCell>
                 )}
-              </TableRow>
-            ))}
-            {sortedData.length === 0 && (
+                  </TableRow>
+                ))}
+              </>
+            )}
+            {!isTableLoading && sortedData.length === 0 && (
               <TableRow>
                 <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
                   {searchTerm || filterStatus ? 'Không tìm thấy tin nhắn phù hợp' : 'Chưa có tin nhắn nào.'}
@@ -439,7 +443,7 @@ function ContactInboxContent() {
           </TableBody>
         </Table>
 
-        {totalCount > 0 && !isLoading && (
+        {totalCount > 0 && !isTableLoading && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
               <div className="flex items-center gap-2">

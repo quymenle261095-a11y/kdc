@@ -1,4 +1,4 @@
-import { Globe, Mail, MapPin, Settings, Share2, Sparkles } from 'lucide-react';
+import { Globe, LayoutTemplate, Mail, MapPin, Settings, Share2, Sparkles } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
  
 export const settingsModule = defineModuleWithRuntime({
@@ -13,6 +13,8 @@ export const settingsModule = defineModuleWithRuntime({
      { key: 'enableSEO', label: 'SEO cơ bản', icon: Globe },
      { key: 'enableSocial', label: 'Mạng xã hội', icon: Share2 },
      { key: 'enableMail', label: 'Cấu hình Email', icon: Mail },
+     { key: 'enableHeaderMenuAdvanced', label: 'Admin chỉnh Header Menu', icon: LayoutTemplate, enabled: true },
+     { key: 'enableTrustPages', label: 'Trang tin cậy', icon: Globe },
      { key: 'enableTrustPagesAutoGenerate', label: 'Tự sinh Trust Pages', icon: Sparkles },
    ],
  
@@ -55,6 +57,7 @@ export const settingsModule = defineModuleWithRuntime({
       { enabled: true, fieldKey: 'seo_og_image', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'OG Image', order: 13, required: false, type: 'image' },
       { enabled: true, fieldKey: 'seo_google_verification', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Google Verification', order: 14, required: false, type: 'text' },
       { enabled: true, fieldKey: 'seo_bing_verification', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Bing Verification', order: 15, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'product_image_placeholder', group: 'advanced', isSystem: false, name: 'Ảnh placeholder sản phẩm', order: 20, required: false, type: 'image' },
       { enabled: true, fieldKey: 'social_facebook', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Facebook', order: 16, required: false, type: 'text' },
       { enabled: true, fieldKey: 'social_instagram', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Instagram', order: 17, required: false, type: 'text' },
       { enabled: true, fieldKey: 'social_youtube', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Youtube', order: 18, required: false, type: 'text' },

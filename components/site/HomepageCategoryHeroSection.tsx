@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import useEmblaCarousel from 'embla-carousel-react';
 import { PublicImage as Image } from '@/components/shared/PublicImage';
 import Link from 'next/link';
 import { useConvex, useQuery } from 'convex/react';
@@ -14,15 +15,19 @@ import type {
   HomepageCategoryHeroSlide,
   HomepageCategoryData,
 } from '@/app/admin/home-components/homepage-category-hero/_types';
+import { normalizeHomepageCategoryHeroCornerRadius } from '@/app/admin/home-components/homepage-category-hero/_types';
 import {
   DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG,
+  DEMO_CATEGORIES_DATA,
   normalizeHomepageCategoryHeroCategories,
   normalizeHomepageCategoryHeroStyle,
 } from '@/app/admin/home-components/homepage-category-hero/_lib/constants';
 import { getHomepageCategoryHeroColors, type HomepageCategoryHeroTokens } from '@/app/admin/home-components/homepage-category-hero/_lib/colors';
 import { getHomepageCategoryHeroIcon } from '@/app/admin/home-components/homepage-category-hero/_lib/icon-options';
 import { autoGenerateHomepageCategoryHeroMenu, buildCategoryAggregateMap } from '@/app/admin/home-components/homepage-category-hero/_lib/auto-generate';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Package } from 'lucide-react';
+import { buildCategoryPath, buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import { getSectionSpacingClassName, normalizeSectionSpacing } from '@/app/admin/home-components/_shared/types/sectionSpacing';
 
 type ResolvedCategory = {
   id: number | string;
@@ -64,143 +69,144 @@ const splitGroupsIntoColumns = (groups: HomepageCategoryHeroMenuGroup[], columnC
   return columns;
 };
 
+const isValidImageSrc = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+
+type HeroImageWithFallbackProps = Omit<React.ComponentProps<typeof Image>, 'src' | 'onError'> & {
+  src?: string | null;
+  fallbackSrc?: string | null;
+  placeholderLabel?: string;
+};
+
+function HeroImageWithFallback({
+  src,
+  fallbackSrc,
+  placeholderLabel = 'Ảnh sản phẩm',
+  ...props
+}: HeroImageWithFallbackProps) {
+  const normalizedSrc = isValidImageSrc(src) ? src.trim() : null;
+  const normalizedFallback = isValidImageSrc(fallbackSrc) ? fallbackSrc.trim() : null;
+  const [currentSrc, setCurrentSrc] = useState<string | null>(normalizedSrc ?? normalizedFallback);
+
+  useEffect(() => {
+    setCurrentSrc(normalizedSrc ?? normalizedFallback);
+  }, [normalizedSrc, normalizedFallback]);
+
+  if (!currentSrc) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-slate-100 text-slate-400 dark:bg-slate-900/60">
+        <Package size={24} strokeWidth={1.5} />
+        <span className="text-[10px] font-medium leading-none">{placeholderLabel}</span>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      {...props}
+      src={currentSrc}
+      onError={() => {
+        setCurrentSrc(currentSrc !== normalizedFallback ? normalizedFallback : null);
+      }}
+    />
+  );
+}
+
 function BannerSlider({
   slides,
   className,
   isHidden,
+  showControls = true,
   tokens,
+  imageFit = 'cover',
+  fallbackImage,
 }: {
   slides: HomepageCategoryHeroSlide[];
   className?: string;
   isHidden?: boolean;
+  showControls?: boolean;
   tokens: HomepageCategoryHeroTokens;
+  imageFit?: 'cover' | 'contain';
+  fallbackImage?: string;
 }) {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(1);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const pointerStartX = useRef<number | null>(null);
-  const pointerStartY = useRef<number | null>(null);
-  const pointerIdRef = useRef<number | null>(null);
-  const isDragging = useRef(false);
-  const isPointerDown = useRef(false);
   const normalizedSlides = slides.length > 0 ? slides : [{ url: '', link: '' }];
   const totalSlides = normalizedSlides.length;
+  const [emblaRef, emblaApi] = useEmblaCarousel({ align: 'start', loop: totalSlides > 1 });
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
+  const isContain = imageFit === 'contain';
+
+  const updateEmblaState = React.useCallback(() => {
+    if (!emblaApi) {return;}
+    setCurrentSlide(emblaApi.selectedScrollSnap());
+    setCanScrollPrev(emblaApi.canScrollPrev());
+    setCanScrollNext(emblaApi.canScrollNext());
+  }, [emblaApi]);
 
   useEffect(() => {
-    if (currentSlide >= totalSlides) {
-      setCurrentSlide(0);
-    }
-  }, [currentSlide, totalSlides]);
-
-  useEffect(() => {
-    const updateWidth = () => {
-      setContainerWidth(containerRef.current?.offsetWidth || 1);
+    if (!emblaApi) {return;}
+    updateEmblaState();
+    emblaApi.on('select', updateEmblaState);
+    emblaApi.on('reInit', updateEmblaState);
+    return () => {
+      emblaApi.off('select', updateEmblaState);
+      emblaApi.off('reInit', updateEmblaState);
     };
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
+  }, [emblaApi, updateEmblaState]);
 
-  const goToSlide = (index: number) => {
-    const next = Math.max(0, Math.min(index, totalSlides - 1));
-    setCurrentSlide(next);
-  };
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    pointerIdRef.current = event.pointerId;
-    pointerStartX.current = event.clientX;
-    pointerStartY.current = event.clientY;
-    isDragging.current = false;
-    isPointerDown.current = true;
-    setDragOffset(0);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPointerDown.current || pointerStartX.current === null) {return;}
-    const deltaX = event.clientX - pointerStartX.current;
-    const deltaY = event.clientY - (pointerStartY.current ?? event.clientY);
-    if (!isDragging.current) {
-      if (Math.abs(deltaX) > 6 && Math.abs(deltaX) > Math.abs(deltaY)) {
-        isDragging.current = true;
-      } else {
-        return;
-      }
-    }
-    setDragOffset(deltaX);
-  };
-
-  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPointerDown.current) {return;}
-    const deltaX = event.clientX - (pointerStartX.current ?? event.clientX);
-    if (isDragging.current) {
-      const threshold = Math.max(40, containerWidth * 0.18);
-      if (Math.abs(deltaX) > threshold) {
-        if (deltaX < 0) {
-          goToSlide(currentSlide + 1);
-        } else {
-          goToSlide(currentSlide - 1);
-        }
-      }
-    }
-    pointerStartX.current = null;
-    pointerStartY.current = null;
-    isPointerDown.current = false;
-    setDragOffset(0);
-    if (pointerIdRef.current !== null) {
-      event.currentTarget.releasePointerCapture(pointerIdRef.current);
-      pointerIdRef.current = null;
-    }
-    window.setTimeout(() => {
-      isDragging.current = false;
-    }, 0);
-  };
-
-  const handleLinkClick = (event: React.MouseEvent) => {
-    if (isDragging.current) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  };
+  useEffect(() => {
+    if (!emblaApi) {return;}
+    emblaApi.reInit();
+    updateEmblaState();
+  }, [emblaApi, totalSlides, updateEmblaState]);
 
   const handleDragStart = (event: React.DragEvent) => {
     event.preventDefault();
   };
 
   return (
-    <div className={cn('relative w-full h-full transition-opacity duration-300', className, isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100')}>
+    <div className={cn('relative w-full transition-opacity duration-300', isContain ? '' : 'h-full', className, isHidden ? 'opacity-0 pointer-events-none' : 'opacity-100')}>
       <div
-        ref={containerRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className="relative w-full h-full overflow-hidden touch-pan-y"
+        ref={emblaRef}
+        className={cn('relative w-full overflow-hidden touch-pan-y', isContain ? '' : 'h-full')}
       >
         <div
-          className={cn(
-            'flex h-full w-full transition-transform duration-500 ease-out',
-            isPointerDown.current || isDragging.current ? 'transition-none' : ''
-          )}
-          style={{
-            transform: `translate3d(calc(${-(currentSlide * 100)}% + ${dragOffset}px), 0, 0)`,
-          }}
+          className={cn('flex w-full', isContain ? '' : 'h-full')}
         >
           {normalizedSlides.map((slide, idx) => {
             const content = slide.url ? (
-              <Image
-                mode="primary"
-                src={slide.url}
-                alt={`Banner ${idx + 1}`}
-                fill
-                className="object-cover"
-                priority={idx === 0}
-                fetchPriority={idx === 0 ? 'high' : 'auto'}
-                sizes="100vw"
-                draggable={false}
-                onDragStart={handleDragStart}
-              />
+              isContain ? (
+                <HeroImageWithFallback
+                  mode="primary"
+                  src={slide.url}
+                  fallbackSrc={fallbackImage}
+                  alt={`Banner ${idx + 1}`}
+                  width={1920}
+                  height={800}
+                  className="w-full h-auto"
+                  priority={idx === 0}
+                  fetchPriority={idx === 0 ? 'high' : 'auto'}
+                  sizes="100vw"
+                  draggable={false}
+                  onDragStart={handleDragStart}
+                  placeholderLabel="Ảnh sản phẩm"
+                />
+              ) : (
+                <HeroImageWithFallback
+                  mode="primary"
+                  src={slide.url}
+                  fallbackSrc={fallbackImage}
+                  alt={`Banner ${idx + 1}`}
+                  fill
+                  className="object-cover"
+                  priority={idx === 0}
+                  fetchPriority={idx === 0 ? 'high' : 'auto'}
+                  sizes="100vw"
+                  draggable={false}
+                  onDragStart={handleDragStart}
+                  placeholderLabel="Ảnh sản phẩm"
+                />
+              )
             ) : (
               <div
                 className="flex h-full w-full items-center justify-center text-sm"
@@ -216,14 +222,13 @@ function BannerSlider({
             return (
               <div
                 key={`${slide.url}-${idx}`}
-                className="relative h-full w-full shrink-0"
+                className={cn('relative min-w-0 flex-[0_0_100%]', isContain ? '' : 'h-full')}
                 style={{ backgroundColor: tokens.placeholder.background }}
               >
                 {slide.url && slide.link ? (
                   <Link
                     href={slide.link}
-                    className="absolute inset-0"
-                    onClick={handleLinkClick}
+                    className={isContain ? 'block' : 'absolute inset-0'}
                     onDragStart={handleDragStart}
                     draggable={false}
                   >
@@ -239,19 +244,63 @@ function BannerSlider({
         </div>
       </div>
       {normalizedSlides.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-          {normalizedSlides.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => goToSlide(idx)}
-              aria-label={`Go to slide ${idx + 1}`}
-              className={cn('h-1.5 rounded-full transition-all duration-300', currentSlide === idx ? 'w-6' : 'w-1.5')}
+        <>
+          {showControls && (
+            <>
+              <button
+                type="button"
+                aria-label="Ảnh trước"
+                onClick={() => emblaApi?.scrollPrev()}
+                disabled={!canScrollPrev}
+                className="absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  backgroundColor: tokens.control.buttonBg,
+                  borderColor: tokens.control.buttonBorder,
+                  color: tokens.control.buttonIcon,
+                }}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Ảnh tiếp"
+                onClick={() => emblaApi?.scrollNext()}
+                disabled={!canScrollNext}
+                className="absolute right-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  backgroundColor: tokens.control.buttonBg,
+                  borderColor: tokens.control.buttonBorder,
+                  color: tokens.control.buttonIcon,
+                }}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </>
+          )}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            {normalizedSlides.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => emblaApi?.scrollTo(idx)}
+                aria-label={`Go to slide ${idx + 1}`}
+                className={cn('h-1.5 rounded-full transition-all duration-300', currentSlide === idx ? 'w-6' : 'w-1.5')}
+                style={{
+                  backgroundColor: currentSlide === idx ? tokens.primary.solid : tokens.neutral.surfaceAlt,
+                }}
+              />
+            ))}
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 z-10 h-0.5" style={{ backgroundColor: tokens.neutral.surfaceAlt }}>
+            <div
+              className="h-full transition-all duration-500"
               style={{
-                backgroundColor: currentSlide === idx ? tokens.primary.solid : tokens.neutral.surfaceAlt,
+                backgroundColor: tokens.primary.solid,
+                width: `${((currentSlide + 1) / totalSlides) * 100}%`,
               }}
             />
-          ))}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -285,7 +334,14 @@ export function HomepageCategoryHeroSection({
   }), [config]);
   const convex = useConvex();
   const categoriesData = useQuery(api.productCategories.listActive);
-  const needsHeroPayload = resolvedConfig.selectionMode === 'auto' || resolvedConfig.hideEmptyCategories;
+  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const productImagePlaceholderSetting = useQuery(api.settings.getValue, { key: 'product_image_placeholder', defaultValue: '' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
+  const productImagePlaceholder = isValidImageSrc(productImagePlaceholderSetting)
+    ? productImagePlaceholderSetting.trim()
+    : '';
+  const isDemo = resolvedConfig.selectionMode === 'demo';
+  const needsHeroPayload = !isDemo && (resolvedConfig.selectionMode === 'auto' || resolvedConfig.hideEmptyCategories);
   const legacyPayload = useQuery(
     api.productCategories.listActiveWithStats,
     needsHeroPayload
@@ -350,8 +406,15 @@ export function HomepageCategoryHeroSection({
     (categoriesData ?? []).forEach((category) => {
       map.set(category._id, category);
     });
+    // Merge demo categories so demo IDs resolve properly
+    if (isDemo) {
+      const demoSource = resolvedConfig.demoCategoriesData ?? DEMO_CATEGORIES_DATA;
+      demoSource.forEach((cat) => {
+        map.set(cat._id, { _id: cat._id, name: cat.name, slug: cat._id, image: cat.image });
+      });
+    }
     return map;
-  }, [categoriesData]);
+  }, [categoriesData, isDemo, resolvedConfig.demoCategoriesData]);
 
   const resolvedHeroPayload = useMemo(() => {
     if (!needsHeroPayload) {return null;}
@@ -406,7 +469,8 @@ export function HomepageCategoryHeroSection({
         if (!category) {return null;}
         const image = item.imageOverride ?? category.image;
 
-        if (resolvedConfig.hideEmptyCategories && aggregateMap) {
+        // Skip empty-category filter for demo mode (no real stats)
+        if (!isDemo && resolvedConfig.hideEmptyCategories && aggregateMap) {
           const aggregated = aggregateMap.get(category._id);
           if (!aggregated || aggregated.productCount <= 0) {
             return null;
@@ -426,7 +490,7 @@ export function HomepageCategoryHeroSection({
       .filter(Boolean) as ResolvedCategory[];
 
     return list;
-  }, [aggregateMap, autoGenerated, categoryMap, resolvedConfig.categories, resolvedConfig.hideEmptyCategories, resolvedConfig.selectionMode]);
+  }, [aggregateMap, autoGenerated, categoryMap, isDemo, resolvedConfig.categories, resolvedConfig.hideEmptyCategories, resolvedConfig.selectionMode]);
 
   const maxCategories = device === 'mobile'
     ? resolvedConfig.maxCategoriesMobile
@@ -436,6 +500,8 @@ export function HomepageCategoryHeroSection({
 
   const visibleCategories = resolvedCategories.slice(0, maxCategories);
   const heroSlides = resolvedConfig.heroSlides ?? [];
+  const sectionSpacing = resolvedConfig.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(resolvedConfig.spacing);
+  const sectionSpacingClassName = getSectionSpacingClassName(sectionSpacing);
 
   const isDesktop = device === 'desktop';
 
@@ -452,14 +518,10 @@ export function HomepageCategoryHeroSection({
     });
   }, [visibleCategories, isDesktop]);
 
-  useEffect(() => {
-    updateScrollState();
-  }, [visibleCategories, device]);
-
   const resolveCategoryLink = (category?: HomepageCategoryData) => {
     if (!category) {return '#';}
     const slug = category.slug ?? category._id;
-    return `/products?category=${slug}`;
+    return buildCategoryPath({ categorySlug: slug, mode: routeMode, moduleKey: 'products' });
   };
 
   const resolveAllProductsLink = () => resolvedConfig.ctaUrl || '/products';
@@ -479,7 +541,12 @@ export function HomepageCategoryHeroSection({
       const product = item.productId ? productMap.get(item.productId) : undefined;
       const label = item.label ?? product?.name ?? 'Sản phẩm';
       const slug = item.slug ?? product?.slug;
-      const href = slug ? `/products/${slug}` : '#';
+      const href = slug ? buildDetailPath({
+        categorySlug: product?.categoryId ? categoryMap.get(product.categoryId)?.slug : undefined,
+        mode: routeMode,
+        moduleKey: 'products',
+        recordSlug: slug,
+      }) : '#';
       return { label, href, isProduct: true, image: item.image ?? product?.image };
     }
     const category = item.categoryId ? categoryMap.get(item.categoryId) : undefined;
@@ -511,7 +578,7 @@ export function HomepageCategoryHeroSection({
     }, 120);
   };
 
-  const updateScrollState = () => {
+  const updateScrollState = React.useCallback(() => {
     const el = categoryListRef.current;
     if (!el) {
       setCanScrollUp(false);
@@ -520,7 +587,11 @@ export function HomepageCategoryHeroSection({
     }
     setCanScrollUp(el.scrollTop > 4);
     setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
-  };
+  }, []);
+
+  useEffect(() => {
+    updateScrollState();
+  }, [updateScrollState, visibleCategories, device]);
 
   const scrollCategoryList = (direction: 'up' | 'down') => {
     const el = categoryListRef.current;
@@ -584,42 +655,27 @@ export function HomepageCategoryHeroSection({
       );
     }
 
-    if (resolvedImage) {
-      return (
-        <div
-          className={cn('overflow-hidden border', shapeClass)}
-          style={{
-            width: containerSize,
-            height: containerSize,
-            borderColor: resolvedTokens.neutral.border,
-            backgroundColor: resolvedTokens.neutral.surfaceAlt,
-          }}
-        >
-          <Image
-            mode="primary"
-            src={resolvedImage}
-            alt={item.category.name}
-            width={containerSize}
-            height={containerSize}
-            className="h-full w-full object-cover"
-            sizes={`${containerSize}px`}
-          />
-        </div>
-      );
-    }
     return (
       <div
-        className={cn('flex items-center justify-center border border-dashed font-semibold', shapeClass)}
+        className={cn('relative overflow-hidden border', shapeClass)}
         style={{
           width: containerSize,
           height: containerSize,
           borderColor: resolvedTokens.neutral.border,
           backgroundColor: resolvedTokens.neutral.surfaceAlt,
-          color: resolvedTokens.neutral.textMuted,
-          fontSize,
         }}
       >
-        {item.category.name.slice(0, 1)}
+        <HeroImageWithFallback
+          mode="primary"
+          src={resolvedImage}
+          fallbackSrc={productImagePlaceholder}
+          alt={item.category.name}
+          width={containerSize}
+          height={containerSize}
+          className="h-full w-full object-cover"
+          sizes={`${containerSize}px`}
+          placeholderLabel={item.category.name.slice(0, 1)}
+        />
       </div>
     );
   };
@@ -678,6 +734,71 @@ export function HomepageCategoryHeroSection({
     ));
   };
 
+  /** Ant Kitchen-style thumbnail grid: items with images render as visual cards */
+  const renderThumbnailGrid = (groups: HomepageCategoryHeroMenuGroup[], maxItems = 9) => {
+    const allItems = groups.flatMap((g) => g.items ?? []);
+    const itemsWithImages = allItems.filter((item) => {
+      const resolved = resolveMenuItem(item);
+      return item.image || resolved.image;
+    }).slice(0, maxItems);
+
+    if (itemsWithImages.length === 0) {return null;}
+
+    const thumbnailGridClass = isDesktop
+      ? itemsWithImages.length <= 3 ? 'grid-cols-3' : itemsWithImages.length <= 6 ? 'grid-cols-4' : 'grid-cols-5'
+      : device === 'tablet'
+        ? itemsWithImages.length <= 3 ? 'grid-cols-3' : 'grid-cols-4'
+        : 'grid-cols-3';
+    const thumbnailImageClass = device === 'mobile' ? 'h-[72px] w-[72px]' : 'h-20 w-20';
+
+    return (
+      <div
+        className="rounded-lg p-3 mb-4 shrink-0"
+        style={{ backgroundColor: resolvedTokens.neutral.surfaceAlt }}
+      >
+        <div className={cn('grid gap-3', thumbnailGridClass)}>
+          {itemsWithImages.map((item) => {
+            const resolved = resolveMenuItem(item);
+            const imgSrc = item.image || resolved.image;
+            return (
+              <Link
+                key={`${item.id}-${resolved.href}-${resolved.label}`}
+                href={resolved.href}
+                className="group flex flex-col items-center gap-1.5 rounded-lg p-2 transition-colors hover:bg-white/80"
+              >
+                <div
+                  className={cn('relative rounded-lg overflow-hidden border', thumbnailImageClass)}
+                  style={{
+                    backgroundColor: resolvedTokens.neutral.surface,
+                    borderColor: resolvedTokens.neutral.border,
+                  }}
+                >
+                  <HeroImageWithFallback
+                    mode="primary"
+                    src={imgSrc}
+                    fallbackSrc={productImagePlaceholder}
+                    alt={resolved.label || ''}
+                    width={80}
+                    height={80}
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    sizes="80px"
+                    placeholderLabel={(resolved.label || '?').slice(0, 2)}
+                  />
+                </div>
+                <span
+                  className="w-full text-xs leading-snug whitespace-normal break-words text-center"
+                  style={{ color: resolvedTokens.neutral.text }}
+                >
+                  {resolved.label || 'Mục'}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderSidebarLayout = (variant: 'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft') => {
     const isClassic = variant === 'classic';
     const isFlush = variant === 'flush';
@@ -694,31 +815,43 @@ export function HomepageCategoryHeroSection({
       '--hero-soft-hover-text': resolvedTokens.softPill.hoverText,
     } as React.CSSProperties;
 
+    const cornerRadius = normalizeHomepageCategoryHeroCornerRadius(resolvedConfig.cornerRadius, resolvedConfig.noBorderRadius);
+    const noBorderRadius = cornerRadius === 'none';
+    const radiusLg = cornerRadius === 'sm' ? 'rounded-lg' : 'rounded-xl';
+    const radiusMd = cornerRadius === 'sm' ? 'rounded-md' : 'rounded-lg';
+    const radiusSoft = cornerRadius === 'sm' ? 'rounded-lg' : 'rounded-[1rem]';
+    const radiusSoftInner = cornerRadius === 'sm' ? 'rounded-md' : 'rounded-[0.75rem]';
+    const isContain = resolvedConfig.bannerImageFit === 'contain';
+
     const sectionClass = cn(
       'w-full',
-      resolvedConfig.attachToHeader ? 'pt-0' : 'pt-4 md:pt-6'
+      resolvedConfig.attachToHeader ? 'pt-0' : isDesktop ? 'pt-6' : 'pt-4'
     );
+    const fixedH = isContain || !isDesktop ? '' : 'h-[576px]';
+    const fixedHFlush = isContain || !isDesktop ? '' : 'h-[600px]';
+    const outerPaddingClass = isDesktop ? 'px-8' : device === 'tablet' ? 'px-6' : 'px-4';
     const containerClass = cn(
-      'relative flex flex-col lg:flex-row w-full max-w-7xl mx-auto',
-      variant === 'sidebar' && 'border rounded-xl overflow-hidden lg:h-[576px]',
-      isClassic && 'gap-4 lg:h-[576px]',
-      isFlush && 'rounded-xl overflow-hidden border lg:h-[600px]',
-      isMinimal && 'gap-8 lg:h-[600px]',
-      isSoft && 'gap-6 lg:h-[576px]'
+      'relative flex w-full max-w-7xl mx-auto',
+      isDesktop ? 'flex-row' : 'flex-col',
+      variant === 'sidebar' && cn(`border overflow-hidden ${fixedH}`, !noBorderRadius && radiusLg),
+      isClassic && `gap-4 ${fixedH}`,
+      isFlush && cn(`overflow-hidden border ${fixedHFlush}`, !noBorderRadius && radiusLg),
+      isMinimal && `gap-8 ${fixedHFlush}`,
+      isSoft && `gap-6 ${fixedH}`
     );
     const sidebarClass = cn(
       'relative w-full shrink-0 flex flex-col z-20',
-      variant === 'sidebar' && 'lg:w-72 lg:border-r py-2 lg:py-3',
-      isClassic && 'lg:w-72 rounded-lg border overflow-hidden',
-      isFlush && 'lg:w-72 border-r',
-      isMinimal && 'lg:w-64',
-      isSoft && 'lg:w-80 rounded-[1rem] border p-3'
+      variant === 'sidebar' && cn('py-2', isDesktop && 'w-72 border-r py-3'),
+      isClassic && cn('border overflow-hidden', !noBorderRadius && radiusMd, isDesktop && 'w-72'),
+      isFlush && cn(isDesktop && 'w-72 border-r'),
+      isMinimal && cn(isDesktop && 'w-64'),
+      isSoft && cn('border p-3', !noBorderRadius && radiusSoft, isDesktop && 'w-80')
     );
     const buttonPadding = {
-      sidebar: 'px-4 py-3.5 lg:py-3',
+      sidebar: cn('px-4', isDesktop ? 'py-3' : 'py-3.5'),
       classic: 'px-4 py-3',
       flush: 'px-6 py-4 border-l-2',
-      minimal: 'px-3 py-2.5 border-b md:border-b-0 md:border-l-2',
+      minimal: cn('px-3 py-2.5', isDesktop ? 'border-l-2' : 'border-b'),
       soft: 'px-5 py-4',
     } satisfies Record<'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft', string>;
     const buttonActive = {
@@ -736,47 +869,50 @@ export function HomepageCategoryHeroSection({
       soft: 'rounded-xl transition-colors',
     } satisfies Record<'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft', string>;
     const heroClass = cn(
-      'hidden lg:block flex-1 relative overflow-hidden z-10',
+      'flex-1 relative overflow-hidden z-10',
+      isDesktop ? 'block' : 'hidden',
       variant === 'sidebar' && '',
-      isClassic && 'rounded-lg',
+      isClassic && !noBorderRadius && radiusMd,
       isFlush && '',
       isMinimal && 'border',
-      isSoft && 'rounded-[1rem]'
+      isSoft && !noBorderRadius && radiusSoft
     );
     const mobileHeroClass = cn(
-      'block lg:hidden w-full relative aspect-[16/9] sm:aspect-[21/9]',
+      'w-full relative',
+      isDesktop ? 'hidden' : 'block',
+      !isContain && (device === 'tablet' ? 'aspect-[21/9]' : 'aspect-[16/9]'),
       isMinimal ? 'border' : 'border-b',
-      isSoft ? 'rounded-[1rem] overflow-hidden' : ''
+      isSoft ? cn('overflow-hidden', !noBorderRadius && radiusSoft) : ''
     );
     const megaPanelBase = {
-      sidebar: 'absolute left-6 top-6 bottom-6 w-[620px] max-w-[70%] rounded-xl border p-8 transition-all duration-300 ease-out',
-      classic: 'absolute top-4 bottom-4 left-4 w-[520px] max-w-[80%] rounded-lg border p-6 transition-all duration-300 ease-out',
-      flush: 'absolute inset-y-0 left-0 w-full lg:w-80 border-r p-6 transition-all duration-300 ease-in-out',
-      minimal: 'absolute inset-0 p-8 md:p-12 transition-all duration-200',
-      soft: 'absolute inset-4 rounded-[0.75rem] p-6 border transition-all duration-200',
+      sidebar: cn('absolute inset-0 border p-8 transition-all duration-300 ease-out overflow-y-auto', !noBorderRadius && radiusLg),
+      classic: cn('absolute inset-0 border p-6 transition-all duration-300 ease-out overflow-y-auto', !noBorderRadius && radiusMd),
+      flush: 'absolute inset-0 p-6 transition-all duration-300 ease-out overflow-y-auto',
+      minimal: cn('absolute inset-0 transition-all duration-200', isDesktop ? 'p-12' : 'p-8'),
+      soft: cn('absolute inset-4 p-6 border transition-all duration-200', !noBorderRadius && radiusSoftInner),
     } satisfies Record<'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft', string>;
     const megaPanelActive = {
       sidebar: 'opacity-100 translate-x-0 z-10',
       classic: 'opacity-100 translate-x-0 z-10',
-      flush: 'translate-x-0',
+      flush: 'opacity-100 z-10',
       minimal: 'opacity-100',
       soft: 'opacity-100',
     } satisfies Record<'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft', string>;
     const megaPanelInactive = {
       sidebar: 'opacity-0 translate-x-4 pointer-events-none z-0',
       classic: 'opacity-0 translate-x-4 pointer-events-none z-0',
-      flush: '-translate-x-full',
+      flush: 'opacity-0 pointer-events-none z-0',
       minimal: 'opacity-0 pointer-events-none',
       soft: 'opacity-0 pointer-events-none',
     } satisfies Record<'sidebar' | 'classic' | 'flush' | 'minimal' | 'soft', string>;
     const mobilePanelClass = cn(
-      'mx-4 px-4 py-5 border flex flex-col gap-6',
-      isSoft ? 'rounded-[0.75rem]' : 'rounded-lg'
+      'mx-4 px-4 py-5 flex flex-col gap-6 bg-white',
+      !noBorderRadius && (isSoft ? radiusSoftInner : radiusMd)
     );
 
     return (
       <section className={sectionClass} style={sectionStyle}>
-        <div className="mx-auto max-w-8xl px-4 py-6 md:px-6 lg:px-8">
+        <div className={cn('mx-auto max-w-8xl', outerPaddingClass, sectionSpacingClassName)}>
           <div
             className={containerClass}
             style={{
@@ -803,8 +939,11 @@ export function HomepageCategoryHeroSection({
             >
               <BannerSlider
                 slides={heroSlides}
-                className={isSoft ? 'absolute inset-0' : undefined}
+                className={isContain ? undefined : (isSoft ? 'absolute inset-0' : undefined)}
                 tokens={resolvedTokens}
+                imageFit={resolvedConfig.bannerImageFit}
+                fallbackImage={productImagePlaceholder}
+                showControls={device !== 'mobile'}
               />
             </div>
 
@@ -817,7 +956,7 @@ export function HomepageCategoryHeroSection({
             >
               {isClassic && (
                 <div
-                  className="p-4 border-b hidden lg:block"
+                  className={cn('p-4 border-b', isDesktop ? 'block' : 'hidden')}
                   style={{
                     borderColor: resolvedTokens.neutral.border,
                     backgroundColor: resolvedTokens.neutral.surfaceAlt,
@@ -834,7 +973,7 @@ export function HomepageCategoryHeroSection({
                 className={cn(
                   'flex flex-1 flex-col overflow-y-auto',
                   isMinimal || isSoft || isClassic || isFlush ? 'py-2' : 'py-0',
-                  isMinimal || isSoft || isClassic || isFlush ? 'lg:py-3' : '',
+                  isMinimal || isSoft || isClassic || isFlush ? (isDesktop ? 'py-3' : '') : '',
                   '[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]'
                 )}
               >
@@ -851,9 +990,13 @@ export function HomepageCategoryHeroSection({
                     const allProductsLink = resolveAllProductsLink();
                     const activeButtonStyle = isActive
                       ? {
-                        borderColor: resolvedTokens.sidebar.activeBorder,
-                        color: resolvedTokens.sidebar.activeText,
-                        backgroundColor: resolvedTokens.sidebar.activeBg,
+                        borderColor: isDesktop ? resolvedTokens.sidebar.activeBorder : resolvedTokens.neutral.border,
+                        color: isDesktop ? resolvedTokens.sidebar.activeText : resolvedTokens.neutral.text,
+                        backgroundColor: isDesktop
+                          ? (variant === 'sidebar' || isFlush)
+                            ? resolvedTokens.panel.background
+                            : resolvedTokens.sidebar.activeBg
+                          : resolvedTokens.neutral.surface,
                       }
                       : { color: resolvedTokens.sidebar.inactiveText };
                     return (
@@ -884,18 +1027,23 @@ export function HomepageCategoryHeroSection({
                           )}
                           style={activeButtonStyle}
                         >
-                          <div className={cn('flex items-center gap-3.5', isMinimal ? 'gap-2' : '')}>
+                          <div className={cn('flex min-w-0 flex-1 items-center gap-3.5 text-left', isMinimal ? 'gap-2' : '')}>
                             {renderCategoryThumb(item)}
-                            <span className={cn(isMinimal ? 'text-sm font-medium' : '')}>{resolveMenuLabel(item.category)}</span>
+                            <span className={cn(
+                              'min-w-0 max-w-[10rem] whitespace-normal break-words text-left leading-snug',
+                              isMinimal ? 'text-sm font-medium' : ''
+                            )}>
+                              {resolveMenuLabel(item.category)}
+                            </span>
                           </div>
                           {hasMegaMenu && (
                             <>
                               <ChevronRight
-                                className={cn('hidden lg:block w-4 h-4 transition-transform', isActive ? 'translate-x-0.5' : '')}
+                                className={cn(isDesktop ? 'block' : 'hidden', 'w-4 h-4 transition-transform', isActive ? 'translate-x-0.5' : '')}
                                 style={{ color: isActive ? resolvedTokens.menuLink.active : resolvedTokens.neutral.textSubtle }}
                               />
                               <ChevronDown
-                                className={cn('lg:hidden w-4 h-4 transition-transform duration-200', isActive ? 'rotate-180' : '')}
+                                className={cn(isDesktop ? 'hidden' : 'block', 'w-4 h-4 transition-transform duration-200', isActive ? 'rotate-180' : '')}
                                 style={{ color: isActive ? resolvedTokens.menuLink.active : resolvedTokens.neutral.textSubtle }}
                               />
                             </>
@@ -904,17 +1052,18 @@ export function HomepageCategoryHeroSection({
                         {hasMegaMenu && (
                           <div
                             className={cn(
-                              'lg:hidden overflow-hidden transition-all duration-300 ease-in-out',
+                              isDesktop ? 'hidden' : 'overflow-hidden transition-all duration-300 ease-in-out',
                               isActive ? 'max-h-[1200px] opacity-100 mt-1 mb-3' : 'max-h-0 opacity-0'
                             )}
                           >
                             <div
                               className={mobilePanelClass}
                               style={{
-                                backgroundColor: resolvedTokens.panel.background,
-                                borderColor: resolvedTokens.panel.border,
+                                backgroundColor: resolvedTokens.neutral.surface,
+                                borderColor: resolvedTokens.neutral.border,
                               }}
                             >
+                              {renderThumbnailGrid(groups, 6)}
                               {splitGroupsIntoColumns(groups, 3).map((column, colIdx) => (
                                 <div key={colIdx} className="flex flex-col gap-5">
                                   {column.map((group) => {
@@ -951,15 +1100,10 @@ export function HomepageCategoryHeroSection({
                                                   <Link
                                                     href={resolvedItem.href}
                                                     className={cn(
-                                                    'text-sm transition-colors block py-0.5 active:text-[var(--hero-link-active)]',
-                                                    isSoft
-                                                      ? 'rounded-full border px-3 py-1.5 hover:bg-[var(--hero-soft-hover-bg)] hover:text-[var(--hero-soft-hover-text)]'
-                                                      : 'hover:text-[var(--hero-link-hover)]'
+                                                    'block py-0.5 text-sm transition-colors active:text-[var(--hero-link-active)] hover:text-[var(--hero-link-hover)]'
                                                     )}
                                                   style={{
                                                     color: resolvedTokens.menuLink.text,
-                                                    borderColor: isSoft ? resolvedTokens.softPill.border : undefined,
-                                                    backgroundColor: isSoft ? resolvedTokens.softPill.bg : undefined,
                                                   }}
                                                   >
                                                     {resolvedItem.label || 'Mục'}
@@ -1050,7 +1194,7 @@ export function HomepageCategoryHeroSection({
                 borderColor: resolvedTokens.neutral.border,
               }}
             >
-              <BannerSlider slides={heroSlides} className="absolute inset-0" tokens={resolvedTokens} />
+              <BannerSlider slides={heroSlides} className={isContain ? undefined : 'absolute inset-0'} tokens={resolvedTokens} imageFit={resolvedConfig.bannerImageFit} fallbackImage={productImagePlaceholder} showControls={device !== 'mobile'} />
               {isClassic && <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to right, rgba(15,23,42,0.2), transparent)' }} />}
               {isMinimal && <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }} />}
 
@@ -1082,7 +1226,7 @@ export function HomepageCategoryHeroSection({
                       }
                     }}
                   >
-                    <div className="mb-4 flex items-center justify-between gap-4">
+                    <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
                       <Link
                         href={categoryLink}
                         className="text-base font-semibold transition-colors hover:text-[var(--hero-link-hover)]"
@@ -1111,8 +1255,11 @@ export function HomepageCategoryHeroSection({
                       </div>
                     </div>
                     {groups.length > 0 ? (
-                      <div className={cn('grid gap-10 h-full', isFlush ? 'grid-cols-1' : 'grid-cols-3')}>
-                        {renderMegaMenuColumns(groups, resolveMenuLabel(item.category))}
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        {renderThumbnailGrid(groups)}
+                        <div className={cn('grid min-h-0 flex-1 grid-cols-3 gap-10 overflow-y-auto pr-2 [scrollbar-width:thin]')}>
+                          {renderMegaMenuColumns(groups, resolveMenuLabel(item.category))}
+                        </div>
                       </div>
                     ) : (
                       <div
@@ -1136,9 +1283,18 @@ export function HomepageCategoryHeroSection({
     );
   };
 
-  const renderTopNavLayout = () => (
+  const renderTopNavLayout = () => {
+    const cornerRadius = normalizeHomepageCategoryHeroCornerRadius(resolvedConfig.cornerRadius, resolvedConfig.noBorderRadius);
+    const noBorderRadius = cornerRadius === 'none';
+    const radiusMd = cornerRadius === 'sm' ? 'rounded-md' : 'rounded-lg';
+    const isContain = resolvedConfig.bannerImageFit === 'contain';
+    const outerPaddingClass = isDesktop ? 'px-8' : device === 'tablet' ? 'px-6' : 'px-4';
+    const heroHeightClass = sectionSpacing !== 'none' && !isContain
+      ? isDesktop || device === 'tablet' ? 'h-[480px]' : 'h-[360px]'
+      : '';
+    return (
     <section
-      className={cn('w-full', resolvedConfig.attachToHeader ? 'pt-0' : 'pt-4 md:pt-6')}
+      className={cn('w-full', resolvedConfig.attachToHeader ? 'pt-0' : isDesktop ? 'pt-6' : 'pt-4')}
       style={{
         backgroundColor: resolvedTokens.neutral.surface,
         '--hero-topnav-hover-bg': resolvedTokens.topNav.inactiveHoverBg,
@@ -1146,7 +1302,7 @@ export function HomepageCategoryHeroSection({
         '--hero-topnav-link-hover': resolvedTokens.menuLink.hover,
       } as React.CSSProperties}
     >
-      <div className="mx-auto max-w-8xl px-4 py-6 md:px-6 lg:px-8">
+      <div className={cn('mx-auto max-w-8xl', outerPaddingClass, sectionSpacingClassName)}>
         <div
           className="relative flex flex-col gap-4"
           onMouseEnter={() => {
@@ -1161,7 +1317,7 @@ export function HomepageCategoryHeroSection({
           }}
         >
           <div
-            className="rounded-lg border p-2 relative z-20"
+            className={cn('border p-2 relative z-20', !noBorderRadius && radiusMd)}
             style={{
               backgroundColor: resolvedTokens.neutral.surface,
               borderColor: resolvedTokens.neutral.border,
@@ -1199,7 +1355,7 @@ export function HomepageCategoryHeroSection({
                       : { color: resolvedTokens.topNav.inactiveText }}
                   >
                     {renderCategoryThumb(item)}
-                    <span className="whitespace-nowrap">{resolveMenuLabel(item.category)}</span>
+                    <span className="max-w-[10rem] whitespace-normal break-words text-left leading-snug">{resolveMenuLabel(item.category)}</span>
                   </button>
                 );
               })}
@@ -1213,7 +1369,8 @@ export function HomepageCategoryHeroSection({
                 <div
                   key={`topnav-${item.id}`}
                   className={cn(
-                    'absolute left-0 right-0 mt-2 rounded-lg border p-6 z-30 transition-all duration-200',
+                    'absolute left-0 right-0 mt-2 border p-6 z-30 transition-all duration-200',
+                    !noBorderRadius && radiusMd,
                     isActive ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
                   )}
                   style={{
@@ -1222,21 +1379,24 @@ export function HomepageCategoryHeroSection({
                   }}
                 >
                   {groups.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                      {groups.flatMap((group) => group.items ?? []).slice(0, 12).map((link) => {
-                        const resolvedItem = resolveMenuItem(link);
-                        return (
-                          <Link
-                            key={link.id}
-                            href={resolvedItem.href}
-                            className="text-sm flex items-center gap-2 hover:text-[var(--hero-topnav-link-hover)]"
-                            style={{ color: resolvedTokens.menuLink.text }}
-                          >
-                            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: resolvedTokens.topNav.bullet }} />
-                            {resolvedItem.label || 'Mục'}
-                          </Link>
-                        );
-                      })}
+                    <div className="flex flex-col gap-4">
+                      {renderThumbnailGrid(groups, 8)}
+                      <div className={cn('grid gap-6', isDesktop || device === 'tablet' ? 'grid-cols-4' : 'grid-cols-2')}>
+                        {groups.flatMap((group) => group.items ?? []).filter((item) => !item.image).slice(0, 12).map((link) => {
+                          const resolvedItem = resolveMenuItem(link);
+                          return (
+                            <Link
+                              key={link.id}
+                              href={resolvedItem.href}
+                              className="text-sm flex items-center gap-2 hover:text-[var(--hero-topnav-link-hover)]"
+                              style={{ color: resolvedTokens.menuLink.text }}
+                            >
+                              <span className="w-1 h-1 rounded-full" style={{ backgroundColor: resolvedTokens.topNav.bullet }} />
+                              {resolvedItem.label || 'Mục'}
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">
@@ -1263,16 +1423,17 @@ export function HomepageCategoryHeroSection({
           </div>
 
           <div
-            className="relative rounded-lg overflow-hidden h-[360px] md:h-[480px] z-10"
+            className={cn('relative overflow-hidden z-10', heroHeightClass, !noBorderRadius && radiusMd)}
             style={{ backgroundColor: resolvedTokens.neutral.surfaceMuted, borderColor: resolvedTokens.neutral.border }}
           >
-            <BannerSlider slides={heroSlides} className="absolute inset-0" tokens={resolvedTokens} />
-            <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+            <BannerSlider slides={heroSlides} className={isContain ? undefined : 'absolute inset-0'} tokens={resolvedTokens} imageFit={resolvedConfig.bannerImageFit} fallbackImage={productImagePlaceholder} showControls={device !== 'mobile'} />
+            {!isContain && <div className="absolute inset-0 bg-black/20 pointer-events-none" />}
           </div>
         </div>
       </div>
     </section>
   );
+  };
 
   if (resolvedConfig.style === 'top-nav') {
     return renderTopNavLayout();

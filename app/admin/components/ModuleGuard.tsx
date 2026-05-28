@@ -63,7 +63,7 @@ export function ModuleGuard({
         </h2>
         <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-md">
           Module <span className="font-semibold text-slate-700 dark:text-slate-300">{currentModule?.name ?? moduleKey}</span> hiện đang bị tắt. 
-          Vui lòng liên hệ System Admin để bật module này tại trang <span className="text-cyan-600">/system/modules</span>.
+          Vui lòng liên hệ quản trị viên hệ thống để bật module này.
         </p>
         <Button onClick={() =>{  router.push(fallbackUrl); }} className="gap-2">
           <ArrowLeft size={16} />
