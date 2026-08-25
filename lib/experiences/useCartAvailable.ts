@@ -6,16 +6,17 @@ type CartAvailability = {
   isLoading: boolean;
   cartEnabled: boolean;
   ordersEnabled: boolean;
+  hasCartProvider: boolean;
 };
 
 export function useCartAvailable(): CartAvailability {
-  const cartModule = useQuery(api.admin.modules.getModuleByKey, { key: 'cart' });
-  const ordersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'orders' });
+  const capabilities = useQuery(api.cart.getCommerceCapabilities, {});
 
-  const isLoading = cartModule === undefined || ordersModule === undefined;
-  const cartEnabled = cartModule?.enabled ?? false;
-  const ordersEnabled = ordersModule?.enabled ?? false;
-  const isAvailable = cartEnabled && ordersEnabled;
+  const isLoading = capabilities === undefined;
+  const cartEnabled = capabilities?.cartEnabled ?? false;
+  const ordersEnabled = capabilities?.ordersEnabled ?? false;
+  const hasCartProvider = capabilities?.hasCartProvider ?? false;
+  const isAvailable = capabilities?.cartAvailable ?? false;
 
-  return { cartEnabled, isAvailable, isLoading, ordersEnabled };
+  return { cartEnabled, hasCartProvider, isAvailable, isLoading, ordersEnabled };
 }

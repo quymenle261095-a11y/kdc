@@ -1,4 +1,6 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React, { useCallback, useEffect, useState } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
@@ -7,7 +9,7 @@ import { cn } from '../../../components/ui';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import { getPreviewDeviceClass } from '../../_shared/lib/previewResponsive';
@@ -25,6 +27,7 @@ import {
   TrustBadgesTrustCue,
   useTrustBadgesSectionState,
 } from './TrustBadgesSectionShared';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 // Best Practices: Grayscale-to-color hover, lightbox/zoom indicator, verification links, alt text accessibility
 interface TrustBadgeItem { id: number; url: string; link: string; name?: string }
@@ -42,6 +45,10 @@ export const TrustBadgesPreview = ({
   config,
   fontStyle,
   fontClassName,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: { 
   items: TrustBadgeItem[]; 
   brandColor: string;
@@ -53,8 +60,25 @@ export const TrustBadgesPreview = ({
   config?: TrustBadgesConfig;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (val: string) => void;
+  onSubtitleChange?: (val: string) => void;
+  onBadgeTextChange?: (val: string) => void;
 }) => {
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
   const [carouselRef, carouselApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
   const [cardsRef, cardsApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps' });
   const [sealRef, sealApi] = useEmblaCarousel({ align: 'start', axis: 'y', containScroll: 'trimSnaps' });
@@ -67,12 +91,13 @@ export const TrustBadgesPreview = ({
   const [selectedSnap, setSelectedSnap] = useState(0);
   const {
     cardBorder,
-    colors,
+    colors: rawColors,
     innerRadiusClassName,
     radiusClassName,
     renderConfig,
     sectionSpacingClassName,
   } = useTrustBadgesSectionState({ brandColor, config, desktopColumns, mode, previewDevice: device, secondary, selectedStyle });
+  const colors = React.useMemo(() => adaptTokensForDarkMode(rawColors, isDark), [rawColors, isDark]);
   const previewStyle = renderConfig.style;
   const setPreviewStyle = (s: string) => onStyleChange?.(s as TrustBadgesStyle);
   const normalizedDesktopColumns = renderConfig.desktopColumns;
@@ -177,6 +202,10 @@ export const TrustBadgesPreview = ({
       brandColor={brandColor}
       config={config}
       title={config?.heading ?? 'Chứng nhận & Giải thưởng'}
+      visualEditEnabled={isVisualEditActive}
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
     />
   );
 
@@ -619,15 +648,21 @@ export const TrustBadgesPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame>
-          {previewStyle === 'grid' && renderGridStyle()}
-          {previewStyle === 'cards' && renderCardsStyle()}
-          {previewStyle === 'stack' && renderStackStyle()}
-          {previewStyle === 'wall' && renderWallStyle()}
-          {previewStyle === 'carousel' && renderCarouselStyle()}
-          {previewStyle === 'seal' && renderSealStyle()}
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <BrowserFrame>
+            {previewStyle === 'grid' && renderGridStyle()}
+            {previewStyle === 'cards' && renderCardsStyle()}
+            {previewStyle === 'stack' && renderStackStyle()}
+            {previewStyle === 'wall' && renderWallStyle()}
+            {previewStyle === 'carousel' && renderCarouselStyle()}
+            {previewStyle === 'seal' && renderSealStyle()}
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
       {mode === 'dual' ? <ColorInfoPanel brandColor={brandColor} secondary={secondary} /> : null}
       {renderImageGuidelines()}

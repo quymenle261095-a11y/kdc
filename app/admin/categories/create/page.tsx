@@ -6,14 +6,24 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Button, Card, CardContent, Input, Label, cn } from '../../components/ui';
+import { Checkbox, Label, cn } from '../../components/ui';
 import { LexicalEditor } from '../../components/LexicalEditor';
 import { FaqForm } from '@/app/admin/home-components/faq/_components/FaqForm';
 import type { FaqItem, FaqStyle, FaqConfig } from '@/app/admin/home-components/faq/_types';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormPageWrapper,
+  AdminFormSidebar,
+  AdminSelect,
+  AdminSlugInput,
+  AdminStickyFooter,
+  AdminTitleInput,
+  generateSlugFromTitle,
+} from '@/app/admin/components/FormUtilities';
 import { AiCategoryContentImport } from '../_components/AiCategoryContentImport';
 
 const MODULE_KEY = 'productCategories';
@@ -27,7 +37,7 @@ export default function CategoryCreatePage() {
     featureKey: 'enableCategoryHierarchy',
     moduleKey: 'products',
   });
-  void fieldsData; // Mark as intentionally unused for now
+  void fieldsData;
 
   // System settings toggles
   const showCategorySubtitleSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'showCategorySubtitle' });
@@ -88,17 +98,12 @@ export default function CategoryCreatePage() {
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setName(val);
-    const generatedSlug = val.toLowerCase()
-      .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
-      .replaceAll(/[đĐ]/g, "d")
-      .replaceAll(/[^a-z0-9\s]/g, '')
-      .replaceAll(/\s+/g, '-');
-    setSlug(generatedSlug);
+    setSlug(generateSlugFromTitle(val));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !slug.trim()) {return;}
+    if (!name.trim() || !slug.trim()) return;
 
     setIsSubmitting(true);
     try {
@@ -124,7 +129,7 @@ export default function CategoryCreatePage() {
         productDetailFaqEnabled: faqEnabled,
         productTypeIds: enableProductTypes ? productTypeIds : undefined,
       });
-      toast.success('Tạo danh mục thành công');
+      toast.success('Tạo danh mục sản phẩm thành công');
       router.push('/admin/categories');
     } catch (error) {
       toast.error(getAdminMutationErrorMessage(error, 'Không thể tạo danh mục'));
@@ -133,87 +138,77 @@ export default function CategoryCreatePage() {
     }
   };
 
+  const parentCategoryOptions = [
+    { value: '', label: '-- Không có (Danh mục gốc) --' },
+    ...(categoriesData?.filter(c => c.active).map(cat => ({ value: cat._id, label: cat.name })) || []),
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thêm danh mục mới</h1>
-          <Link href="/admin/categories" className="text-sm text-orange-600 hover:underline">Quay lại danh sách</Link>
-        </div>
-      </div>
+    <AdminFormPageWrapper
+      title="Thêm danh mục sản phẩm mới"
+      subtitle="Tạo danh mục phân loại và thiết lập nội dung mở rộng cho sản phẩm."
+      backHref="/admin/categories"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          submitLabel="Tạo danh mục"
+          onCancel={() => router.push('/admin/categories')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          aiImportNode={
+            <AiCategoryContentImport 
+              categoryName={name}
+              categoryDescription={description}
+              onApply={handleAiApply}
+            />
+          }
+        />
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <AdminFormGrid>
+          <AdminFormMain>
+            <AdminFormCard title="Thông tin cơ bản">
+              <AdminTitleInput
+                label="Tên danh mục"
+                value={name}
+                onChange={handleNameChange}
+                required
+                placeholder="Ví dụ: Điện thoại, Áo sơ mi, Phụ kiện..."
+                autoFocus
+                copyLabel="tên danh mục"
+              />
 
-      <form onSubmit={handleSubmit}>
-        <Card className="w-full">
-          <CardContent className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
+              <AdminSlugInput
+                slug={slug}
+                onChange={setSlug}
+                categorySlug="products"
+              />
+
+              {(enabledFields.has('description') || showCategorySubtitle) && (
                 <div className="space-y-2">
-                  <Label>Tên danh mục <span className="text-red-500">*</span></Label>
-                  <Input value={name} onChange={handleNameChange} required placeholder="Ví dụ: Điện thoại, Áo sơ mi..." autoFocus />
+                  <Label>Mô tả ngắn (Subtitle)</Label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Mô tả ngắn hiển thị dưới tên danh mục..."
+                    className="w-full min-h-[80px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+                  />
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Slug</Label>
-                  <Input value={slug} onChange={(e) =>{  setSlug(e.target.value); }} placeholder="tu-dong-tao-tu-ten" className="font-mono text-sm" />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {isHierarchyEnabled && (
-                  <div className="space-y-2">
-                    <Label>Danh mục cha</Label>
-                    <select 
-                      value={parentId}
-                      onChange={(e) =>{  setParentId(e.target.value); }}
-                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                    >
-                      <option value="">-- Không có (Danh mục gốc) --</option>
-                      {categoriesData?.filter(c => c.active).map(cat => (
-                        <option key={cat._id} value={cat._id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>Trạng thái</Label>
-                  <select 
-                    value={active ? 'active' : 'inactive'}
-                    onChange={(e) =>{  setActive(e.target.value === 'active'); }}
-                    className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                  >
-                    <option value="active">Hoạt động</option>
-                    <option value="inactive">Ẩn</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {(enabledFields.has('description') || showCategorySubtitle) && (
-              <div className="space-y-2">
-                <Label>Mô tả ngắn (Subtitle)</Label>
-                <textarea
-                  value={description}
-                  onChange={(e) =>{  setDescription(e.target.value); }}
-                  placeholder="Mô tả ngắn hiển thị dưới tên danh mục..."
-                  className="w-full min-h-[80px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                />
-              </div>
-            )}
+              )}
+            </AdminFormCard>
 
             {enableProductTypes && (
-              <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <Label className="text-base font-semibold block">Phân loại & Thuộc tính</Label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Chọn duy nhất 1 kiểu sản phẩm cho danh mục này. Mỗi danh mục chỉ có thể liên kết với tối đa 1 kiểu để hiển thị các thuộc tính bộ lọc phù hợp.
-                    </p>
-                  </div>
-                  <Link href="/admin/product-types" className="text-xs text-orange-600 hover:underline whitespace-nowrap">
+              <AdminFormCard
+                title="Phân loại & Kiểu sản phẩm"
+                description="Chọn kiểu sản phẩm liên kết để kích hoạt các thuộc tính bộ lọc phù hợp."
+                extra={
+                  <Link href="/admin/product-types" className="text-xs text-blue-600 hover:underline">
                     Quản lý kiểu
                   </Link>
-                </div>
+                }
+              >
                 <div className="border border-slate-200 dark:border-slate-700 rounded-md p-3 max-h-60 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-900/30">
                   {productTypesData === undefined ? (
                     <p className="text-sm text-slate-500 italic">Đang tải kiểu sản phẩm...</p>
@@ -221,24 +216,24 @@ export default function CategoryCreatePage() {
                     <p className="text-sm text-slate-500 italic">Chưa có kiểu sản phẩm nào.</p>
                   ) : (
                     <>
-                      <label className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-orange-600">
+                      <label className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-blue-600">
                         <input
                           type="radio"
                           name="productTypeId"
                           checked={productTypeIds.length === 0}
                           onChange={() => setProductTypeIds([])}
-                          className="h-4 w-4 border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                          className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
                         <span className="text-sm font-medium text-slate-500 italic">Không gán kiểu sản phẩm (Bỏ chọn)</span>
                       </label>
                       {productTypesData.map(type => (
-                        <label key={type._id} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-orange-600">
+                        <label key={type._id} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-blue-600">
                           <input
                             type="radio"
                             name="productTypeId"
                             checked={productTypeIds.includes(type._id)}
                             onChange={() => setProductTypeIds([type._id])}
-                            className="h-4 w-4 border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                            className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                           <span className="text-sm font-medium">{type.name}</span>
                           <span className="text-xs text-slate-400 font-mono">({type.slug})</span>
@@ -247,32 +242,34 @@ export default function CategoryCreatePage() {
                     </>
                   )}
                 </div>
-              </div>
+              </AdminFormCard>
             )}
 
             {enableCategoryFilterFooterContent && (
-              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <Label className="text-base font-semibold block">Nội dung cuối trang danh mục</Label>
-                <LexicalEditor onChange={setFilterFooterContent} initialContent={filterFooterContent} resetKey={`create:filterFooterContent:${aiResetKey}`} />
-              </div>
+              <AdminFormCard title="Nội dung cuối trang danh mục" description="Hiển thị ở chân trang danh mục sản phẩm (hỗ trợ SEO on-page).">
+                <LexicalEditor
+                  onChange={setFilterFooterContent}
+                  initialContent={filterFooterContent}
+                  resetKey={`create:filterFooterContent:${aiResetKey}`}
+                />
+              </AdminFormCard>
             )}
 
             {enableCategoryProductDetailSuffix && (
-              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <Label className="text-base font-semibold block">Nội dung nối đuôi chi tiết sản phẩm</Label>
-                <LexicalEditor onChange={setProductDetailSuffixContent} initialContent={productDetailSuffixContent} resetKey={`create:productDetailSuffixContent:${aiResetKey}`} />
-              </div>
+              <AdminFormCard title="Nội dung nối đuôi chi tiết sản phẩm" description="Tự động gắn vào cuối phần mô tả của toàn bộ sản phẩm thuộc danh mục này.">
+                <LexicalEditor
+                  onChange={setProductDetailSuffixContent}
+                  initialContent={productDetailSuffixContent}
+                  resetKey={`create:productDetailSuffixContent:${aiResetKey}`}
+                />
+              </AdminFormCard>
             )}
 
             {enableCategoryProductDetailFaq && (
-              <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base font-semibold block">FAQ chi tiết sản phẩm</Label>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Bật hoặc tắt hiển thị các câu hỏi thường gặp cho danh mục này trên trang chi tiết sản phẩm.
-                    </span>
-                  </div>
+              <AdminFormCard
+                title="FAQ chi tiết sản phẩm"
+                description="Bộ câu hỏi thường gặp hiển thị trên trang chi tiết sản phẩm thuộc danh mục này."
+                extra={
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -280,8 +277,8 @@ export default function CategoryCreatePage() {
                       aria-checked={faqEnabled}
                       onClick={() => setFaqEnabled(!faqEnabled)}
                       className={cn(
-                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2",
-                        faqEnabled ? "bg-orange-500" : "bg-slate-200 dark:bg-slate-700"
+                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                        faqEnabled ? "bg-blue-600" : "bg-slate-200 dark:bg-slate-700"
                       )}
                     >
                       <span
@@ -292,21 +289,21 @@ export default function CategoryCreatePage() {
                       />
                     </button>
                     <span className={cn(
-                      "text-sm font-medium",
-                      faqEnabled ? "text-orange-600 dark:text-orange-400" : "text-slate-400"
+                      "text-xs font-semibold",
+                      faqEnabled ? "text-blue-600 dark:text-blue-400" : "text-slate-400"
                     )}>
                       {faqEnabled ? "Đang bật" : "Đã tắt"}
                     </span>
                   </div>
-                </div>
-
+                }
+              >
                 {faqEnabled ? (
                   <div className="space-y-4 pt-2">
                     <FaqForm
                       faqItems={faqItems}
                       setFaqItems={setFaqItems}
                       faqStyle={faqStyle}
-                      brandColor="#f97316"
+                      brandColor="#2563eb"
                       faqConfig={faqConfig}
                       setFaqConfig={setFaqConfig}
                     />
@@ -317,39 +314,37 @@ export default function CategoryCreatePage() {
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Các câu hỏi FAQ đã soạn thảo vẫn được lưu trữ an toàn nhưng sẽ không hiển thị ngoài giao diện web cho đến khi bạn bật lại.</p>
                   </div>
                 )}
-              </div>
+              </AdminFormCard>
             )}
-          </CardContent>
-        </Card>
+          </AdminFormMain>
 
-        <HomeComponentStickyFooter
-          isSubmitting={isSubmitting}
-          submitLabel="Tạo danh mục"
-        >
-          <>
-            <Button type="button" variant="ghost" onClick={() => router.push('/admin/categories')} disabled={isSubmitting}>Hủy bỏ</Button>
-            <div className="flex flex-wrap justify-end gap-2">
-              <AiCategoryContentImport 
-                categoryName={name}
-                categoryDescription={description}
-                onApply={handleAiApply}
-              />
-              <Button
-                type="submit"
-                variant="accent"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin mr-2" />
-                    Đang tạo...
-                  </>
-                ) : 'Tạo danh mục'}
-              </Button>
-            </div>
-          </>
-        </HomeComponentStickyFooter>
+          <AdminFormSidebar>
+            <AdminFormCard title="Xuất bản & Phân cấp">
+              {isHierarchyEnabled && (
+                <div className="space-y-2">
+                  <Label>Danh mục cha</Label>
+                  <AdminSelect
+                    value={parentId}
+                    onChange={setParentId}
+                    options={parentCategoryOptions}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <Checkbox
+                  id="active"
+                  checked={active}
+                  onCheckedChange={(checked) => setActive(Boolean(checked))}
+                />
+                <Label htmlFor="active" className="cursor-pointer text-sm font-medium">
+                  Kích hoạt hiển thị danh mục
+                </Label>
+              </div>
+            </AdminFormCard>
+          </AdminFormSidebar>
+        </AdminFormGrid>
       </form>
-    </div>
+    </AdminFormPageWrapper>
   );
 }

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useContext } from 'react';
+import { LiveEditorContext } from './PreviewWrapper';
 
 export const ColorInfoPanel = ({
   brandColor,
@@ -11,6 +12,13 @@ export const ColorInfoPanel = ({
   secondary: string;
   description?: string;
 }) => {
+  const liveEditor = useContext(LiveEditorContext);
+  const isLiveMode = liveEditor?.isLiveEditor ?? false;
+
+  if (isLiveMode) {
+    return null;
+  }
+
   if (!secondary) {return null;}
 
   if (compact) {

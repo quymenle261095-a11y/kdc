@@ -5,7 +5,7 @@ import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostsListColors } from './colors';
 
-export type SortOption = 'newest' | 'oldest' | 'popular' | 'title';
+export type SortOption = 'newest' | 'oldest' | 'popular' | 'title' | 'title_desc';
 
 interface Category {
   _id: Id<"postCategories">;
@@ -32,6 +32,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { label: 'Cũ nhất', value: 'oldest' },
   { label: 'Xem nhiều', value: 'popular' },
   { label: 'Theo tên A-Z', value: 'title' },
+  { label: 'Theo tên Z-A', value: 'title_desc' },
 ];
 
 export function PostsFilter({
@@ -42,7 +43,7 @@ export function PostsFilter({
   onSearchChange,
   sortBy,
   onSortChange,
-  totalResults,
+  totalResults: _totalResults,
   tokens,
   showSearch = true,
   showCategories = true,
@@ -127,26 +128,37 @@ export function PostsFilter({
           {/* Spacer */}
           <div className="hidden lg:block flex-1" />
 
-          {/* Sort Dropdown - Right Aligned */}
-          <div className="hidden lg:block relative">
-            <select
-              value={sortBy}
-              onChange={(e) =>{  onSortChange(e.target.value as SortOption); }}
-              className="appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 cursor-pointer"
-              style={{
-                '--tw-ring-color': tokens.inputRing,
-                borderColor: tokens.inputBorder,
-                backgroundColor: tokens.inputBackground,
-                color: tokens.inputText,
-              } as React.CSSProperties}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tokens.inputIcon }} />
+          {/* Sort Dropdown & Clear Filter - Desktop */}
+          <div className="hidden lg:flex items-center gap-3 shrink-0">
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-xs font-semibold hover:underline"
+                style={{ color: tokens.filterClearText }}
+              >
+                Xóa bộ lọc
+              </button>
+            )}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) =>{  onSortChange(e.target.value as SortOption); }}
+                className="appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 cursor-pointer"
+                style={{
+                  '--tw-ring-color': tokens.inputRing,
+                  borderColor: tokens.inputBorder,
+                  backgroundColor: tokens.inputBackground,
+                  color: tokens.inputText,
+                } as React.CSSProperties}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tokens.inputIcon }} />
+            </div>
           </div>
 
           {/* Mobile Filter Toggle */}
@@ -248,62 +260,49 @@ export function PostsFilter({
         )}
       </div>
 
-      {/* Applied Filters & Results Count */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Results count */}
-          <span className="text-sm" style={{ color: tokens.filterCountText }}>
-            {totalResults} bài viết
-          </span>
-
-          {/* Applied filters */}
-          {selectedCategoryName && (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
-              style={{
-                backgroundColor: tokens.filterTagBg,
-                color: tokens.filterTagText,
-                borderColor: tokens.filterTagBorder,
-              }}
-            >
-              {selectedCategoryName}
-              <button
-                onClick={() =>{  onCategoryChange(null); }}
+      {/* Applied Filters */}
+      {((selectedCategoryName) || (showSearch && searchQuery)) && (
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectedCategoryName && (
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border"
+                style={{
+                  backgroundColor: tokens.filterTagBg,
+                  color: tokens.filterTagText,
+                  borderColor: tokens.filterTagBorder,
+                }}
               >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-          {showSearch && searchQuery && (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
-              style={{
-                backgroundColor: tokens.filterTagBg,
-                color: tokens.filterTagText,
-                borderColor: tokens.filterTagBorder,
-              }}
-            >
-              &quot;{searchQuery}&quot;
-              <button
-                onClick={() =>{  onSearchChange(''); }}
+                {selectedCategoryName}
+                <button
+                  onClick={() =>{  onCategoryChange(null); }}
+                  className="hover:opacity-85"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            {showSearch && searchQuery && (
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border"
+                style={{
+                  backgroundColor: tokens.filterTagBg,
+                  color: tokens.filterTagText,
+                  borderColor: tokens.filterTagBorder,
+                }}
               >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
+                &quot;{searchQuery}&quot;
+                <button
+                  onClick={() =>{  onSearchChange(''); }}
+                  className="hover:opacity-85"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </div>
         </div>
-
-        {/* Clear all filters */}
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="text-sm hover:underline"
-            style={{ color: tokens.filterClearText }}
-          >
-            Xóa bộ lọc
-          </button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

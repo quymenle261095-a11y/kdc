@@ -1,14 +1,14 @@
 import { DEFAULT_PRODUCT_LIST_CARD_RADIUS, DEFAULT_PRODUCT_LIST_DESKTOP_COLUMNS, type DemoProductItem, type ProductListConfig, type ProductListStyle, type ProductListTextConfig } from '../_types';
 
 export const PRODUCT_LIST_STYLES: { id: ProductListStyle; label: string }[] = [
-  { id: 'commerce', label: 'Commerce' },
-  { id: 'minimal', label: 'E-commerce' },
-  { id: 'bento', label: 'Bento' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'wine-carousel', label: 'Wine Carousel' },
-  { id: 'compact', label: 'Compact' },
-  { id: 'showcase', label: 'Showcase' },
-  { id: 'lookbook', label: 'Lookbook Banner' },
+  { id: 'commerce', label: '(1) Thương mại' },
+  { id: 'minimal', label: '(2) Tối giản' },
+  { id: 'bento', label: '(3) Ô ghép' },
+  { id: 'carousel', label: '(4) Trượt ngang' },
+  { id: 'wine-carousel', label: '(5) Trượt ngang 2' },
+  { id: 'compact', label: '(6) Thu gọn' },
+  { id: 'showcase', label: '(7) Trưng bày' },
+  { id: 'lookbook', label: '(8) Gắn điểm' },
 ];
 
 export const PRODUCT_LIST_LOOKBOOK_BANNERS = [
@@ -52,6 +52,9 @@ export const DEFAULT_PRODUCT_LIST_CONFIG: ProductListConfig = {
   itemCount: 8,
   lookbookDesktopColumns: DEFAULT_PRODUCT_LIST_DESKTOP_COLUMNS,
   sortBy: 'newest',
+  showAddToCartButton: true,
+  showBuyNowButton: true,
+  cartButtonsLayout: 'stack',
 };
 
 export const DEFAULT_PRODUCT_LIST_TEXT: ProductListTextConfig = {

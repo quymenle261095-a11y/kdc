@@ -27,6 +27,7 @@ const PROCESS_STYLE_SET = new Set<ProcessStyle>([
   'compactMinimal',
   'grid',
   'alternating',
+  'circular',
 ]);
 
 const coerceText = (value: unknown) => {
@@ -150,6 +151,8 @@ export const normalizeProcessConfig = (rawConfig: unknown): ProcessConfig => {
     uppercaseText: typeof config.uppercaseText === 'boolean' ? config.uppercaseText : false,
     showBadge: typeof config.showBadge === 'boolean' ? config.showBadge : true,
     badgeText: coerceText(config.badgeText),
+    circularCtaText: coerceText(config.circularCtaText),
+    circularCtaLink: coerceText(config.circularCtaLink),
     noBorderRadius: config.noBorderRadius === true,
     noVerticalMargin: config.noVerticalMargin === true,
     spacing: normalizeProcessSpacing(config.spacing, config.noVerticalMargin),

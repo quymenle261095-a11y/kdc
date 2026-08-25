@@ -2,7 +2,7 @@
  
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Settings, Palette, Loader2, FolderTree, BookOpen, Sparkles, CheckCircle2, ArrowRight, Layers, AlertTriangle } from 'lucide-react';
 import type { ModuleDefinition } from '@/lib/modules/define-module';
@@ -19,6 +19,7 @@ import {
   SettingToggle,
   SettingTextarea,
   FeaturesCard,
+  CapabilitiesCard,
   FieldsCard,
 } from '@/components/modules/shared';
 import { VariantSettingsSection } from '@/components/modules/products/VariantSettingsSection';
@@ -35,6 +36,18 @@ const REMOVED_SETTINGS_FIELDS = new Set([
   'seo_geo_lng',
   'seo_hreflang',
 ]);
+
+const HIDDEN_COURSES_FIELDS = new Set(['durationSeconds']);
+
+const COURSE_FIELD_NAME_OVERRIDES: Record<string, string> = {
+  comparePriceAmount: 'Giá gốc',
+  htmlRender: 'Nội dung HTML',
+  level: 'Trình độ',
+  markdownRender: 'Nội dung Markdown',
+  metaDescription: 'Mô tả SEO',
+  metaTitle: 'Tiêu đề SEO',
+  renderType: 'Kiểu nội dung',
+};
  
 export interface ModuleConfigPageRenderProps {
   config: ModuleDefinition;
@@ -321,15 +334,57 @@ export function ConfigTab({ config, moduleData, isReadOnly, localFeatures, local
 
   const isProductModule = config.key === 'products';
   const isSettingsModule = config.key === 'settings';
+  const productSaleModeSetting = useQuery(
+    api.admin.modules.getModuleSetting,
+    isSettingsModule ? { moduleKey: 'products', settingKey: 'saleMode' } : 'skip'
+  );
+  const isProductContactSaleMode = productSaleModeSetting?.value === 'contact';
+  const advancedSettingsFeatureKeys = new Set([
+    'enableProductImageAdvanced',
+    'enableProductFrameAdvanced',
+    'enableProductWatermarkAdvanced',
+    'enableMail',
+    'enableHeaderMenuAdvanced',
+    'enableProductSupplementalAdvanced',
+    'enableShopConfigAdvanced',
+    'enableProductContactLinkAdvanced',
+  ]);
+  const featureItems = config.features?.map(f => ({
+    config: {
+      key: f.key,
+      label: f.label,
+      icon: f.icon ?? Settings,
+      linkedField: f.linkedField,
+      description: f.description,
+    },
+    enabled: localFeatures[f.key] ?? f.enabled ?? false,
+  })) ?? [];
+  const advancedSettingsFeatures = isSettingsModule
+    ? featureItems
+      .filter(item => advancedSettingsFeatureKeys.has(item.config.key))
+      .filter(item => item.config.key !== 'enableProductContactLinkAdvanced' || isProductContactSaleMode)
+    : [];
+  const regularFeatures = isSettingsModule
+    ? featureItems.filter(item => !advancedSettingsFeatureKeys.has(item.config.key))
+    : featureItems;
   const isSingleBrandMode = isSettingsModule && localSettings.site_brand_mode === 'single';
   const visibleFields = localFields.filter((field) => {
     if (isSettingsModule && REMOVED_SETTINGS_FIELDS.has(field.key)) {
+      return false;
+    }
+    if (config.key === 'courses' && HIDDEN_COURSES_FIELDS.has(field.key)) {
       return false;
     }
     if (config.key === 'subscriptions' && (field.key === 'timezone' || field.key === 'notes')) {
       return false;
     }
     return true;
+  }).map((field) => {
+    if (config.key !== 'courses') {
+      return field;
+    }
+    const name = COURSE_FIELD_NAME_OVERRIDES[field.key];
+    return name ? { ...field, name } : field;
   });
   const handleFieldToggle = (key: string) => {
     if (isSingleBrandMode && key === 'site_brand_secondary') {return;}
@@ -425,18 +480,23 @@ export function ConfigTab({ config, moduleData, isReadOnly, localFeatures, local
             </div>
           ))}
            
-           {config.features && config.features.length > 0 && (
+           {config.capabilities && config.capabilities.length > 0 && (
+             <CapabilitiesCard
+               capabilities={config.capabilities}
+               toggleColor={colorClasses.toggle}
+             />
+           )}
+           {regularFeatures.length > 0 && (
              <FeaturesCard
-               features={config.features.map(f => ({
-                 config: { 
-                   key: f.key, 
-                   label: f.label, 
-                   icon: f.icon ?? Settings,
-                   linkedField: f.linkedField,
-                   description: f.description,
-                 },
-                 enabled: localFeatures[f.key] ?? false,
-               }))}
+               features={regularFeatures}
+               onToggle={onToggleFeature}
+               toggleColor={colorClasses.toggle}
+             />
+           )}
+           {advancedSettingsFeatures.length > 0 && (
+             <FeaturesCard
+               title="Tab Cài đặt nâng cao"
+               features={advancedSettingsFeatures}
                onToggle={onToggleFeature}
                toggleColor={colorClasses.toggle}
              />

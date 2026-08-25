@@ -1,11 +1,13 @@
 'use client';
 
+
 import React from 'react';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { cn } from '../../../components/ui';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
@@ -61,6 +63,10 @@ export const FaqPreview = ({
   showBadge,
   badgeText,
   spacing = DEFAULT_FAQ_SPACING,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemTextChange,
 }: {
   items: FaqItem[];
   brandColor: string;
@@ -83,8 +89,13 @@ export const FaqPreview = ({
   showBadge?: boolean;
   badgeText?: string;
   spacing?: SectionSpacing;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemTextChange?: (id: FaqItem['id'], field: 'question' | 'answer', value: string) => void;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
   const style = selectedStyle;
   const maxVisible = device === 'mobile' ? 4 : 6;
   const sectionSpacingClassName = getFaqSectionSpacingClassName(spacing);
@@ -100,12 +111,10 @@ export const FaqPreview = ({
     ? brandColor.trim()
     : '#3b82f6';
 
-  const tokens = getFaqColors({
-    primary: normalizedPrimary,
-    secondary,
-    mode,
-    style,
-  });
+  const tokens = React.useMemo(
+    () => adaptTokensForDarkMode(getFaqColors({primary: normalizedPrimary, secondary, mode, style}), isDark),
+    [normalizedPrimary, secondary, mode, style, isDark]
+  );
 
   const resolvedSecondary = resolveFaqSecondary(normalizedPrimary, secondary, mode);
   const harmonyStatus = mode === 'dual'
@@ -152,6 +161,7 @@ export const FaqPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+        visualEditAllowed={Boolean(onItemTextChange || onTitleChange || onSubtitleChange || onBadgeTextChange)}
       >
         <BrowserFrame url="yoursite.com/faq">
           <div className={cn('container mx-auto', style === 'cards' && device !== 'desktop' ? 'px-0' : 'px-4', sectionSpacingClassName)}>
@@ -168,6 +178,9 @@ export const FaqPreview = ({
               subtitleAboveTitle={subtitleAboveTitle}
               uppercaseText={uppercaseText}
               brandColor={brandColor}
+              onTitleChange={onTitleChange}
+              onSubtitleChange={onSubtitleChange}
+              onBadgeTextChange={onBadgeTextChange}
             />
             <FaqSectionShared
               items={items}
@@ -182,6 +195,7 @@ export const FaqPreview = ({
               spacingClassName="py-0"
               rounded={rounded}
               desktopColumns={desktopColumns}
+              onItemTextChange={onItemTextChange}
             />
           </div>
         </BrowserFrame>

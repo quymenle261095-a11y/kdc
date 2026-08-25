@@ -23,6 +23,7 @@ interface AdminUser {
 interface AdminAuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
+  isPermissionLoading: boolean;
   isSessionVerified: boolean; // True khi đã verify session xong (dù valid hay invalid)
   token: string | null;
   user: AdminUser | null;
@@ -55,6 +56,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     defaultValue: 'rbac',
     key: 'admin_permission_mode',
   });
+  const isPermissionLoading = permissionMode === undefined;
 
   const activeToken = sessionResult?.valid === false ? null : token;
 
@@ -126,7 +128,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AdminAuthContext.Provider value={{ hasPermission, isAuthenticated, isLoading, isSessionVerified, login, logout, token: activeToken, user }}>
+    <AdminAuthContext.Provider value={{ hasPermission, isAuthenticated, isLoading, isPermissionLoading, isSessionVerified, login, logout, token: activeToken, user }}>
       {children}
     </AdminAuthContext.Provider>
   );

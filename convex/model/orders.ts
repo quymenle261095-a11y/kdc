@@ -13,7 +13,11 @@ type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
 type PaymentMethod = "COD" | "BankTransfer" | "VietQR" | "CreditCard" | "EWallet";
 
 interface OrderItem {
-  productId: Id<"products">;
+  itemType?: "product" | "service" | "course" | "resource";
+  productId?: Id<"products">;
+  serviceId?: Id<"services">;
+  courseId?: Id<"courses">;
+  resourceId?: Id<"resources">;
   productImage?: string;
   productName: string;
   quantity: number;

@@ -136,6 +136,12 @@ export default function VoucherPromotionsCreatePage() {
         canUseRealData={canUseRealData}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        onTitleChange={(value) => {
+          setTitle(value);
+          setVoucherConfig((prev) => ({ ...prev, texts: { ...prev.texts, heading: value } }));
+        }}
+        onSubtitleChange={(value) => setVoucherConfig((prev) => ({ ...prev, subtitle: value, texts: { ...prev.texts, description: value } }))}
+        onBadgeTextChange={(value) => setVoucherConfig((prev) => ({ ...prev, badgeText: value }))}
       />
     </ComponentFormWrapper>
   );

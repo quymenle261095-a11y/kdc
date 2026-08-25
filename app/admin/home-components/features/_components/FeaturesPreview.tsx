@@ -1,4 +1,6 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
@@ -50,10 +52,15 @@ interface FeaturesPreviewProps {
   spacing?: SectionSpacing;
   desktopColumns?: FeaturesDesktopColumns;
   cornerRadius?: FeaturesCornerRadius;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (value: FeatureItem[]) => void;
 }
 
 export function FeaturesPreview({
-  items,
+  items = [],
   brandColor,
   secondary,
   mode,
@@ -76,8 +83,23 @@ export function FeaturesPreview({
   spacing,
   desktopColumns,
   cornerRadius,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
 }: FeaturesPreviewProps) {
   const { device, setDevice } = usePreviewDevice();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
 
   const previewStyle = selectedStyle ?? 'carousel6';
   const info = (() => {
@@ -93,6 +115,24 @@ export function FeaturesPreview({
     return `${items.length} tính năng • ${sizeLabel} • ${modeLabel}`;
   })();
 
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
+  const handleItemTextUpdate = (idx: number, field: 'title' | 'description', nextText: string) => {
+    if (!onItemsChange) return;
+    const nextItems = items.map((item, i) => {
+      if (i === idx) {
+        return {
+          ...item,
+          [field]: nextText,
+        };
+      }
+      return item;
+    });
+    onItemsChange(nextItems);
+  };
+
   return (
     <>
       <PreviewWrapper
@@ -100,6 +140,9 @@ export function FeaturesPreview({
         device={device}
         setDevice={setDevice}
         previewStyle={previewStyle}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
         setPreviewStyle={(next) => onStyleChange?.(next as FeaturesStyle)}
         styles={styles}
         info={info}
@@ -107,32 +150,40 @@ export function FeaturesPreview({
         fontClassName={fontClassName}
         deviceWidthClass={deviceWidths[device]}
       >
-        <BrowserFrame>
-          <FeaturesSectionShared
-            context="preview"
-            device={device}
-            items={items}
-            style={previewStyle}
-            showIcons={showIcons}
-            title={sectionTitle}
-            brandColor={brandColor}
-            secondary={secondary}
-            mode={mode}
-            hideHeader={hideHeader}
-            showTitle={showTitle}
-            subtitle={subtitle}
-            showSubtitle={showSubtitle}
-            headerAlign={headerAlign}
-            titleColorPrimary={titleColorPrimary}
-            subtitleAboveTitle={subtitleAboveTitle}
-            uppercaseText={uppercaseText}
-            showBadge={showBadge}
-            badgeText={badgeText}
-            spacing={spacing}
-            desktopColumns={desktopColumns}
-            cornerRadius={cornerRadius}
-          />
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <BrowserFrame url="yoursite.com/features">
+            <FeaturesSectionShared
+              context="preview"
+              device={device}
+              items={items}
+              style={previewStyle}
+              showIcons={showIcons}
+              title={sectionTitle}
+              brandColor={brandColor}
+              secondary={secondary}
+              mode={mode}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              subtitle={subtitle}
+              showSubtitle={showSubtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={badgeText}
+              spacing={spacing}
+              desktopColumns={desktopColumns}
+              cornerRadius={cornerRadius}
+              isVisualEditActive={isVisualEditActive}
+              onItemTextUpdate={handleItemTextUpdate}
+              onTitleChange={onTitleChange}
+              onSubtitleChange={onSubtitleChange}
+              onBadgeTextChange={onBadgeTextChange}
+            />
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' ? (

@@ -9,13 +9,13 @@ import {
   type SectionSpacing,
 } from '../../_shared/types/sectionSpacing';
 
-export type PartnersStyle = 'grid' | 'marquee' | 'badge' | 'carousel' | 'clean' | 'divider' | 'logoCloud';
+export type PartnersStyle = 'grid' | 'marquee' | 'badge' | 'carousel' | 'clean' | 'divider' | 'logoCloud' | 'glassLogoCloud';
 export type PartnersAlign = 'left' | 'center' | 'right';
 export type PartnersDisplayMode = 'withName' | 'logoOnly';
 export type PartnersHeaderAlign = 'left' | 'center' | 'right';
 export type PartnersCornerRadius = 'none' | 'sm' | 'lg';
 export type PartnersLogoSize = 'small' | 'normal' | 'large' | 'veryLarge' | 'largest';
-export type PartnersLogoSizeLayout = 'grid' | 'compact' | 'marquee' | 'clean' | 'logoCloud';
+export type PartnersLogoSizeLayout = 'grid' | 'compact' | 'marquee' | 'clean' | 'logoCloud' | 'glassLogoCloud';
 export type PartnersSpacing = SectionSpacing;
 
 export interface PartnerItem extends ImageItem {
@@ -24,6 +24,10 @@ export interface PartnerItem extends ImageItem {
   link: string;
   name?: string;
 }
+
+export type PartnersLogoColorMode = 'color' | 'grayscale' | 'white';
+export type PartnersLogoColorIntensity = number;
+export const DEFAULT_PARTNERS_LOGO_COLOR_INTENSITY: PartnersLogoColorIntensity = 50;
 
 export interface PartnersConfig extends SectionHeaderConfig {
   items: PartnerItem[];
@@ -35,6 +39,8 @@ export interface PartnersConfig extends SectionHeaderConfig {
   logoSize: PartnersLogoSize;
   showBorder: boolean;
   spacing: PartnersSpacing;
+  logoColorMode?: PartnersLogoColorMode;
+  logoColorIntensity?: PartnersLogoColorIntensity;
 }
 
 export const DEFAULT_PARTNERS_ALIGN: PartnersAlign = 'center';
@@ -62,10 +68,12 @@ export const DEFAULT_PARTNERS_CONFIG: Partial<PartnersConfig> = {
   showBorder: DEFAULT_PARTNERS_SHOW_BORDER,
   spacing: DEFAULT_PARTNERS_SPACING,
   style: 'grid',
+  logoColorMode: 'grayscale',
+  logoColorIntensity: DEFAULT_PARTNERS_LOGO_COLOR_INTENSITY,
 };
 
 export const normalizePartnersStyle = (value: unknown): PartnersStyle => {
-  if (value === 'grid' || value === 'marquee' || value === 'badge' || value === 'carousel' || value === 'clean' || value === 'divider' || value === 'logoCloud') {
+  if (value === 'grid' || value === 'marquee' || value === 'badge' || value === 'carousel' || value === 'clean' || value === 'divider' || value === 'logoCloud' || value === 'glassLogoCloud') {
     return value;
   }
 
@@ -132,11 +140,57 @@ export const normalizePartnersShowBorder = (value: unknown): boolean => {
   return DEFAULT_PARTNERS_SHOW_BORDER;
 };
 
+export const normalizePartnersLogoColorMode = (value: unknown): PartnersLogoColorMode => {
+  if (value === 'color' || value === 'grayscale' || value === 'white') {
+    return value;
+  }
+
+  return 'grayscale';
+};
+
+export const getPartnersLogoColorIntensityFromMode = (mode: PartnersLogoColorMode): PartnersLogoColorIntensity => {
+  if (mode === 'color') {
+    return 0;
+  }
+
+  if (mode === 'white') {
+    return 100;
+  }
+
+  return DEFAULT_PARTNERS_LOGO_COLOR_INTENSITY;
+};
+
+export const normalizePartnersLogoColorIntensity = (value: unknown, fallbackMode: unknown = 'grayscale'): PartnersLogoColorIntensity => {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim() !== ''
+      ? Number(value)
+      : Number.NaN;
+
+  if (Number.isFinite(numericValue)) {
+    return Math.min(100, Math.max(0, Math.round(numericValue)));
+  }
+
+  return getPartnersLogoColorIntensityFromMode(normalizePartnersLogoColorMode(fallbackMode));
+};
+
+export const getPartnersLogoColorModeFromIntensity = (value: PartnersLogoColorIntensity): PartnersLogoColorMode => {
+  if (value <= 25) {
+    return 'color';
+  }
+
+  if (value >= 75) {
+    return 'white';
+  }
+
+  return 'grayscale';
+};
+
 export const normalizePartnersSpacing = normalizeSectionSpacing;
 
 export const getPartnersSectionSpacingClassName = (
   spacing: PartnersSpacing = DEFAULT_PARTNERS_SPACING,
-  variant: 'grid' | 'default' | 'marquee' | 'marqueeSkip' | 'siteOuter' | 'logoCloud' | 'empty' = 'default',
+  variant: 'grid' | 'default' | 'marquee' | 'marqueeSkip' | 'siteOuter' | 'logoCloud' | 'glassLogoCloud' | 'empty' = 'default',
   skipHeader = false,
 ) => {
   if (variant === 'default' && !skipHeader) {
@@ -150,7 +204,7 @@ export const getPartnersSectionSpacingClassName = (
     if (variant === 'marquee') { return 'py-5 md:py-7'; }
     if (variant === 'marqueeSkip') { return 'py-4 md:py-6'; }
     if (variant === 'siteOuter') { return 'py-4'; }
-    if (variant === 'logoCloud') { return 'py-3 md:py-5'; }
+    if (variant === 'logoCloud' || variant === 'glassLogoCloud') { return 'py-3 md:py-5'; }
     if (variant === 'empty') { return 'py-3'; }
     return skipHeader ? 'pb-3 md:pb-5' : 'py-3 md:py-5';
   }
@@ -159,7 +213,7 @@ export const getPartnersSectionSpacingClassName = (
   if (variant === 'marquee') { return 'py-10 md:py-14'; }
   if (variant === 'marqueeSkip') { return 'py-8 md:py-12'; }
   if (variant === 'siteOuter') { return 'py-8'; }
-  if (variant === 'logoCloud') { return 'py-6 md:py-10'; }
+  if (variant === 'logoCloud' || variant === 'glassLogoCloud') { return 'py-6 md:py-10'; }
   if (variant === 'empty') { return 'py-6'; }
   return skipHeader ? 'pb-6 md:pb-10' : 'py-6 md:py-10';
 };
@@ -230,11 +284,11 @@ export const getPartnersLogoBoxClassName = (
   }
 
   if (layout === 'compact') {
-    if (logoSize === 'small') { return showName ? 'h-8 md:h-10' : 'h-10 md:h-12'; }
-    if (logoSize === 'large') { return showName ? 'h-12 md:h-14' : 'h-14 md:h-16'; }
-    if (logoSize === 'veryLarge') { return showName ? 'h-14 md:h-16' : 'h-16 md:h-20'; }
-    if (logoSize === 'largest') { return showName ? 'h-16 md:h-20' : 'h-20 md:h-24'; }
-    return showName ? 'h-10 md:h-12' : 'h-12 md:h-14';
+    if (logoSize === 'small') { return showName ? 'h-10 md:h-12' : 'h-12 md:h-14'; }
+    if (logoSize === 'large') { return showName ? 'h-16 md:h-20' : 'h-20 md:h-24'; }
+    if (logoSize === 'veryLarge') { return showName ? 'h-20 md:h-24' : 'h-24 md:h-28'; }
+    if (logoSize === 'largest') { return showName ? 'h-24 md:h-28' : 'h-28 md:h-32'; }
+    return showName ? 'h-14 md:h-16' : 'h-16 md:h-20';
   }
 
   if (layout === 'marquee') {
@@ -260,6 +314,14 @@ export const getPartnersLogoBoxClassName = (
     return 'h-9 w-[80px] md:h-10 md:w-[100px]';
   }
 
+  if (layout === 'logoCloud' || layout === 'glassLogoCloud') {
+    if (logoSize === 'small') { return 'max-h-[90px]'; }
+    if (logoSize === 'large') { return 'max-h-[140px]'; }
+    if (logoSize === 'veryLarge') { return 'max-h-[160px]'; }
+    if (logoSize === 'largest') { return 'max-h-[180px]'; }
+    return 'max-h-[120px]';
+  }
+
   if (logoSize === 'small') { return 'max-h-[60px]'; }
   if (logoSize === 'large') { return 'max-h-[96px]'; }
   if (logoSize === 'veryLarge') { return 'max-h-[112px]'; }
@@ -281,18 +343,18 @@ export const getPartnersLogoCardClassName = (
   }
 
   if (showName) {
-    if (logoSize === 'small') { return 'w-[130px] flex-col gap-2 p-3 md:w-[150px] md:p-4'; }
-    if (logoSize === 'large') { return 'w-[170px] flex-col gap-2 p-4 md:w-[190px] md:p-5'; }
-    if (logoSize === 'veryLarge') { return 'w-[190px] flex-col gap-2.5 p-5 md:w-[220px] md:p-6'; }
-    if (logoSize === 'largest') { return 'w-[220px] flex-col gap-3 p-5 md:w-[250px] md:p-7'; }
-    return 'w-[150px] flex-col gap-2 p-4 md:w-[170px] md:p-5';
+    if (logoSize === 'small') { return 'w-[110px] flex-col gap-1 p-1.5 md:w-[130px] md:p-2'; }
+    if (logoSize === 'large') { return 'w-[150px] flex-col gap-1.5 p-2 md:w-[170px] md:p-2.5'; }
+    if (logoSize === 'veryLarge') { return 'w-[170px] flex-col gap-2 p-2.5 md:w-[190px] md:p-3'; }
+    if (logoSize === 'largest') { return 'w-[190px] flex-col gap-2.5 p-2.5 md:w-[220px] md:p-3'; }
+    return 'w-[130px] flex-col gap-1 p-1.5 md:w-[150px] md:p-2';
   }
 
-  if (logoSize === 'small') { return 'w-[110px] p-3 md:w-[130px] md:p-4'; }
-  if (logoSize === 'large') { return 'w-[140px] p-4 md:w-[170px] md:p-5'; }
-  if (logoSize === 'veryLarge') { return 'w-[170px] p-5 md:w-[200px] md:p-6'; }
-  if (logoSize === 'largest') { return 'w-[200px] p-5 md:w-[240px] md:p-7'; }
-  return 'w-[120px] p-4 md:w-[140px] md:p-5';
+  if (logoSize === 'small') { return 'w-[90px] p-1 md:w-[110px] md:p-1.5'; }
+  if (logoSize === 'large') { return 'w-[130px] p-1.5 md:w-[150px] md:p-2'; }
+  if (logoSize === 'veryLarge') { return 'w-[150px] p-2 md:w-[170px] md:p-2.5'; }
+  if (logoSize === 'largest') { return 'w-[170px] p-2 md:w-[200px] md:p-2.5'; }
+  return 'w-[110px] p-1 md:w-[130px] md:p-1.5';
 };
 
 export const getPartnersLogoFallbackSize = (
@@ -306,7 +368,7 @@ export const getPartnersLogoFallbackSize = (
       ? 28
       : layout === 'clean'
         ? (showName ? 24 : 36)
-        : layout === 'logoCloud'
+        : (layout === 'logoCloud' || layout === 'glassLogoCloud')
           ? 32
           : (showName ? 32 : 40);
 

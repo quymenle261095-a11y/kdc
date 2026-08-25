@@ -3,7 +3,7 @@ export interface Post {
   title: string;
   category: string;
   author: string;
-  status: 'Published' | 'Draft' | 'Archived';
+  status: 'Published' | 'Draft';
   views: number;
   created: string;
   thumbnail: string;
@@ -17,7 +17,7 @@ export interface Product {
   price: number;
   salePrice?: number;
   stock: number;
-  status: 'Active' | 'Draft' | 'Archived';
+  status: 'Active' | 'Draft';
   image: string;
   sales: number;
   description?: string;

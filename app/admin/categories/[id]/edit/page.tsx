@@ -7,18 +7,31 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Badge, Button, Card, CardContent, Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '../../../components/ui';
+import { Badge, Button, Checkbox, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '../../../components/ui';
 import { buildCategoryPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 import { LexicalEditor } from '@/app/admin/components/LexicalEditor';
 import { FaqForm } from '@/app/admin/home-components/faq/_components/FaqForm';
 import type { FaqItem, FaqStyle, FaqConfig } from '@/app/admin/home-components/faq/_types';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
 import { AiCategoryContentImport } from '../../_components/AiCategoryContentImport';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormPageWrapper,
+  AdminFormSidebar,
+  AdminSelect,
+  AdminSlugInput,
+  AdminStickyFooter,
+  AdminTitleInput,
+  generateSlugFromTitle,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'productCategories';
+
+const formatPrice = (price: number) => new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
 
 export default function CategoryEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -26,7 +39,7 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
 
   const categoryData = useQuery(api.productCategories.getById, { id: id as Id<"productCategories"> });
   const categoriesData = useQuery(api.productCategories.listAll, {});
-  const productsData = useQuery(api.products.listAll, {});
+  const relatedProducts = useQuery(api.products.listProductsByCategoryForAdmin, { categoryId: id as Id<"productCategories"> }) ?? [];
   const updateCategory = useMutation(api.productCategories.update);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
   const hierarchyFeature = useQuery(api.admin.modules.getModuleFeature, {
@@ -54,7 +67,7 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
     enableProductTypes ? { categoryId: id as Id<"productCategories"> } : 'skip'
   );
 
-  const [activeTab, setActiveTab] = useState('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'products'>('info');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
@@ -97,7 +110,7 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
   }, [fieldsData]);
   const isHierarchyEnabled = hierarchyFeature?.enabled === true;
 
-  // Ref & State for Dirty State (Phát hiện thay đổi)
+  // Ref & State for Dirty State
   const initialSnapshotRef = useRef<{
     name: string;
     slug: string;
@@ -141,12 +154,12 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
   }, [name, slug, description, parentId, active, filterFooterContent, productDetailSuffixContent, faqItems, faqStyle, faqEnabled, productTypeIds]);
 
   const hasChanges = useMemo(() => {
-    if (!initialSnapshotRef.current) {return false;}
+    if (!initialSnapshotRef.current) return false;
     return JSON.stringify(initialSnapshotRef.current) !== JSON.stringify(currentSnapshot);
   }, [currentSnapshot, snapshotVersion]);
 
   useEffect(() => {
-    if (saveStatus === 'saving') {return;}
+    if (saveStatus === 'saving') return;
     if (hasChanges && saveStatus === 'saved') {
       setSaveStatus('idle');
       return;
@@ -156,12 +169,6 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
     }
   }, [hasChanges, saveStatus]);
 
-  const generateSlugFromName = (value: string) => value.toLowerCase()
-    .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
-    .replaceAll(/[đĐ]/g, "d")
-    .replaceAll(/[^a-z0-9\s]/g, '')
-    .replaceAll(/\s+/g, '-');
-
   useEffect(() => {
     if (categoryData) {
       setName(categoryData.name);
@@ -170,7 +177,6 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
       setParentId(categoryData.parentId ?? '');
       setActive(categoryData.active);
 
-      // Load new fields
       const loadedFilterFooterContent = categoryData.filterFooterContent ?? '';
       const loadedProductDetailSuffixContent = categoryData.productDetailSuffixContent ?? '';
       setFilterFooterContent(loadedFilterFooterContent);
@@ -221,7 +227,7 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
   }, [categoryData]);
 
   useEffect(() => {
-    if (!assignedProductTypesData) {return;}
+    if (!assignedProductTypesData) return;
     const nextProductTypeIds = assignedProductTypesData.map(type => type._id);
     setProductTypeIds(nextProductTypeIds);
     if (initialSnapshotRef.current) {
@@ -233,17 +239,15 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
     }
   }, [assignedProductTypesData]);
 
-  const relatedProducts = useMemo(() => productsData?.filter(p => p.categoryId === id) ?? [], [productsData, id]);
-
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setName(val);
-    setSlug(generateSlugFromName(val));
+    setSlug(generateSlugFromTitle(val));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {return;}
+    if (!name.trim() || !slug.trim()) return;
 
     setIsSubmitting(true);
     setSaveStatus('saving');
@@ -272,7 +276,6 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
         productTypeIds: enableProductTypes ? productTypeIds : undefined,
       });
 
-      // Reset snapshot to current values upon successful save
       initialSnapshotRef.current = {
         name: name.trim(),
         slug: slug.trim(),
@@ -297,340 +300,335 @@ export default function CategoryEditPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  if (categoryData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
-  if (categoryData === null) {
-    return <div className="text-center py-8 text-slate-500">Không tìm thấy danh mục</div>;
-  }
-
-  const formatPrice = (price: number) => new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
+  const parentCategoryOptions = [
+    { value: '', label: '-- Không có (Danh mục gốc) --' },
+    ...(categoriesData?.filter(c => c._id !== id).map(cat => ({ value: cat._id, label: cat.name })) || []),
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa danh mục</h1>
-          <Link href="/admin/categories" className="text-sm text-orange-600 hover:underline">Quay lại danh sách</Link>
+    <AdminFormPageWrapper
+      title="Chỉnh sửa danh mục sản phẩm"
+      subtitle="Quản lý và cập nhật thông tin phân loại sản phẩm cùng nội dung mở rộng."
+      backHref="/admin/categories"
+      isLoading={categoryData === undefined}
+      notFound={categoryData === null}
+      notFoundMessage="Không tìm thấy danh mục yêu cầu"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting || saveStatus === 'saving'}
+      isDirty={hasChanges}
+      saveLabel="Lưu thay đổi"
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting || saveStatus === 'saving'}
+          hasChanges={hasChanges}
+          submitLabel="Lưu thay đổi"
+          onCancel={() => router.push('/admin/categories')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          aiImportNode={
+            <AiCategoryContentImport 
+              categoryName={name}
+              categoryDescription={description}
+              onApply={handleAiApply}
+            />
+          }
+        />
+      }
+      extraHeaderAction={
+        slug ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2 text-xs"
+            onClick={() => window.open(buildCategoryPath({ categorySlug: slug, mode: routeMode, moduleKey: 'products' }), '_blank')}
+          >
+            <ExternalLink size={13} /> Xem trên web
+          </Button>
+        ) : null
+      }
+    >
+      <div className="space-y-4">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setActiveTab('info')}
+            className={cn(
+              "px-5 py-2.5 text-xs font-semibold border-b-2 transition-colors",
+              activeTab === 'info'
+                ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400"
+            )}
+          >
+            Thông tin danh mục
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('products')}
+            className={cn(
+              "px-5 py-2.5 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5",
+              activeTab === 'products'
+                ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400"
+            )}
+          >
+            Sản phẩm thuộc danh mục
+            <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-4">
+              {relatedProducts.length}
+            </Badge>
+          </button>
         </div>
-      </div>
 
-      <div className="flex border-b border-slate-200 dark:border-slate-700">
-        <button
-          onClick={() =>{  setActiveTab('info'); }}
-          className={cn(
-            "px-6 py-3 text-sm font-medium border-b-2 transition-colors",
-            activeTab === 'info' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"
-          )}
-        >
-          Thông tin chung
-        </button>
-        <button
-          onClick={() =>{  setActiveTab('products'); }}
-          className={cn(
-            "px-6 py-3 text-sm font-medium border-b-2 transition-colors",
-            activeTab === 'products' ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"
-          )}
-        >
-          Sản phẩm thuộc danh mục <Badge variant="secondary" className="ml-1">{relatedProducts.length}</Badge>
-        </button>
-      </div>
+        {activeTab === 'info' ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <AdminFormGrid>
+              <AdminFormMain>
+                <AdminFormCard title="Thông tin cơ bản">
+                  <AdminTitleInput
+                    label="Tên danh mục"
+                    value={name}
+                    onChange={handleNameChange}
+                    required
+                    placeholder="Ví dụ: Điện thoại, Áo sơ mi, Phụ kiện..."
+                    autoFocus
+                    copyLabel="tên danh mục"
+                  />
 
-      {activeTab === 'info' ? (
-        <form onSubmit={handleSubmit}>
-          <Card className="w-full">
-            <CardContent className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Tên danh mục <span className="text-red-500">*</span></Label>
-                    <Input value={name} onChange={handleNameChange} required placeholder="Ví dụ: Điện thoại, Áo sơ mi..." autoFocus />
-                  </div>
+                  <AdminSlugInput
+                    slug={slug}
+                    onChange={setSlug}
+                    categorySlug="products"
+                  />
 
-                  <div className="space-y-2">
-                    <Label>Slug</Label>
-                    <Input value={slug} onChange={(e) =>{  setSlug(e.target.value); }} placeholder="slug" className="font-mono text-sm" />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {isHierarchyEnabled && (
+                  {(enabledFields.has('description') || showCategorySubtitle) && (
                     <div className="space-y-2">
-                      <Label>Danh mục cha</Label>
-                      <select 
-                        value={parentId}
-                        onChange={(e) =>{  setParentId(e.target.value); }}
-                        className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                      >
-                        <option value="">-- Không có (Danh mục gốc) --</option>
-                        {categoriesData?.filter(c => c._id !== id).map(cat => (
-                          <option key={cat._id} value={cat._id}>{cat.name}</option>
-                        ))}
-                      </select>
+                      <Label>Mô tả ngắn (Subtitle)</Label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Mô tả ngắn hiển thị dưới tên danh mục..."
+                        className="w-full min-h-[80px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+                      />
                     </div>
                   )}
+                </AdminFormCard>
 
-                  <div className="space-y-2">
-                    <Label>Trạng thái</Label>
-                    <select 
-                      value={active ? 'active' : 'inactive'}
-                      onChange={(e) =>{  setActive(e.target.value === 'active'); }}
-                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                    >
-                      <option value="active">Hoạt động</option>
-                      <option value="inactive">Ẩn</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {(enabledFields.has('description') || showCategorySubtitle) && (
-                <div className="space-y-2">
-                  <Label>Mô tả ngắn (Subtitle)</Label>
-                  <textarea
-                    value={description}
-                    onChange={(e) =>{  setDescription(e.target.value); }}
-                    placeholder="Mô tả ngắn hiển thị dưới tên danh mục..."
-                    className="w-full min-h-[80px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                  />
-                </div>
-              )}
-
-              {enableProductTypes && (
-                <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <Label className="text-base font-semibold block">Phân loại & Thuộc tính</Label>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Chọn duy nhất 1 kiểu sản phẩm cho danh mục này. Mỗi danh mục chỉ có thể liên kết với tối đa 1 kiểu để hiển thị các thuộc tính bộ lọc phù hợp.
-                      </p>
-                    </div>
-                    <Link href="/admin/product-types" className="text-xs text-orange-600 hover:underline whitespace-nowrap">
-                      Quản lý kiểu
-                    </Link>
-                  </div>
-                  <div className="border border-slate-200 dark:border-slate-700 rounded-md p-3 max-h-60 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-900/30">
-                    {productTypesData === undefined ? (
-                      <p className="text-sm text-slate-500 italic">Đang tải kiểu sản phẩm...</p>
-                    ) : productTypesData.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">Chưa có kiểu sản phẩm nào.</p>
-                    ) : (
-                      <>
-                        <label className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-orange-600">
-                          <input
-                            type="radio"
-                            name="productTypeId"
-                            checked={productTypeIds.length === 0}
-                            onChange={() => setProductTypeIds([])}
-                            className="h-4 w-4 border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                          />
-                          <span className="text-sm font-medium text-slate-500 italic">Không gán kiểu sản phẩm (Bỏ chọn)</span>
-                        </label>
-                        {productTypesData.map(type => (
-                          <label key={type._id} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-orange-600">
+                {enableProductTypes && (
+                  <AdminFormCard
+                    title="Phân loại & Kiểu sản phẩm"
+                    description="Chọn kiểu sản phẩm liên kết để kích hoạt các thuộc tính bộ lọc phù hợp."
+                    extra={
+                      <Link href="/admin/product-types" className="text-xs text-blue-600 hover:underline">
+                        Quản lý kiểu
+                      </Link>
+                    }
+                  >
+                    <div className="border border-slate-200 dark:border-slate-700 rounded-md p-3 max-h-60 overflow-y-auto space-y-2 bg-slate-50 dark:bg-slate-900/30">
+                      {productTypesData === undefined ? (
+                        <p className="text-sm text-slate-500 italic">Đang tải kiểu sản phẩm...</p>
+                      ) : productTypesData.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">Chưa có kiểu sản phẩm nào.</p>
+                      ) : (
+                        <>
+                          <label className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-blue-600">
                             <input
                               type="radio"
                               name="productTypeId"
-                              checked={productTypeIds.includes(type._id)}
-                              onChange={() => setProductTypeIds([type._id])}
-                              className="h-4 w-4 border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                              checked={productTypeIds.length === 0}
+                              onChange={() => setProductTypeIds([])}
+                              className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                             />
-                            <span className="text-sm font-medium">{type.name}</span>
-                            <span className="text-xs text-slate-400 font-mono">({type.slug})</span>
+                            <span className="text-sm font-medium text-slate-500 italic">Không gán kiểu sản phẩm (Bỏ chọn)</span>
                           </label>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {enableCategoryFilterFooterContent && (
-                <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <Label className="text-base font-semibold block">Nội dung cuối trang danh mục</Label>
-                  <LexicalEditor
-                    key={`${id}:filterFooterContent:${aiResetKey}`}
-                    resetKey={`${id}:filterFooterContent:${aiResetKey}`}
-                    onChange={setFilterFooterContent}
-                    initialContent={filterFooterContent}
-                  />
-                </div>
-              )}
-
-              {enableCategoryProductDetailSuffix && (
-                <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <Label className="text-base font-semibold block">Nội dung nối đuôi chi tiết sản phẩm</Label>
-                  <LexicalEditor
-                    key={`${id}:productDetailSuffixContent:${aiResetKey}`}
-                    resetKey={`${id}:productDetailSuffixContent:${aiResetKey}`}
-                    onChange={setProductDetailSuffixContent}
-                    initialContent={productDetailSuffixContent}
-                  />
-                </div>
-              )}
-
-              {enableCategoryProductDetailFaq && (
-                <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base font-semibold block">FAQ chi tiết sản phẩm</Label>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Bật hoặc tắt hiển thị các câu hỏi thường gặp cho danh mục này trên trang chi tiết sản phẩm.
-                      </span>
+                          {productTypesData.map(type => (
+                            <label key={type._id} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-blue-600">
+                              <input
+                                type="radio"
+                                name="productTypeId"
+                                checked={productTypeIds.includes(type._id)}
+                                onChange={() => setProductTypeIds([type._id])}
+                                className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <span className="text-sm font-medium">{type.name}</span>
+                              <span className="text-xs text-slate-400 font-mono">({type.slug})</span>
+                            </label>
+                          ))}
+                        </>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={faqEnabled}
-                        onClick={() => setFaqEnabled(!faqEnabled)}
-                        className={cn(
-                          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2",
-                          faqEnabled ? "bg-orange-500" : "bg-slate-200 dark:bg-slate-700"
-                        )}
-                      >
-                        <span
+                  </AdminFormCard>
+                )}
+
+                {enableCategoryFilterFooterContent && (
+                  <AdminFormCard title="Nội dung cuối trang danh mục" description="Hiển thị ở chân trang danh mục sản phẩm (hỗ trợ SEO on-page).">
+                    <LexicalEditor
+                      key={`${id}:filterFooterContent:${aiResetKey}`}
+                      resetKey={`${id}:filterFooterContent:${aiResetKey}`}
+                      onChange={setFilterFooterContent}
+                      initialContent={filterFooterContent}
+                    />
+                  </AdminFormCard>
+                )}
+
+                {enableCategoryProductDetailSuffix && (
+                  <AdminFormCard title="Nội dung nối đuôi chi tiết sản phẩm" description="Tự động gắn vào cuối phần mô tả của toàn bộ sản phẩm thuộc danh mục này.">
+                    <LexicalEditor
+                      key={`${id}:productDetailSuffixContent:${aiResetKey}`}
+                      resetKey={`${id}:productDetailSuffixContent:${aiResetKey}`}
+                      onChange={setProductDetailSuffixContent}
+                      initialContent={productDetailSuffixContent}
+                    />
+                  </AdminFormCard>
+                )}
+
+                {enableCategoryProductDetailFaq && (
+                  <AdminFormCard
+                    title="FAQ chi tiết sản phẩm"
+                    description="Bộ câu hỏi thường gặp hiển thị trên trang chi tiết sản phẩm thuộc danh mục này."
+                    extra={
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={faqEnabled}
+                          onClick={() => setFaqEnabled(!faqEnabled)}
                           className={cn(
-                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            faqEnabled ? "translate-x-5" : "translate-x-0"
+                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                            faqEnabled ? "bg-blue-600" : "bg-slate-200 dark:bg-slate-700"
                           )}
+                        >
+                          <span
+                            className={cn(
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                              faqEnabled ? "translate-x-5" : "translate-x-0"
+                            )}
+                          />
+                        </button>
+                        <span className={cn(
+                          "text-xs font-semibold",
+                          faqEnabled ? "text-blue-600 dark:text-blue-400" : "text-slate-400"
+                        )}>
+                          {faqEnabled ? "Đang bật" : "Đã tắt"}
+                        </span>
+                      </div>
+                    }
+                  >
+                    {faqEnabled ? (
+                      <div className="space-y-4 pt-2">
+                        <FaqForm
+                          faqItems={faqItems}
+                          setFaqItems={setFaqItems}
+                          faqStyle={faqStyle}
+                          brandColor="#2563eb"
+                          faqConfig={faqConfig}
+                          setFaqConfig={setFaqConfig}
                         />
-                      </button>
-                      <span className={cn(
-                        "text-sm font-medium",
-                        faqEnabled ? "text-orange-600 dark:text-orange-400" : "text-slate-400"
-                      )}>
-                        {faqEnabled ? "Đang bật" : "Đã tắt"}
-                      </span>
-                    </div>
-                  </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-6 text-center bg-slate-50/50 dark:bg-slate-900/50">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">FAQ chi tiết sản phẩm đã bị tắt cho danh mục này</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Các câu hỏi FAQ đã soạn thảo vẫn được lưu trữ an toàn nhưng sẽ không hiển thị ngoài giao diện web cho đến khi bạn bật lại.</p>
+                      </div>
+                    )}
+                  </AdminFormCard>
+                )}
+              </AdminFormMain>
 
-                  {faqEnabled ? (
-                    <div className="space-y-4 pt-2">
-                      <FaqForm
-                        faqItems={faqItems}
-                        setFaqItems={setFaqItems}
-                        faqStyle={faqStyle}
-                        brandColor="#f97316"
-                        faqConfig={faqConfig}
-                        setFaqConfig={setFaqConfig}
+              <AdminFormSidebar>
+                <AdminFormCard title="Xuất bản & Phân cấp">
+                  {isHierarchyEnabled && (
+                    <div className="space-y-2">
+                      <Label>Danh mục cha</Label>
+                      <AdminSelect
+                        value={parentId}
+                        onChange={setParentId}
+                        options={parentCategoryOptions}
                       />
                     </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-6 text-center bg-slate-50/50 dark:bg-slate-900/50">
-                      <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">FAQ chi tiết sản phẩm đã bị tắt cho danh mục này</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Các câu hỏi FAQ đã soạn thảo vẫn được lưu trữ an toàn nhưng sẽ không hiển thị ngoài giao diện web cho đến khi bạn bật lại.</p>
-                    </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <HomeComponentStickyFooter
-            isSubmitting={isSubmitting}
-            hasChanges={hasChanges}
-            submitLabel="Lưu thay đổi"
-          >
-            <>
-              <Button type="button" variant="ghost" onClick={() => router.push('/admin/categories')} disabled={isSubmitting}>Hủy bỏ</Button>
-              <div className="flex flex-wrap justify-end gap-2">
-                <AiCategoryContentImport 
-                  categoryName={name}
-                  categoryDescription={description}
-                  onApply={handleAiApply}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => window.open(buildCategoryPath({ categorySlug: slug, mode: routeMode, moduleKey: 'products' }), '_blank')}
-                  className="gap-2"
-                  disabled={!slug.trim()}
-                >
-                  <ExternalLink size={16} />
-                  Xem trên web
-                </Button>
-                <Button
-                  type="submit"
-                  variant="accent"
-                  disabled={isSubmitting || !hasChanges}
-                  className={cn(
-                    !hasChanges && !isSubmitting
-                      ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400 cursor-not-allowed'
-                      : undefined
-                  )}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin mr-2" />
-                      Đang lưu...
-                    </>
-                  ) : (!hasChanges ? 'Đã lưu' : 'Lưu thay đổi')}
-                </Button>
-              </div>
-            </>
-          </HomeComponentStickyFooter>
-        </form>
-      ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Hình ảnh</TableHead>
-                <TableHead>Tên sản phẩm</TableHead>
-                <TableHead>Giá bán</TableHead>
-                <TableHead>Kho</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead className="text-right">Hành động</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {relatedProducts.map(prod => (
-                <TableRow key={prod._id}>
-                  <TableCell>
-                    {prod.image ? (
-                      <Image src={prod.image} width={40} height={40} className="object-cover rounded bg-slate-100" alt="" />
-                    ) : (
-                      <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded" />
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium">{prod.name}</TableCell>
-                  <TableCell>
-                    {prod.salePrice ? (
-                      <span className="text-red-500">{formatPrice(prod.salePrice)}</span>
-                    ) : (
-                      formatPrice(prod.price)
-                    )}
-                  </TableCell>
-                  <TableCell className={prod.stock < 10 ? 'text-red-500 font-medium' : ''}>{prod.stock}</TableCell>
-                  <TableCell>
-                    <Badge variant={prod.status === 'Active' ? 'success' : 'secondary'}>
-                      {prod.status === 'Active' ? 'Đang bán' : (prod.status === 'Draft' ? 'Nháp' : 'Lưu trữ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/admin/products/${prod._id}/edit`}>
-                      <Button variant="ghost" size="sm" className="h-8">Sửa</Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {relatedProducts.length === 0 && (
+                  <div className="flex items-center gap-2 pt-2">
+                    <Checkbox
+                      id="active"
+                      checked={active}
+                      onCheckedChange={(checked) => setActive(Boolean(checked))}
+                    />
+                    <Label htmlFor="active" className="cursor-pointer text-sm font-medium">
+                      Kích hoạt hiển thị danh mục
+                    </Label>
+                  </div>
+                </AdminFormCard>
+              </AdminFormSidebar>
+            </AdminFormGrid>
+          </form>
+        ) : (
+          <AdminFormCard title={`Danh sách sản phẩm trong danh mục (${relatedProducts.length})`}>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
-                    Chưa có sản phẩm nào trong danh mục này.
-                  </TableCell>
+                  <TableHead className="w-16">Hình ảnh</TableHead>
+                  <TableHead>Tên sản phẩm</TableHead>
+                  <TableHead className="w-32">Giá bán</TableHead>
+                  <TableHead className="w-20">Kho</TableHead>
+                  <TableHead className="w-28">Trạng thái</TableHead>
+                  <TableHead className="w-20 text-right">Thao tác</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      )}
-    </div>
+              </TableHeader>
+              <TableBody>
+                {relatedProducts.map((prod) => (
+                  <TableRow key={prod._id}>
+                    <TableCell>
+                      {prod.image ? (
+                        <Image
+                          src={prod.image}
+                          width={44}
+                          height={44}
+                          className="w-11 h-11 object-cover rounded-md bg-slate-100 dark:bg-slate-800"
+                          alt=""
+                        />
+                      ) : (
+                        <div className="w-11 h-11 bg-slate-100 dark:bg-slate-800 rounded-md" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                      {prod.name}
+                    </TableCell>
+                    <TableCell className="text-sm font-mono">
+                      {prod.salePrice ? (
+                        <span className="text-red-500 font-semibold">{formatPrice(prod.salePrice)}</span>
+                      ) : (
+                        formatPrice(prod.price)
+                      )}
+                    </TableCell>
+                    <TableCell className={cn("text-sm", prod.stock < 10 ? 'text-red-500 font-medium' : '')}>
+                      {prod.stock}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={prod.status === 'Active' ? 'success' : 'secondary'}>
+                        {prod.status === 'Active' ? 'Đang bán' : (prod.status === 'Draft' ? 'Nháp' : 'Lưu trữ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/admin/products/${prod._id}/edit`}>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs text-blue-600">
+                          Sửa
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {relatedProducts.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-slate-500 text-sm">
+                      Chưa có sản phẩm nào trong danh mục này.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </AdminFormCard>
+        )}
+      </div>
+    </AdminFormPageWrapper>
   );
 }

@@ -25,6 +25,8 @@ export default function HeroEditPage({ params }: { params: Promise<{ id: string 
   const updateMutation = useMutation(api.homeComponents.update);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   if (isSnapshotComponentKey) {
     return (
@@ -62,6 +64,7 @@ export default function HeroEditPage({ params }: { params: Promise<{ id: string 
       draftOwnerKey={`home-component:hero:edit:${decodedId}`}
       colorOverride={colorOverride}
       fontOverride={fontOverride}
+      isVisualEditAllowed={isVisualEditAllowed}
       initial={{
         active: component.active,
         config: component.config ?? {},

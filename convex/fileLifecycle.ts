@@ -72,6 +72,24 @@ export const commitDraftUploads = mutation({
   returns: v.object({ committed: v.number() }),
 });
 
+export const commitDraftUploadsByStorageIds = mutation({
+  args: { storageIds: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const validIds: Array<Id<"_storage">> = [];
+    for (const idStr of args.storageIds) {
+      if (idStr && !idStr.includes("/") && !idStr.startsWith("http")) {
+        validIds.push(idStr as Id<"_storage">);
+      }
+    }
+    if (validIds.length > 0) {
+      await markDrafts(ctx, validIds, "committed");
+    }
+    return { committed: validIds.length };
+  },
+  returns: v.object({ committed: v.number() }),
+});
+
+
 export const cleanupDraftUploads = mutation({
   args: { storageIds: v.array(v.id("_storage")) },
   handler: async (ctx, args) => {

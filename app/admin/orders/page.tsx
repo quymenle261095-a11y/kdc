@@ -5,14 +5,15 @@ import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ChevronDown, Edit, Eye, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, Edit, ExternalLink, Eye, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { Badge, Button, Card, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { useOrderStatuses } from '@/lib/experiences';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
+import { buildAbsoluteWebUrl, buildPublicOrderLookupPath } from '@/lib/orders/links';
 
 const MODULE_KEY = 'orders';
 
@@ -54,21 +55,7 @@ function OrdersContent() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<'' | 'Pending' | 'Paid' | 'Failed' | 'Refunded'>('');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_orders_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : [];
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_orders_visible_columns');
   const [manualSelectedIds, setManualSelectedIds] = useState<Id<"orders">[]>([]);
   const [selectionMode, setSelectionMode] = useState<'manual' | 'all'>('manual');
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,11 +73,7 @@ function OrdersContent() {
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    if (visibleColumns.length > 0) {
-      window.localStorage.setItem('admin_orders_visible_columns', JSON.stringify(visibleColumns));
-    }
-  }, [visibleColumns]);
+
 
   const enabledFields = useMemo(() => {
     const fields = new Set<string>();
@@ -107,9 +90,29 @@ function OrdersContent() {
     return 'secondary';
   };
 
+  const buildOrderLookupUrl = (orderNumber: string) => {
+    const path = buildPublicOrderLookupPath(orderNumber);
+    return typeof window === 'undefined'
+      ? path
+      : buildAbsoluteWebUrl(window.location.origin, path);
+  };
+
+  const handleCopyOrderLookupUrl = async (orderNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(buildOrderLookupUrl(orderNumber));
+      toast.success('Đã copy link tra cứu đơn hàng.');
+    } catch {
+      toast.error('Không thể copy link. Vui lòng copy thủ công.');
+    }
+  };
+
+  const handleOpenOrderLookupUrl = (orderNumber: string) => {
+    window.open(buildOrderLookupUrl(orderNumber), '_blank', 'noopener,noreferrer');
+  };
+
   const columns = useMemo(() => {
     const cols = [
-      { key: 'select', label: 'Chọn' },
+      { key: 'select', label: 'Chọn', required: true },
       { key: 'orderNumber', label: 'Mã đơn', required: true },
       { key: 'customer', label: 'Khách hàng' },
       { key: 'items', label: 'Sản phẩm' },
@@ -123,20 +126,7 @@ function OrdersContent() {
     return cols;
   }, [enabledFields]);
 
-  useEffect(() => {
-    if (columns.length > 0 && visibleColumns.length === 0) {
-      setVisibleColumns(columns.map(c => c.key));
-    }
-  }, [columns, visibleColumns.length]);
 
-  useEffect(() => {
-    if (fieldsData !== undefined) {
-      setVisibleColumns(prev => {
-        const validKeys = new Set(columns.map(c => c.key));
-        return prev.filter(key => validKeys.has(key));
-      });
-    }
-  }, [fieldsData, columns]);
 
   // Lấy setting ordersPerPage từ module settings
   const ordersPerPage = useMemo(() => {
@@ -201,11 +191,7 @@ function OrdersContent() {
     })) ?? [], [ordersData, customerMap]);
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
-  };
-
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    setSortConfig(prev => getNextSortState(prev, key));
   };
 
   const sortedData = useSortableData(orders, sortConfig);
@@ -303,16 +289,12 @@ function OrdersContent() {
   const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('vi-VN');
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Đơn hàng</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý đơn hàng và vận chuyển</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/orders/create"><Button className="gap-2 bg-emerald-600 hover:bg-emerald-500"><Plus size={16}/> Tạo đơn hàng</Button></Link>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý đơn hàng"
+        description="Quản lý đơn hàng và vận chuyển"
+        addHref="/admin/orders/create"
+      />
 
       <BulkActionBar 
         selectedCount={selectedIds.length} 
@@ -329,195 +311,175 @@ function OrdersContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex flex-wrap gap-3 flex-1">
-            <div className="relative max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Tìm mã đơn, khách hàng..." className="pl-9 w-48" value={searchTerm} onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }} />
-            </div>
-            <select className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" value={filterStatus} onChange={(e) =>{  handleFilterChange('status', e.target.value); }}>
-              <option value="">Tất cả trạng thái</option>
-              {orderStatuses.map((status) => (
-                <option key={status.key} value={status.key}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-            {enabledFields.has('paymentStatus') && (
-              <select className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" value={filterPaymentStatus} onChange={(e) =>{  handleFilterChange('paymentStatus', e.target.value); }}>
-                <option value="">Tất cả TT toán</option>
-                <option value="Pending">Chờ thanh toán</option>
-                <option value="Paid">Đã thanh toán</option>
-                <option value="Failed">Thất bại</option>
-                <option value="Refunded">Hoàn tiền</option>
-              </select>
-            )}
-            <Button variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
-          </div>
-          <ColumnToggle columns={columns} visibleColumns={visibleColumns} onToggle={toggleColumn} />
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              {visibleColumns.includes('select') && <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>}
-              {visibleColumns.includes('orderNumber') && <SortableHeader label="Mã đơn" sortKey="orderNumber" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="customerName" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('items') && <TableHead>Sản phẩm</TableHead>}
-              {visibleColumns.includes('totalAmount') && <SortableHeader label="Tổng tiền" sortKey="totalAmount" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('paymentStatus') && enabledFields.has('paymentStatus') && <SortableHeader label="Thanh toán" sortKey="paymentStatus" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('trackingNumber') && enabledFields.has('trackingNumber') && <TableHead>Mã vận đơn</TableHead>}
-              {visibleColumns.includes('createdAt') && <SortableHeader label="Ngày tạo" sortKey="_creationTime" sortConfig={sortConfig} onSort={handleSort} />}
-              {visibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedOrdersPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell colSpan={tableColumnCount}>
-                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedData.map(order => (
-                  <TableRow key={order._id} className={selectedIds.includes(order._id) ? 'bg-emerald-500/5' : ''}>
-                {visibleColumns.includes('select') && <TableCell><SelectCheckbox checked={selectedIds.includes(order._id)} onChange={() =>{  toggleSelectItem(order._id); }} /></TableCell>}
-                {visibleColumns.includes('orderNumber') && <TableCell className="font-mono text-sm font-medium text-emerald-600">{order.orderNumber}</TableCell>}
-                {visibleColumns.includes('customer') && <TableCell>{order.customerName}</TableCell>}
-                {visibleColumns.includes('items') && (
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <ShoppingBag size={14} className="text-slate-400" />
-                      <span>{order.itemsCount} sản phẩm</span>
-                    </div>
-                  </TableCell>
-                )}
-                {visibleColumns.includes('totalAmount') && <TableCell className="font-medium">{formatPrice(order.totalAmount)}</TableCell>}
-                {visibleColumns.includes('status') && (
-                  <TableCell>
-                    <Badge variant={getStatusVariant(order.status)}>
-                      {statusMap.get(order.status)?.label ?? order.status}
-                    </Badge>
-                  </TableCell>
-                )}
-                {visibleColumns.includes('paymentStatus') && enabledFields.has('paymentStatus') && order.paymentStatus && (
-                  <TableCell>
-                    <Badge variant={PAYMENT_STATUS_COLORS[order.paymentStatus as PaymentStatus]}>
-                      {PAYMENT_STATUS_LABELS[order.paymentStatus as PaymentStatus]}
-                    </Badge>
-                  </TableCell>
-                )}
-                {visibleColumns.includes('trackingNumber') && enabledFields.has('trackingNumber') && (
-                  <TableCell className="font-mono text-xs text-slate-500">{order.trackingNumber ?? '-'}</TableCell>
-                )}
-                {visibleColumns.includes('createdAt') && <TableCell className="text-slate-500 text-sm">{formatDate(order._creationTime)}</TableCell>}
-                {visibleColumns.includes('actions') && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/admin/orders/${order._id}/edit`}><Button variant="ghost" size="icon" title="Xem chi tiết"><Eye size={16}/></Button></Link>
-                      <Link href={`/admin/orders/${order._id}/edit`}><Button variant="ghost" size="icon"><Edit size={16}/></Button></Link>
-                      <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(order._id)}><Trash2 size={16}/></Button>
-                    </div>
-                  </TableCell>
-                )}
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedData.length === 0 && (
+        <TableToolbar
+          activeFilterCount={[Boolean(filterStatus), Boolean(filterPaymentStatus)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+              placeholder="Tìm mã đơn, khách hàng..."
+            />
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Trạng thái đơn hàng"
+                value={filterStatus}
+                onChange={(val) => handleFilterChange('status', val)}
+                placeholder="Tất cả trạng thái"
+                options={orderStatuses.map((status) => ({ value: status.key, label: status.label }))}
+              />
+              {enabledFields.has('paymentStatus') && (
+                <FilterSelect
+                  label="Trạng thái thanh toán"
+                  value={filterPaymentStatus}
+                  onChange={(val) => handleFilterChange('paymentStatus', val)}
+                  placeholder="Tất cả TT toán"
+                  options={[
+                    { value: 'Pending', label: 'Chờ thanh toán' },
+                    { value: 'Paid', label: 'Đã thanh toán' },
+                    { value: 'Failed', label: 'Thất bại' },
+                    { value: 'Refunded', label: 'Hoàn tiền' },
+                  ]}
+                />
+              )}
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterStatus || filterPaymentStatus)} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={visibleColumns} onToggle={(key) => toggleColumn(key, columns.map(c => c.key))} />
+            </>
+          }
+        />
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
               <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterStatus || filterPaymentStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đơn hàng nào.'}
-                </TableCell>
+                {visibleColumns.includes('select') && <TableHeadSelect checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} />}
+                {visibleColumns.includes('orderNumber') && <SortableHeader label="Mã đơn" sortKey="orderNumber" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="customerName" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('items') && <TableHead>Sản phẩm</TableHead>}
+                {visibleColumns.includes('totalAmount') && <SortableHeader label="Tổng tiền" sortKey="totalAmount" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('paymentStatus') && enabledFields.has('paymentStatus') && <SortableHeader label="Thanh toán" sortKey="paymentStatus" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('trackingNumber') && enabledFields.has('trackingNumber') && <TableHead>Mã vận đơn</TableHead>}
+                {visibleColumns.includes('createdAt') && <SortableHeader label="Ngày tạo" sortKey="_creationTime" sortConfig={sortConfig} onSort={handleSort} />}
+                {visibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedOrdersPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số đơn hàng mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>đơn/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedOrdersPerPage) + 1 : 0}–{Math.min(currentPage * resolvedOrdersPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">đơn hàng</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedOrdersPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedData.map(order => (
+                    <TableRow key={order._id} className={selectedIds.includes(order._id) ? 'bg-emerald-500/5' : ''}>
+                      {visibleColumns.includes('select') && <TableCellSelect checked={selectedIds.includes(order._id)} onChange={() => { toggleSelectItem(order._id); }} />}
+                  {visibleColumns.includes('orderNumber') && <TableCell className="font-mono text-sm font-medium text-emerald-600 whitespace-nowrap">{order.orderNumber}</TableCell>}
+                  {visibleColumns.includes('customer') && <TableCell className="whitespace-nowrap">{order.customerName}</TableCell>}
+                  {visibleColumns.includes('items') && (
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <ShoppingBag size={14} className="text-slate-400" />
+                        <span>{order.itemsCount} sản phẩm</span>
                       </div>
-                    );
-                  }
+                    </TableCell>
+                  )}
+                  {visibleColumns.includes('totalAmount') && <TableCell className="font-medium whitespace-nowrap">{formatPrice(order.totalAmount)}</TableCell>}
+                  {visibleColumns.includes('status') && (
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={getStatusVariant(order.status)}>
+                        {statusMap.get(order.status)?.label ?? order.status}
+                      </Badge>
+                    </TableCell>
+                  )}
+                  {visibleColumns.includes('paymentStatus') && enabledFields.has('paymentStatus') && order.paymentStatus && (
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={PAYMENT_STATUS_COLORS[order.paymentStatus as PaymentStatus]}>
+                        {PAYMENT_STATUS_LABELS[order.paymentStatus as PaymentStatus]}
+                      </Badge>
+                    </TableCell>
+                  )}
+                  {visibleColumns.includes('trackingNumber') && enabledFields.has('trackingNumber') && (
+                    <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">{order.trackingNumber ?? '-'}</TableCell>
+                  )}
+                  {visibleColumns.includes('createdAt') && <TableCell className="text-slate-500 text-sm whitespace-nowrap">{formatDate(order._creationTime)}</TableCell>}
+                  {visibleColumns.includes('actions') && (
+                    <TableCell className="text-right whitespace-nowrap">
+                      <RowActions>
+                        <EditActionButton href={`/admin/orders/${order._id}/edit`} title="Xem chi tiết đơn hàng" />
+                        <RowActionButton title="Copy link tra cứu" icon={<Copy size={16} />} onClick={async () => handleCopyOrderLookupUrl(order.orderNumber)} />
+                        <RowActionButton title="Mở link tra cứu" icon={<ExternalLink size={16} />} onClick={() => handleOpenOrderLookupUrl(order.orderNumber)} />
+                        <DeleteActionButton onClick={async () => handleDelete(order._id)} />
+                      </RowActions>
+                    </TableCell>
+                  )}
+                    </TableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedData.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterStatus || filterPaymentStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đơn hàng nào.'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-emerald-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterStatus || filterPaymentStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đơn hàng nào.'}
             </div>
-          </div>
-        )}
+          ) : (
+            paginatedData.map(order => (
+              <MobileRowCard
+                key={order._id}
+                selected={selectedIds.includes(order._id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(order._id)} onChange={() => toggleSelectItem(order._id)} />}
+                title={<span className="font-mono text-emerald-600">{order.orderNumber}</span>}
+                subtitle={<span className="text-xs text-slate-500">{order.customerName}</span>}
+                badge={
+                  <Badge variant={getStatusVariant(order.status)}>
+                    {statusMap.get(order.status)?.label ?? order.status}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Tổng tiền:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{formatPrice(order.totalAmount)}</span></div>
+                    <div><span className="text-slate-400">Sản phẩm:</span> {order.itemsCount} sản phẩm</div>
+                    <div><span className="text-slate-400">Ngày tạo:</span> {formatDate(order._creationTime)}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    <EditActionButton href={`/admin/orders/${order._id}/edit`} title="Xem chi tiết" />
+                    <RowActionButton title="Copy link tra cứu" icon={<Copy size={16} />} onClick={async () => handleCopyOrderLookupUrl(order.orderNumber)} />
+                    <RowActionButton title="Mở link tra cứu" icon={<ExternalLink size={16} />} onClick={() => handleOpenOrderLookupUrl(order.orderNumber)} />
+                    <DeleteActionButton onClick={async () => handleDelete(order._id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedOrdersPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="đơn hàng"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -531,6 +493,6 @@ function OrdersContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

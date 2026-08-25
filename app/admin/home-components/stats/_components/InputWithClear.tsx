@@ -10,6 +10,7 @@ interface InputWithClearProps {
   placeholder?: string;
   required?: boolean;
   className?: string;
+  autoFocus?: boolean;
 }
 
 export function InputWithClear({ 
@@ -17,7 +18,8 @@ export function InputWithClear({
   onChange, 
   placeholder, 
   required = false,
-  className 
+  className,
+  autoFocus
 }: InputWithClearProps) {
   const handleClear = () => {
     onChange('');
@@ -31,6 +33,7 @@ export function InputWithClear({
         placeholder={placeholder}
         required={required}
         className={cn("pr-8", className)}
+        autoFocus={autoFocus}
       />
       {value && (
         <button

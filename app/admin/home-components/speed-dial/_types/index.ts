@@ -19,4 +19,5 @@ export interface SpeedDialConfig {
   defaultOpen: boolean;
   showOnAllPages: boolean;
   enableShadow: boolean;
+  enableGlassmorphism?: boolean;
 }

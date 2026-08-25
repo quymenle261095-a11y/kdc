@@ -11,13 +11,18 @@ type SearchLayoutStyle = 'search-only' | 'with-filters' | 'advanced';
 type ResultsDisplayStyle = 'grid' | 'list';
 
 type PostsListConfig = {
-  layoutStyle: 'grid' | 'list' | 'masonry';
+  layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
   filterPosition: FilterPosition;
   paginationType: PaginationType;
   showSearch: boolean;
   showCategories: boolean;
   hideEmptyCategories: boolean;
   postsPerPage: number;
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
 };
 
 type SearchFilterConfig = {
@@ -26,6 +31,15 @@ type SearchFilterConfig = {
   showFilters: boolean;
   showSorting: boolean;
   showResultCount: boolean;
+  
+  // Cấu hình sản phẩm (đọc từ products_list_ui pattern)
+  showWishlistButton: boolean;
+  showAddToCartButton: boolean;
+  showBuyNowButton: boolean;
+  showPromotionBadge: boolean;
+  enableQuickAddVariant: boolean;
+  cornerRadius: 'none' | 'sm' | 'lg';
+  cartButtonsLayout?: 'stack' | 'grid-2';
 };
 
 type PostDetailLayoutStyle = 'classic' | 'modern' | 'minimal';
@@ -73,15 +87,37 @@ export function usePostsListConfig(): PostsListConfig {
   const experienceSetting = useQuery(api.settings.getByKey, { key: 'posts_list_ui' });
   
   return useMemo(() => {
-    const raw = experienceSetting?.value as Partial<PostsListConfig & { showPagination?: boolean }> | undefined;
+    const raw = experienceSetting?.value as {
+      layoutStyle?: string;
+      gridColumns?: number;
+      filterPosition?: FilterPosition;
+      paginationType?: PaginationType;
+      showSearch?: boolean;
+      showCategories?: boolean;
+      hideEmptyCategories?: boolean;
+      postsPerPage?: number;
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
+    } | undefined;
+    const rawStyle = raw?.layoutStyle;
+    const layoutStyle: PostsListConfig['layoutStyle'] = rawStyle === 'sidebar'
+      ? 'sidebar'
+      : (rawStyle === 'magazine' || rawStyle === 'list' ? 'list' : 'grid');
     return {
-      layoutStyle: raw?.layoutStyle ?? 'grid',
+      layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
       filterPosition: raw?.filterPosition ?? 'sidebar',
-      paginationType: normalizePaginationType(raw?.paginationType ?? raw?.showPagination),
+      paginationType: normalizePaginationType(raw?.paginationType),
       showSearch: raw?.showSearch ?? true,
       showCategories: raw?.showCategories ?? true,
       hideEmptyCategories: raw?.hideEmptyCategories ?? true,
       postsPerPage: raw?.postsPerPage ?? 12,
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Đọc ngay',
+      showContextIntro: raw?.showContextIntro ?? true,
     };
   }, [experienceSetting?.value]);
 }
@@ -92,7 +128,14 @@ export function useSearchFilterConfig(): SearchFilterConfig {
   return useMemo(() => {
     const raw = experienceSetting?.value as {
       layoutStyle?: SearchLayoutStyle;
-      layouts?: Partial<Record<SearchLayoutStyle, Partial<Omit<SearchFilterConfig, 'layoutStyle'>>>>;
+      layouts?: Partial<Record<SearchLayoutStyle, Partial<Omit<SearchFilterConfig, 'layoutStyle' | 'showWishlistButton' | 'showAddToCartButton' | 'showBuyNowButton' | 'showPromotionBadge' | 'enableQuickAddVariant' | 'cornerRadius' | 'cartButtonsLayout'>>>>;
+      showWishlistButton?: boolean;
+      showAddToCartButton?: boolean;
+      showBuyNowButton?: boolean;
+      showPromotionBadge?: boolean;
+      enableQuickAddVariant?: boolean;
+      cornerRadius?: 'none' | 'sm' | 'lg';
+      cartButtonsLayout?: 'stack' | 'grid-2';
     } | undefined;
     const layoutStyle: SearchLayoutStyle = raw?.layoutStyle ?? 'with-filters';
     const defaultConfig = {
@@ -106,13 +149,19 @@ export function useSearchFilterConfig(): SearchFilterConfig {
       layoutStyle,
       ...defaultConfig,
       ...layoutConfig,
+      showWishlistButton: raw?.showWishlistButton ?? true,
+      showAddToCartButton: raw?.showAddToCartButton ?? true,
+      showBuyNowButton: raw?.showBuyNowButton ?? true,
+      showPromotionBadge: raw?.showPromotionBadge ?? true,
+      enableQuickAddVariant: raw?.enableQuickAddVariant ?? true,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
+      cartButtonsLayout: raw?.cartButtonsLayout ?? 'stack',
     };
   }, [experienceSetting?.value]);
 }
 
 export function usePostsDetailConfig(): PostsDetailConfig {
   const experienceSetting = useQuery(api.settings.getByKey, { key: 'posts_detail_ui' });
-  const legacyStyleSetting = useQuery(api.settings.getByKey, { key: 'posts_detail_style' });
 
   return useMemo(() => {
     const raw = experienceSetting?.value as {
@@ -127,16 +176,22 @@ export function usePostsDetailConfig(): PostsDetailConfig {
       showThumbnail?: boolean;
       layouts?: Record<PostDetailLayoutStyle, Partial<PostDetailLayoutConfig>>;
     } | undefined;
-    const legacyStyle = legacyStyleSetting?.value as PostDetailLayoutStyle | undefined;
-    const layoutStyle = raw?.layoutStyle ?? legacyStyle ?? 'classic';
-    const legacyShared = raw?.layouts?.classic ?? raw?.layouts?.modern ?? raw?.layouts?.minimal ?? {};
+    const layoutStyle = raw?.layoutStyle ?? 'classic';
+    const layoutConfig = raw?.layouts?.[layoutStyle] ?? {};
     return {
       layoutStyle,
       ...DEFAULT_POST_DETAIL_CONFIG,
-      ...legacyShared,
-      ...raw,
+      ...layoutConfig,
+      showAuthor: raw?.showAuthor ?? layoutConfig.showAuthor ?? DEFAULT_POST_DETAIL_CONFIG.showAuthor,
+      showShare: raw?.showShare ?? layoutConfig.showShare ?? DEFAULT_POST_DETAIL_CONFIG.showShare,
+      showComments: raw?.showComments ?? layoutConfig.showComments ?? DEFAULT_POST_DETAIL_CONFIG.showComments,
+      showCommentLikes: raw?.showCommentLikes ?? layoutConfig.showCommentLikes ?? DEFAULT_POST_DETAIL_CONFIG.showCommentLikes,
+      showCommentReplies: raw?.showCommentReplies ?? layoutConfig.showCommentReplies ?? DEFAULT_POST_DETAIL_CONFIG.showCommentReplies,
+      showRelated: raw?.showRelated ?? layoutConfig.showRelated ?? DEFAULT_POST_DETAIL_CONFIG.showRelated,
+      showTags: raw?.showTags ?? layoutConfig.showTags ?? DEFAULT_POST_DETAIL_CONFIG.showTags,
+      showThumbnail: raw?.showThumbnail ?? layoutConfig.showThumbnail ?? DEFAULT_POST_DETAIL_CONFIG.showThumbnail,
     };
-  }, [experienceSetting?.value, legacyStyleSetting?.value]);
+  }, [experienceSetting?.value]);
 }
 
 export function useBookingConfig(): BookingExperienceConfig {
@@ -154,6 +209,7 @@ export function useBookingConfig(): BookingExperienceConfig {
 
 type ProductsListConfig = {
   layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
   paginationType: PaginationType;
   cornerRadius: 'none' | 'sm' | 'lg';
   showSearch: boolean;
@@ -165,6 +221,13 @@ type ProductsListConfig = {
   showBuyNowButton: boolean;
   showPromotionBadge: boolean;
   enableQuickAddVariant: boolean;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  priceFilterMode: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
+  isLoading: boolean;
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
 };
 
 export function useProductsListConfig(): ProductsListConfig {
@@ -175,10 +238,10 @@ export function useProductsListConfig(): ProductsListConfig {
   
   return useMemo(() => {
     const raw = experienceSetting?.value as {
-      layoutStyle?: ProductsListConfig['layoutStyle'] | 'masonry';
-      layouts?: Record<string, Partial<Omit<ProductsListConfig, 'layoutStyle'> & { showPagination?: boolean }>>;
-      paginationType?: string | boolean;
-      showPagination?: boolean;
+      layoutStyle?: ProductsListConfig['layoutStyle'];
+      gridColumns?: number;
+      layouts?: Partial<Record<ProductsListConfig['layoutStyle'], Partial<Omit<ProductsListConfig, 'layoutStyle'>>>>;
+      paginationType?: PaginationType;
       showSearch?: boolean;
       showCategories?: boolean;
       hideEmptyCategories?: boolean;
@@ -189,13 +252,16 @@ export function useProductsListConfig(): ProductsListConfig {
       showPromotionBadge?: boolean;
       enableQuickAddVariant?: boolean;
       cornerRadius?: ProductsListConfig['cornerRadius'];
+      cartButtonsLayout?: 'stack' | 'grid-2';
+      priceFilterMode?: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
     } | undefined;
 
-    const rawLayout = raw?.layoutStyle;
-    const layoutStyle: ProductsListConfig['layoutStyle'] = rawLayout === 'masonry' ? 'sidebar' : (rawLayout ?? 'grid');
-    const layoutConfig = layoutStyle === 'sidebar'
-      ? (raw?.layouts?.sidebar ?? raw?.layouts?.masonry)
-      : raw?.layouts?.[layoutStyle];
+    const layoutStyle: ProductsListConfig['layoutStyle'] = raw?.layoutStyle ?? 'grid';
+    const layoutConfig = raw?.layouts?.[layoutStyle];
     
     const configShowAddToCart = raw?.showAddToCartButton ?? true;
     const configShowBuyNow = raw?.showBuyNowButton ?? true;
@@ -203,9 +269,12 @@ export function useProductsListConfig(): ProductsListConfig {
     const wishlistEnabled = wishlistModule?.enabled ?? false;
     const promotionsEnabled = promotionsModule?.enabled ?? false;
 
+    const isLoading = experienceSetting === undefined || wishlistModule === undefined || promotionsModule === undefined;
+
     return {
       layoutStyle,
-      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType ?? layoutConfig?.showPagination ?? raw?.showPagination),
+      gridColumns: raw?.gridColumns ?? 3,
+      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType),
       cornerRadius: raw?.cornerRadius ?? 'lg',
       showSearch: layoutConfig?.showSearch ?? raw?.showSearch ?? true,
       showCategories: layoutConfig?.showCategories ?? raw?.showCategories ?? true,
@@ -216,8 +285,15 @@ export function useProductsListConfig(): ProductsListConfig {
       showBuyNowButton: configShowBuyNow && ordersEnabled,
       showPromotionBadge: (raw?.showPromotionBadge ?? true) && promotionsEnabled,
       enableQuickAddVariant: (raw?.enableQuickAddVariant ?? true) && cartAvailable,
+      cartButtonsLayout: raw?.cartButtonsLayout ?? 'stack',
+      priceFilterMode: raw?.priceFilterMode ?? 'custom',
+      isLoading,
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Xem sản phẩm',
+      showContextIntro: raw?.showContextIntro ?? true,
     };
-  }, [experienceSetting?.value, cartAvailable, ordersEnabled, wishlistModule?.enabled, promotionsModule?.enabled]);
+  }, [experienceSetting, cartAvailable, ordersEnabled, wishlistModule, promotionsModule]);
 }
 
 type WishlistConfig = {
@@ -236,14 +312,13 @@ export function useWishlistConfig(): WishlistConfig {
 
   return useMemo(() => {
     const raw = experienceSetting?.value as {
-      layoutStyle?: WishlistConfig['layoutStyle'] | 'masonry';
-      layouts?: Record<string, Partial<Omit<WishlistConfig, 'layoutStyle'>>>;
+      layoutStyle?: WishlistConfig['layoutStyle'];
+      layouts?: Partial<Record<WishlistConfig['layoutStyle'], Partial<Omit<WishlistConfig, 'layoutStyle'>>>>;
       showAddToCartButton?: boolean;
     } | undefined;
 
-    const rawLayout = raw?.layoutStyle;
-    const layoutStyle: WishlistConfig['layoutStyle'] = rawLayout === 'masonry' ? 'table' : (rawLayout ?? 'grid');
-    const layoutConfig = raw?.layouts?.[layoutStyle] ?? raw?.layouts?.masonry ?? {};
+    const layoutStyle: WishlistConfig['layoutStyle'] = raw?.layoutStyle ?? 'grid';
+    const layoutConfig = raw?.layouts?.[layoutStyle] ?? {};
     const showNote = layoutConfig.showNote ?? true;
     const showNotification = layoutConfig.showNotification ?? true;
     const configShowAddToCart = layoutConfig.showAddToCartButton ?? raw?.showAddToCartButton ?? true;
@@ -259,13 +334,18 @@ export function useWishlistConfig(): WishlistConfig {
 }
 
 type ServicesListConfig = {
-   layoutStyle: 'grid' | 'sidebar' | 'masonry';
+  layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
   filterPosition: 'sidebar' | 'top' | 'none';
   paginationType: PaginationType;
   showSearch: boolean;
   showCategories: boolean;
   hideEmptyCategories: boolean;
   postsPerPage: number;
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
 };
 
 export function useServicesListConfig(): ServicesListConfig {
@@ -273,28 +353,334 @@ export function useServicesListConfig(): ServicesListConfig {
   
   return useMemo(() => {
     const raw = experienceSetting?.value as {
-       layoutStyle?: ServicesListConfig['layoutStyle'] | 'list';
-      layouts?: Record<string, Partial<Omit<ServicesListConfig, 'layoutStyle'> & { showPagination?: boolean }>>;
+      layoutStyle?: string;
+      gridColumns?: number;
+      layouts?: Partial<Record<'grid' | 'sidebar' | 'list', Partial<Omit<ServicesListConfig, 'layoutStyle'>>>>;
       filterPosition?: FilterPosition;
-      paginationType?: string | boolean;
-      showPagination?: boolean;
+      paginationType?: PaginationType;
       showSearch?: boolean;
       showCategories?: boolean;
       hideEmptyCategories?: boolean;
       postsPerPage?: number;
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
     } | undefined;
 
-     const rawLayout = raw?.layoutStyle;
-     const layoutStyle: ServicesListConfig['layoutStyle'] = rawLayout === 'list' ? 'sidebar' : (rawLayout ?? 'grid');
+    const rawStyle = raw?.layoutStyle;
+    const layoutStyle: ServicesListConfig['layoutStyle'] = rawStyle === 'sidebar'
+      ? 'sidebar'
+      : (rawStyle === 'list' || rawStyle === 'masonry' ? 'list' : 'grid');
     const layoutConfig = raw?.layouts?.[layoutStyle];
     return {
       layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
       filterPosition: layoutConfig?.filterPosition ?? raw?.filterPosition ?? 'sidebar',
-      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType ?? layoutConfig?.showPagination ?? raw?.showPagination),
+      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType),
       showSearch: layoutConfig?.showSearch ?? raw?.showSearch ?? true,
       showCategories: layoutConfig?.showCategories ?? raw?.showCategories ?? true,
       hideEmptyCategories: raw?.hideEmptyCategories ?? true,
       postsPerPage: layoutConfig?.postsPerPage ?? raw?.postsPerPage ?? 12,
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Xem dịch vụ',
+      showContextIntro: raw?.showContextIntro ?? true,
+    };
+  }, [experienceSetting?.value]);
+}
+
+type ProjectsListConfig = {
+  layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
+  filterPosition: 'sidebar' | 'top' | 'none';
+  paginationType: PaginationType;
+  showSearch: boolean;
+  showCategories: boolean;
+  hideEmptyCategories: boolean;
+  postsPerPage: number;
+  showClientName: boolean;
+  showIntroVideo: boolean;
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
+};
+
+export function useProjectsListConfig(): ProjectsListConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'projects_list_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as {
+      layoutStyle?: string;
+      gridColumns?: number;
+      filterPosition?: FilterPosition;
+      paginationType?: PaginationType;
+      showSearch?: boolean;
+      showCategories?: boolean;
+      hideEmptyCategories?: boolean;
+      postsPerPage?: number;
+      showClientName?: boolean;
+      showIntroVideo?: boolean;
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
+    } | undefined;
+    const rawStyle = raw?.layoutStyle;
+    const layoutStyle: ProjectsListConfig['layoutStyle'] = rawStyle === 'sidebar'
+      ? 'sidebar'
+      : (rawStyle === 'list' || rawStyle === 'masonry' ? 'list' : 'grid');
+    return {
+      layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
+      filterPosition: raw?.filterPosition ?? 'top',
+      paginationType: normalizePaginationType(raw?.paginationType),
+      showSearch: raw?.showSearch ?? true,
+      showCategories: raw?.showCategories ?? true,
+      hideEmptyCategories: raw?.hideEmptyCategories ?? true,
+      postsPerPage: raw?.postsPerPage ?? 12,
+      showClientName: raw?.showClientName ?? true,
+      showIntroVideo: raw?.showIntroVideo ?? true,
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Xem dự án',
+      showContextIntro: raw?.showContextIntro ?? true,
+    };
+  }, [experienceSetting?.value]);
+}
+
+type ProjectsDetailConfig = {
+  layoutStyle: 'classic' | 'modern' | 'minimal';
+  showGallery: boolean;
+  showIntroVideo: boolean;
+  showRelated: boolean;
+  showShare: boolean;
+  showClientName: boolean;
+};
+
+export function useProjectsDetailConfig(): ProjectsDetailConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'projects_detail_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as Partial<ProjectsDetailConfig> | undefined;
+    return {
+      layoutStyle: raw?.layoutStyle ?? 'classic',
+      showGallery: raw?.showGallery ?? true,
+      showIntroVideo: raw?.showIntroVideo ?? true,
+      showRelated: raw?.showRelated ?? true,
+      showShare: raw?.showShare ?? true,
+      showClientName: raw?.showClientName ?? true,
+    };
+  }, [experienceSetting?.value]);
+}
+
+type CoursesListConfig = {
+  layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
+  paginationType: PaginationType;
+  showSearch: boolean;
+  showCategories: boolean;
+  showLevelFilter: boolean;
+  hideEmptyCategories: boolean;
+  postsPerPage: number;
+  cornerRadius: 'none' | 'sm' | 'lg';
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
+};
+
+const normalizeCoursesListLayoutStyle = (value?: string): CoursesListConfig['layoutStyle'] => {
+  if (value === 'grid' || value === 'sidebar' || value === 'list') {return value;}
+  if (value === 'masonry') return 'list';
+  return 'grid';
+};
+
+export function useCoursesListConfig(): CoursesListConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'courses_list_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as {
+      layoutStyle?: string;
+      gridColumns?: number;
+      layouts?: Partial<Record<'grid' | 'sidebar' | 'list', Partial<Omit<CoursesListConfig, 'layoutStyle'>>>>;
+      paginationType?: PaginationType;
+      showSearch?: boolean;
+      showCategories?: boolean;
+      showLevelFilter?: boolean;
+      hideEmptyCategories?: boolean;
+      postsPerPage?: number;
+      cornerRadius?: 'none' | 'sm' | 'lg';
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
+    } | undefined;
+    const layoutStyle = normalizeCoursesListLayoutStyle(raw?.layoutStyle);
+    const layoutConfig = raw?.layouts?.[layoutStyle];
+    return {
+      layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
+      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType),
+      showSearch: layoutConfig?.showSearch ?? raw?.showSearch ?? true,
+      showCategories: layoutConfig?.showCategories ?? raw?.showCategories ?? true,
+      showLevelFilter: layoutConfig?.showLevelFilter ?? raw?.showLevelFilter ?? true,
+      hideEmptyCategories: raw?.hideEmptyCategories ?? true,
+      postsPerPage: layoutConfig?.postsPerPage ?? raw?.postsPerPage ?? 12,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Vào học ngay',
+      showContextIntro: raw?.showContextIntro ?? true,
+    };
+  }, [experienceSetting?.value]);
+}
+
+type CoursesDetailConfig = {
+  layoutStyle: 'classic' | 'modern' | 'minimal';
+  showCurriculum: boolean;
+  showInstructor: boolean;
+  showRelated: boolean;
+  showStickyCta: boolean;
+  cornerRadius: 'none' | 'sm' | 'lg';
+};
+
+export function useCoursesDetailConfig(): CoursesDetailConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'courses_detail_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as Partial<CoursesDetailConfig> | undefined;
+    return {
+      layoutStyle: raw?.layoutStyle ?? 'classic',
+      showCurriculum: raw?.showCurriculum ?? true,
+      showInstructor: raw?.showInstructor ?? true,
+      showRelated: raw?.showRelated ?? true,
+      showStickyCta: raw?.showStickyCta ?? true,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
+    };
+  }, [experienceSetting?.value]);
+}
+
+type ResourcesListConfig = {
+  layoutStyle: 'grid' | 'sidebar' | 'list';
+  gridColumns: number;
+  paginationType: PaginationType;
+  showSearch: boolean;
+  showCategories: boolean;
+  showResourceFilters: boolean;
+  hideEmptyCategories: boolean;
+  postsPerPage: number;
+  cornerRadius: 'none' | 'sm' | 'lg';
+  darkModePremiumBorder?: boolean;
+  showDetailButton?: boolean;
+  detailButtonText?: string;
+  showContextIntro?: boolean;
+};
+
+const normalizeResourcesListLayoutStyle = (value?: string): ResourcesListConfig['layoutStyle'] => {
+  if (value === 'grid' || value === 'sidebar' || value === 'list') {return value;}
+  if (value === 'masonry') return 'list';
+  return 'grid';
+};
+
+export function useResourcesListConfig(): ResourcesListConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'resources_list_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as {
+      layoutStyle?: string;
+      gridColumns?: number;
+      layouts?: Partial<Record<'grid' | 'sidebar' | 'list', Partial<Omit<ResourcesListConfig, 'layoutStyle'>>>>;
+      paginationType?: PaginationType;
+      showSearch?: boolean;
+      showCategories?: boolean;
+      showResourceFilters?: boolean;
+      hideEmptyCategories?: boolean;
+      postsPerPage?: number;
+      cornerRadius?: 'none' | 'sm' | 'lg';
+      darkModePremiumBorder?: boolean;
+      showDetailButton?: boolean;
+      detailButtonText?: string;
+      showContextIntro?: boolean;
+    } | undefined;
+    const layoutStyle = normalizeResourcesListLayoutStyle(raw?.layoutStyle);
+    const layoutConfig = raw?.layouts?.[layoutStyle];
+    return {
+      layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
+      paginationType: normalizePaginationType(layoutConfig?.paginationType ?? raw?.paginationType),
+      showSearch: layoutConfig?.showSearch ?? raw?.showSearch ?? true,
+      showCategories: layoutConfig?.showCategories ?? raw?.showCategories ?? true,
+      showResourceFilters: layoutConfig?.showResourceFilters ?? raw?.showResourceFilters ?? true,
+      hideEmptyCategories: raw?.hideEmptyCategories ?? true,
+      postsPerPage: layoutConfig?.postsPerPage ?? raw?.postsPerPage ?? 12,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
+      darkModePremiumBorder: raw?.darkModePremiumBorder ?? false,
+      showDetailButton: raw?.showDetailButton ?? false,
+      detailButtonText: raw?.detailButtonText ?? 'Xem chi tiết',
+      showContextIntro: raw?.showContextIntro ?? true,
+    };
+  }, [experienceSetting?.value]);
+}
+
+type ResourcesDetailConfig = {
+  layoutStyle: 'classic' | 'modern' | 'minimal';
+  showGallery: boolean;
+  galleryMode?: 'scroll' | 'grid';
+  showRelated: boolean;
+  showStickyCta: boolean;
+  showResourceFilters: boolean;
+  cornerRadius: 'none' | 'sm' | 'lg';
+};
+
+export function useResourcesDetailConfig(): ResourcesDetailConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'resources_detail_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as Partial<ResourcesDetailConfig> | undefined;
+    return {
+      layoutStyle: raw?.layoutStyle ?? 'classic',
+      showGallery: raw?.showGallery ?? true,
+      galleryMode: raw?.galleryMode ?? 'grid',
+      showRelated: raw?.showRelated ?? true,
+      showStickyCta: raw?.showStickyCta ?? true,
+      showResourceFilters: raw?.showResourceFilters ?? true,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
+    };
+  }, [experienceSetting?.value]);
+}
+
+type LessonDetailConfig = {
+  layoutStyle: 'classic' | 'focus' | 'compact';
+  showSidebar: boolean;
+  showLessonNavigation: boolean;
+  showExerciseDownload: boolean;
+  showCourseBreadcrumb: boolean;
+  lockWallStyle: 'overlay' | 'card';
+  cornerRadius: 'none' | 'sm' | 'lg';
+};
+
+export function useLessonDetailConfig(): LessonDetailConfig {
+  const experienceSetting = useQuery(api.settings.getByKey, { key: 'lesson_detail_ui' });
+
+  return useMemo(() => {
+    const raw = experienceSetting?.value as Partial<LessonDetailConfig> | undefined;
+    const layoutStyle = raw?.layoutStyle === 'focus' || raw?.layoutStyle === 'compact' || raw?.layoutStyle === 'classic'
+      ? raw.layoutStyle
+      : 'classic';
+    const lockWallStyle = raw?.lockWallStyle === 'card' || raw?.lockWallStyle === 'overlay'
+      ? raw.lockWallStyle
+      : 'overlay';
+
+    return {
+      layoutStyle,
+      showSidebar: raw?.showSidebar ?? true,
+      showLessonNavigation: raw?.showLessonNavigation ?? true,
+      showExerciseDownload: raw?.showExerciseDownload ?? true,
+      showCourseBreadcrumb: raw?.showCourseBreadcrumb ?? true,
+      lockWallStyle,
+      cornerRadius: raw?.cornerRadius ?? 'lg',
     };
   }, [experienceSetting?.value]);
 }

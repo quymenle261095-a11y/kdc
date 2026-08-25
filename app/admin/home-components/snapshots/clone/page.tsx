@@ -7,6 +7,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { ArrowLeft, Bot, Check, ChevronLeft, ChevronRight, Copy, Eye, Image as ImageIcon, Loader2, Menu, Save, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
+import { AiDirectGeneratePanel } from '@/app/admin/components/AiDirectGenerateButton';
 import type { HomepageSnapshotPayload, SnapshotComponentPayload } from '@/lib/homepage-snapshot/types';
 import type {
   SnapshotContactSettings,
@@ -49,10 +50,10 @@ const STEPS: Array<{ key: WizardStep; label: string }> = [
 ];
 
 const DEFAULT_SITE_SETTINGS: SnapshotSiteSettings = {
-  site_brand_color: '#9b2c3b',
   site_brand_mode: 'dual',
   site_brand_primary: '#9b2c3b',
   site_brand_secondary: '#ecaa4d',
+  site_dark_mode: 'light',
   site_favicon: '',
   site_language: 'vi',
   site_logo: '',
@@ -276,7 +277,6 @@ const buildPayload = (
   };
   const nextSite: SnapshotSiteSettings = {
     ...meta.site,
-    site_brand_color: meta.site.site_brand_primary,
     site_brand_mode: 'dual',
   };
   const nextFooterMenu = normalizeMenuPayload(footerMenu, 'footer');
@@ -337,6 +337,13 @@ function SnapshotCloneWizard() {
   const currentComponent = components[componentIndex];
   const menuResult = useMemo(() => parseAiMenuInput(menuInput), [menuInput]);
   const imagePaths = useMemo(() => collectImagePaths(currentComponent?.config ?? {}), [currentComponent]);
+  const currentComponentPrompt = useMemo(() => (
+    currentComponent
+      ? COMPONENT_PROMPT
+        .replace('[TYPE]', currentComponent.type)
+        .replace('[DÁN CONFIG HIỆN TẠI]', JSON.stringify(currentComponent.config ?? {}, null, 2))
+      : ''
+  ), [currentComponent]);
   const previewPayload = sourcePayload && meta ? buildPayload(sourcePayload, meta, headerItems, components) : null;
   const previewBundle = (previewPayload?.homepage.demoBundle ?? null) as SnapshotDemoBundle | null;
 
@@ -388,11 +395,7 @@ function SnapshotCloneWizard() {
 
   const copyComponentPrompt = async () => {
     if (!currentComponent) return;
-    await navigator.clipboard.writeText(
-      COMPONENT_PROMPT
-        .replace('[TYPE]', currentComponent.type)
-        .replace('[DÁN CONFIG HIỆN TẠI]', JSON.stringify(currentComponent.config ?? {}, null, 2))
-    );
+    await navigator.clipboard.writeText(currentComponentPrompt);
     toast.success('Đã copy prompt component');
   };
 
@@ -591,6 +594,12 @@ function SnapshotCloneWizard() {
                 <Copy size={14} /> Copy prompt
               </Button>
               <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{MENU_PROMPT}</pre>
+              <AiDirectGeneratePanel
+                prompt={MENU_PROMPT}
+                sessionId="admin-snapshot-menu-import"
+                onGenerated={setMenuInput}
+                placeholder="Ví dụ: Tạo menu header cho website đào tạo 3D, gồm khóa học, tài nguyên, dự án, dịch vụ, bài viết, liên hệ."
+              />
               <textarea
                 className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 placeholder='{"items":[{"label":"Trang chủ"},{"label":"Sản phẩm"}]}'
@@ -678,6 +687,12 @@ function SnapshotCloneWizard() {
                   <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => { void copyComponentPrompt(); }}>
                     <Copy size={14} /> Copy prompt component
                   </Button>
+                  <AiDirectGeneratePanel
+                    prompt={currentComponentPrompt}
+                    sessionId={`admin-snapshot-component-import:${currentComponent.componentKey}`}
+                    onGenerated={setComponentInput}
+                    placeholder={`Ví dụ: Viết lại nội dung component ${currentComponent.title} cho thương hiệu hiện tại, giữ layout và cấu trúc config gốc.`}
+                  />
                   <textarea
                     className="min-h-72 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder='{"title":"Tiêu đề mới","items":[...]}'

@@ -2,13 +2,22 @@
 
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { ArrowLeft, FileText, Loader2, Package, Save } from 'lucide-react';
+import { FileText, Package } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, Card, Input } from '../../components/ui';
+import { Button, Input, Label } from '../../components/ui';
 import { ModuleGuard } from '../../components/ModuleGuard';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormPageWrapper,
+  AdminFormSidebar,
+  AdminSelect,
+  AdminStickyFooter,
+  AdminTitleInput,
+} from '@/app/admin/components/FormUtilities';
 
 export default function CreateCommentPage() {
   return (
@@ -39,9 +48,9 @@ function CreateCommentContent() {
 
   const targets = useMemo(() => {
     if (formData.targetType === 'post') {
-      return postsData?.map(p => ({ id: p._id, name: p.title })) ?? [];
+      return postsData?.map((p) => ({ id: p._id, name: p.title })) ?? [];
     }
-    return productsData?.map(p => ({ id: p._id, name: p.name })) ?? [];
+    return productsData?.map((p) => ({ id: p._id, name: p.name })) ?? [];
   }, [formData.targetType, postsData, productsData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,152 +81,137 @@ function CreateCommentContent() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="flex items-center gap-4">
-        <Link href="/admin/comments">
-          <Button variant="ghost" size="icon"><ArrowLeft size={20} /></Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thêm bình luận</h1>
-          <p className="text-sm text-slate-500">Tạo bình luận mới cho bài viết hoặc sản phẩm</p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <Card className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Tên người bình luận <span className="text-red-500">*</span>
-              </label>
-              <Input
+    <AdminFormPageWrapper
+      title="Thêm bình luận mới"
+      subtitle="Tạo bình luận và đánh giá thủ công cho bài viết hoặc sản phẩm."
+      backHref="/admin/comments"
+      isLoading={isLoading}
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          submitLabel="Tạo bình luận"
+          onCancel={() => router.push('/admin/comments')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          disableSave={isSubmitting || !formData.authorName.trim() || !formData.content.trim() || !formData.targetId}
+        />
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <AdminFormGrid>
+          <AdminFormMain>
+            <AdminFormCard title="Thông tin người bình luận">
+              <AdminTitleInput
+                label="Tên người bình luận"
                 value={formData.authorName}
-                onChange={(e) =>{  setFormData({ ...formData, authorName: e.target.value }); }}
-                placeholder="Nhập tên..."
+                onChange={(e) => setFormData({ ...formData, authorName: e.target.value })}
                 required
+                placeholder="Nhập họ tên người đánh giá/bình luận..."
+                autoFocus
+                copyLabel="tên người bình luận"
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
-              <Input
-                type="email"
-                value={formData.authorEmail}
-                onChange={(e) =>{  setFormData({ ...formData, authorEmail: e.target.value }); }}
-                placeholder="email@example.com"
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Loại bình luận</label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={formData.targetType === 'post' ? 'default' : 'outline'}
-                className="gap-2"
-                onClick={() =>{  setFormData({ ...formData, targetType: 'post', targetId: '' }); }}
-              >
-                <FileText size={16} /> Bài viết
-              </Button>
-              <Button
-                type="button"
-                variant={formData.targetType === 'product' ? 'default' : 'outline'}
-                className="gap-2"
-                onClick={() =>{  setFormData({ ...formData, targetType: 'product', targetId: '' }); }}
-              >
-                <Package size={16} /> Sản phẩm
-              </Button>
-            </div>
-          </div>
+              <div className="space-y-2">
+                <Label>Email liên hệ</Label>
+                <Input
+                  type="email"
+                  value={formData.authorEmail}
+                  onChange={(e) => setFormData({ ...formData, authorEmail: e.target.value })}
+                  placeholder="email@example.com"
+                />
+              </div>
+            </AdminFormCard>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              {formData.targetType === 'post' ? 'Bài viết' : 'Sản phẩm'} <span className="text-red-500">*</span>
-            </label>
-            <select
-              className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={formData.targetId}
-              onChange={(e) =>{  setFormData({ ...formData, targetId: e.target.value }); }}
-              required
-            >
-              <option value="">-- Chọn {formData.targetType === 'post' ? 'bài viết' : 'sản phẩm'} --</option>
-              {targets.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+            <AdminFormCard title="Nội dung bình luận">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nội dung chi tiết <span className="text-red-500">*</span></Label>
+                  <textarea
+                    className="w-full min-h-[140px] rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    value={formData.content}
+                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                    placeholder="Nhập nội dung nhận xét hoặc bình luận..."
+                    required
+                  />
+                </div>
+              </div>
+            </AdminFormCard>
+          </AdminFormMain>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Nội dung <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              className="w-full min-h-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm resize-y"
-              value={formData.content}
-              onChange={(e) =>{  setFormData({ ...formData, content: e.target.value }); }}
-              placeholder="Nhập nội dung bình luận..."
-              required
-            />
-          </div>
+          <AdminFormSidebar>
+            <AdminFormCard title="Đối tượng nhận bình luận">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Loại đối tượng</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={formData.targetType === 'post' ? 'default' : 'outline'}
+                      className="gap-2 h-9 text-xs"
+                      onClick={() => setFormData({ ...formData, targetType: 'post', targetId: '' })}
+                    >
+                      <FileText size={14} /> Bài viết
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={formData.targetType === 'product' ? 'default' : 'outline'}
+                      className="gap-2 h-9 text-xs"
+                      onClick={() => setFormData({ ...formData, targetType: 'product', targetId: '' })}
+                    >
+                      <Package size={14} /> Sản phẩm
+                    </Button>
+                  </div>
+                </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Đánh giá (1-5)</label>
-            <select
-              className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={formData.rating === '' ? '' : String(formData.rating)}
-              onChange={(e) =>{
-                const value = e.target.value;
-                setFormData({ ...formData, rating: value === '' ? '' : Number(value) });
-              }}
-            >
-              <option value="">Không đánh giá</option>
-              <option value="1">1 - Rất tệ</option>
-              <option value="2">2 - Tệ</option>
-              <option value="3">3 - Trung bình</option>
-              <option value="4">4 - Tốt</option>
-              <option value="5">5 - Rất tốt</option>
-            </select>
-          </div>
+                <div className="space-y-2">
+                  <Label>
+                    Chọn {formData.targetType === 'post' ? 'bài viết' : 'sản phẩm'} <span className="text-red-500">*</span>
+                  </Label>
+                  <AdminSelect
+                    value={formData.targetId}
+                    onChange={(val) => setFormData({ ...formData, targetId: val })}
+                    placeholder={`-- Chọn ${formData.targetType === 'post' ? 'bài viết' : 'sản phẩm'} --`}
+                    options={targets.map((t) => ({ value: t.id, label: t.name }))}
+                  />
+                </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Trạng thái</label>
-            <div className="flex gap-2">
-              {(['Pending', 'Approved', 'Spam'] as const).map(status => (
-                <Button
-                  key={status}
-                  type="button"
-                  variant={formData.status === status ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() =>{  setFormData({ ...formData, status }); }}
-                >
-                  <Badge variant={status === 'Approved' ? 'default' : (status === 'Pending' ? 'secondary' : 'destructive')} className="pointer-events-none">
-                    {status === 'Approved' ? 'Đã duyệt' : (status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
-                  </Badge>
-                </Button>
-              ))}
-            </div>
-          </div>
+                <div className="space-y-2">
+                  <Label>Đánh giá số sao (Rating)</Label>
+                  <AdminSelect
+                    value={formData.rating === '' ? '' : String(formData.rating)}
+                    onChange={(val) => setFormData({ ...formData, rating: val === '' ? '' : Number(val) })}
+                    options={[
+                      { value: '', label: 'Không đánh giá' },
+                      { value: '5', label: '⭐⭐⭐⭐⭐ (5 sao - Rất tốt)' },
+                      { value: '4', label: '⭐⭐⭐⭐ (4 sao - Tốt)' },
+                      { value: '3', label: '⭐⭐⭐ (3 sao - Trung bình)' },
+                      { value: '2', label: '⭐⭐ (2 sao - Tệ)' },
+                      { value: '1', label: '⭐ (1 sao - Rất tệ)' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </AdminFormCard>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Link href="/admin/comments">
-              <Button type="button" variant="outline">Hủy</Button>
-            </Link>
-            <Button type="submit" disabled={isSubmitting} className="gap-2">
-              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Tạo bình luận
-            </Button>
-          </div>
-        </Card>
+            <AdminFormCard title="Trạng thái kiểm duyệt">
+              <div className="space-y-2">
+                <Label>Trạng thái</Label>
+                <AdminSelect
+                  value={formData.status}
+                  onChange={(val) => setFormData({ ...formData, status: val as 'Pending' | 'Approved' | 'Spam' })}
+                  options={[
+                    { value: 'Approved', label: 'Đã duyệt (Hiển thị)' },
+                    { value: 'Pending', label: 'Chờ duyệt' },
+                    { value: 'Spam', label: 'Spam (Ẩn)' },
+                  ]}
+                />
+              </div>
+            </AdminFormCard>
+          </AdminFormSidebar>
+        </AdminFormGrid>
       </form>
-    </div>
+    </AdminFormPageWrapper>
   );
 }

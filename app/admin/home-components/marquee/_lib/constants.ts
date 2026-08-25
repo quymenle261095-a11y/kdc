@@ -35,6 +35,7 @@ export const DEMO_MARQUEE_ITEMS = [
 ];
 
 export const SEPARATOR_OPTIONS = [
+  { label: 'Khoảng cách trống', value: '  ' },
   { label: 'Sao', value: '✦' },
   { label: 'Ngôi sao', value: '★' },
   { label: 'Kim cương', value: '♦' },

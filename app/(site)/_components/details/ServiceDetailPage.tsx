@@ -3,12 +3,14 @@
 import React, { use, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
+import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
-import { useBrandColors } from '@/components/site/hooks';
+import { useBrandColors, useSiteSettings } from '@/components/site/hooks';
 import { getServiceDetailColors } from '@/components/site/services/detail/_lib/colors';
 import { ClassicStyle, MinimalStyle, ModernStyle } from '@/components/site/services/detail/ServiceDetailStyles';
 import { ArrowLeft, Briefcase } from 'lucide-react';
 import { normalizeRouteMode } from '@/lib/ia/route-mode';
+import { useCart } from '@/lib/cart';
 
 type ServiceDetailStyle = 'classic' | 'modern' | 'minimal';
 
@@ -84,19 +86,24 @@ function useEnabledServiceFields(): Set<string> {
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  initialService?: any;
 }
 
-export default function ServiceDetailPage({ params }: PageProps) {
+export default function ServiceDetailPage({ params, initialService }: PageProps) {
   const { slug } = use(params);
   const brandColors = useBrandColors();
+  const { isDark } = useSiteSettings();
   const tokens = useMemo(
-    () => getServiceDetailColors(brandColors.primary, brandColors.secondary, brandColors.mode || 'single'),
-    [brandColors.primary, brandColors.secondary, brandColors.mode]
+    () => getServiceDetailColors(brandColors.primary, brandColors.secondary, brandColors.mode || 'single', isDark),
+    [brandColors.primary, brandColors.secondary, brandColors.mode, isDark]
   );
   const experienceConfig = useServiceDetailExperienceConfig();
   const enabledFields = useEnabledServiceFields();
+  const { addItem, openDrawer } = useCart();
   
-  const service = useQuery(api.services.getBySlug, { slug });
+  const serviceQuery = useQuery(api.services.getBySlug, { slug });
+  const service = serviceQuery ?? (initialService as Exclude<typeof serviceQuery, undefined>);
+  const serviceCommerceSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'services', settingKey: 'commerceMode' });
   const category = useQuery(
     api.serviceCategories.getById,
     service?.categoryId ? { id: service.categoryId } : 'skip'
@@ -109,6 +116,7 @@ export default function ServiceDetailPage({ params }: PageProps) {
     return new Map(categories.map((item) => [item._id, item.slug]));
   }, [categories]);
   const incrementViews = useMutation(api.services.incrementViews);
+  const commerceMode: 'cart' | 'contact' = serviceCommerceSetting?.value === 'cart' ? 'cart' : 'contact';
   
   const relatedServices = useQuery(
     api.services.searchPublished,
@@ -161,6 +169,17 @@ export default function ServiceDetailPage({ params }: PageProps) {
     enabledFields,
     showShare: experienceConfig.showShare,
     tokens,
+    commerceCta: {
+      mode: commerceMode,
+      buttonText: commerceMode === 'cart' ? 'Thêm vào giỏ hàng' : undefined,
+      onAddToCart: async () => {
+        const ok = await addItem({ itemType: 'service', serviceId: service._id, quantity: 1 });
+        if (ok) {
+          toast.success('Đã thêm dịch vụ vào giỏ hàng');
+          openDrawer();
+        }
+      },
+    },
     routeMode,
     categorySlugMap,
   };
@@ -204,21 +223,21 @@ export default function ServiceDetailPage({ params }: PageProps) {
 
 function ServiceDetailSkeleton() {
   return (
-    <div className="min-h-screen bg-white animate-pulse">
+    <div className="min-h-screen bg-white dark:bg-black animate-pulse">
       <div className="max-w-2xl mx-auto px-4 py-12">
-        <div className="h-4 w-24 bg-slate-200 rounded mb-12" />
+        <div className="h-4 w-24 bg-slate-200 dark:bg-zinc-800 rounded mb-12" />
         <div className="space-y-4 mb-8">
-          <div className="h-3 w-20 bg-slate-200 rounded" />
-          <div className="h-12 w-full bg-slate-200 rounded" />
-          <div className="h-12 w-3/4 bg-slate-200 rounded" />
+          <div className="h-3 w-20 bg-slate-200 dark:bg-zinc-800 rounded" />
+          <div className="h-12 w-full bg-slate-200 dark:bg-zinc-800 rounded" />
+          <div className="h-12 w-3/4 bg-slate-200 dark:bg-zinc-800 rounded" />
         </div>
-        <div className="h-6 w-32 bg-slate-200 rounded mb-12" />
-        <div className="aspect-[2/1] bg-slate-200 rounded-xl mb-12" />
+        <div className="h-6 w-32 bg-slate-200 dark:bg-zinc-800 rounded mb-12" />
+        <div className="aspect-[2/1] bg-slate-200 dark:bg-zinc-800 rounded-xl mb-12" />
         <div className="space-y-4">
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-5/6" />
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-4/6" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-5/6" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-4/6" />
         </div>
       </div>
     </div>

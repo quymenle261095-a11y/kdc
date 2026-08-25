@@ -255,6 +255,10 @@ export default function TeamCreatePage() {
         spacing={spacing}
         desktopColumns={desktopColumns}
         cornerRadius={cornerRadius}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
+        onMembersChange={setMembers}
       />
     </ComponentFormWrapper>
   );

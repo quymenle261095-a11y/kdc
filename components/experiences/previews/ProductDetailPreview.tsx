@@ -24,6 +24,7 @@ import {
   MapPin,
   Minus,
   Phone,
+  PiggyBank,
   Plus,
   Package,
   RotateCcw,
@@ -114,9 +115,24 @@ type ProductDetailPreviewProps = {
   priceRightIcon?: string;
   showPriceLeftIcon?: boolean;
   showPriceRightIcon?: boolean;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
+  cornerRadius?: 'none' | 'sm' | 'lg';
 };
 
 const formatVND = (price: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+
+const getRadiusClass = (
+  type: 'box' | 'button' | 'image' | 'combo-card',
+  radius?: 'none' | 'sm' | 'lg'
+) => {
+  if (radius === 'none') return 'rounded-none';
+  if (radius === 'sm') return 'rounded-lg';
+  if (type === 'button') return 'rounded-full';
+  if (type === 'combo-card') return 'rounded-xl';
+  return 'rounded-2xl';
+};
 
 const CLASSIC_HIGHLIGHT_ICON_MAP: Record<string, React.ElementType> = {
   Award,
@@ -650,11 +666,18 @@ export function ProductDetailPreview({
   phoneText = 'GỌI TƯ VẤN',
   phoneIcon = 'Phone',
   mobileFontSize = 'xs',
-  priceLeftIcon = 'Award',
   priceRightIcon = 'Gift',
-  showPriceLeftIcon = true,
   showPriceRightIcon = true,
+  cartButtonsLayout = 'stack',
+  highlightsPosition,
+  highlightsSpacing = 'high',
+  cornerRadius = 'lg',
 }: ProductDetailPreviewProps) {
+  const getHighlightsSpacingClass = (spacing?: 'low' | 'high' | 'none') => {
+    if (spacing === 'none') return '!mt-0';
+    if (spacing === 'low') return '!mt-4 md:!mt-5';
+    return '!mt-8 md:!mt-10';
+  };
   const tokens = getProductDetailColors(brandColor, secondaryColor, colorMode);
   const categoryBadgeColors = resolveProductDetailElementColor(accentColors?.categoryBadge ?? 'secondary', tokens);
   const discountBadgeColors = resolveProductDetailElementColor(accentColors?.discountBadge ?? 'primary', tokens);
@@ -731,7 +754,7 @@ export function ProductDetailPreview({
   const contentWidthClass = contentWidth === 'narrow'
     ? 'max-w-4xl'
     : contentWidth === 'wide'
-      ? 'max-w-7xl'
+      ? 'max-w-7xl tv:max-w-[1600px]'
       : 'max-w-6xl';
   const imageFrame = getProductImageFrameConfig(imageAspectRatio, layoutStyle);
   const mainImageFrameStyle: React.CSSProperties = { aspectRatio: imageFrame.frameAspectRatio };
@@ -801,19 +824,80 @@ export function ProductDetailPreview({
     return () => observer.disconnect();
   }, [layoutStyle]);
 
-  const renderHighlights = () => (
-    <div className="grid grid-cols-3 gap-4 p-4 rounded-xl" style={{ backgroundColor: tokens.highlightBg }}>
-      {highlightItems.map((item, index) => {
-        const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon] ?? Star;
-        return (
-          <div key={`${item.icon}-${index}`} className="text-center">
-            <Icon size={24} className="mx-auto mb-2" style={{ color: tokens.highlightIcon }} />
-            <p className="text-xs" style={{ color: tokens.highlightText }}>{item.text}</p>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const renderHighlights = (position: 'image_column' | 'info_column' = 'image_column') => {
+    if (highlightItems.length === 0) return null;
+    const isNoneSpacing = highlightsSpacing === 'none';
+    const isImageCol = position === 'image_column';
+    const isSingleImage = PREVIEW_IMAGES.length <= 1;
+    
+    // Cho phép ghép sát đối với layoutStyle === 'premium' hoặc 'minimal' bất kể isSingleImage thế nào
+    const shouldAttach = isNoneSpacing && isImageCol && (isSingleImage || layoutStyle === 'premium' || layoutStyle === 'minimal');
+
+    // Xác định class bo góc cho container highlights
+    let borderRadiusClass = 'rounded-2xl';
+    if (layoutStyle === 'minimal') {
+      borderRadiusClass = shouldAttach 
+        ? 'rounded-b-sm rounded-t-none' 
+        : (isNoneSpacing && isImageCol ? 'rounded-b-sm rounded-t-none md:rounded-t-sm' : 'rounded-sm');
+    } else {
+      if (shouldAttach) {
+        borderRadiusClass = 'rounded-b-2xl rounded-t-none';
+      } else if (isNoneSpacing && isImageCol) {
+        // Cho layout classic và modern có nhiều ảnh trên mobile (không có thumbnail rail ngang)
+        borderRadiusClass = 'rounded-b-2xl rounded-t-none md:rounded-t-2xl';
+      } else {
+        borderRadiusClass = 'rounded-2xl';
+      }
+    }
+
+    // Padding & gap
+    const paddingClass = shouldAttach ? 'p-3' : 'p-4';
+    const gapClass = isNoneSpacing ? 'gap-x-5 gap-y-2' : 'gap-x-6 gap-y-3';
+    
+    const isGridStyle = position === 'image_column';
+
+    return (
+      <div
+        className={`${
+          isGridStyle 
+            ? 'grid gap-2' 
+            : `flex flex-wrap items-center justify-center ${gapClass}`
+        } w-full ${borderRadiusClass} ${paddingClass} animate-fadeIn transition-all duration-300`}
+        style={{
+          gridTemplateColumns: isGridStyle ? `repeat(${highlightItems.length}, minmax(0, 1fr))` : undefined,
+          backgroundColor: shouldAttach
+            ? (tokens.highlightBg || tokens.surfaceMuted || 'rgba(0,0,0,0.02)')
+            : (tokens.highlightBg || 'transparent'),
+          border: shouldAttach ? 'none' : `1px solid ${tokens.divider || 'rgba(0,0,0,0.08)'}`,
+          marginTop: isNoneSpacing ? 0 : undefined
+        }}
+      >
+        {highlightItems.map((item, index) => {
+          const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon] ?? Star;
+          return (
+            <div
+              key={`${item.icon}-${index}`}
+              className={`flex items-center gap-1.5 ${isGridStyle ? 'justify-center' : ''} min-w-0`}
+            >
+              <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary/5 dark:bg-primary/10">
+                <Icon
+                  size={12}
+                  className="stroke-[1.75]"
+                  style={{ color: tokens.primary }}
+                />
+              </div>
+              <span
+                className="text-[10px] md:text-xs font-semibold leading-tight line-clamp-2"
+                style={{ color: tokens.bodyText }}
+              >
+                {item.text}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderPreviewDescriptionImages = () => {
     if (!showAllProductImagesSection || PREVIEW_IMAGES.length === 0) {
@@ -846,9 +930,17 @@ export function ProductDetailPreview({
           <>
             <div className={`${isMobile ? 'space-y-4' : 'grid grid-cols-2 gap-8'}`}>
             <div className="space-y-3">
-              <div className={imageFrame.frameWidthClassName}>
+              <div className={`${imageFrame.frameWidthClassName} ${
+                showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                  ? 'mb-0'
+                  : 'mb-3 md:mb-4'
+              } group/carousel relative`}>
                 <div
-                  className={`relative rounded-xl overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                  className={`relative overflow-hidden ${
+                    showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                      ? 'rounded-t-xl rounded-b-none'
+                      : 'rounded-xl'
+                  } ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                   style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                   role={canOpenLightbox ? 'button' : undefined}
                   tabIndex={canOpenLightbox ? 0 : -1}
@@ -879,6 +971,12 @@ export function ProductDetailPreview({
                     </div>
                   )}
                 </div>
+
+                {showHighlightBlock && highlightsPosition === 'image_column' && (PREVIEW_IMAGES.length <= 1 || highlightsSpacing === 'none') && (
+                  <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                    {renderHighlights('image_column')}
+                  </div>
+                )}
               </div>
               {PREVIEW_IMAGES.length > 1 && (
                 <>
@@ -912,6 +1010,13 @@ export function ProductDetailPreview({
                     />
                   )}
                 </>
+              )}
+              {showHighlightBlock && highlightsPosition === 'image_column' && !(PREVIEW_IMAGES.length <= 1 || highlightsSpacing === 'none') && (
+                <div className={imageFrame.frameWidthClassName}>
+                  <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                    {renderHighlights('image_column')}
+                  </div>
+                </div>
               )}
             </div>
             <div className="space-y-3 md:space-y-4">
@@ -986,16 +1091,19 @@ export function ProductDetailPreview({
                   </button>
                 </div>
 
-                <div className="flex flex-1 flex-col gap-2">
+                <div className={cn(
+                  "flex flex-1 gap-2",
+                  cartButtonsLayout === 'grid-2' && showAddToCart && showBuyNow ? "grid grid-cols-2" : "flex-col"
+                )}>
                   {showAddToCart && (
-                    <button className="py-3.5 px-8 rounded-xl font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: primaryButtonColors.bg, color: primaryButtonColors.text }}>
+                    <button className="py-3.5 px-8 rounded-xl font-semibold flex items-center justify-center gap-2 w-full" style={{ backgroundColor: primaryButtonColors.bg, color: primaryButtonColors.text }}>
                       <ShoppingCart size={20} />
                       Thêm vào giỏ hàng
                     </button>
                   )}
                   {showBuyNow && (
                     <button
-                      className="py-3.5 px-8 rounded-xl font-semibold flex items-center justify-center gap-2 border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
+                      className="py-3.5 px-8 rounded-xl font-semibold flex items-center justify-center gap-2 border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)] w-full"
                       style={{
                         borderColor: primaryButtonColors.border,
                         color: primaryButtonColors.text,
@@ -1028,7 +1136,11 @@ export function ProductDetailPreview({
                 />
               )}
 
-              {showHighlightBlock && renderHighlights()}
+              {showHighlightBlock && highlightsPosition !== 'image_column' && (
+                <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-6`}>
+                  {renderHighlights('info_column')}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1086,9 +1198,17 @@ export function ProductDetailPreview({
                 {heroStyle === 'split' ? (
                   <div className={`overflow-hidden ${heroContainerClass}`} style={heroContainerStyle}>
                     <div className="grid md:grid-cols-2 gap-3 items-center p-3 md:p-5">
-                      <div className={imageFrame.frameWidthClassName}>
+                      <div className={`${imageFrame.frameWidthClassName} ${
+                        showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'mb-0'
+                          : ''
+                      }`}>
                     <div
-                      className={`relative rounded-xl overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                      className={`relative overflow-hidden ${
+                        showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'rounded-t-xl rounded-b-none'
+                          : 'rounded-xl'
+                      } ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                       style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                       role={canOpenLightbox ? 'button' : undefined}
                       tabIndex={canOpenLightbox ? 0 : -1}
@@ -1126,15 +1246,29 @@ export function ProductDetailPreview({
                         </div>
                       )}
                     </div>
+
+                    {showHighlightBlock && highlightsPosition === 'image_column' && (PREVIEW_IMAGES.length <= 1 || highlightsSpacing === 'none') && (
+                      <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                        {renderHighlights('image_column')}
+                      </div>
+                    )}
                   </div>
                     </div>
                   </div>
                 ) : (
                   <div className={`overflow-hidden ${heroContainerClass}`} style={heroContainerStyle}>
                     <div className={heroImageWrapperClass}>
-                  <div className={`${imageFrame.frameWidthClassName} overflow-hidden`}>
+                  <div className={`${imageFrame.frameWidthClassName} overflow-hidden ${
+                    showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                      ? 'mb-0'
+                      : ''
+                  }`}>
                     <div
-                      className={`relative overflow-hidden rounded-xl ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                      className={`relative overflow-hidden ${
+                        showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'rounded-t-xl rounded-b-none'
+                          : 'rounded-xl'
+                      } ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                       style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                       role={canOpenLightbox ? 'button' : undefined}
                       tabIndex={canOpenLightbox ? 0 : -1}
@@ -1170,6 +1304,12 @@ export function ProductDetailPreview({
                         <div className="w-40 h-40 rounded-xl" style={{ backgroundColor: tokens.surfaceSoft }} />
                       )}
                     </div>
+
+                    {showHighlightBlock && highlightsPosition === 'image_column' && (PREVIEW_IMAGES.length <= 1 || highlightsSpacing === 'none') && (
+                      <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                        {renderHighlights('image_column')}
+                      </div>
+                    )}
                   </div>
                 </div>
                   </div>
@@ -1190,6 +1330,13 @@ export function ProductDetailPreview({
                       />
                     )}
                   </>
+                )}
+                {showHighlightBlock && highlightsPosition === 'image_column' && !(PREVIEW_IMAGES.length <= 1 || highlightsSpacing === 'none') && (
+                  <div className={imageFrame.frameWidthClassName}>
+                    <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                      {renderHighlights('image_column')}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1274,25 +1421,48 @@ export function ProductDetailPreview({
 
                 {(showAddToCart || showBuyNow || showWishlist) && (
                   <div className="space-y-2.5">
-                    {showAddToCart && (
-                      <button className="w-full h-12 text-base font-semibold" style={{ backgroundColor: primaryButtonColors.bg, color: primaryButtonColors.text }}>
-                        <ShoppingBag className="w-5 h-5 mr-2 inline-block" />
-                        Thêm vào giỏ hàng
-                      </button>
-                    )}
-                    {showBuyNow && (
-                      <button
-                        className="w-full h-12 text-base font-semibold border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
-                        style={{
-                          borderColor: primaryButtonColors.border,
-                          color: primaryButtonColors.text,
-                          '--cta-secondary-bg': primaryButtonColors.bg,
-                          '--cta-secondary-hover-bg': primaryButtonColors.bg,
-                          '--cta-secondary-ring': tokens.inputRing,
-                        } as React.CSSProperties}
-                      >
-                        Mua ngay
-                      </button>
+                    {cartButtonsLayout === 'grid-2' && showAddToCart && showBuyNow ? (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button className="w-full h-12 text-base font-semibold" style={{ backgroundColor: primaryButtonColors.bg, color: primaryButtonColors.text }}>
+                          <ShoppingBag className="w-5 h-5 mr-2 inline-block" />
+                          Thêm vào giỏ
+                        </button>
+                        <button
+                          className="w-full h-12 text-base font-semibold border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
+                          style={{
+                            borderColor: primaryButtonColors.border,
+                            color: primaryButtonColors.text,
+                            '--cta-secondary-bg': primaryButtonColors.bg,
+                            '--cta-secondary-hover-bg': primaryButtonColors.bg,
+                            '--cta-secondary-ring': tokens.inputRing,
+                          } as React.CSSProperties}
+                        >
+                          Mua ngay
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {showAddToCart && (
+                          <button className="w-full h-12 text-base font-semibold" style={{ backgroundColor: primaryButtonColors.bg, color: primaryButtonColors.text }}>
+                            <ShoppingBag className="w-5 h-5 mr-2 inline-block" />
+                            Thêm vào giỏ hàng
+                          </button>
+                        )}
+                        {showBuyNow && (
+                          <button
+                            className="w-full h-12 text-base font-semibold border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
+                            style={{
+                              borderColor: primaryButtonColors.border,
+                              color: primaryButtonColors.text,
+                              '--cta-secondary-bg': primaryButtonColors.bg,
+                              '--cta-secondary-hover-bg': primaryButtonColors.bg,
+                              '--cta-secondary-ring': tokens.inputRing,
+                            } as React.CSSProperties}
+                          >
+                            Mua ngay
+                          </button>
+                        )}
+                      </>
                     )}
                     {showWishlist && (
                       <button className="w-full h-12 text-base border" style={{ borderColor: tokens.wishlistBorder, color: tokens.metaText, backgroundColor: tokens.wishlistBg }}>
@@ -1310,7 +1480,11 @@ export function ProductDetailPreview({
                   />
                 )}
 
-                {showHighlightBlock && renderHighlights()}
+                {showHighlightBlock && highlightsPosition !== 'image_column' && (
+                  <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-6`}>
+                    {renderHighlights('info_column')}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1372,10 +1546,18 @@ export function ProductDetailPreview({
                     </div>
                   )}
 
-                  <div className={`flex-1 ${imageFrame.frameWidthClassName}`}>
+                  <div className={`flex-1 ${imageFrame.frameWidthClassName} ${
+                    showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                      ? 'mb-0'
+                      : ''
+                  }`}>
                     <div
                       ref={mainImageRef}
-                      className={`relative w-full rounded-sm overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                      className={`relative w-full overflow-hidden ${
+                        showHighlightBlock && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'rounded-t-sm rounded-b-none'
+                          : 'rounded-sm'
+                      } group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                       style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                       role={canOpenLightbox ? 'button' : undefined}
                       tabIndex={canOpenLightbox ? 0 : -1}
@@ -1413,6 +1595,12 @@ export function ProductDetailPreview({
                         </div>
                       )}
                     </div>
+
+                    {showHighlightBlock && highlightsPosition === 'image_column' && (
+                      <div className={`${getHighlightsSpacingClass(highlightsSpacing)} w-full`}>
+                        {renderHighlights('image_column')}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1489,13 +1677,27 @@ export function ProductDetailPreview({
                           Thêm vào giỏ
                         </button>
                       )}
+                      {cartButtonsLayout === 'grid-2' && showAddToCart && showBuyNow && (
+                        <button
+                          className="flex-1 h-14 uppercase tracking-wider text-sm font-medium border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
+                          style={{
+                            borderColor: primaryButtonColors.border,
+                            color: primaryButtonColors.text,
+                            '--cta-secondary-bg': primaryButtonColors.bg,
+                            '--cta-secondary-hover-bg': primaryButtonColors.bg,
+                            '--cta-secondary-ring': tokens.inputRing,
+                          } as React.CSSProperties}
+                        >
+                          Mua ngay
+                        </button>
+                      )}
                       {showWishlist && (
-                        <button className="w-14 h-14 border flex items-center justify-center" style={{ borderColor: tokens.wishlistBorder, backgroundColor: tokens.wishlistBg }}>
+                        <button className="w-14 h-14 border flex items-center justify-center shrink-0" style={{ borderColor: tokens.wishlistBorder, backgroundColor: tokens.wishlistBg }}>
                           <Heart size={20} style={{ color: tokens.wishlistIcon }} />
                         </button>
                       )}
                     </div>
-                    {showBuyNow && (
+                    {showBuyNow && !(cartButtonsLayout === 'grid-2' && showAddToCart) && (
                       <button
                         className="h-12 uppercase tracking-wider text-xs font-medium border transition-all cursor-pointer bg-[var(--cta-secondary-bg)] shadow-sm hover:bg-[var(--cta-secondary-hover-bg)] hover:shadow-md active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cta-secondary-ring)]"
                         style={{
@@ -1519,7 +1721,11 @@ export function ProductDetailPreview({
                   />
                 )}
 
-                {showHighlightBlock && renderHighlights()}
+                {showHighlightBlock && highlightsPosition !== 'image_column' && (
+                  <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-6`}>
+                    {renderHighlights('info_column')}
+                  </div>
+                )}
 
                 <div className="space-y-4 text-sm font-light" style={{ color: tokens.metaText }}>
                   <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: tokens.divider }}>
@@ -1608,50 +1814,63 @@ export function ProductDetailPreview({
                         tokens={tokens}
                         thumbnailAspectRatio={imageFrame.thumbnailAspectRatio}
                         onActiveIndexChange={setActiveImageIndex}
-                        itemClassName="w-full rounded-lg"
+                        itemClassName="w-20 rounded-lg"
                       />
                     </div>
                   )}
 
                   {/* Ảnh chính */}
                   <div className="flex-1">
-                    <div
-                      className={`relative rounded-2xl overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
-                      style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
-                      onClick={canOpenLightbox ? () => openLightboxAt(activeImageIndex) : undefined}
-                      onKeyDown={handleLightboxKeyDown}
-                      role={canOpenLightbox ? 'button' : undefined}
-                      tabIndex={canOpenLightbox ? 0 : -1}
-                    >
-                      {PREVIEW_IMAGES.length > 0 ? (
-                        <>
-                          {isMobile ? (
-                            <PreviewMobileCarousel
-                              images={PREVIEW_IMAGES}
-                              alt={productName}
-                              activeIndex={activeImageIndex}
-                              onActiveIndexChange={setActiveImageIndex}
-                            />
-                          ) : (
-                            <BlurredPreviewImage src={PREVIEW_IMAGES[activeImageIndex]} alt={productName} />
-                          )}
-                          {discountPercent > 0 && (
-                            <span
-                              className="absolute top-3 left-3 px-2.5 py-1 text-xs font-semibold rounded-lg z-30"
-                              style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}
-                            >
-                              -{discountPercent}%
-                            </span>
-                          )}
-                          {isMobile && PREVIEW_IMAGES.length > 1 && (
-                            <span className="absolute bottom-3 right-3 px-2 py-0.5 text-[11px] font-semibold rounded-full backdrop-blur-sm" style={{ backgroundColor: tokens.surface, color: tokens.headingColor }}>
-                              {activeImageIndex + 1}/{PREVIEW_IMAGES.length}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="w-32 h-32 rounded-lg" style={{ backgroundColor: tokens.surfaceSoft }} />
+                    <div className={`${imageFrame.frameWidthClassName} group/carousel relative`}>
+                      <div
+                        className={`relative overflow-hidden ${
+                          showHighlightBlock && highlightsPosition !== 'info_column' && highlightsSpacing === 'none'
+                            ? (cornerRadius === 'none' ? 'rounded-none' : cornerRadius === 'sm' ? 'rounded-t-lg rounded-b-none' : 'rounded-t-2xl rounded-b-none')
+                            : getRadiusClass('image', cornerRadius)
+                        } ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                        style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
+                        onClick={canOpenLightbox ? () => openLightboxAt(activeImageIndex) : undefined}
+                        onKeyDown={handleLightboxKeyDown}
+                        role={canOpenLightbox ? 'button' : undefined}
+                        tabIndex={canOpenLightbox ? 0 : -1}
+                      >
+                        {PREVIEW_IMAGES.length > 0 ? (
+                          <>
+                            {isMobile ? (
+                              <PreviewMobileCarousel
+                                images={PREVIEW_IMAGES}
+                                alt={productName}
+                                activeIndex={activeImageIndex}
+                                onActiveIndexChange={setActiveImageIndex}
+                              />
+                            ) : (
+                              <BlurredPreviewImage src={PREVIEW_IMAGES[activeImageIndex]} alt={productName} />
+                            )}
+                            {discountPercent > 0 && (
+                              <span
+                                className="absolute top-3 left-3 px-2.5 py-1 text-xs font-semibold rounded-lg z-30"
+                                style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}
+                              >
+                                -{discountPercent}%
+                              </span>
+                            )}
+                            {isMobile && PREVIEW_IMAGES.length > 1 && (
+                              <span className="absolute bottom-3 right-3 px-2 py-0.5 text-[11px] font-semibold rounded-full backdrop-blur-sm" style={{ backgroundColor: tokens.surface, color: tokens.headingColor }}>
+                                {activeImageIndex + 1}/{PREVIEW_IMAGES.length}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="w-32 h-32 rounded-lg" style={{ backgroundColor: tokens.surfaceSoft }} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Highlights cài đặt dưới ảnh */}
+                      {showHighlightBlock && highlightsPosition !== 'info_column' && (
+                        <div className="w-full">
+                          {renderHighlights('image_column')}
                         </div>
                       )}
                     </div>
@@ -1677,21 +1896,6 @@ export function ProductDetailPreview({
                     ))}
                   </div>
                 )}
-
-                {/* Highlights cài đặt dưới ảnh */}
-                {showHighlightBlock && (
-                  <div className="grid grid-cols-3 gap-2 border-t pt-4" style={{ borderColor: tokens.divider }}>
-                    {highlightItems.map((item, index) => {
-                      const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon] || Star;
-                      return (
-                        <div key={`${item.icon}-${index}`} className="flex flex-col items-center text-center p-2 rounded-xl" style={{ backgroundColor: tokens.surfaceMuted }}>
-                          <Icon size={18} style={{ color: tokens.primary }} />
-                          <span className="text-[10px] md:text-xs font-medium mt-1 line-clamp-1" style={{ color: tokens.bodyText }}>{item.text}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
 
               {/* Cột phải: Thông tin & Giá */}
@@ -1711,7 +1915,7 @@ export function ProductDetailPreview({
                       </span>
                       {stockBadge}
                     </div>
-                    <h1 className="text-xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>{productName}</h1>
+                    <h1 className="text-sm md:text-lg font-bold" style={{ color: '#111111' }}>{productName}</h1>
                   </div>
                   <div className="flex gap-2 shrink-0">
                     {showWishlist && (
@@ -1746,7 +1950,7 @@ export function ProductDetailPreview({
 
                 {/* Box Giá Premium sử dụng Dynamic Color từ Tokens */}
                 <div
-                  className="rounded-2xl border p-4 relative overflow-hidden"
+                  className={cn("border p-4 relative overflow-hidden", getRadiusClass('box', cornerRadius))}
                   style={{
                     backgroundColor: tokens.surfaceMuted,
                     borderColor: tokens.border,
@@ -1757,24 +1961,30 @@ export function ProductDetailPreview({
                       {renderPremiumIcon(priceRightIcon, 120) || <Gift size={120} />}
                     </div>
                   )}
-                  <div className="flex items-start gap-3">
-                    {showPriceLeftIcon !== false && (
-                      <div className="p-2 rounded-lg" style={{ backgroundColor: tokens.surface, color: tokens.primary }}>
-                        {renderPremiumIcon(priceLeftIcon, 18) || <Award size={18} />}
+                  <div className="flex items-start gap-3 relative z-10">
+                    <div className="flex-1 grid grid-cols-12 gap-3 items-center">
+                      {/* Cột trái: Giá bán ưu đãi và text Tiết kiệm */}
+                      <div className={cn(
+                        "space-y-1",
+                        discountPercent > 0 ? "col-span-8 pr-2" : "col-span-12"
+                      )}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ ƯU ĐÃI HÔM NAY ✨</p>
+                        <span className="text-2xl md:text-3xl font-extrabold block leading-tight" style={{ color: tokens.primary }}>{formatVND(price)}</span>
+                        {discountPercent > 0 && (
+                          <p className="text-[10px] md:text-xs font-semibold" style={{ color: tokens.primary }}>
+                            Tiết kiệm {formatVND(originalPrice - price)} so với giá gốc
+                          </p>
+                        )}
                       </div>
-                    )}
-                    <div className="flex-1 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ ƯU ĐÃI HÔM NAY</p>
-                      <div className="flex flex-col md:flex-row md:items-baseline gap-1 md:gap-3">
-                        <span className="text-2xl md:text-3xl font-extrabold" style={{ color: tokens.priceColor }}>{formatVND(price)}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm line-through italic" style={{ color: tokens.priceOriginalText }}>{formatVND(originalPrice)}</span>
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded" style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}>-{discountPercent}%</span>
+
+                      {/* Cột phải: Giá gốc và badge giảm giá */}
+                      {discountPercent > 0 && (
+                        <div className="col-span-4 pl-3 border-l space-y-1 text-left" style={{ borderColor: tokens.divider || tokens.border }}>
+                          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ GỐC</p>
+                          <span className="text-xs md:text-sm line-through block" style={{ color: tokens.priceOriginalText }}>{formatVND(originalPrice)}</span>
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] font-bold rounded text-white" style={{ backgroundColor: discountBadgeColors.bg }}>-{discountPercent}%</span>
                         </div>
-                      </div>
-                      <p className="text-xs font-semibold" style={{ color: tokens.priceColor }}>
-                        Tiết kiệm {formatVND(originalPrice - price)} so với giá gốc
-                      </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1783,59 +1993,198 @@ export function ProductDetailPreview({
 
                 {/* Box Combo dạng so sánh song song chuyên nghiệp */}
                 {enableCombos && (
-                  <div className="space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>ƯU ĐÃI COMBO – MUA NHIỀU, TIẾT KIỆM HƠN</p>
-                    <div className="grid grid-cols-2 gap-3 pt-3">
+                  <div
+                    className={cn(
+                      "border p-2.5 md:p-3 pt-8 relative mt-6 mb-6",
+                      getRadiusClass('box', cornerRadius)
+                    )}
+                    style={{
+                      borderColor: tokens.border,
+                    }}
+                  >
+                    {/* Badge Header nổi ở góc trái trên */}
+                    <div
+                      className="absolute -top-[16px] left-[-1px] px-5 py-2 text-[10px] md:text-xs font-bold text-white shadow-sm flex items-center gap-1.5 z-20"
+                      style={{ 
+                        backgroundColor: brandColor || '#8B0000',
+                        borderRadius: '12px 16px 24px 0px',
+                        lineHeight: '1.2'
+                      }}
+                    >
+                      <Gift size={13} className="text-white shrink-0 animate-bounce" />
+                      <span className="tracking-wide font-extrabold uppercase">ƯU ĐẠI COMBO – MUA NHIỀU, TIẾT KIỆM HƠN</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-4">
                       {/* Combo 6 Chai */}
                       <div
-                        className="rounded-xl border p-4 flex flex-col justify-between transition-all cursor-pointer relative"
+                        className={cn(
+                          "flex flex-col justify-between transition-all cursor-pointer relative select-none border-2 hover:scale-[1.01] active:scale-[0.99]",
+                          getRadiusClass('combo-card', cornerRadius)
+                        )}
                         style={{
                           backgroundColor: tokens.surface,
-                          borderColor: tokens.border,
+                          borderColor: brandColor || '#8B0000',
+                          boxShadow: `0 12px 28px ${(brandColor || '#8B0000')}18`,
                         }}
                       >
-                        <div>
-                          <div className="inline-block px-2 py-0.5 text-[11px] font-bold rounded-md text-white" style={{ backgroundColor: brandColor }}>
-                            COMBO 6 CHAI
+                        <div
+                          className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-[9px] md:text-[11px] font-black text-white flex items-center gap-1 z-10 shadow-sm uppercase tracking-wider whitespace-nowrap"
+                          style={{ 
+                            backgroundColor: brandColor || '#8B0000',
+                            borderRadius: '999px',
+                            lineHeight: '1.2'
+                          }}
+                        >
+                          <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-current" />
+                          BÁN CHẠY NHẤT
+                        </div>
+
+                        <div
+                          className="absolute top-2 right-2 z-20 h-5 w-5 md:h-6 md:w-6 rounded-full flex items-center justify-center text-white shadow-sm"
+                          style={{ backgroundColor: brandColor || '#8B0000' }}
+                          aria-hidden="true"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={3} />
+                        </div>
+
+                        <div className="pt-6 pb-3 px-2 md:pt-6 md:pb-3 md:px-2.5 flex flex-col items-center justify-center relative flex-1 text-center min-w-0">
+                          <h3 className="text-[12px] xs:text-[13px] md:text-[15px] font-black uppercase tracking-wide leading-tight text-slate-900 dark:text-white">
+                            MUA 2 CHAI
+                          </h3>
+                          <p className="mt-0.5 text-[9px] xs:text-[10px] md:text-[11px] leading-snug font-medium text-slate-500 line-clamp-1">
+                            Giảm giá trực tiếp
+                          </p>
+
+                          <div className="mt-3 w-full border-t pt-3" style={{ borderColor: tokens.divider }}>
+                            <span className="text-[18px] xs:text-[20px] md:text-[23px] font-black tracking-tight leading-none whitespace-nowrap" style={{ color: brandColor || '#8B0000' }}>
+                              {formatVND(1450000)}
+                            </span>
+
+                            <div
+                              className="mx-auto mt-2 inline-flex max-w-full items-center justify-center rounded-md px-2 py-0.5 text-[8.5px] xs:text-[9px] md:text-[10px] font-bold whitespace-nowrap"
+                              style={{ 
+                                backgroundColor: brandColor ? `${brandColor}10` : '#ffebee',
+                                color: brandColor || '#8B0000'
+                              }}
+                            >
+                              Chỉ <span className="mx-1 font-black">241.000đ</span> / chai
+                            </div>
                           </div>
-                          <p className="text-[10px] mt-1.5" style={{ color: tokens.metaText }}>Phù hợp dùng thử / biếu tặng</p>
-                          <p className="text-sm font-bold mt-2" style={{ color: tokens.headingColor }}>{formatVND(1450000)}</p>
-                          <p className="text-[10px] font-semibold" style={{ color: tokens.priceColor }}>Chi ~241.000đ / chai</p>
                         </div>
-                        <div className="border-t pt-2 mt-3 flex items-center gap-1 text-[9px] font-medium" style={{ borderColor: tokens.divider, color: tokens.priceColor }}>
-                          <Gift size={10} />
-                          <span>Tiết kiệm 340.000đ</span>
-                        </div>
-                        <div className="absolute right-2 top-2 h-4 w-4 rounded-full border flex items-center justify-center" style={{ borderColor: tokens.border }}>
-                          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'transparent' }} />
+
+                        {/* Footer của Card (Phần dưới: Tiết kiệm) */}
+                        <div
+                          className={cn(
+                            "px-2 py-2 md:px-2 md:py-2 border-t text-[9px] xs:text-[10px] font-medium",
+                            cornerRadius === 'none' ? 'rounded-b-none' : cornerRadius === 'sm' ? 'rounded-b-[6px]' : 'rounded-b-[10px]'
+                          )}
+                          style={{
+                            borderColor: brandColor ? `${brandColor}14` : '#f3f4f6',
+                            backgroundColor: brandColor ? `${brandColor}08` : '#fdf2f2',
+                            color: tokens.bodyText
+                          }}
+                        >
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-1.5">
+                            <div className="flex items-center justify-center md:justify-start gap-2 md:gap-1.5 min-w-0">
+                              <span className="h-7 w-7 md:h-6 md:w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: brandColor ? `${brandColor}12` : '#ffebee' }}>
+                                <PiggyBank className="h-3.5 w-3.5 md:h-3 md:w-3 shrink-0" style={{ color: brandColor || '#b91c1c' }} />
+                              </span>
+                              <div className="text-left space-y-0.5 min-w-0">
+                                <p className="text-[8.5px] md:text-[10px] leading-tight font-medium text-slate-600 dark:text-slate-300">
+                                  Tiết kiệm
+                                </p>
+                                <p className="font-extrabold text-[11px] xs:text-[12px] md:text-[12px] leading-tight whitespace-nowrap" style={{ color: brandColor || '#b91c1c' }}>
+                                  340.000đ
+                                </p>
+                                <p className="text-[7.5px] xs:text-[8px] md:text-[10px] opacity-75 leading-none font-medium text-slate-500 whitespace-nowrap">so với mua lẻ</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="h-7 md:h-7 w-full md:w-auto md:min-w-[62px] rounded-full px-3 md:px-2 inline-flex items-center justify-center gap-1 md:gap-0.5 text-[9px] md:text-[10px] font-bold text-white shadow-sm transition-all hover:shadow-md active:scale-95 shrink-0"
+                              style={{ backgroundColor: brandColor || '#8B0000' }}
+                            >
+                              <span>Chọn</span>
+                              <ChevronRight className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={3} />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Combo 12 Chai - Best Seller */}
+                      {/* Combo 12 Chai - Best Seller (Active) */}
                       <div
-                        className="rounded-xl border-2 p-4 flex flex-col justify-between transition-all cursor-pointer relative shadow-sm"
+                        className={cn(
+                          "flex flex-col justify-between transition-all cursor-pointer relative select-none border-2 hover:scale-[1.01] active:scale-[0.99]",
+                          getRadiusClass('combo-card', cornerRadius)
+                        )}
                         style={{
                           backgroundColor: tokens.surface,
-                          borderColor: brandColor,
+                          borderColor: '#c98500',
+                          boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)'
                         }}
                       >
-                        <div className="absolute -top-2.5 right-2 px-1.5 py-0.5 rounded text-[8px] font-bold text-white flex items-center gap-0.5 z-10" style={{ backgroundColor: '#eab308' }}>
-                          ★ BÁN CHẠY
-                        </div>
-                        <div>
-                          <div className="inline-block px-2 py-0.5 text-[11px] font-bold rounded-md text-white" style={{ backgroundColor: '#eab308' }}>
-                            COMBO 12 CHAI
+                        <div className="pt-6 pb-3 px-2 md:pt-6 md:pb-3 md:px-2.5 flex flex-col items-center justify-center relative flex-1 text-center min-w-0">
+                          <h3 className="text-[12px] xs:text-[13px] md:text-[15px] font-black uppercase tracking-wide leading-tight text-slate-900 dark:text-white">
+                            MUA 5 TẶNG 1
+                          </h3>
+                          <p className="mt-0.5 text-[9px] xs:text-[10px] md:text-[11px] leading-snug font-medium text-slate-500 line-clamp-1">
+                            Cùng loại
+                          </p>
+
+                          <div className="mt-3 w-full border-t pt-3" style={{ borderColor: tokens.divider }}>
+                            <span className="text-[18px] xs:text-[20px] md:text-[23px] font-black tracking-tight leading-none whitespace-nowrap" style={{ color: '#c98500' }}>
+                              {formatVND(2800000)}
+                            </span>
+
+                            <div
+                              className="mx-auto mt-2 inline-flex max-w-full items-center justify-center rounded-md px-2 py-0.5 text-[8.5px] xs:text-[9px] md:text-[10px] font-bold whitespace-nowrap"
+                              style={{ 
+                                backgroundColor: '#c9850010',
+                                color: '#c98500'
+                              }}
+                            >
+                              Chỉ <span className="mx-1 font-black">233.000đ</span> / chai
+                            </div>
                           </div>
-                          <p className="text-[10px] mt-1.5" style={{ color: tokens.metaText }}>Lời nhất – Tiết kiệm nhiều nhất</p>
-                          <p className="text-sm font-bold mt-2" style={{ color: tokens.headingColor }}>{formatVND(2800000)}</p>
-                          <p className="text-[10px] font-semibold" style={{ color: tokens.priceColor }}>Chi ~233.000đ / chai</p>
                         </div>
-                        <div className="border-t pt-2 mt-3 flex items-center gap-1 text-[9px] font-medium" style={{ borderColor: tokens.divider, color: tokens.priceColor }}>
-                          <Gift size={10} />
-                          <span>Tiết kiệm 680.000đ</span>
-                        </div>
-                        <div className="absolute right-2 top-2 h-4 w-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: brandColor }}>
-                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: brandColor }} />
+
+                        {/* Footer của Card (Phần dưới: Tiết kiệm) */}
+                        <div
+                          className={cn(
+                            "px-2 py-2 md:px-2 md:py-2 border-t text-[9px] xs:text-[10px] font-medium",
+                            cornerRadius === 'none' ? 'rounded-b-none' : cornerRadius === 'sm' ? 'rounded-b-[6px]' : 'rounded-b-[10px]'
+                          )}
+                          style={{
+                            borderColor: '#c9850014',
+                            backgroundColor: '#c9850008',
+                            color: tokens.bodyText
+                          }}
+                        >
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-1.5">
+                            <div className="flex items-center justify-center md:justify-start gap-2 md:gap-1.5 min-w-0">
+                              <span className="h-7 w-7 md:h-6 md:w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#c9850012' }}>
+                                <Gift className="h-3.5 w-3.5 md:h-3 md:w-3 shrink-0" style={{ color: '#c98500' }} />
+                              </span>
+                              <div className="text-left space-y-0.5 min-w-0">
+                                <p className="text-[8.5px] md:text-[10px] leading-tight font-medium text-slate-600 dark:text-slate-300">
+                                  Tiết kiệm
+                                </p>
+                                <p className="font-extrabold text-[11px] xs:text-[12px] md:text-[12px] leading-tight whitespace-nowrap" style={{ color: '#c98500' }}>
+                                  680.000đ
+                                </p>
+                                <p className="text-[7.5px] xs:text-[8px] md:text-[10px] opacity-75 leading-none font-medium text-slate-500 whitespace-nowrap">so với mua lẻ</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="h-7 md:h-7 w-full md:w-auto md:min-w-[62px] rounded-full px-3 md:px-2 inline-flex items-center justify-center gap-1 md:gap-0.5 text-[9px] md:text-[10px] font-bold text-white shadow-sm transition-all hover:shadow-md active:scale-95 shrink-0"
+                              style={{ backgroundColor: '#c98500' }}
+                            >
+                              <span>Chọn</span>
+                              <ChevronRight className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={3} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1846,7 +2195,8 @@ export function ProductDetailPreview({
                 <div className="space-y-2 pt-2">
                   <div className="flex gap-2">
                     <button className={cn(
-                      "flex-1 font-bold rounded-xl flex items-center justify-center gap-1.5 text-white transition-transform hover:scale-[1.01]",
+                      "flex-1 font-bold flex items-center justify-center gap-1.5 text-white transition-transform hover:scale-[1.01]",
+                      getRadiusClass('button', cornerRadius),
                       isMobile ? "h-9 px-2.5" : "h-11 px-4",
                       isMobile && (mobileFontSize === 'xs' ? 'text-[10px]' : mobileFontSize === 'sm' ? 'text-xs' : 'text-sm') || 'text-xs'
                     )} style={{ backgroundColor: brandColor }}>
@@ -1854,7 +2204,8 @@ export function ProductDetailPreview({
                       {zaloText}
                     </button>
                     <button className={cn(
-                      "flex-1 font-bold rounded-xl border flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01]",
+                      "flex-1 font-bold border flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01]",
+                      getRadiusClass('button', cornerRadius),
                       isMobile ? "h-9 px-2.5" : "h-11 px-4",
                       isMobile && (mobileFontSize === 'xs' ? 'text-[10px]' : mobileFontSize === 'sm' ? 'text-xs' : 'text-sm') || 'text-xs'
                     )} style={{ borderColor: brandColor, color: brandColor, backgroundColor: tokens.surface }}>
@@ -1863,7 +2214,7 @@ export function ProductDetailPreview({
                     </button>
                   </div>
                   {showAddToCart && (
-                    <button className="w-full h-11 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01]" style={{ borderColor: brandColor, color: brandColor, backgroundColor: tokens.surface }}>
+                    <button className={cn("w-full h-11 text-xs font-bold border flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01]", getRadiusClass('button', cornerRadius))} style={{ borderColor: brandColor, color: brandColor, backgroundColor: tokens.surface }}>
                       <ShoppingCart size={14} />
                       THÊM VÀO GIỎ HÀNG
                     </button>
@@ -1877,7 +2228,11 @@ export function ProductDetailPreview({
                   />
                 )}
 
-
+                {showHighlightBlock && highlightsPosition === 'info_column' && (
+                  <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                    {renderHighlights('info_column')}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1922,7 +2277,7 @@ export function ProductDetailPreview({
               return (
                 <div className="border-t pt-6 mt-8" style={{ borderColor: tokens.divider }}>
                   <div 
-                    className="rounded-2xl py-3 px-2 md:p-5 relative border"
+                    className={cn("py-3 px-2 md:p-5 relative border", getRadiusClass('box', cornerRadius))}
                     style={{ 
                       backgroundColor: tokens.surfaceMuted || '#f8fafc',
                       borderColor: tokens.border || '#e2e8f0'
@@ -2041,7 +2396,7 @@ export function ProductDetailPreview({
                       onClick={() => setActiveAttrModal(null)}
                     >
                       <div 
-                        className="rounded-2xl p-6 max-w-sm w-full border text-center relative shadow-2xl"
+                        className={cn("p-6 max-w-sm w-full border text-center relative shadow-2xl", getRadiusClass('box', cornerRadius))}
                         style={{ 
                           backgroundColor: tokens.surface || '#ffffff',
                           borderColor: tokens.border || '#e2e8f0'
@@ -2079,10 +2434,18 @@ export function ProductDetailPreview({
               const bgColor = BANNER_COLOR_MAP[premiumBannerBg] ?? tokens.primary;
               const textColor = BANNER_COLOR_MAP[premiumBannerText] ?? '#ffffff';
               return (
-                <div className="rounded-2xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center" style={{ backgroundColor: bgColor, color: textColor }}>
+                <div className={cn("p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center", getRadiusClass('box', cornerRadius))} style={{ backgroundColor: bgColor, color: textColor }}>
                   {premiumBannerItems.map((item, idx) => (
-                    <div key={idx} className={`space-y-0.5${idx > 0 ? ' border-l' : ''}`} style={{ borderColor: `${textColor}33` }}>
-                      <p className="text-xs font-extrabold uppercase tracking-wide">{item.title}</p>
+                    <div
+                      key={idx}
+                      className={cn(
+                        "space-y-0.5 min-w-0 px-2 md:px-0",
+                        idx % 2 === 1 && "border-l",
+                        idx % 4 !== 0 && "md:border-l"
+                      )}
+                      style={{ borderColor: `${textColor}33` }}
+                    >
+                      <p className="min-h-[30px] flex items-center justify-center text-xs font-extrabold uppercase tracking-wide leading-tight text-center">{item.title}</p>
                       <p className="text-[10px] opacity-80">{item.subtitle}</p>
                     </div>
                   ))}
@@ -2597,7 +2960,7 @@ function PreviewSocialButtons({
   if (activeButtons.length === 0) return null;
 
   return (
-    <div className="mt-4 pt-4 border-t" style={{ borderColor: tokens.divider }}>
+    <div className="mt-4 pt-4 border-t pb-2" style={{ borderColor: tokens.divider }}>
       <p className="text-xs font-semibold mb-2" style={{ color: tokens.headingColor }}>
         Liên hệ & Mua hàng:
       </p>

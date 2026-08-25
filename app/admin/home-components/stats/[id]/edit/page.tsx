@@ -63,6 +63,8 @@ export default function StatsEditPage({
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
   const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
@@ -582,6 +584,22 @@ export default function StatsEditPage({
               showBadge={showBadge}
               badgeText={badgeText}
               enableAnimation={enableAnimation}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemsChange={(nextItems) => {
+                setStatsItems(nextItems.map((item, idx) => ({
+                  id: statsItems[idx]?.id ?? `stat-${idx}`,
+                  label: item.label,
+                  value: item.value,
+                  description: item.description,
+                  iconType: item.iconType,
+                  iconName: item.iconName,
+                  iconUrl: item.iconUrl,
+                  iconStorageId: item.iconStorageId,
+                })));
+              }}
             />
           </div>
         </div>

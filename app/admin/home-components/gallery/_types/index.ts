@@ -7,7 +7,7 @@ import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 export type GalleryStyle = 'spotlight' | 'explore' | 'stories' | 'grid' | 'marquee' | 'masonry';
 
 export type GalleryCornerRadius = 'none' | 'sm' | 'lg';
-export type GalleryDesktopColumns = 3 | 4;
+export type GalleryDesktopColumns = 3 | 4 | 6;
 
 export const DEFAULT_GALLERY_CORNER_RADIUS: GalleryCornerRadius = 'lg';
 export const DEFAULT_GALLERY_DESKTOP_COLUMNS: GalleryDesktopColumns = 4;
@@ -132,5 +132,8 @@ export function normalizeGalleryCornerRadius(value: unknown, noBorderRadius?: un
 }
 
 export function normalizeGalleryDesktopColumns(value: unknown): GalleryDesktopColumns {
-  return value === 3 ? 3 : DEFAULT_GALLERY_DESKTOP_COLUMNS;
+  if (value === 3 || value === 4 || value === 6) {
+    return value as GalleryDesktopColumns;
+  }
+  return DEFAULT_GALLERY_DESKTOP_COLUMNS;
 }

@@ -17,7 +17,9 @@ import {
 } from '@/app/admin/home-components/faq/_types';
 import type { HomeComponentSectionProps } from '../types';
 
-export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function FaqRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const faqConfig = config as FaqConfig & { items?: Array<{ question?: string; answer?: string }>; style?: FaqStyle };
   const items: FaqItem[] = (faqConfig.items ?? []).map((item, idx) => ({
     answer: item.answer ?? '',
@@ -25,7 +27,7 @@ export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }
     question: item.question ?? '',
   }));
   const style: FaqStyle = faqConfig.style ?? 'wine-list';
-  const tokens = getFaqColors({ primary: brandColor, secondary, mode, style });
+  const tokens = adaptTokensForDarkMode(getFaqColors({ primary: brandColor, secondary, mode, style }), isDark ?? false);
   const headerConfig = extractSectionHeaderConfig(config);
   const spacingClassName = getFaqSectionSpacingClassName(normalizeFaqSpacing(faqConfig.spacing, faqConfig.noVerticalMargin));
   const rounded = normalizeFaqRounded(faqConfig.cornerRadius ?? faqConfig.rounded, faqConfig.noBorderRadius);
@@ -52,7 +54,7 @@ export function FaqRuntimeSection({ config, brandColor, secondary, mode, title }
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       <section className={cn(style === 'cards' ? 'px-1 sm:px-3' : 'px-3', spacingClassName)}>
-        <div className="mx-auto max-w-7xl space-y-6">
+        <div className="mx-auto max-w-7xl tv:max-w-[1400px] space-y-6">
           <SectionHeader
             title={title}
             subtitle={headerConfig.subtitle}

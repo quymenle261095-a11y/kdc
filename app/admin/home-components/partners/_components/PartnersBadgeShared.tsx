@@ -4,7 +4,7 @@ import React from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../../components/ui';
 import { getPartnersColors, type PartnersBrandMode } from '../_lib/colors';
-import { getPartnersContentTopSpacingClassName, getPartnersCornerRadiusClassName, getPartnersHeaderSpacingClassName, getPartnersItemGapClassName, getPartnersLogoBoxClassName, getPartnersLogoCardClassName, getPartnersLogoFallbackSize, getPartnersSectionSpacingClassName, type PartnersAlign, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing } from '../_types';
+import { getPartnersContentTopSpacingClassName, getPartnersCornerRadiusClassName, getPartnersHeaderSpacingClassName, getPartnersItemGapClassName, getPartnersLogoCardClassName, getPartnersLogoFallbackSize, getPartnersSectionSpacingClassName, type PartnersAlign, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing } from '../_types';
 import { PartnersSectionHeader } from './PartnersSectionHeader';
 
 export type PartnerBadgeItem = {
@@ -34,7 +34,8 @@ export const PartnersBadgeShared = ({
   openInNewTab = false,
   skipHeader = false,
   className,
-
+  visualEditEnabled,
+  onItemNameChange,
 }: {
   items: PartnerBadgeItem[];
   brandColor: string;
@@ -54,19 +55,20 @@ export const PartnersBadgeShared = ({
   skipHeader?: boolean;
   variant?: 'preview' | 'site';
   className?: string;
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   if (items.length === 0) {return null;}
 
   const visibleItems = items.slice(0, maxVisible);
   const colors = React.useMemo(() => getPartnersColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
-  const shouldAnimate = visibleItems.length > 1;
+  const shouldAnimate = visibleItems.length > 1 && !visualEditEnabled;
   const loopCount = shouldAnimate ? 2 : 1;
   const duration = Math.max(12, visibleItems.length * 3);
   const [isPaused, setIsPaused] = React.useState(false);
   const linkProps = openInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {};
   const showName = displayMode === 'withName';
   const radiusClassName = getPartnersCornerRadiusClassName(cornerRadius);
-  const logoBoxClassName = getPartnersLogoBoxClassName('compact', logoSize, showName);
   const logoCardClassName = getPartnersLogoCardClassName('compact', logoSize, showName);
   const fallbackIconSize = getPartnersLogoFallbackSize('compact', logoSize, showName);
   const sectionSpacingClassName = getPartnersSectionSpacingClassName(spacing, 'default', skipHeader);
@@ -128,17 +130,30 @@ export const PartnersBadgeShared = ({
                   onMouseLeave={(event) => { event.currentTarget.style.borderColor = ''; }}
                   {...linkProps}
                 >
-                  <div className={cn(
-                    'flex w-full items-center justify-center',
-                    logoBoxClassName,
-                  )}>
+                  <div className="flex w-full items-center justify-center">
                     {item.url
-                      ? renderImage(item, 'h-full w-auto max-w-full object-contain')
+                      ? renderImage(item, 'w-full h-auto object-contain')
                       : <ImageIcon size={fallbackIconSize} className="text-slate-300" />}
                   </div>
                   {showName && (
-                    <span className="w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm">
-                      {item.name ?? `Đối tác ${idx + 1}`}
+                    <span
+                      contentEditable={visualEditEnabled}
+                      suppressContentEditableWarning={visualEditEnabled}
+                      onClick={(e) => {
+                        if (visualEditEnabled) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }
+                      }}
+                      onBlur={visualEditEnabled ? (e) => {
+                        onItemNameChange?.(idx, e.currentTarget.textContent ?? '');
+                      } : undefined}
+                      className={cn(
+                        "w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm",
+                        visualEditEnabled && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text"
+                      )}
+                    >
+                      {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${idx + 1}`)}
                     </span>
                   )}
                 </a>

@@ -7,6 +7,7 @@ import { useContactPageData } from '@/components/site/useContactPageData';
 import OpenStreetMapDisplay from '@/components/maps/OpenStreetMapDisplay';
 import { ContactInquiryForm } from '@/components/contact/ContactInquiryForm';
 import { sanitizeGoogleMapIframe } from '@/lib/contact/getContactMapData';
+import { useSiteSettings } from '@/components/site/hooks';
 
 type SocialLinkItem = { label: string; href: string; color: string; icon: React.ElementType };
 
@@ -62,6 +63,7 @@ function ContactInfoCard({
   taxId,
   showSocialLinks,
   socialLinks,
+  isDark,
 }: {
   brandColor: string;
   secondaryColor: string;
@@ -71,6 +73,7 @@ function ContactInfoCard({
   taxId: string;
   showSocialLinks: boolean;
   socialLinks: SocialLinkItem[];
+  isDark: boolean;
 }) {
   const infoItems = [
     { label: 'Điện thoại', value: phone, icon: Phone },
@@ -80,40 +83,40 @@ function ContactInfoCard({
   ].filter((item) => item.value);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-      <h3 className="font-semibold mb-4" style={{ color: brandColor }}>Thông tin liên hệ</h3>
+    <div className="bg-white dark:bg-[#161617] rounded-xl border border-slate-200 dark:border-zinc-800 p-5 shadow-sm">
+      <h3 className="font-semibold mb-4 text-slate-900 dark:text-[#f5f5f7]" style={!isDark ? { color: brandColor } : undefined}>Thông tin liên hệ</h3>
       <div className="space-y-4">
         {infoItems.length === 0 ? (
-          <div className="text-sm text-slate-500">Chưa có dữ liệu liên hệ.</div>
+          <div className="text-sm text-slate-500 dark:text-[#86868b]">Chưa có dữ liệu liên hệ.</div>
         ) : (
           infoItems.map((item) => (
             <div key={item.label} className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-50 border border-slate-200">
-                <item.icon size={18} style={{ color: secondaryColor }} />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-50 dark:bg-[#2c2c2e] border border-slate-200 dark:border-zinc-800/80 shrink-0">
+                <item.icon size={18} style={!isDark ? { color: secondaryColor } : { color: '#f5f5f7' }} />
               </div>
-              <div>
-                <div className="font-medium text-slate-900">{item.label}</div>
-                <div className="text-sm text-slate-500 break-words">{item.value}</div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-slate-900 dark:text-[#f5f5f7]">{item.label}</div>
+                <div className="text-sm text-slate-500 dark:text-[#86868b] break-words">{item.value}</div>
               </div>
             </div>
           ))
         )}
       </div>
       {showSocialLinks && socialLinks.length > 0 && (
-        <div className="pt-4 mt-4 border-t border-slate-200">
-          <div className="text-sm font-medium mb-2" style={{ color: secondaryColor }}>Theo dõi chúng tôi</div>
-          <div className="flex flex-wrap gap-2">
+        <div className="pt-4 mt-4 border-t border-slate-200 dark:border-zinc-800">
+          <div className="text-sm font-medium mb-3" style={!isDark ? { color: secondaryColor } : { color: '#86868b' }}>Theo dõi chúng tôi</div>
+          <div className="flex flex-wrap gap-2.5">
             {socialLinks.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
                 target="_blank"
                 rel="noreferrer"
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-white"
-                style={{ backgroundColor: item.color }}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 dark:text-[#f5f5f7] bg-slate-100 dark:bg-[#2c2c2e] border border-slate-200 dark:border-zinc-800 transition-all duration-200 hover:bg-slate-200 dark:hover:bg-[#3a3a3c] hover:scale-105"
+                style={!isDark ? { backgroundColor: item.color, color: '#fff' } : undefined}
                 aria-label={item.label}
               >
-                <item.icon size={18} />
+                <item.icon size={17} />
               </a>
             ))}
           </div>
@@ -132,6 +135,7 @@ function CorporateSidebar({
   socialLinks,
   brandColor,
   secondaryColor,
+  isDark,
 }: {
   address: string;
   email: string;
@@ -141,9 +145,10 @@ function CorporateSidebar({
   socialLinks: SocialLinkItem[];
   brandColor: string;
   secondaryColor: string;
+  isDark: boolean;
 }) {
-  const sidebarColor = darkenColor(brandColor, 0.5);
-  const glowColor = withAlpha(brandColor, 0.18);
+  const sidebarColor = isDark ? '#1c1c1e' : darkenColor(brandColor, 0.5);
+  const glowColor = isDark ? withAlpha(brandColor, 0.10) : withAlpha(brandColor, 0.18);
   const infoItems = [
     { label: 'Điện thoại', value: phone, note: 'Thứ 2 - Thứ 7, 8:00 - 17:00', icon: Phone },
     { label: 'Email', value: email, note: 'Phản hồi trong vòng 24 giờ', icon: Mail },
@@ -153,29 +158,33 @@ function CorporateSidebar({
 
   return (
     <div
-      className="relative lg:w-5/12 text-white p-6 lg:p-8 flex flex-col justify-between overflow-hidden"
+      className="relative lg:w-5/12 flex flex-col justify-between overflow-hidden p-6 lg:p-8 border-r border-zinc-800/60"
       style={{ backgroundColor: sidebarColor }}
     >
-      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full blur-3xl" style={{ backgroundColor: glowColor }} />
-      <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 rounded-full blur-3xl" style={{ backgroundColor: glowColor }} />
+      {/* Glow effects */}
+      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: glowColor }} />
+      <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: glowColor }} />
+
       <div className="relative z-10">
-        <h2 className="text-2xl font-bold tracking-tight mb-2">Liên hệ với chúng tôi</h2>
-        <p className="text-white/80 text-sm mb-8">
+        <h2 className={`text-2xl font-bold tracking-tight mb-2 ${isDark ? 'text-[#f5f5f7]' : 'text-white'}`}>
+          Liên hệ với chúng tôi
+        </h2>
+        <p className={`text-sm mb-8 ${isDark ? 'text-[#86868b]' : 'text-white/80'}`}>
           Chúng tôi luôn sẵn sàng lắng nghe và hỗ trợ giải pháp tốt nhất cho doanh nghiệp của bạn.
         </p>
         <div className="space-y-6">
           {infoItems.length === 0 ? (
-            <div className="text-sm text-white/70">Chưa có dữ liệu liên hệ.</div>
+            <div className={`text-sm ${isDark ? 'text-[#86868b]' : 'text-white/70'}`}>Chưa có dữ liệu liên hệ.</div>
           ) : (
             infoItems.map((item) => (
               <div key={item.label} className="flex items-start gap-4">
-                <div className="bg-white/10 p-3 rounded-lg">
-                  <item.icon size={20} style={{ color: secondaryColor }} />
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-[#2c2c2e] border border-zinc-700' : 'bg-white/10'}`}>
+                  <item.icon size={20} style={{ color: isDark ? '#f5f5f7' : secondaryColor }} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">{item.label}</h3>
-                  <p className="text-base font-semibold mt-1 break-words text-white">{item.value}</p>
-                  {item.note && <p className="text-xs text-white/70 mt-1">{item.note}</p>}
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-[#86868b]' : 'text-white'}`}>{item.label}</h3>
+                  <p className={`text-base font-semibold mt-1 break-words ${isDark ? 'text-[#f5f5f7]' : 'text-white'}`}>{item.value}</p>
+                  {item.note && <p className={`text-xs mt-1 ${isDark ? 'text-[#6e6e73]' : 'text-white/70'}`}>{item.note}</p>}
                 </div>
               </div>
             ))
@@ -184,7 +193,7 @@ function CorporateSidebar({
       </div>
       {showSocialLinks && socialLinks.length > 0 && (
         <div className="relative z-10 mt-8">
-          <h3 className="text-sm font-semibold text-white mb-3">Theo dõi chúng tôi</h3>
+          <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-[#86868b]' : 'text-white'}`}>Theo dõi chúng tôi</h3>
           <div className="flex gap-3">
             {socialLinks.map((item) => (
               <a
@@ -192,8 +201,8 @@ function CorporateSidebar({
                 href={item.href}
                 target="_blank"
                 rel="noreferrer"
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white"
-                style={{ backgroundColor: item.color }}
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 ${isDark ? 'bg-[#2c2c2e] border border-zinc-700 text-[#f5f5f7] hover:bg-[#3a3a3c]' : 'text-white'}`}
+                style={!isDark ? { backgroundColor: item.color } : undefined}
                 aria-label={item.label}
               >
                 <item.icon size={16} />
@@ -212,7 +221,7 @@ function GoogleMapEmbed({ iframeHtml }: { iframeHtml: string }) {
   }
   return (
     <div
-      className="rounded-xl overflow-hidden border"
+      className="rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800"
       dangerouslySetInnerHTML={{ __html: iframeHtml }}
     />
   );
@@ -246,30 +255,42 @@ function MapPreview({
 
 export default function ContactPage() {
   const { isLoading: isContactLoading, brandColor, secondaryColor, colorMode, config, contactData, socialLinks } = useContactPageData();
+  const { isDark } = useSiteSettings();
   const pathname = usePathname();
   const resolvedSecondary = resolveSecondary(brandColor, secondaryColor, colorMode);
-  const isContactLoadingState = isContactLoading;
 
-  if (isContactLoadingState) {
+  if (isContactLoading) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-10">
-        <div className="h-8 w-48 bg-slate-200 rounded-lg animate-pulse" />
-        <div className="h-4 w-64 bg-slate-200 rounded-lg animate-pulse mt-3" />
+        <div className="h-8 w-48 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
+        <div className="h-4 w-64 bg-slate-200 dark:bg-zinc-800 rounded-lg animate-pulse mt-3" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
+    <div className="max-w-6xl mx-auto px-4 py-10 md:py-14">
+      {/* Page header */}
       {config.layoutStyle !== 'form-only' && (
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold" style={{ color: brandColor }}>Liên hệ với chúng tôi</h1>
-          <p className="mt-2" style={{ color: resolvedSecondary }}>Chúng tôi luôn sẵn sàng hỗ trợ bạn.</p>
+        <div className="text-center mb-10">
+          <h1
+            className="text-3xl font-bold tracking-tight"
+            style={{ color: brandColor }}
+          >
+            Liên hệ với chúng tôi
+          </h1>
+          <p
+            className="mt-2 text-base dark:text-[#86868b]"
+            style={!isDark ? { color: resolvedSecondary } : undefined}
+          >
+            Chúng tôi luôn sẵn sàng hỗ trợ bạn.
+          </p>
         </div>
       )}
 
+      {/* Layout: form-only — corporate card */}
       {config.layoutStyle === 'form-only' && (
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col lg:flex-row">
+        <div className="bg-white dark:bg-[#111111] rounded-2xl shadow-xl dark:shadow-none overflow-hidden border border-slate-100 dark:border-zinc-800 flex flex-col lg:flex-row">
           {config.showContactInfo && (
             <CorporateSidebar
               address={contactData.address}
@@ -280,9 +301,10 @@ export default function ContactPage() {
               socialLinks={socialLinks}
               brandColor={brandColor}
               secondaryColor={resolvedSecondary}
+              isDark={isDark}
             />
           )}
-          <div className={`${config.showContactInfo ? 'lg:w-7/12' : 'w-full'} bg-white p-6 lg:p-8 space-y-6`}>
+          <div className={`${config.showContactInfo ? 'lg:w-7/12' : 'w-full'} bg-white dark:bg-[#111111] p-6 lg:p-8 space-y-6`}>
             <ContactInquiryForm
               brandColor={brandColor}
               secondaryColor={resolvedSecondary}
@@ -302,6 +324,7 @@ export default function ContactPage() {
         </div>
       )}
 
+      {/* Layout: with-map */}
       {config.layoutStyle === 'with-map' && (
         <div className="space-y-4">
           {config.showMap && (
@@ -330,12 +353,14 @@ export default function ContactPage() {
                 taxId={contactData.taxId}
                 showSocialLinks={config.showSocialLinks}
                 socialLinks={socialLinks}
+                isDark={isDark}
               />
             )}
           </div>
         </div>
       )}
 
+      {/* Layout: with-info */}
       {config.layoutStyle === 'with-info' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3">
@@ -357,6 +382,7 @@ export default function ContactPage() {
                 taxId={contactData.taxId}
                 showSocialLinks={config.showSocialLinks}
                 socialLinks={socialLinks}
+                isDark={isDark}
               />
             )}
             {config.showMap && (

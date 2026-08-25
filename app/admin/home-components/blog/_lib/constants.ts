@@ -2,13 +2,13 @@ import type { Id } from '@/convex/_generated/dataModel';
 import type { BlogConfig, DemoBlogItem } from '../_types';
 
 export const BLOG_STYLES = [
-  { id: 'layout1', label: 'Layout 1' },
-  { id: 'layout2', label: 'Layout 2' },
-  { id: 'layout3', label: 'Layout 3' },
-  { id: 'layout4', label: 'Layout 4' },
-  { id: 'layout5', label: 'Layout 5' },
-  { id: 'layout6', label: 'Layout 6' },
-  { id: 'layout7', label: 'Layout 7' }
+  { id: 'layout1', label: '(1) Lưới thẻ' },
+  { id: 'layout2', label: '(2) Bài lớn' },
+  { id: 'layout3', label: '(3) Xếp dọc' },
+  { id: 'layout4', label: '(4) Trượt ngang' },
+  { id: 'layout5', label: '(5) Ô ghép' },
+  { id: 'layout6', label: '(6) Tin chính' },
+  { id: 'layout7', label: '(7) Tối giản' }
 ];
 
 export const DEFAULT_BLOG_CONFIG: BlogConfig = {

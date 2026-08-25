@@ -1,16 +1,22 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ArrowLeft, CreditCard, Loader2, MapPin, Package, ShoppingBag, Truck, User } from 'lucide-react';
+import { Copy, CreditCard, ExternalLink, Loader2, MapPin, Package, ShoppingBag, Truck, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
 import { useOrderStatuses } from '@/lib/experiences';
 import { DigitalCredentialsForm } from '@/components/orders/DigitalCredentialsForm';
+import { buildAbsoluteWebUrl, buildAdminOrderDetailPath, buildPublicOrderLookupPath } from '@/lib/orders/links';
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormPageWrapper,
+  AdminStickyFooter,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'orders';
 
@@ -33,10 +39,12 @@ const PAYMENT_METHODS: Record<PaymentMethod, string> = {
 };
 
 export default function EditOrderPage() {
+  const router = useRouter();
   const params = useParams();
   const orderId = params.id as Id<"orders">;
 
   const orderData = useQuery(api.orders.getById, { id: orderId });
+  useSetAdminBreadcrumb(orderData?.orderNumber);
   const customerData = useQuery(api.customers.getById, orderData?.customerId ? { id: orderData.customerId } : "skip");
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
   const updateOrder = useMutation(api.orders.update);
@@ -148,23 +156,62 @@ export default function EditOrderPage() {
     );
   }
 
-  return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-4">
-        <Link href="/admin/orders">
-          <Button variant="ghost" size="icon"><ArrowLeft size={20}/></Button>
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{orderData.orderNumber}</h1>
-            <Badge variant={getStatusVariant(orderData.status)}>
-              {statusMap.get(orderData.status)?.label ?? orderData.status}
-            </Badge>
-          </div>
-          <p className="text-sm text-slate-500">Tạo lúc: {formatDate(orderData._creationTime)}</p>
-        </div>
-      </div>
+  const publicOrderLookupPath = buildPublicOrderLookupPath(orderData.orderNumber);
+  const adminOrderDetailPath = buildAdminOrderDetailPath(orderData._id);
+  const publicOrderLookupUrl = typeof window === 'undefined'
+    ? publicOrderLookupPath
+    : buildAbsoluteWebUrl(window.location.origin, publicOrderLookupPath);
+  const adminOrderDetailUrl = typeof window === 'undefined'
+    ? adminOrderDetailPath
+    : buildAbsoluteWebUrl(window.location.origin, adminOrderDetailPath);
+  const handleCopyUrl = async (url: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`Đã copy ${label}.`);
+    } catch {
+      toast.error(`Không thể copy ${label}.`);
+    }
+  };
 
+  const hasChanges = useMemo(() => {
+    if (!orderData) return false;
+    return (
+      status !== (orderData.status || '') ||
+      paymentStatus !== ((orderData.paymentStatus as PaymentStatus) || 'Pending') ||
+      trackingNumber !== (orderData.trackingNumber || '') ||
+      shippingAddress !== (orderData.shippingAddress || '') ||
+      note !== (orderData.note || '')
+    );
+  }, [orderData, status, paymentStatus, trackingNumber, shippingAddress, note]);
+
+  return (
+    <AdminFormPageWrapper
+      title={orderData?.orderNumber || 'Chỉnh sửa đơn hàng'}
+      subtitle={orderData ? `Tạo lúc: ${formatDate(orderData._creationTime)}` : undefined}
+      backHref="/admin/orders"
+      isLoading={isLoading}
+      notFound={orderData === null}
+      notFoundMessage="Không tìm thấy đơn hàng"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      isDirty={hasChanges}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          hasChanges={hasChanges}
+          submitLabel="Lưu thay đổi"
+          onCancel={() => router.push('/admin/orders')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+        />
+      }
+      extraHeaderAction={
+        orderData ? (
+          <Badge variant={getStatusVariant(orderData.status)}>
+            {statusMap.get(orderData.status)?.label ?? orderData.status}
+          </Badge>
+        ) : undefined
+      }
+    >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main content */}
@@ -198,8 +245,12 @@ export default function EditOrderPage() {
                     <div key={index} className="py-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded flex items-center justify-center">
-                            <Package size={16} className="text-slate-400" />
+                          <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded flex items-center justify-center overflow-hidden shrink-0">
+                            {item.productImage ? (
+                              <img src={item.productImage} alt={item.productName} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package size={16} className="text-slate-400" />
+                            )}
                           </div>
                           <div>
                             <p className="font-medium">{item.productName}</p>
@@ -366,19 +417,40 @@ export default function EditOrderPage() {
               </Card>
             )}
 
-            {/* Actions */}
-            <div className="flex flex-col gap-2">
-              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-                Cập nhật đơn hàng
-              </Button>
-              <Link href="/admin/orders">
-                <Button type="button" variant="outline" className="w-full">Quay lại</Button>
-              </Link>
-            </div>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>Liên kết nhanh</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Link khách tra cứu</Label>
+                  <div className="flex gap-2">
+                    <Input value={publicOrderLookupUrl} readOnly className="font-mono text-xs" />
+                    <Button type="button" variant="outline" size="icon" title="Copy link khách" onClick={async () => handleCopyUrl(publicOrderLookupUrl, 'link khách')}>
+                      <Copy size={16} />
+                    </Button>
+                    <Button type="button" variant="outline" size="icon" title="Mở link khách" onClick={() => window.open(publicOrderLookupUrl, '_blank', 'noopener,noreferrer')}>
+                      <ExternalLink size={16} />
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Link admin đơn này</Label>
+                  <div className="flex gap-2">
+                    <Input value={adminOrderDetailUrl} readOnly className="font-mono text-xs" />
+                    <Button type="button" variant="outline" size="icon" title="Copy link admin" onClick={async () => handleCopyUrl(adminOrderDetailUrl, 'link admin')}>
+                      <Copy size={16} />
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Dùng các link này để dán cho khách hoặc lưu nội bộ khi email hệ thống chưa sẵn sàng.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </form>
-    </div>
+    </AdminFormPageWrapper>
   );
 }

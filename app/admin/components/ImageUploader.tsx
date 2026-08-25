@@ -19,11 +19,11 @@ type InputMode = 'upload' | 'url';
 interface ImageUploaderProps {
   value?: string;
   onChange: (url: string | undefined, storageId?: Id<'_storage'>) => void;
-  storageId?: Id<'_storage'>;
+  storageId?: Id<'_storage'> | null;
   folder?: string;
   naming?: ImageNamingContext;
   className?: string;
-  aspectRatio?: 'square' | 'video' | 'auto';
+  aspectRatio?: 'square' | 'video' | 'portrait' | 'auto';
   cropAspectRatio?: ImageAspectRatioInput;
   quality?: number;
   deleteMode?: 'immediate' | 'defer';
@@ -60,7 +60,7 @@ export function ImageUploader({
   useEffect(() => {
     setPreview(value);
     setHasError(false);
-    setCurrentStorageId(storageId);
+    setCurrentStorageId(storageId ?? undefined);
     if (value && !value.includes('convex.cloud')) {
       setUrlInput(value);
     }
@@ -182,6 +182,7 @@ export function ImageUploader({
 
   const aspectClasses = {
     auto: 'min-h-[160px]',
+    portrait: 'aspect-[3/4]',
     square: 'aspect-square',
     video: 'aspect-video',
   };
@@ -262,7 +263,7 @@ export function ImageUploader({
               fill
               sizes="(max-width: 768px) 100vw, 400px"
               className="object-cover"
-              onError={() => { setHasError(true); setPreview(undefined); onChange(undefined, undefined); }}
+              onError={() => { setHasError(true); }}
             />
           ) : null}
           <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">

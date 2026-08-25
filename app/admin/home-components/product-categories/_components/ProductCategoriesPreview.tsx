@@ -1,11 +1,14 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
+
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { PRODUCT_CATEGORIES_STYLES } from '../_lib/constants';
 import { getProductCategoriesColors } from '../_lib/colors';
@@ -24,6 +27,7 @@ import type {
   ProductCategoriesSelectionMode,
   ProductCategoriesStyle,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 export const ProductCategoriesPreview = ({ 
   config, 
@@ -33,11 +37,15 @@ export const ProductCategoriesPreview = ({
   mode,
   selectedStyle, 
   onStyleChange,
-  categoriesData,
+  categoriesData = [],
   fontStyle,
   fontClassName,
   selectionMode = 'real',
   demoCategories = [],
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: { 
   config: ProductCategoriesConfig;
   title?: string;
@@ -46,17 +54,53 @@ export const ProductCategoriesPreview = ({
   mode: ProductCategoriesBrandMode;
   selectedStyle?: ProductCategoriesStyle;
   onStyleChange?: (style: ProductCategoriesStyle) => void;
-  categoriesData: CategoryData[];
+  categoriesData?: CategoryData[];
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
   selectionMode?: ProductCategoriesSelectionMode;
   demoCategories?: DemoProductCategoryItem[];
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
   const previewStyle = (selectedStyle ?? config.style) || 'image-strip';
   const setPreviewStyle = (s: string) => onStyleChange?.(s as ProductCategoriesStyle);
-  const colors = React.useMemo(() => getProductCategoriesColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
+  const colors = React.useMemo(() => adaptTokensForDarkMode(getProductCategoriesColors(brandColor, secondary, mode), isDark), [brandColor, secondary, mode, isDark]);
   const productsData = useQuery(api.products.listPublicResolved, { limit: 100 });
+  const categoriesConfig = React.useMemo(() => config.categories ?? [], [config.categories]);
+
+  const productIdsForImages = React.useMemo(() => {
+    const ids: string[] = [];
+    for (const item of categoriesConfig) {
+      if (item.imageMode === 'product-image' && item.customImage?.startsWith('product:')) {
+        const id = item.customImage.replace('product:', '');
+        if (id) ids.push(id);
+      }
+    }
+    return ids;
+  }, [categoriesConfig]);
+
+  const targetProductsData = useQuery(api.products.listByIds, { ids: productIdsForImages as any });
+  const categoriesWithStats = useQuery(api.productCategories.listActiveWithStats, { productLimit: 5000 });
+
   const categoryMap = React.useMemo(() => {
     const map: Record<string, CategoryData> = {};
     for (const cat of categoriesData) {
@@ -64,6 +108,7 @@ export const ProductCategoriesPreview = ({
     }
     return map;
   }, [categoriesData]);
+
   const productImageMap = React.useMemo(() => {
     const map: Record<string, { image?: string }> = {};
     if (productsData) {
@@ -71,19 +116,24 @@ export const ProductCategoriesPreview = ({
         map[product._id] = { image: product.image };
       }
     }
-    return map;
-  }, [productsData]);
-  const productCountMap = React.useMemo(() => {
-    const map: Record<string, number> = {};
-    if (productsData) {
-      for (const product of productsData) {
-        map[product.categoryId] = (map[product.categoryId] || 0) + 1;
+    if (targetProductsData) {
+      for (const product of targetProductsData) {
+        map[product._id] = { image: product.image };
       }
     }
     return map;
-  }, [productsData]);
+  }, [productsData, targetProductsData]);
 
-  const categoriesConfig = React.useMemo(() => config.categories ?? [], [config.categories]);
+  const productCountMap = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    if (categoriesWithStats?.stats) {
+      for (const stat of categoriesWithStats.stats) {
+        map[stat.categoryId] = stat.productCount;
+      }
+    }
+    return map;
+  }, [categoriesWithStats]);
+
   const uniqueCategories = React.useMemo(() => (
     categoriesConfig.filter((item, index, arr) => {
       if (!item.categoryId) {return true;}
@@ -99,7 +149,7 @@ export const ProductCategoriesPreview = ({
       const imageMode = item.imageMode ?? 'default';
       let displayImage = cat.image;
       let displayIcon: string | undefined;
-      
+
       if (imageMode === 'icon' && item.customImage?.startsWith('icon:')) {
         displayIcon = item.customImage.replace('icon:', '');
         displayImage = undefined;
@@ -109,7 +159,7 @@ export const ProductCategoriesPreview = ({
       } else if (imageMode === 'upload' || imageMode === 'url') {
         displayImage = item.customImage ?? cat.image;
       }
-      
+
       return {
         ...cat,
         itemId: item.id || idx,
@@ -161,38 +211,48 @@ export const ProductCategoriesPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame>
-          <ProductCategoriesSectionShared
-            title={title ?? 'Danh mục sản phẩm'}
-            subtitle={subtitle}
-            subheading={subtitle}
-            headerAlign={headerAlign}
-            align={headerAlign}
-            hideHeader={config.hideHeader}
-            showTitle={config.showTitle}
-            showSubtitle={config.showSubtitle}
-            titleColorPrimary={config.titleColorPrimary}
-            subtitleAboveTitle={config.subtitleAboveTitle}
-            uppercaseText={config.uppercaseText}
-            showBadge={config.showBadge}
-            badgeText={config.badgeText}
-            style={previewStyle}
-            items={finalItems}
-            colors={colors}
-            brandColor={brandColor}
-            context="preview"
-            device={device}
-            mode={mode}
-            showProductCount={config.showProductCount}
-            spacing={config.spacing}
-            cornerRadius={config.cornerRadius}
-            desktopColumns={config.desktopColumns}
-            fontClassName={fontClassName}
-            fontStyle={fontStyle}
-            getItemHref={(item) => item.link || `#`}
-          />
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <BrowserFrame>
+            <ProductCategoriesSectionShared
+              title={title ?? 'Danh mục sản phẩm'}
+              subtitle={subtitle}
+              subheading={subtitle}
+              headerAlign={headerAlign}
+              align={headerAlign}
+              hideHeader={config.hideHeader}
+              showTitle={config.showTitle}
+              showSubtitle={config.showSubtitle}
+              titleColorPrimary={config.titleColorPrimary}
+              subtitleAboveTitle={config.subtitleAboveTitle}
+              uppercaseText={config.uppercaseText}
+              showBadge={config.showBadge}
+              badgeText={config.badgeText}
+              style={previewStyle}
+              items={finalItems}
+              colors={colors}
+              brandColor={brandColor}
+              context="preview"
+              device={device}
+              mode={mode}
+              showProductCount={config.showProductCount}
+              spacing={config.spacing}
+              cornerRadius={config.cornerRadius}
+              desktopColumns={config.desktopColumns}
+              fontClassName={fontClassName}
+              fontStyle={fontStyle}
+              getItemHref={(item) => item.link || `#`}
+              visualEditEnabled={isVisualEditActive}
+              onTitleChange={onTitleChange}
+              onSubtitleChange={onSubtitleChange}
+              onBadgeTextChange={onBadgeTextChange}
+            />
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       <ColorInfoPanel brandColor={brandColor} secondary={secondary} />

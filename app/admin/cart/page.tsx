@@ -8,7 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { AlertTriangle, CheckCircle, Eye, Loader2, Search, ShoppingCart, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { ColumnToggle, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminPagination, BulkActionBar, ColumnToggle, FilterSelect, generatePaginationItems, getNextSortState, ResetFilterButton, SearchInput, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 
 const MODULE_KEY = 'cart';
@@ -70,7 +70,7 @@ function CartContent() {
 
   const columns = useMemo(() => {
     const cols = [
-      { key: 'select', label: 'Chọn' },
+      { key: 'select', label: 'Chọn', required: true },
       { key: 'customer', label: 'Khách hàng / Session', required: true },
       { key: 'itemsCount', label: 'Số SP' },
       { key: 'totalAmount', label: 'Tổng tiền' },
@@ -98,7 +98,7 @@ function CartContent() {
     })) ?? [], [cartsData, customerMap]);
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
   };
 
   const toggleColumn = (key: string) => {
@@ -281,16 +281,22 @@ function CartContent() {
       <Card>
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
           <div className="flex flex-wrap gap-3 flex-1">
-            <div className="relative max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Tìm khách hàng, session..." className="pl-9 w-48" value={searchTerm} onChange={(e) =>{  handleSearchChange(e.target.value); }} />
-            </div>
-            <select className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" value={filterStatus} onChange={(e) =>{  handleFilterChange(e.target.value); }}>
-              <option value="">Tất cả trạng thái</option>
-              <option value="Active">Hoạt động</option>
-              <option value="Abandoned">Bỏ dở</option>
-              <option value="Converted">Đã đặt hàng</option>
-            </select>
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => handleSearchChange(val)}
+              placeholder="Tìm khách hàng, session..."
+            />
+            <FilterSelect
+              value={filterStatus}
+              onChange={(val) => handleFilterChange(val)}
+              placeholder="Tất cả trạng thái"
+              options={[
+                { value: 'Active', label: 'Hoạt động' },
+                { value: 'Abandoned', label: 'Bỏ dở' },
+                { value: 'Converted', label: 'Đã đặt hàng' },
+              ]}
+            />
+            <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterStatus)} onReset={() => { setSearchTerm(''); setFilterStatus(''); setCurrentPage(1); }} />
           </div>
           <ColumnToggle columns={columns} visibleColumns={visibleColumns} onToggle={toggleColumn} />
         </div>
@@ -342,7 +348,7 @@ function CartContent() {
                 {visibleColumns.includes('createdAt') && <TableCell className="text-slate-500 text-sm">{formatDate(cart._creationTime)}</TableCell>}
                 {visibleColumns.includes('actions') && (
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-1">
                       <Link href={`/admin/cart/${cart._id}`}><Button variant="ghost" size="icon" title="Xem chi tiết"><Eye size={16}/></Button></Link>
                       <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(cart._id)}><Trash2 size={16}/></Button>
                     </div>
@@ -359,36 +365,14 @@ function CartContent() {
             )}
           </TableBody>
         </Table>
-        {sortedData.length > 0 && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-sm text-slate-500">
-              Hiển thị {(currentPage - 1) * cartsPerPage + 1} - {Math.min(currentPage * cartsPerPage, sortedData.length)} / {sortedData.length} giỏ hàng
-            </span>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={currentPage === 1}
-                  onClick={() =>{  setCurrentPage(p => p - 1); }}
-                >
-                  Trước
-                </Button>
-                <span className="text-sm text-slate-600 dark:text-slate-400">
-                  Trang {currentPage} / {totalPages}
-                </span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={currentPage === totalPages}
-                  onClick={() =>{  setCurrentPage(p => p + 1); }}
-                >
-                  Sau
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={cartsPerPage}
+          totalItems={sortedData.length}
+          onPageChange={setCurrentPage}
+          entityLabel="giỏ hàng"
+        />
       </Card>
     </div>
   );

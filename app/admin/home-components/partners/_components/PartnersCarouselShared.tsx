@@ -32,6 +32,8 @@ const PartnersCarouselInner = ({
   skipHeader = false,
   renderImage,
   className,
+  visualEditEnabled,
+  onItemNameChange,
 }: {
   items: PartnersCarouselItem[];
   brandColor: string;
@@ -49,6 +51,8 @@ const PartnersCarouselInner = ({
   skipHeader?: boolean;
   renderImage?: (item: PartnersCarouselItem, className: string) => React.ReactNode;
   className?: string;
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   const colors = React.useMemo(() => getPartnersColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
   const showName = displayMode === 'withName';
@@ -151,8 +155,24 @@ const PartnersCarouselInner = ({
                       : <ImageIcon size={fallbackIconSize} className="text-slate-300" />}
                   </div>
                   {showName && (
-                    <span className="w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm pointer-events-none">
-                      {item.name ?? `Đối tác ${index + 1}`}
+                    <span
+                      contentEditable={visualEditEnabled}
+                      suppressContentEditableWarning={visualEditEnabled}
+                      onClick={(e) => {
+                        if (visualEditEnabled) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }
+                      }}
+                      onBlur={visualEditEnabled ? (e) => {
+                        onItemNameChange?.(index, e.currentTarget.textContent ?? '');
+                      } : undefined}
+                      className={cn(
+                        "w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm",
+                        visualEditEnabled ? "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text" : "pointer-events-none"
+                      )}
+                    >
+                      {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${index + 1}`)}
                     </span>
                   )}
                 </a>
@@ -165,6 +185,9 @@ const PartnersCarouselInner = ({
   );
 };
 
-export const PartnersCarouselShared = (props: Parameters<typeof PartnersCarouselInner>[0]) => {
+export const PartnersCarouselShared = (props: Parameters<typeof PartnersCarouselInner>[0] & {
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
+}) => {
   return <PartnersCarouselInner {...props} />;
 };

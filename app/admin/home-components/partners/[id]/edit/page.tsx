@@ -23,7 +23,7 @@ import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/
 import { PartnersForm } from '../../_components/PartnersForm';
 import { PartnersPreview } from '../../_components/PartnersPreview';
 import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import { DEFAULT_PARTNERS_CORNER_RADIUS, DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, normalizePartnersCornerRadius, normalizePartnersDisplayMode, normalizePartnersLogoSize, normalizePartnersShowBorder, normalizePartnersSpacing, normalizePartnersStyle, type PartnerItem, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle } from '../../_types';
+import { DEFAULT_PARTNERS_CORNER_RADIUS, DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_COLOR_INTENSITY, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, getPartnersLogoColorModeFromIntensity, normalizePartnersCornerRadius, normalizePartnersDisplayMode, normalizePartnersLogoColorIntensity, normalizePartnersLogoColorMode, normalizePartnersLogoSize, normalizePartnersShowBorder, normalizePartnersSpacing, normalizePartnersStyle, type PartnerItem, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoColorIntensity, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle, type PartnersLogoColorMode } from '../../_types';
 import { AiDemoPartnersImport } from '../../../product-list/_components/AiDemoProductsImport';
 
 const COMPONENT_TYPE = 'Partners';
@@ -63,6 +63,8 @@ export default function PartnersEditPage({
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<"homeComponents"> });
   const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
@@ -81,6 +83,8 @@ export default function PartnersEditPage({
   const [logoSize, setLogoSize] = useState<PartnersLogoSize>(DEFAULT_PARTNERS_LOGO_SIZE);
   const [showBorder, setShowBorder] = useState(DEFAULT_PARTNERS_SHOW_BORDER);
   const [spacing, setSpacing] = useState<PartnersSpacing>(DEFAULT_PARTNERS_SPACING);
+  const [logoColorMode, setLogoColorMode] = useState<PartnersLogoColorMode>('grayscale');
+  const [logoColorIntensity, setLogoColorIntensity] = useState<PartnersLogoColorIntensity>(DEFAULT_PARTNERS_LOGO_COLOR_INTENSITY);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
@@ -141,6 +145,9 @@ export default function PartnersEditPage({
       const nextLogoSize = normalizePartnersLogoSize(config.logoSize);
       const nextShowBorder = normalizePartnersShowBorder(config.showBorder);
       const nextSpacing = normalizePartnersSpacing(config.spacing);
+      const nextLogoColorMode = normalizePartnersLogoColorMode(config.logoColorMode);
+      const nextLogoColorIntensity = normalizePartnersLogoColorIntensity(config.logoColorIntensity, nextLogoColorMode);
+      const nextResolvedLogoColorMode = getPartnersLogoColorModeFromIntensity(nextLogoColorIntensity);
 
       // Load header config
       const headerConfig = extractSectionHeaderConfig(config);
@@ -162,12 +169,16 @@ export default function PartnersEditPage({
       setLogoSize(nextLogoSize);
       setShowBorder(nextShowBorder);
       setSpacing(nextSpacing);
+      setLogoColorMode(nextResolvedLogoColorMode);
+      setLogoColorIntensity(nextLogoColorIntensity);
       setInitialSnapshot(JSON.stringify({
         displayMode: nextDisplayMode,
         cornerRadius: nextCornerRadius,
         logoSize: nextLogoSize,
         showBorder: nextShowBorder,
         spacing: nextSpacing,
+        logoColorMode: nextResolvedLogoColorMode,
+        logoColorIntensity: nextLogoColorIntensity,
         title: component.title.trim(),
         active: component.active,
         style: nextStyle,
@@ -193,6 +204,8 @@ export default function PartnersEditPage({
     logoSize,
     showBorder,
     spacing,
+    logoColorMode,
+    logoColorIntensity,
     title: title.trim(),
     active,
     style: partnersStyle,
@@ -236,6 +249,8 @@ export default function PartnersEditPage({
           logoSize,
           showBorder,
           spacing,
+          logoColorMode,
+          logoColorIntensity,
           items: partnersItems.map((item: PartnerItem) => ({ link: item.link, name: item.name, url: item.url, storageId: item.storageId })),
           style: partnersStyle,
           // Header fields
@@ -367,6 +382,11 @@ export default function PartnersEditPage({
           setShowBorder={setShowBorder}
           spacing={spacing}
           setSpacing={setSpacing}
+          selectedStyle={partnersStyle}
+          logoColorMode={logoColorMode}
+          setLogoColorMode={setLogoColorMode}
+          logoColorIntensity={logoColorIntensity}
+          setLogoColorIntensity={setLogoColorIntensity}
           defaultExpanded={false}
           className="mb-4"
           actions={(
@@ -437,6 +457,8 @@ export default function PartnersEditPage({
               logoSize={logoSize}
               showBorder={showBorder}
               spacing={spacing}
+              logoColorMode={logoColorMode}
+              logoColorIntensity={logoColorIntensity}
               onDisplayModeChange={setDisplayMode}
               fontStyle={fontStyle}
               fontClassName="font-active"
@@ -449,6 +471,17 @@ export default function PartnersEditPage({
               uppercaseText={uppercaseText}
               showBadge={showBadge}
               badgeText={badgeText}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemNameChange={(index, nextName) => {
+                const nextItems = [...partnersItems];
+                if (nextItems[index]) {
+                  nextItems[index] = { ...nextItems[index], name: nextName };
+                  setPartnersItems(nextItems);
+                }
+              }}
             />
           </div>
         </div>

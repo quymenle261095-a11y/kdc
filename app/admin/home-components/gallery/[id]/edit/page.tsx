@@ -417,8 +417,8 @@ export default function GalleryEditPage({
           >
             <div className="space-y-2">
               <Label>Số cột desktop</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {[3, 4].map((option) => {
+              <div className="grid grid-cols-3 gap-2">
+                {[3, 4, 6].map((option) => {
                   const selected = desktopColumns === option;
                   return (
                     <button
@@ -539,6 +539,9 @@ export default function GalleryEditPage({
               fullWidthDesktop={fullWidthDesktop}
               desktopColumns={desktopColumns}
               cornerRadius={cornerRadius}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
             />
           </div>
         </div>

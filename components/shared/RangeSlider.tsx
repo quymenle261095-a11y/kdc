@@ -37,6 +37,10 @@ interface RangeSliderProps {
   onValueCommit?: (min: number, max: number) => void;
   /** Đơn vị hiển thị (%, %, °C…) */
   unit?: string;
+  /** Đang có bộ lọc hoạt động bên ngoài (dùng khi minLimit === maxLimit) */
+  hasFilterActive?: boolean;
+  /** Formatter tùy biến cho giá trị hiển thị */
+  formatValue?: (value: number) => string;
 }
 
 export function RangeSlider({
@@ -51,97 +55,66 @@ export function RangeSlider({
   onValueChange,
   onValueCommit,
   unit = '',
+  hasFilterActive = false,
+  formatValue,
 }: RangeSliderProps) {
   // Local state để hiển thị real-time mà không gây navigate
   const [localValues, setLocalValues] = useState<[number, number]>([valueMin, valueMax]);
 
-  // Debounce timer ref
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref lưu giá trị tự trượt apply gần nhất để chống giật ngược khi URL update trễ
+  const lastAppliedValuesRef = useRef<[number, number] | null>(null);
 
   // Sync khi props thay đổi từ bên ngoài (URL change)
-  const prevExternalRef = useRef<[number, number]>([valueMin, valueMax]);
   useEffect(() => {
-    const [prevMin, prevMax] = prevExternalRef.current;
-    if (prevMin !== valueMin || prevMax !== valueMax) {
-      prevExternalRef.current = [valueMin, valueMax];
-      setLocalValues([valueMin, valueMax]);
-    }
-  }, [valueMin, valueMax]);
-
-  // Dọn dẹp timer khi unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+    if (lastAppliedValuesRef.current) {
+      const [appliedMin, appliedMax] = lastAppliedValuesRef.current;
+      if (appliedMin === valueMin && appliedMax === valueMax) {
+        lastAppliedValuesRef.current = null;
+        return;
       }
-    };
-  }, []);
+    }
+    setLocalValues([valueMin, valueMax]);
+  }, [valueMin, valueMax]);
 
   const handleChange = useCallback(
     (values: number[]) => {
-      const [min, max] = values as [number, number];
-      setLocalValues([min, max]);
-      onValueChange?.(min, max);
-
-      // Debounce: hẹn giờ 500ms để trigger commit
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      debounceTimerRef.current = setTimeout(() => {
-        onValueCommit?.(min, max);
-      }, 500);
+      const [minVal, maxVal] = values as [number, number];
+      setLocalValues([minVal, maxVal]);
+      onValueChange?.(minVal, maxVal);
     },
-    [onValueChange, onValueCommit]
+    [onValueChange]
   );
 
   const handleCommit = useCallback(
     (values: number[]) => {
-      const [min, max] = values as [number, number];
-      // Hủy timer đang chờ vì đã commit trực tiếp
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      setLocalValues([min, max]);
-      onValueCommit?.(min, max);
+      const [minVal, maxVal] = values as [number, number];
+      setLocalValues([minVal, maxVal]);
+      lastAppliedValuesRef.current = [minVal, maxVal];
+      onValueCommit?.(minVal, maxVal);
     },
     [onValueCommit]
   );
 
   const handleReset = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
     setLocalValues([minLimit, maxLimit]);
+    lastAppliedValuesRef.current = [minLimit, maxLimit];
     onValueCommit?.(minLimit, maxLimit);
   }, [minLimit, maxLimit, onValueCommit]);
 
   const [min, max] = localValues;
 
-  return (
-    <div className="space-y-4 py-1 select-none">
-      {/* Badge hiển thị dải đang chọn */}
-      <div className="flex items-center justify-between text-sm font-medium">
-        <span style={{ color: '#64748b' }}>Dải chọn:</span>
-        <div className="flex items-center gap-1.5">
-          <span
-            className="px-2.5 py-0.5 rounded-md font-mono text-sm tabular-nums"
-            style={{ backgroundColor: primaryColor, color: '#fff' }}
-          >
-            {min}{unit} – {max}{unit}
-          </span>
-          {(min !== minLimit || max !== maxLimit) && (
-            <button
-              type="button"
-              onClick={handleReset}
-              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-600 flex items-center justify-center"
-              title="Đặt lại khoảng lọc"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      </div>
+  const formatVal = (val: number) => {
+    if (formatValue) {
+      return formatValue(val);
+    }
+    if (unit === 'đ' || unit === '₫' || val >= 1000) {
+      return `${val.toLocaleString('vi-VN')}${unit}`;
+    }
+    return `${val}${unit}`;
+  };
 
+  return (
+    <div className="space-y-3 py-1 select-none">
       {/* Radix Slider */}
       <SliderPrimitive.Root
         className="relative flex items-center w-full touch-none"
@@ -217,10 +190,24 @@ export function RangeSlider({
         />
       </SliderPrimitive.Root>
 
-      {/* Min / Max limit labels */}
-      <div className="flex justify-between text-xs font-mono" style={{ color: '#94a3b8' }}>
-        <span>{minLimit}{unit}</span>
-        <span>{maxLimit}{unit}</span>
+      {/* Min / Max hiển thị động giá trị đang chọn bên dưới, kèm nút Reset */}
+      <div className="flex justify-between items-center text-xs font-mono font-semibold" style={{ color: '#64748b' }}>
+        <span>{formatVal(min)}</span>
+        
+        {((min !== minLimit || max !== maxLimit || hasFilterActive)) ? (
+          <button
+            type="button"
+            onClick={handleReset}
+            className="px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-[10px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-600 flex items-center gap-1 font-sans font-normal"
+            title="Đặt lại khoảng lọc"
+          >
+            <X size={10} /> Đặt lại
+          </button>
+        ) : (
+          <span className="text-slate-300 dark:text-slate-700 font-bold">-</span>
+        )}
+
+        <span>{formatVal(max)}</span>
       </div>
     </div>
   );

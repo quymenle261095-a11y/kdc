@@ -57,6 +57,10 @@ export interface ProductCategoriesSectionSharedProps {
   viewAllHref?: string;
   getItemHref?: (item: ProductCategoriesResolvedItem) => string | undefined;
   renderImage?: (item: ProductCategoriesResolvedItem, className: string) => React.ReactNode;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }
 
 const DEFAULT_TITLE = 'Danh mục sản phẩm';
@@ -181,6 +185,10 @@ export function ProductCategoriesSectionShared({
   viewAllHref = '#',
   getItemHref,
   renderImage,
+  visualEditEnabled = false,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: ProductCategoriesSectionSharedProps) {
   const sectionTitle = title?.trim() || DEFAULT_TITLE;
   const sectionSubheading = (subtitle ?? subheading)?.trim() || '';
@@ -277,6 +285,10 @@ export function ProductCategoriesSectionShared({
           badgeText={badgeText}
           brandColor={brandColor ?? colors.primary.solid}
           className="mb-0"
+          visualEditEnabled={visualEditEnabled}
+          onTitleChange={onTitleChange}
+          onSubtitleChange={onSubtitleChange}
+          onBadgeTextChange={onBadgeTextChange}
         />
         {extraAction ? (
           <div className="mt-3 flex justify-start md:mt-4 md:justify-end">

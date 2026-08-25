@@ -24,11 +24,6 @@ export function useProductFrameConfig(aspectRatio?: string) {
     settingKey: 'defaultImageAspectRatio',
   });
 
-  // Query khung hình đơn lẻ cũ để tương thích ngược
-  const legacySetting = useQuery(api.settings.getValue, {
-    key: 'product_frame_overlay_url',
-  });
-
   const enabled = enabledSetting === true;
   const resolvedAr = aspectRatio || (typeof defaultImageAspectRatio === 'string' ? defaultImageAspectRatio : 'square');
 
@@ -54,11 +49,8 @@ export function useProductFrameConfig(aspectRatio?: string) {
       default:
         url = squareSetting;
     }
-    // Tương thích ngược: Nếu ảnh khung cho tỷ lệ cụ thể trống, dùng product_frame_overlay_url cũ làm fallback
-    return (typeof url === 'string' && url)
-      ? url
-      : (typeof legacySetting === 'string' && legacySetting ? legacySetting : null);
-  }, [enabled, resolvedAr, squareSetting, portrait916Setting, portrait34Setting, landscape43Setting, wide169Setting, legacySetting]);
+    return (typeof url === 'string' && url) ? url : null;
+  }, [enabled, resolvedAr, squareSetting, portrait916Setting, portrait34Setting, landscape43Setting, wide169Setting]);
 
   return useMemo(
     () => ({ enabled, overlayUrl }),

@@ -97,7 +97,7 @@ export const getMarqueeColorTokens = ({
     minimalText: '#1e293b',
     minimalBorder: '#e2e8f0',
     // Dark
-    darkBg: '#0f172a',
+    darkBg: '#000000',
     darkText: '#f1f5f9',
     darkAccent: p,
     // Split

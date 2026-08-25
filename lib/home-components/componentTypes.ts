@@ -40,8 +40,10 @@ export const HOME_COMPONENT_BASE_TYPES: HomeComponentBaseType[] = [
   { description: 'Video giới thiệu hoặc demo sản phẩm', label: 'Video / Media', route: 'video', value: 'Video', position: 26 },
   { description: 'Form liên hệ, bản đồ', label: 'Liên hệ', route: 'contact', value: 'Contact', recommended: true, position: 27 },
   { description: 'Vị trí đang tuyển', label: 'Tuyển dụng', route: 'career', value: 'Career', position: 28 },
-  { description: 'Chân trang', label: 'Footer', route: 'footer', value: 'Footer', singleton: true, recommended: true, position: 29 },
-  { description: 'Nút liên hệ nhanh (FAB)', label: 'Speed Dial', route: 'speed-dial', value: 'SpeedDial', singleton: true, recommended: true, position: 30 },
+  { description: 'Mini app Pokemon Champions order desk', label: 'Pokemon Champions', route: 'pokemon-champions', value: 'PokemonChampions', singleton: true, position: 29 },
+  { description: 'Nhúng giao diện HTML/CSS/JS custom trong sandbox', label: 'Custom Home Code', route: 'custom-home', value: 'CustomHome', position: 30 },
+  { description: 'Chân trang', label: 'Footer', route: 'footer', value: 'Footer', singleton: true, recommended: true, position: 31 },
+  { description: 'Nút liên hệ nhanh (FAB)', label: 'Speed Dial', route: 'speed-dial', value: 'SpeedDial', singleton: true, recommended: true, position: 32 },
 ];
 
 export const HOME_COMPONENT_TYPE_VALUES = HOME_COMPONENT_BASE_TYPES.map((type) => type.value);

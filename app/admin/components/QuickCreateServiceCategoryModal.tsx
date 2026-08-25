@@ -78,7 +78,7 @@ export function QuickCreateServiceCategoryModal({
           </div>
           <div className="flex justify-end gap-3 mt-6">
             <Button type="button" variant="ghost" onClick={onClose}>Huy</Button>
-            <Button type="submit" variant="accent" disabled={isSubmitting} className="bg-teal-600 hover:bg-teal-500">
+            <Button type="submit" variant="accent" disabled={isSubmitting}>
               {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
               Tao danh muc
             </Button>

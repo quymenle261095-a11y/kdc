@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
   experimental: {
     turbopackFileSystemCacheForDev: false,
     turbopackFileSystemCacheForBuild: true,
+    optimizePackageImports: [
+      'lucide-react',
+      'motion',
+      'culori',
+      'recharts',
+      '@radix-ui/react-tooltip',
+      '@radix-ui/react-slider',
+      'embla-carousel-react',
+    ],
   },
   htmlLimitedBots: /bingbot|BingPreview|msnbot|Google-Site-Verification|Googlebot/i,
   images: {
@@ -26,6 +35,10 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         hostname: '*.convex.cloud',
+        protocol: 'https',
+      },
+      {
+        hostname: '*.convex.site',
         protocol: 'https',
       },
       {
@@ -54,6 +67,14 @@ const nextConfig: NextConfig = {
       },
       {
         hostname: 'bizweb.dktcdn.net',
+        protocol: 'https',
+      },
+      {
+        hostname: 'sapo.dktcdn.net',
+        protocol: 'https',
+      },
+      {
+        hostname: '*.dktcdn.net',
         protocol: 'https',
       },
       {

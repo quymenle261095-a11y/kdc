@@ -1,9 +1,10 @@
 'use client';
 
+
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
@@ -20,6 +21,7 @@ import type {
   CareerTexts,
   JobPosition,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 interface CareerPreviewProps {
   jobs: JobPosition[];
@@ -73,6 +75,7 @@ export function CareerPreview({
   logoSize,
 }: CareerPreviewProps) {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
 
   const previewStyle = selectedStyle;
   const setPreviewStyle = (value: string) => onStyleChange?.(value as CareerStyle);
@@ -87,6 +90,7 @@ export function CareerPreview({
     secondary,
     mode,
   }), [brandColor, secondary, mode]);
+  const tokens = React.useMemo(() => adaptTokensForDarkMode(validation.tokens, isDark), [validation.tokens, isDark]);
 
   const modeLabel = mode === 'single' ? '1 màu (single)' : '2 màu (dual)';
 
@@ -110,7 +114,7 @@ export function CareerPreview({
             jobs={normalizedJobs}
             style={previewStyle}
             title={title}
-            tokens={validation.tokens}
+            tokens={tokens}
             device={device}
             texts={texts}
             spacing={spacing}

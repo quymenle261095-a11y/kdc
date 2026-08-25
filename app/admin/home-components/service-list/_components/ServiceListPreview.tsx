@@ -1,9 +1,15 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
+
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { useBrandColors } from '@/components/site/hooks';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
@@ -13,6 +19,7 @@ import {
   getServiceListValidationResult,
 } from '../_lib/colors';
 import { ServiceListSectionShared } from './ServiceListSectionShared';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import type {
   ServiceListBrandMode,
   ServiceListCardRadius,
@@ -46,6 +53,11 @@ interface ServiceListPreviewProps {
   showViewAll?: boolean;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (val: string) => void;
+  onSubtitleChange?: (val: string) => void;
+  onBadgeTextChange?: (val: string) => void;
+  onItemChange?: (index: number, updatedItem: Partial<ServiceListPreviewItem>) => void;
 }
 
 const MOCK_SERVICES: ServiceListPreviewItem[] = [
@@ -90,6 +102,98 @@ const MOCK_SERVICES: ServiceListPreviewItem[] = [
   },
 ];
 
+const ServiceListPreviewInner = ({
+  homePageBgColor,
+  mode,
+  previewStyle,
+  hideHeader,
+  showTitle,
+  showSubtitle,
+  subtitle,
+  headerAlign,
+  titleColorPrimary,
+  subtitleAboveTitle,
+  uppercaseText,
+  showBadge,
+  badgeText,
+  spacing,
+  cardRadius,
+  desktopColumns,
+  title,
+  displayItems,
+  validationTokens,
+  device,
+  showViewAll,
+  isVisualEditActive,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemChange,
+}: {
+  homePageBgColor: string;
+  mode: ServiceListBrandMode;
+  previewStyle: ServiceListStyle;
+  hideHeader?: boolean;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  subtitle?: string;
+  headerAlign?: 'left' | 'center' | 'right';
+  titleColorPrimary?: boolean;
+  subtitleAboveTitle?: boolean;
+  uppercaseText?: boolean;
+  showBadge?: boolean;
+  badgeText?: string;
+  spacing?: SectionSpacing;
+  cardRadius?: ServiceListCardRadius;
+  desktopColumns?: ServiceListDesktopColumns;
+  title: string;
+  displayItems: ServiceListPreviewItem[];
+  validationTokens: any;
+  device: any;
+  showViewAll: boolean;
+  isVisualEditActive?: boolean;
+  onTitleChange?: (val: string) => void;
+  onSubtitleChange?: (val: string) => void;
+  onBadgeTextChange?: (val: string) => void;
+  onItemChange?: (index: number, updatedItem: Partial<ServiceListPreviewItem>) => void;
+}) => {
+  const { isDark } = usePreviewDark();
+  const adaptedTokens = React.useMemo(() => adaptTokensForDarkMode(validationTokens, isDark), [validationTokens, isDark]);
+
+  return (
+    <div className="w-full transition-colors duration-300" style={{ backgroundColor: isDark ? '#0a0a0a' : homePageBgColor }}>
+      <ServiceListSectionShared
+        context="preview"
+        mode={mode}
+        style={previewStyle}
+        hideHeader={hideHeader}
+        showTitle={showTitle}
+        showSubtitle={showSubtitle}
+        subtitle={subtitle}
+        headerAlign={headerAlign}
+        titleColorPrimary={titleColorPrimary}
+        subtitleAboveTitle={subtitleAboveTitle}
+        uppercaseText={uppercaseText}
+        showBadge={showBadge}
+        badgeText={badgeText}
+        spacing={spacing}
+        cardRadius={cardRadius}
+        desktopColumns={desktopColumns}
+        sectionTitle={title}
+        items={displayItems}
+        tokens={adaptedTokens}
+        device={device}
+        showViewAll={showViewAll}
+        visualEditEnabled={isVisualEditActive}
+        onTitleChange={onTitleChange}
+        onSubtitleChange={onSubtitleChange}
+        onBadgeTextChange={onBadgeTextChange}
+        onItemChange={onItemChange}
+      />
+    </div>
+  );
+};
+
 export const ServiceListPreview = ({
   brandColor,
   secondary,
@@ -115,13 +219,52 @@ export const ServiceListPreview = ({
   cardRadius,
   desktopColumns,
   fontClassName,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemChange,
 }: ServiceListPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const systemColors = useBrandColors();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
+  const homePageBgColor = React.useMemo(() => {
+    if (!systemConfig?.homePageBackground) {return '#ffffff';}
+    const { type, customColor } = systemConfig.homePageBackground;
+    switch (type) {
+      case 'white':
+        return '#ffffff';
+      case 'black':
+        return '#000000';
+      case 'primary':
+        return systemColors.primary;
+      case 'secondary':
+        return systemColors.secondary || systemColors.primary;
+      case 'custom':
+        return customColor || '#ffffff';
+      default:
+        return '#ffffff';
+    }
+  }, [systemConfig?.homePageBackground, systemColors]);
 
   const previewStyle = selectedStyle;
   const setPreviewStyle = (value: string) => onStyleChange?.(value as ServiceListStyle);
 
-  const targetCount = Math.max(itemCount, 6);
+  const targetCount = Math.max(Number(itemCount) || 0, 6);
   const displayItems: ServiceListPreviewItem[] = items && items.length > 0
     ? items
     : MOCK_SERVICES.slice(0, targetCount);
@@ -147,32 +290,42 @@ export const ServiceListPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame url="yoursite.com/services">
-          <ServiceListSectionShared
-            context="preview"
-            mode={mode}
-            style={previewStyle}
-            hideHeader={hideHeader}
-            showTitle={showTitle}
-            showSubtitle={showSubtitle}
-            subtitle={subtitle}
-            headerAlign={headerAlign}
-            titleColorPrimary={titleColorPrimary}
-            subtitleAboveTitle={subtitleAboveTitle}
-            uppercaseText={uppercaseText}
-            showBadge={showBadge}
-            badgeText={badgeText}
-            spacing={spacing}
-            cardRadius={cardRadius}
-            desktopColumns={desktopColumns}
-            sectionTitle={title}
-            items={displayItems}
-            tokens={validation.tokens}
-            device={device}
-            showViewAll={showViewAll}
-          />
-        </BrowserFrame>
+        <div className="space-y-3">
+          <BrowserFrame url="yoursite.com/services">
+            <ServiceListPreviewInner
+              homePageBgColor={homePageBgColor}
+              mode={mode}
+              previewStyle={previewStyle}
+              hideHeader={hideHeader}
+              showTitle={showTitle}
+              showSubtitle={showSubtitle}
+              subtitle={subtitle}
+              headerAlign={headerAlign}
+              titleColorPrimary={titleColorPrimary}
+              subtitleAboveTitle={subtitleAboveTitle}
+              uppercaseText={uppercaseText}
+              showBadge={showBadge}
+              badgeText={badgeText}
+              spacing={spacing}
+              cardRadius={cardRadius}
+              desktopColumns={desktopColumns}
+              title={title}
+              displayItems={displayItems}
+              validationTokens={validation.tokens}
+              device={device}
+              showViewAll={showViewAll}
+              isVisualEditActive={isVisualEditActive}
+              onTitleChange={onTitleChange}
+              onSubtitleChange={onSubtitleChange}
+              onBadgeTextChange={onBadgeTextChange}
+              onItemChange={onItemChange}
+            />
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' && (

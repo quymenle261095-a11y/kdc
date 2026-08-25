@@ -1,16 +1,18 @@
 'use client';
 
 import React, { use, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
 import { ModuleGuard } from '../../../components/ModuleGuard';
 import { OptionForm, type ProductOptionFormValues } from '../../components/OptionForm';
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormPageWrapper,
+} from '@/app/admin/components/FormUtilities';
 
 type DisplayType = 'dropdown' | 'buttons' | 'radio' | 'color_swatch' | 'image_swatch' | 'color_picker' | 'number_input' | 'text_input';
 type InputType = 'text' | 'number' | 'color';
@@ -28,6 +30,7 @@ function ProductOptionEditContent({ params }: { params: Promise<{ id: string }> 
   const router = useRouter();
 
   const optionData = useQuery(api.productOptions.getById, { id: id as Id<'productOptions'> });
+  useSetAdminBreadcrumb(optionData?.name);
   const updateOption = useMutation(api.productOptions.update);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -68,37 +71,23 @@ function ProductOptionEditContent({ params }: { params: Promise<{ id: string }> 
     }
   };
 
-  if (optionData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
-  if (optionData === null) {
-    return (
-      <div className="text-center py-8 text-slate-500">
-        Không tìm thấy option
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-2">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/admin/product-options" className="text-sm text-orange-600 hover:underline">
-          Quay lại danh sách
-        </Link>
-      </div>
+    <AdminFormPageWrapper
+      title="Chỉnh sửa loại tùy chọn"
+      subtitle={optionData ? `Cấu hình thuộc tính biến thể: ${optionData.name}` : undefined}
+      backHref="/admin/product-options"
+      isLoading={optionData === undefined}
+      notFound={optionData === null}
+      notFoundMessage="Không tìm thấy tùy chọn"
+      isSubmitting={isSubmitting}
+    >
       <OptionForm
-        title="Chỉnh sửa loại tùy chọn"
         submitLabel="Lưu thay đổi"
         isSubmitting={isSubmitting}
-        onCancel={() =>{  router.push('/admin/product-options'); }}
+        onCancel={() => { router.push('/admin/product-options'); }}
         onSubmit={handleSubmit}
         initialValues={initialValues}
       />
-    </div>
+    </AdminFormPageWrapper>
   );
 }

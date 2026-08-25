@@ -5,8 +5,44 @@
 
 import type { ContactSettings, SEOSettings, SiteSettings, SocialSettings } from '@/lib/get-settings';
 import { shouldIncludeLocalBusiness } from './resolver';
+import {
+  buildSiteSearchActionUrl,
+  collectBrandAliases,
+  collectBrandSameAs,
+  collectBrandSearchTerms,
+  collectBrandServices,
+  collectBrandTopics,
+  mergeUniqueSeoList,
+  resolveBrandDescription,
+  resolveBrandEntityType,
+  type BrandEntityType,
+} from './brand';
 
 type SchemaRecord = Record<string, unknown>;
+
+const normalizeSchemaUrl = (url?: string) => {
+  const trimmed = url?.trim();
+  return trimmed ? trimmed.replace(/([^:]\/)\/+/g, '$1') : '';
+};
+
+const normalizeArticleKeywords = (keywords?: string[] | string) => {
+  const source = Array.isArray(keywords)
+    ? keywords
+    : (keywords ?? '').split(',');
+  const seen = new Set<string>();
+  const normalized = source
+    .map((keyword) => keyword.trim().replaceAll(/\s+/g, ' ').slice(0, 80))
+    .filter((keyword) => {
+      const key = keyword.toLocaleLowerCase('vi-VN');
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+  return normalized.length > 0 ? normalized.join(', ') : undefined;
+};
 
 // =================== Site-Level Schemas ===================
 
@@ -14,12 +50,25 @@ export const buildWebSiteSchema = (params: {
   name: string;
   url: string;
   description?: string;
+  alternateName?: string[];
+  searchActionUrl?: string;
 }): SchemaRecord => ({
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: params.name,
-  url: params.url,
+  url: normalizeSchemaUrl(params.url),
   ...(params.description && { description: params.description }),
+  ...(params.alternateName && params.alternateName.length > 0 && { alternateName: params.alternateName }),
+  ...(params.searchActionUrl && {
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: normalizeSchemaUrl(params.searchActionUrl),
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  }),
 });
 
 export const buildOrganizationSchema = (params: {
@@ -31,11 +80,14 @@ export const buildOrganizationSchema = (params: {
   phone?: string;
   address?: string;
   sameAs?: string[];
+  alternateName?: string[];
+  knowsAbout?: string[];
 }): SchemaRecord => ({
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: params.name,
-  url: params.url,
+  url: normalizeSchemaUrl(params.url),
+  ...(params.alternateName && params.alternateName.length > 0 && { alternateName: params.alternateName }),
   ...(params.logo && { logo: params.logo }),
   ...(params.description && { description: params.description }),
   ...(params.email && { email: params.email }),
@@ -43,10 +95,12 @@ export const buildOrganizationSchema = (params: {
   ...(params.address && {
     address: { '@type': 'PostalAddress', streetAddress: params.address },
   }),
+  ...(params.knowsAbout && params.knowsAbout.length > 0 && { knowsAbout: params.knowsAbout }),
   ...(params.sameAs && params.sameAs.length > 0 && { sameAs: params.sameAs }),
 });
 
 export const buildLocalBusinessSchema = (params: {
+  type?: Exclude<BrandEntityType, 'Organization'>;
   name: string;
   url: string;
   logo?: string;
@@ -55,11 +109,15 @@ export const buildLocalBusinessSchema = (params: {
   phone?: string;
   address?: string;
   sameAs?: string[];
+  alternateName?: string[];
+  knowsAbout?: string[];
+  serviceType?: string[];
 }): SchemaRecord => ({
   '@context': 'https://schema.org',
-  '@type': 'LocalBusiness',
+  '@type': params.type ?? 'LocalBusiness',
   name: params.name,
-  url: params.url,
+  url: normalizeSchemaUrl(params.url),
+  ...(params.alternateName && params.alternateName.length > 0 && { alternateName: params.alternateName }),
   ...(params.logo && { image: params.logo }),
   ...(params.description && { description: params.description }),
   ...(params.email && { email: params.email }),
@@ -67,6 +125,8 @@ export const buildLocalBusinessSchema = (params: {
   ...(params.address && {
     address: { '@type': 'PostalAddress', streetAddress: params.address },
   }),
+  ...(params.knowsAbout && params.knowsAbout.length > 0 && { knowsAbout: params.knowsAbout }),
+  ...(params.serviceType && params.serviceType.length > 0 && { serviceType: params.serviceType }),
   ...(params.sameAs && params.sameAs.length > 0 && { sameAs: params.sameAs }),
 });
 
@@ -79,7 +139,7 @@ export const buildBreadcrumbSchema = (
   '@type': 'BreadcrumbList',
   itemListElement: items.map((item, index) => ({
     '@type': 'ListItem',
-    item: item.url,
+    item: normalizeSchemaUrl(item.url),
     name: item.name,
     position: index + 1,
   })),
@@ -95,22 +155,28 @@ export const buildArticleSchema = (params: {
   updatedAt?: number;
   authorName?: string;
   language?: string;
-}): SchemaRecord => ({
-  '@context': 'https://schema.org',
-  '@type': 'Article',
-  headline: params.title,
-  url: params.url,
-  mainEntityOfPage: { '@type': 'WebPage', '@id': params.url },
-  ...(params.description && { description: params.description }),
-  ...(params.image && { image: params.image }),
-  ...(params.publishedAt && { datePublished: new Date(params.publishedAt).toISOString() }),
-  ...(params.updatedAt && { dateModified: new Date(params.updatedAt).toISOString() }),
-  ...(params.language && { inLanguage: params.language }),
-  ...(params.authorName && {
-    author: { '@type': 'Person', name: params.authorName },
-  }),
-  publisher: { '@type': 'Organization', name: params.siteName },
-});
+  keywords?: string[] | string;
+}): SchemaRecord => {
+  const url = normalizeSchemaUrl(params.url);
+  const keywords = normalizeArticleKeywords(params.keywords);
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: params.title,
+    url,
+    mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+    ...(params.description && { description: params.description }),
+    ...(params.image && { image: normalizeSchemaUrl(params.image) }),
+    ...(params.publishedAt && { datePublished: new Date(params.publishedAt).toISOString() }),
+    ...(params.updatedAt && { dateModified: new Date(params.updatedAt).toISOString() }),
+    ...(params.language && { inLanguage: params.language }),
+    ...(keywords && { keywords }),
+    ...(params.authorName && {
+      author: { '@type': 'Person', name: params.authorName },
+    }),
+    publisher: { '@type': 'Organization', name: params.siteName },
+  };
+};
 
 export const buildProductSchema = (params: {
   name: string;
@@ -131,13 +197,13 @@ export const buildProductSchema = (params: {
   '@context': 'https://schema.org',
   '@type': 'Product',
   name: params.name,
-  url: params.url,
+  url: normalizeSchemaUrl(params.url),
   sku: params.sku,
-  mainEntityOfPage: { '@type': 'WebPage', '@id': params.url },
+  mainEntityOfPage: { '@type': 'WebPage', '@id': normalizeSchemaUrl(params.url) },
   ...(params.description && { description: params.description }),
   ...(params.images && params.images.length > 0
-    ? { image: params.images }
-    : (params.image ? { image: params.image } : {})),
+    ? { image: params.images.map(normalizeSchemaUrl) }
+    : (params.image ? { image: normalizeSchemaUrl(params.image) } : {})),
   ...(params.createdAt && { dateCreated: new Date(params.createdAt).toISOString() }),
   ...(params.updatedAt && { dateModified: new Date(params.updatedAt).toISOString() }),
   ...(params.brand && { brand: { '@type': 'Brand', name: params.brand } }),
@@ -148,7 +214,7 @@ export const buildProductSchema = (params: {
       : 'https://schema.org/OutOfStock',
     price: params.salePrice ?? params.price,
     priceCurrency: params.currency ?? 'VND',
-    url: params.url,
+    url: normalizeSchemaUrl(params.url),
   },
   ...(params.aggregateRating && {
     aggregateRating: {
@@ -173,14 +239,14 @@ export const buildServiceSchema = (params: {
   '@context': 'https://schema.org',
   '@type': 'Service',
   name: params.name,
-  url: params.url,
-  mainEntityOfPage: { '@type': 'WebPage', '@id': params.url },
+  url: normalizeSchemaUrl(params.url),
+  mainEntityOfPage: { '@type': 'WebPage', '@id': normalizeSchemaUrl(params.url) },
   ...(params.description && { description: params.description }),
-  ...(params.image && { image: params.image }),
+  ...(params.image && { image: normalizeSchemaUrl(params.image) }),
   provider: {
     '@type': 'Organization',
     name: params.providerName,
-    ...(params.providerUrl && { url: params.providerUrl }),
+    ...(params.providerUrl && { url: normalizeSchemaUrl(params.providerUrl) }),
   },
   ...(params.price && {
     offers: {
@@ -219,14 +285,14 @@ export const buildItemListSchema = (params: {
   '@context': 'https://schema.org',
   '@type': 'ItemList',
   name: params.name,
-  url: params.url,
+  url: normalizeSchemaUrl(params.url),
   numberOfItems: params.items.length,
   ...(params.itemListOrder && { itemListOrder: params.itemListOrder }),
   itemListElement: params.items.map((item, index) => ({
     '@type': 'ListItem',
     name: item.name,
     position: index + 1,
-    url: item.url,
+    url: normalizeSchemaUrl(item.url),
   })),
 });
 
@@ -239,7 +305,14 @@ export const buildSiteSchemas = (params: {
   social?: SocialSettings;
 }): SchemaRecord[] => {
   const schemas: SchemaRecord[] = [];
-  const sameAs = [
+  const siteUrl = normalizeSchemaUrl(params.site.site_url || process.env.NEXT_PUBLIC_SITE_URL || '');
+  const brandAliases = collectBrandAliases(params.seo, params.site);
+  const brandTopics = collectBrandTopics(params.seo);
+  const brandServices = collectBrandServices(params.seo);
+  const brandSearchTerms = collectBrandSearchTerms(params.seo, params.site);
+  const brandEntityType = resolveBrandEntityType(params.seo.seo_brand_entity_type);
+  const brandDescription = resolveBrandDescription(params.seo, params.site);
+  const sameAs = mergeUniqueSeoList([
     params.social?.social_facebook,
     params.social?.social_instagram,
     params.social?.social_youtube,
@@ -250,41 +323,51 @@ export const buildSiteSchemas = (params: {
     params.contact.contact_zalo,
   ].map((value) => (value || '').trim())
     .filter((value) => value && value !== '#')
-    .filter((value) => value.startsWith('http'));
+    .filter((value) => value.startsWith('http')), collectBrandSameAs(params.seo));
+  const knowsAbout = mergeUniqueSeoList(brandTopics, brandServices, brandSearchTerms);
 
   schemas.push(
     buildWebSiteSchema({
-      description: params.seo.seo_description || params.site.site_tagline,
+      alternateName: brandAliases,
+      description: brandDescription,
       name: params.site.site_name,
-      url: params.site.site_url || process.env.NEXT_PUBLIC_SITE_URL || '',
+      searchActionUrl: siteUrl ? buildSiteSearchActionUrl(siteUrl, params.seo.seo_site_search_path) : undefined,
+      url: siteUrl,
     })
   );
 
   schemas.push(
     buildOrganizationSchema({
-      description: params.seo.seo_description || params.site.site_tagline,
+      alternateName: brandAliases,
+      description: brandDescription,
       email: params.contact.contact_email,
+      knowsAbout,
       logo: params.site.site_logo,
       name: params.site.site_name,
       phone: params.contact.contact_phone,
       sameAs,
-      url: params.site.site_url || process.env.NEXT_PUBLIC_SITE_URL || '',
+      url: siteUrl,
     })
   );
 
   if (
     shouldIncludeLocalBusiness({ contact: params.contact, site: params.site })
+    || brandEntityType !== 'Organization'
   ) {
     schemas.push(
       buildLocalBusinessSchema({
+        alternateName: brandAliases,
         address: params.contact.contact_address,
-        description: params.seo.seo_description || params.site.site_tagline,
+        description: brandDescription,
         email: params.contact.contact_email,
+        knowsAbout,
         logo: params.site.site_logo,
         name: params.site.site_name,
         phone: params.contact.contact_phone,
         sameAs,
-        url: params.site.site_url || process.env.NEXT_PUBLIC_SITE_URL || '',
+        serviceType: brandServices,
+        type: brandEntityType === 'Organization' ? 'LocalBusiness' : brandEntityType,
+        url: siteUrl,
       })
     );
   }

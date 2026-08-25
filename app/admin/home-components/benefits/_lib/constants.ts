@@ -12,12 +12,12 @@ export const DEFAULT_BENEFITS_HARMONY: BenefitsHarmony = 'analogous';
 export const DEFAULT_BENEFITS_CORNER_RADIUS: BenefitsCornerRadius = 'lg';
 
 export const BENEFITS_STYLES: BenefitsStyleOption[] = [
-  { id: '1', label: 'Layout 1' },
-  { id: '2', label: 'Layout 2' },
-  { id: '3', label: 'Layout 3' },
-  { id: '4', label: 'Layout 4' },
-  { id: '5', label: 'Layout 5' },
-  { id: '6', label: 'Layout 6' },
+  { id: '1', label: '(1) Số liệu' },
+  { id: '2', label: '(2) Vạch đáy' },
+  { id: '3', label: '(3) Đường cong' },
+  { id: '4', label: '(4) Chia đôi' },
+  { id: '5', label: '(5) Ô ghép' },
+  { id: '6', label: '(6) Thẻ nổi' },
 ];
 
 export const BENEFITS_HARMONY_OPTIONS: Array<{ value: BenefitsHarmony; label: string }> = [

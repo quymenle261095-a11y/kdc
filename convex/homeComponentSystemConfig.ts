@@ -3,13 +3,18 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { HOME_COMPONENT_TYPE_VALUES } from "../lib/home-components/componentTypes";
 import { DEFAULT_FONT_KEY, FONT_REGISTRY } from "../lib/fonts/registry";
+import { COMPONENT_LAYOUTS } from "./lib/componentLayouts";
 
 const GROUP_KEY = "home_components";
 const HIDDEN_TYPES_KEY = "create_hidden_types";
+const HIDDEN_LAYOUTS_KEY = "create_hidden_layouts";
 const OVERRIDES_KEY = "type_color_overrides";
 const FONT_OVERRIDES_KEY = "type_font_overrides";
 const GLOBAL_FONT_OVERRIDE_KEY = "global_font_override";
 const AI_IMPORT_OVERRIDES_KEY = "type_ai_import_overrides";
+const VISUAL_EDIT_OVERRIDES_KEY = "type_visual_edit_overrides";
+const HOME_PAGE_BACKGROUND_KEY = "home_page_background";
+const HOME_PAGE_CHROME_KEY = "home_page_chrome";
 const DEFAULT_BRAND_COLOR = "#3b82f6";
 const SUPPORTED_CUSTOM_TYPES = new Set(HOME_COMPONENT_TYPE_VALUES);
 const FONT_KEYS = new Set(FONT_REGISTRY.map((font) => font.key));
@@ -36,6 +41,28 @@ const globalFontOverrideDoc = v.object({
 
 const aiImportOverrideDoc = v.object({
   enabled: v.boolean(),
+});
+
+const visualEditOverrideDoc = v.object({
+  enabled: v.boolean(),
+});
+
+const homePageBackgroundDoc = v.object({
+  enabled: v.optional(v.boolean()),
+  type: v.union(
+    v.literal("white"),
+    v.literal("black"),
+    v.literal("primary"),
+    v.literal("secondary"),
+    v.literal("custom")
+  ),
+  customColor: v.string(),
+});
+
+const homePageChromeDoc = v.object({
+  showFooter: v.boolean(),
+  showHeader: v.boolean(),
+  showSpeedDial: v.boolean(),
 });
 
 const isValidHexColor = (value: string) => /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value.trim());
@@ -105,6 +132,39 @@ const normalizeGlobalFontOverride = (value: unknown) => {
   return { enabled, fontKey };
 };
 
+const normalizeHomePageBackground = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return {
+      enabled: false,
+      type: "white" as const,
+      customColor: "",
+    };
+  }
+  const record = value as Record<string, unknown>;
+  const enabled = typeof record.enabled === "boolean" ? record.enabled : false;
+  const type = (["white", "black", "primary", "secondary", "custom"].includes(record.type as string))
+    ? (record.type as "white" | "black" | "primary" | "secondary" | "custom")
+    : ("white" as const);
+  const customColor = typeof record.customColor === "string" ? record.customColor : "";
+  return { enabled, type, customColor };
+};
+
+const normalizeHomePageChrome = (value: unknown) => {
+  if (!value || typeof value !== "object") {
+    return {
+      showFooter: true,
+      showHeader: true,
+      showSpeedDial: true,
+    };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    showFooter: record.showFooter !== false,
+    showHeader: record.showHeader !== false,
+    showSpeedDial: record.showSpeedDial !== false,
+  };
+};
+
 const normalizeOverrides = (value: unknown): Record<string, { enabled: boolean; systemEnabled: boolean; mode: "single" | "dual"; primary: string; secondary: string }> => {
   if (!value || typeof value !== "object") {return {};}
   const result: Record<string, { enabled: boolean; systemEnabled: boolean; mode: "single" | "dual"; primary: string; secondary: string }> = {};
@@ -148,6 +208,23 @@ const normalizeAiImportOverrides = (value: unknown): Record<string, { enabled: b
   return result;
 };
 
+const normalizeVisualEditOverrides = (value: unknown): Record<string, { enabled: boolean }> => {
+  if (!value || typeof value !== "object") {return {};}
+  const result: Record<string, { enabled: boolean }> = {};
+  const record = value as Record<string, unknown>;
+  Object.entries(record).forEach(([key, entry]) => {
+    if (!SUPPORTED_CUSTOM_TYPES.has(key)) {return;}
+    if (typeof entry === "boolean") {
+      result[key] = { enabled: entry };
+      return;
+    }
+    if (entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).enabled === "boolean") {
+      result[key] = { enabled: Boolean((entry as Record<string, unknown>).enabled) };
+    }
+  });
+  return result;
+};
+
 const getSettingValue = async (ctx: QueryCtx | MutationCtx, key: string) => {
   const setting = await ctx.db
     .query("settings")
@@ -172,24 +249,36 @@ export const getConfig = query({
   args: {},
   handler: async (ctx) => {
     const hiddenTypes = normalizeHiddenTypes(await getSettingValue(ctx, HIDDEN_TYPES_KEY));
+    const hiddenLayouts = normalizeHiddenTypes(await getSettingValue(ctx, HIDDEN_LAYOUTS_KEY));
     const overrides = normalizeOverrides(await getSettingValue(ctx, OVERRIDES_KEY));
     const fontOverrides = normalizeFontOverrides(await getSettingValue(ctx, FONT_OVERRIDES_KEY));
     const globalFontOverride = normalizeGlobalFontOverride(await getSettingValue(ctx, GLOBAL_FONT_OVERRIDE_KEY));
     const aiImportOverrides = normalizeAiImportOverrides(await getSettingValue(ctx, AI_IMPORT_OVERRIDES_KEY));
+    const visualEditOverrides = normalizeVisualEditOverrides(await getSettingValue(ctx, VISUAL_EDIT_OVERRIDES_KEY));
+    const homePageBackground = normalizeHomePageBackground(await getSettingValue(ctx, HOME_PAGE_BACKGROUND_KEY));
+    const homePageChrome = normalizeHomePageChrome(await getSettingValue(ctx, HOME_PAGE_CHROME_KEY));
     return {
       hiddenTypes,
+      hiddenLayouts,
       typeColorOverrides: overrides,
       typeFontOverrides: fontOverrides,
       globalFontOverride,
       typeAiImportOverrides: aiImportOverrides,
+      typeVisualEditOverrides: visualEditOverrides,
+      homePageBackground,
+      homePageChrome,
     };
   },
   returns: v.object({
     hiddenTypes: v.array(v.string()),
+    hiddenLayouts: v.array(v.string()),
     typeColorOverrides: v.record(v.string(), colorOverrideDoc),
     typeFontOverrides: v.record(v.string(), fontOverrideDoc),
     globalFontOverride: globalFontOverrideDoc,
     typeAiImportOverrides: v.record(v.string(), aiImportOverrideDoc),
+    typeVisualEditOverrides: v.record(v.string(), visualEditOverrideDoc),
+    homePageBackground: homePageBackgroundDoc,
+    homePageChrome: homePageChromeDoc,
   }),
 });
 
@@ -202,6 +291,7 @@ export const setCreateVisibility = mutation({
   },
   returns: v.null(),
 });
+
 
 export const setTypeColorOverride = mutation({
   args: {
@@ -374,3 +464,137 @@ export const bulkSetTypeAiImportOverride = mutation({
   },
   returns: v.null(),
 });
+
+export const setHomePageBackground = mutation({
+  args: {
+    enabled: v.boolean(),
+    type: v.union(
+      v.literal("white"),
+      v.literal("black"),
+      v.literal("primary"),
+      v.literal("secondary"),
+      v.literal("custom")
+    ),
+    customColor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const next = {
+      enabled: args.enabled,
+      type: args.type,
+      customColor: args.customColor ?? "",
+    };
+    await upsertSetting(ctx, HOME_PAGE_BACKGROUND_KEY, next);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const setHomePageChrome = mutation({
+  args: {
+    showFooter: v.boolean(),
+    showHeader: v.boolean(),
+    showSpeedDial: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await upsertSetting(ctx, HOME_PAGE_CHROME_KEY, normalizeHomePageChrome(args));
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const setHiddenLayouts = mutation({
+  args: { hiddenLayouts: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const normalized = normalizeHiddenTypes(args.hiddenLayouts);
+    await upsertSetting(ctx, HIDDEN_LAYOUTS_KEY, normalized);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const hideUnusedLayoutsAndTypes = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const components = await ctx.db.query("homeComponents").collect();
+    const usedTypes = new Set<string>();
+    const usedLayouts = new Set<string>();
+
+    components.forEach((c) => {
+      usedTypes.add(c.type);
+      const style = c.config?.style ?? c.config?.layout;
+      if (typeof style === "string" && style.trim().length > 0) {
+        usedLayouts.add(`${c.type}:${style.trim()}`);
+      }
+    });
+
+    const hiddenTypes: string[] = [];
+    const hiddenLayouts: string[] = [];
+
+    Object.entries(COMPONENT_LAYOUTS).forEach(([type, layouts]) => {
+      if (!usedTypes.has(type)) {
+        hiddenTypes.push(type);
+      } else {
+        layouts.forEach((style) => {
+          if (!usedLayouts.has(`${type}:${style}`)) {
+            hiddenLayouts.push(`${type}:${style}`);
+          }
+        });
+      }
+    });
+
+    await upsertSetting(ctx, HIDDEN_TYPES_KEY, hiddenTypes);
+    await upsertSetting(ctx, HIDDEN_LAYOUTS_KEY, hiddenLayouts);
+
+    return {
+      hiddenTypesCount: hiddenTypes.length,
+      hiddenLayoutsCount: hiddenLayouts.length,
+    };
+  },
+  returns: v.object({
+    hiddenTypesCount: v.number(),
+    hiddenLayoutsCount: v.number(),
+  }),
+});
+
+export const showAllLayoutsAndTypes = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await upsertSetting(ctx, HIDDEN_TYPES_KEY, []);
+    await upsertSetting(ctx, HIDDEN_LAYOUTS_KEY, []);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const setTypeVisualEditOverride = mutation({
+  args: {
+    enabled: v.boolean(),
+    type: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!SUPPORTED_CUSTOM_TYPES.has(args.type)) {
+      return null;
+    }
+    const overrides = normalizeVisualEditOverrides(await getSettingValue(ctx, VISUAL_EDIT_OVERRIDES_KEY));
+    overrides[args.type] = { enabled: args.enabled };
+    await upsertSetting(ctx, VISUAL_EDIT_OVERRIDES_KEY, overrides);
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const bulkSetTypeVisualEditOverride = mutation({
+  args: { enabled: v.boolean(), types: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const overrides = normalizeVisualEditOverrides(await getSettingValue(ctx, VISUAL_EDIT_OVERRIDES_KEY));
+    args.types
+      .filter((type) => SUPPORTED_CUSTOM_TYPES.has(type))
+      .forEach((type) => {
+        overrides[type] = { enabled: args.enabled };
+      });
+    await upsertSetting(ctx, VISUAL_EDIT_OVERRIDES_KEY, overrides);
+    return null;
+  },
+  returns: v.null(),
+});
+

@@ -58,7 +58,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const tagline = site.site_tagline || '';
   const customOgImage = seo.seo_og_image || '';
   const logoUrl = site.site_logo || '';
-  const primary = site.site_brand_primary || site.site_brand_color || '#3b82f6';
+  const primary = site.site_brand_primary || '#3b82f6';
   const brandMode = site.site_brand_mode;
   const secondary = brandMode === 'dual' ? (site.site_brand_secondary || primary) : primary;
   const phone = contact.contact_phone || '';

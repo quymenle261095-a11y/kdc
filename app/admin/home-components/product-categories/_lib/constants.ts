@@ -5,17 +5,17 @@ import type { CustomImageAspectRatio } from '@/lib/products/image-aspect-ratio';
 import type { ProductCategoriesStyle } from '../_types';
 
 export const PRODUCT_CATEGORIES_STYLES = [
-  { id: 'image-strip' as const, label: 'Layout 1' },
-  { id: 'carousel' as const, label: 'Layout 2' },
-  { id: 'cards' as const, label: 'Layout 3' },
-  { id: 'marquee' as const, label: 'Layout 4' },
-  { id: 'circular' as const, label: 'Layout 5' },
-  { id: 'icon-grid' as const, label: 'Layout 6' },
-  { id: 'mosaic' as const, label: 'Layout 7' },
-  { id: 'compact-grid' as const, label: 'Layout 8' },
-  { id: 'grid' as const, label: 'Layout 9' },
-  { id: 'grid-10' as const, label: 'Layout 10' },
-  { id: 'grid-11' as const, label: 'Layout 11' },
+  { id: 'image-strip' as const, label: '(1) Dải ảnh' },
+  { id: 'carousel' as const, label: '(2) Trượt ngang' },
+  { id: 'cards' as const, label: '(3) Dạng thẻ' },
+  { id: 'marquee' as const, label: '(4) Chạy chữ' },
+  { id: 'circular' as const, label: '(5) Ảnh tròn' },
+  { id: 'icon-grid' as const, label: '(6) Lưới icon' },
+  { id: 'mosaic' as const, label: '(7) Ô ghép' },
+  { id: 'compact-grid' as const, label: '(8) Thu gọn' },
+  { id: 'grid' as const, label: '(9) Lưới chuẩn' },
+  { id: 'grid-10' as const, label: '(10) Thẻ nổi' },
+  { id: 'grid-11' as const, label: '(11) Bo viền' },
 ];
 
 export const PRODUCT_CATEGORIES_CROP_ASPECT_RATIOS: Record<ProductCategoriesStyle, CustomImageAspectRatio> = {

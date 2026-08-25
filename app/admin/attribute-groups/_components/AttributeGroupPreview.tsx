@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import * as SliderPrimitive from '@radix-ui/react-slider';
 import { getAttributeIconComponent } from '../_lib/iconRegistry';
 import { Card, CardContent, cn } from '../../components/ui';
 import { ChevronDown, Check } from 'lucide-react';
@@ -88,7 +89,6 @@ export function AttributeGroupPreview({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const resolvedRangeConfig = getSmartRangeConfig(name, terms);
-  const rangeGap = resolvedRangeConfig.step;
   const [minVal, setMinVal] = useState(resolvedRangeConfig.defaultMin);
   const [maxVal, setMaxVal] = useState(resolvedRangeConfig.defaultMax);
 
@@ -208,49 +208,6 @@ export function AttributeGroupPreview({
             {/* Kiểu RANGE SLIDER (Nếu filterType === 'range') */}
             {filterType === 'range' ? (
               <div className="space-y-6 py-3">
-                <style dangerouslySetInnerHTML={{__html: `
-                  .double-range-slider input[type="range"] {
-                    position: absolute;
-                    width: 100%;
-                    height: 8px;
-                    top: 0;
-                    left: 0;
-                    background: none;
-                    pointer-events: none;
-                    -webkit-appearance: none;
-                    appearance: none;
-                  }
-                  .double-range-slider input[type="range"]::-webkit-slider-thumb {
-                    height: 18px;
-                    width: 18px;
-                    border-radius: 50%;
-                    background: ${iconColor};
-                    cursor: pointer;
-                    pointer-events: auto;
-                    -webkit-appearance: none;
-                    border: 2px solid #ffffff;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-                    transition: transform 0.1s ease;
-                  }
-                  .double-range-slider input[type="range"]::-webkit-slider-thumb:active {
-                    transform: scale(1.2);
-                  }
-                  .double-range-slider input[type="range"]::-moz-range-thumb {
-                    height: 18px;
-                    width: 18px;
-                    border-radius: 50%;
-                    background: ${iconColor};
-                    cursor: pointer;
-                    pointer-events: auto;
-                    border: 2px solid #ffffff;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-                    transition: transform 0.1s ease;
-                  }
-                  .double-range-slider input[type="range"]::-moz-range-thumb:active {
-                    transform: scale(1.2);
-                  }
-                `}} />
-
                 <div className="flex justify-between items-center text-xs font-semibold text-slate-600 dark:text-slate-400">
                   <span>Dải chọn:</span>
                   <span className="px-2 py-0.5 rounded font-mono text-white" style={{ backgroundColor: iconColor }}>
@@ -259,49 +216,57 @@ export function AttributeGroupPreview({
                 </div>
 
                 <div className="space-y-4 pt-2">
-                  {/* Container Slider */}
-                  <div className="relative w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-lg double-range-slider">
-                    {/* Active Track */}
-                    <div 
-                      className="absolute h-full rounded-lg"
+                  {/* Radix Slider */}
+                  <SliderPrimitive.Root
+                    className="relative flex items-center w-full touch-none select-none"
+                    min={resolvedRangeConfig.min}
+                    max={resolvedRangeConfig.max}
+                    step={resolvedRangeConfig.step}
+                    value={[minVal, maxVal]}
+                    onValueChange={(values) => {
+                      const [newMin, newMax] = values as [number, number];
+                      setMinVal(newMin);
+                      setMaxVal(newMax);
+                    }}
+                    minStepsBetweenThumbs={0}
+                    style={{ height: 20 }}
+                  >
+                    {/* Background Track */}
+                    <SliderPrimitive.Track 
+                      className="relative w-full rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800"
+                      style={{ height: 4 }}
+                    >
+                      {/* Active Range */}
+                      <SliderPrimitive.Range 
+                        className="absolute h-full rounded-full"
+                        style={{ backgroundColor: iconColor, opacity: 0.8 }}
+                      />
+                    </SliderPrimitive.Track>
+
+                    {/* Min Thumb */}
+                    <SliderPrimitive.Thumb 
+                      className="block rounded-full bg-white border-2 focus:outline-none relative after:content-[''] after:absolute after:top-1/2 after:left-1/2 after:-translate-x-1/2 after:-translate-y-1/2 after:w-11 after:h-11 after:rounded-full cursor-grab active:cursor-grabbing transition-transform active:scale-125"
                       style={{
-                        left: `${((minVal - resolvedRangeConfig.min) / (resolvedRangeConfig.max - resolvedRangeConfig.min)) * 100}%`,
-                        right: `${100 - ((maxVal - resolvedRangeConfig.min) / (resolvedRangeConfig.max - resolvedRangeConfig.min)) * 100}%`,
-                        backgroundColor: iconColor,
-                        opacity: 0.8
+                        width: 16,
+                        height: 16,
+                        borderColor: iconColor,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
                       }}
+                      aria-label="Giá trị nhỏ nhất"
                     />
-                    
-                    {/* Min Range Input */}
-                    <input
-                      type="range"
-                      min={resolvedRangeConfig.min}
-                      max={resolvedRangeConfig.max}
-                      step={resolvedRangeConfig.step}
-                      value={minVal}
-                      onChange={(e) => {
-                        const val = Math.min(Number(e.target.value), maxVal - rangeGap);
-                        setMinVal(val);
+
+                    {/* Max Thumb */}
+                    <SliderPrimitive.Thumb 
+                      className="block rounded-full bg-white border-2 focus:outline-none relative after:content-[''] after:absolute after:top-1/2 after:left-1/2 after:-translate-x-1/2 after:-translate-y-1/2 after:w-11 after:h-11 after:rounded-full cursor-grab active:cursor-grabbing transition-transform active:scale-125"
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderColor: iconColor,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
                       }}
-                      className="absolute w-full"
-                      style={{ zIndex: minVal > resolvedRangeConfig.max - (resolvedRangeConfig.max - resolvedRangeConfig.min) * 0.1 ? 5 : 3 }}
+                      aria-label="Giá trị lớn nhất"
                     />
-                    
-                    {/* Max Range Input */}
-                    <input
-                      type="range"
-                      min={resolvedRangeConfig.min}
-                      max={resolvedRangeConfig.max}
-                      step={resolvedRangeConfig.step}
-                      value={maxVal}
-                      onChange={(e) => {
-                        const val = Math.max(Number(e.target.value), minVal + rangeGap);
-                        setMaxVal(val);
-                      }}
-                      className="absolute w-full"
-                      style={{ zIndex: 4 }}
-                    />
-                  </div>
+                  </SliderPrimitive.Root>
 
                   {/* Min / Max Labels */}
                   <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 font-mono">

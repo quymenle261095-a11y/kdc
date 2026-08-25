@@ -12,6 +12,7 @@ import { CollapsibleSubSection as SubSection } from '../../_shared/components/Co
 import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
 import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import { QuickRouteInput } from '../../_shared/components/QuickRouteInput';
 
 interface PopupFormProps {
   config: PopupConfig;
@@ -277,7 +278,7 @@ export function PopupForm({ config, onChange, defaultExpanded = true }: PopupFor
               </div>
               <div className="space-y-2">
                 <Label>Link nút phụ</Label>
-                <Input value={config.secondaryButtonLink} onChange={(event) => updateConfig(config, onChange, 'secondaryButtonLink', event.target.value)} placeholder="#" />
+                <QuickRouteInput value={config.secondaryButtonLink} onChangeValue={(v) => onChange({ ...config, secondaryButtonLink: v })} placeholder="#" />
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={config.secondaryButtonDisabled} onChange={(event) => updateConfig(config, onChange, 'secondaryButtonDisabled', event.target.checked)} />
@@ -291,7 +292,7 @@ export function PopupForm({ config, onChange, defaultExpanded = true }: PopupFor
               </div>
               <div className="space-y-2">
                 <Label>Link nút chính</Label>
-                <Input value={config.primaryButtonLink} onChange={(event) => updateConfig(config, onChange, 'primaryButtonLink', event.target.value)} placeholder="#" />
+                <QuickRouteInput value={config.primaryButtonLink} onChangeValue={(v) => onChange({ ...config, primaryButtonLink: v })} placeholder="#" />
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={config.primaryButtonDisabled} onChange={(event) => updateConfig(config, onChange, 'primaryButtonDisabled', event.target.checked)} />

@@ -7,7 +7,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Ban, Check, ChevronDown, Package, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
@@ -34,21 +34,7 @@ function ReviewsContent() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'desc', key: 'created' });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return ['rating', 'product', 'status', 'created'];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_reviews_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : ['rating', 'product', 'status', 'created'];
-      }
-    } catch {
-      return ['rating', 'product', 'status', 'created'];
-    }
-    return ['rating', 'product', 'status', 'created'];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_reviews_visible_columns');
   const isSelectAllActive = selectionMode === 'all';
 
   const productsData = useQuery(api.products.listAll, {});
@@ -168,7 +154,7 @@ function ReviewsContent() {
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
   };
 
@@ -257,15 +243,11 @@ function ReviewsContent() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Đánh giá sản phẩm</h1>
-          <p className="text-sm text-slate-500">Quản lý đánh giá và nhận xét từ khách hàng</p>
-        </div>
-        <div />
-      </div>
-
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý đánh giá sản phẩm"
+        description="Kiểm duyệt và quản lý đánh giá từ khách hàng"
+      />
       <BulkActionBar
         selectedCount={selectedIds.length}
         entityLabel="đánh giá"
@@ -280,243 +262,199 @@ function ReviewsContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Tìm khách hàng hoặc nội dung..."
-              className="pl-9"
+        <TableToolbar
+          activeFilterCount={[Boolean(filterStatus), Boolean(filterProduct)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
               value={searchTerm}
-              onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }}
+              onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+              placeholder="Tìm khách hàng hoặc nội dung..."
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={filterProduct}
-              onChange={(e) =>{  handleProductChange(e.target.value); }}
-            >
-              <option value="">Tất cả sản phẩm</option>
-              {productsData?.map(product => (
-                <option key={product._id} value={product._id}>{product.name}</option>
-              ))}
-            </select>
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={filterStatus}
-              onChange={(e) =>{  handleStatusChange(e.target.value); }}
-            >
-              <option value="">Tất cả trạng thái</option>
-              <option value="Approved">Đã duyệt</option>
-              <option value="Pending">Chờ duyệt</option>
-              <option value="Spam">Spam</option>
-            </select>
-            <Button variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
-            <ColumnToggle
-              columns={columns}
-              visibleColumns={resolvedVisibleColumns}
-              onToggle={(key) => {
-                setVisibleColumns(prev => prev.includes(key) ? prev.filter(col => col !== key) : [...prev, key]);
-              }}
-            />
-          </div>
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>
-              <SortableHeader label="Khách hàng" sortKey="author" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
-              <TableHead>Nội dung</TableHead>
-              {resolvedVisibleColumns.includes('rating') && (
-                <SortableHeader label="Đánh giá" sortKey="rating" sortConfig={sortConfig} onSort={handleSort} className="w-[90px]" />
-              )}
-              {resolvedVisibleColumns.includes('product') && (
-                <SortableHeader label="Sản phẩm" sortKey="productName" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
-              )}
-              {resolvedVisibleColumns.includes('status') && (
-                <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="w-[120px]" />
-              )}
-              {resolvedVisibleColumns.includes('created') && (
-                <SortableHeader label="Thời gian" sortKey="created" sortConfig={sortConfig} onSort={handleSort} className="w-[140px]" />
-              )}
-              <TableHead className="text-right w-[120px]">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedReviewsPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell>
-                    <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-2/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  {resolvedVisibleColumns.includes('rating') && (
-                    <TableCell>
-                      <div className="h-4 w-10 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('product') && (
-                    <TableCell>
-                      <div className="h-4 w-28 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('status') && (
-                    <TableCell>
-                      <div className="h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('created') && (
-                    <TableCell>
-                      <div className="h-4 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right">
-                    <div className="ml-auto h-8 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedReviews.map(review => (
-                  <TableRow key={review._id} className={selectedIds.includes(review._id) ? 'bg-blue-500/5' : ''}>
-                    <TableCell><SelectCheckbox checked={selectedIds.includes(review._id)} onChange={() =>{  toggleSelectItem(review._id); }} /></TableCell>
-                    <TableCell>
-                      <div className="font-medium">{review.author}</div>
-                      <div className="text-xs text-slate-400">{review.authorEmail ?? 'N/A'}</div>
-                    </TableCell>
-                    <TableCell><p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{review.content}</p></TableCell>
-                    {resolvedVisibleColumns.includes('rating') && (
-                      <TableCell className="text-sm text-slate-500">{review.rating ? `${review.rating}/5` : '—'}</TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('product') && (
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
-                          <Package size={12} className="text-orange-500" />
-                          {review.productName}
-                        </div>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('status') && (
-                      <TableCell>
-                        <Badge variant={review.status === 'Approved' ? 'default' : (review.status === 'Pending' ? 'secondary' : 'destructive')} className="whitespace-nowrap">
-                          {review.status === 'Approved' ? 'Đã duyệt' : (review.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('created') && (
-                      <TableCell className="text-xs text-slate-500">{new Date(review.created).toLocaleString('vi-VN')}</TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {review.status !== 'Approved' && (
-                          <Button variant="ghost" size="icon" className="text-green-500 hover:text-green-600" title="Duyệt" onClick={ async () => handleApprove(review._id)}><Check size={16}/></Button>
-                        )}
-                        {review.status !== 'Spam' && (
-                          <Button variant="ghost" size="icon" className="text-orange-500 hover:text-orange-600" title="Đánh dấu spam" onClick={ async () => handleSpam(review._id)}><Ban size={16}/></Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" title="Xóa" onClick={ async () => handleDelete(review._id)}><Trash2 size={16}/></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedReviews.length === 0 && (
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Sản phẩm"
+                value={filterProduct}
+                onChange={(val) => handleProductChange(val)}
+                placeholder="Tất cả sản phẩm"
+                options={(productsData ?? []).map(product => ({ value: product._id, label: product.name }))}
+              />
+              <FilterSelect
+                label="Trạng thái"
+                value={filterStatus}
+                onChange={(val) => handleStatusChange(val)}
+                placeholder="Tất cả trạng thái"
+                options={[
+                  { value: 'Approved', label: 'Đã duyệt' },
+                  { value: 'Pending', label: 'Chờ duyệt' },
+                  { value: 'Spam', label: 'Spam' },
+                ]}
+              />
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterStatus || filterProduct)} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={(key) => toggleColumn(key, columns.map(c => c.key))} />
+            </>
+          }
+        />
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
               <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterStatus || filterProduct ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đánh giá nào.'}
-                </TableCell>
+                <TableHeadSelect checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} />
+                <SortableHeader label="Khách hàng" sortKey="author" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
+                <TableHead>Nội dung</TableHead>
+                {resolvedVisibleColumns.includes('rating') && (
+                  <SortableHeader label="Đánh giá" sortKey="rating" sortConfig={sortConfig} onSort={handleSort} className="w-[90px]" />
+                )}
+                {resolvedVisibleColumns.includes('product') && (
+                  <SortableHeader label="Sản phẩm" sortKey="productName" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
+                )}
+                {resolvedVisibleColumns.includes('status') && (
+                  <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="w-[120px]" />
+                )}
+                {resolvedVisibleColumns.includes('created') && (
+                  <SortableHeader label="Thời gian" sortKey="created" sortConfig={sortConfig} onSort={handleSort} className="w-[140px]" />
+                )}
+                <TableHead className="text-right w-[120px]">Hành động</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedReviewsPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số đánh giá mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedReviewsPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedReviews.map(review => (
+                    <TableRow key={review._id} className={selectedIds.includes(review._id) ? 'bg-blue-500/5' : ''}>
+                      <TableCellSelect checked={selectedIds.includes(review._id)} onChange={() => { toggleSelectItem(review._id); }} />
+                      <TableCell className="whitespace-nowrap">
+                        <div className="font-medium">{review.author}</div>
+                        <div className="text-xs text-slate-400">{review.authorEmail ?? 'N/A'}</div>
+                      </TableCell>
+                      <TableCell><p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{review.content}</p></TableCell>
+                      {resolvedVisibleColumns.includes('rating') && (
+                        <TableCell className="text-sm text-slate-500 whitespace-nowrap">{review.rating ? `${review.rating}/5` : '—'}</TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('product') && (
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
+                            <Package size={12} className="text-orange-500" />
+                            {review.productName}
+                          </div>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('status') && (
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant={review.status === 'Approved' ? 'success' : (review.status === 'Pending' ? 'secondary' : 'destructive')} className="whitespace-nowrap">
+                            {review.status === 'Approved' ? 'Đã duyệt' : (review.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('created') && (
+                        <TableCell className="text-xs text-slate-500 whitespace-nowrap">{new Date(review.created).toLocaleString('vi-VN')}</TableCell>
+                      )}
+                      <TableCell className="text-right whitespace-nowrap">
+                        <RowActions>
+                          {review.status !== 'Approved' && (
+                            <RowActionButton
+                              title="Duyệt"
+                              icon={<Check size={16} />}
+                              onClick={async () => handleApprove(review._id)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            />
+                          )}
+                          {review.status !== 'Spam' && (
+                            <RowActionButton
+                              title="Đánh dấu spam"
+                              icon={<Ban size={16} />}
+                              onClick={async () => handleSpam(review._id)}
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            />
+                          )}
+                          <DeleteActionButton onClick={async () => handleDelete(review._id)} />
+                        </RowActions>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </select>
-                <span>đánh giá/trang</span>
-              </div>
+                </>
+              )}
+              {!isTableLoading && paginatedReviews.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterStatus || filterProduct ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đánh giá nào.'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedReviewsPerPage) + 1 : 0}–{Math.min(currentPage * resolvedReviewsPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">đánh giá</span>
-              </div>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedReviews.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterStatus || filterProduct ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có đánh giá nào.'}
             </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
-                      </div>
-                    );
-                  }
-
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
-            </div>
-          </div>
-        )}
+          ) : (
+            paginatedReviews.map(review => (
+              <MobileRowCard
+                key={review._id}
+                selected={selectedIds.includes(review._id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(review._id)} onChange={() => toggleSelectItem(review._id)} />}
+                title={review.author}
+                subtitle={<span className="text-xs text-slate-500">{review.productName}</span>}
+                badge={
+                  <Badge variant={review.status === 'Approved' ? 'success' : (review.status === 'Pending' ? 'secondary' : 'destructive')}>
+                    {review.status === 'Approved' ? 'Đã duyệt' : (review.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 italic">{review.content}</p>
+                    {review.rating && <div><span className="text-slate-400">Đánh giá:</span> {review.rating}/5 ⭐</div>}
+                    <div><span className="text-slate-400">Thời gian:</span> {new Date(review.created).toLocaleString('vi-VN')}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    {review.status !== 'Approved' && (
+                      <RowActionButton
+                        title="Duyệt"
+                        icon={<Check size={16} />}
+                        onClick={async () => handleApprove(review._id)}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                      />
+                    )}
+                    {review.status !== 'Spam' && (
+                      <RowActionButton
+                        title="Đánh dấu spam"
+                        icon={<Ban size={16} />}
+                        onClick={async () => handleSpam(review._id)}
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      />
+                    )}
+                    <DeleteActionButton onClick={async () => handleDelete(review._id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedReviewsPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="đánh giá"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -530,6 +468,6 @@ function ReviewsContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

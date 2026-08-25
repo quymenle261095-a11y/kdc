@@ -52,8 +52,8 @@ const getServiceKey = (item: ServiceItem, index: number) => {
   return `${item.mediaType}-${item.icon}-${item.image}-${item.title}-${item.description}-${index}`;
 };
 
-const serviceTitleClassName = 'text-[13px] font-bold uppercase leading-tight tracking-wide';
-const serviceBodyClassName = 'mt-0.5 text-[12px] leading-4';
+const serviceTitleClassName = 'text-[13px] font-bold uppercase leading-tight tracking-wide tv:text-lg tv:tracking-widest';
+const serviceBodyClassName = 'mt-0.5 text-[12px] leading-4 tv:text-[15px] tv:leading-6 tv:mt-2';
 const serviceTitleFontStyle = { fontFamily: 'var(--font-active), var(--font-be-vietnam-pro), sans-serif' } as React.CSSProperties;
 const serviceBodyFontStyle = { fontFamily: 'var(--font-active), var(--font-be-vietnam-pro), sans-serif' } as React.CSSProperties;
 
@@ -176,6 +176,8 @@ export const ServicesSectionCore = ({
   device = 'desktop',
   isPreview = false,
   carouselId,
+  isVisualEditActive = false,
+  onItemTextUpdate,
 }: {
   items: ServiceItem[];
   style: ServicesStyle;
@@ -193,9 +195,12 @@ export const ServicesSectionCore = ({
   device?: ServicesCoreDevice;
   isPreview?: boolean;
   carouselId?: string;
+  isVisualEditActive?: boolean;
+  onItemTextUpdate?: (idx: number, field: 'title' | 'description', nextText: string) => void;
 }) => {
   void carouselId;
   void spacing;
+  const isVisualEditActiveNormalized = isPreview && isVisualEditActive;
   const sectionTitle = getDisplayTitle(title);
   const sectionSubtitle = subtitle?.trim() || '';
   const shouldShowTitle = showTitle !== false;
@@ -227,8 +232,8 @@ export const ServicesSectionCore = ({
 
     return (
       <div className={`space-y-2 ${headerAlignClassName}`}>
-        {shouldShowTitle ? <h2 className="text-2xl font-bold tracking-tight md:text-3xl" style={{ color: colors.heading }}>{sectionTitle}</h2> : null}
-        {shouldShowSubtitle ? <p className="text-sm font-medium" style={{ color: colors.subheading }}>{sectionSubtitle}</p> : null}
+        {shouldShowTitle ? <h2 className="text-2xl font-bold tracking-tight md:text-3xl tv:text-5xl" style={{ color: colors.heading }}>{sectionTitle}</h2> : null}
+        {shouldShowSubtitle ? <p className="text-sm font-medium tv:text-xl" style={{ color: colors.subheading }}>{sectionSubtitle}</p> : null}
       </div>
     );
   };
@@ -238,16 +243,16 @@ export const ServicesSectionCore = ({
     ? (device === 'mobile'
       ? (desktopColumns === 4 ? 'grid grid-cols-2 gap-4' : 'grid grid-cols-1 gap-4')
       : device === 'tablet'
-        ? (desktopColumns === 4 ? 'grid grid-cols-2 gap-4' : 'grid grid-cols-3 gap-4')
-        : (desktopColumns === 4 ? 'grid grid-cols-4 gap-4' : 'grid grid-cols-3 gap-4'))
-    : (desktopColumns === 4 ? 'grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-4' : 'grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-3');
+        ? (desktopColumns === 4 ? 'grid grid-cols-2 gap-4 tv:gap-8' : 'grid grid-cols-3 gap-4 tv:gap-8')
+        : (desktopColumns === 4 ? 'grid grid-cols-4 gap-4 tv:gap-8' : 'grid grid-cols-3 gap-4 tv:gap-8'))
+    : (desktopColumns === 4 ? 'grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-4 tv:gap-8' : 'grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-3 tv:gap-8');
   const stripGridClassName = isPreview
     ? (device === 'mobile'
-      ? (desktopColumns === 4 ? 'grid grid-cols-2' : 'grid grid-cols-1')
+      ? (desktopColumns === 4 ? 'grid grid-cols-2 tv:gap-8' : 'grid grid-cols-1 tv:gap-8')
       : device === 'tablet'
-        ? (desktopColumns === 4 ? 'grid grid-cols-2' : 'grid grid-cols-3')
-        : (desktopColumns === 4 ? 'grid grid-cols-4' : 'grid grid-cols-3'))
-    : (desktopColumns === 4 ? 'grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4' : 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3');
+        ? (desktopColumns === 4 ? 'grid grid-cols-2 tv:gap-8' : 'grid grid-cols-3 tv:gap-8')
+        : (desktopColumns === 4 ? 'grid grid-cols-4 tv:gap-8' : 'grid grid-cols-3 tv:gap-8'))
+    : (desktopColumns === 4 ? 'grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 tv:gap-8' : 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 tv:gap-8');
 
   const visibleForRuntime = items.slice(0, 6);
   const displayFeaturedItems = isPreview ? visibleForPreview : visibleForRuntime;
@@ -280,7 +285,7 @@ export const ServicesSectionCore = ({
 
     return (
       <section className="px-4">
-        <div className="mx-auto max-w-7xl space-y-2">
+        <div className="mx-auto max-w-7xl tv:max-w-[1536px] space-y-2">
           {renderSectionHeader()}
           <div className={cn('overflow-hidden', compactRadiusClassName)} style={{ backgroundColor: background }}>
             <div className={`${stripGridClassName} divide-y md:divide-y-0`} style={{ borderColor: divider }}>
@@ -304,8 +309,26 @@ export const ServicesSectionCore = ({
                       surfaceColor: surface,
                     })}
                     <div className="min-w-0">
-                      <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: text }}>{item.title || 'Tiêu đề'}</h3>
-                      <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: subtext }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                      <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceTitleFontStyle, color: text }}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                      </h3>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceBodyFontStyle, color: subtext }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </article>
                 );
@@ -345,7 +368,7 @@ export const ServicesSectionCore = ({
     return (
       <section>
         <div style={{ backgroundColor: stripBg }}>
-          <div className="mx-auto max-w-7xl px-4">
+          <div className="mx-auto max-w-7xl tv:max-w-[1536px] px-4">
             <div className={`${stripGridClassName} gap-y-5`}>
               {displayFeaturedItems.map((item, idx) => {
                 if (stackedLayout) {
@@ -360,12 +383,26 @@ export const ServicesSectionCore = ({
                           imageClassName="h-11 w-11 rounded object-cover"
                         />
                       </div>
-                      <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: titleColor }}>
-                        {item.title || 'Tiêu đề'}
+                      <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceTitleFontStyle, color: titleColor }}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
                       </h3>
-                      <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: descColor }}>
-                        {item.description || 'Mô tả dịch vụ...'}
-                      </p>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceBodyFontStyle, color: descColor }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </article>
                   );
                 }
@@ -381,12 +418,26 @@ export const ServicesSectionCore = ({
                       />
                     </div>
                     <div className="min-w-0">
-                      <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: titleColor }}>
-                        {item.title || 'Tiêu đề'}
+                      <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceTitleFontStyle, color: titleColor }}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
                       </h3>
-                      <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: descColor }}>
-                        {item.description || 'Mô tả dịch vụ...'}
-                      </p>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceBodyFontStyle, color: descColor }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </article>
                 );
@@ -401,7 +452,7 @@ export const ServicesSectionCore = ({
   if (style === 'bigNumber') {
     return (
       <section className="px-4">
-        <div className="mx-auto max-w-7xl space-y-2">
+        <div className="mx-auto max-w-7xl tv:max-w-[1536px] space-y-2">
           {renderSectionHeader()}
           <div className={cn('overflow-hidden border', cornerRadius === 'lg' ? 'rounded-[32px]' : radiusClassName)} style={{ borderColor: colors.cardBorder, backgroundColor: colors.cardBackground }}>
             <div className={`${stripGridClassName} divide-y md:divide-y-0`} style={{ borderColor: colors.neutralBorder }}>
@@ -425,8 +476,26 @@ export const ServicesSectionCore = ({
                           surfaceColor: colors.primaryTint,
                         })}
                         <div className="min-w-0 flex-1">
-                          <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: colors.bodyText }}>{item.title || 'Tiêu đề'}</h3>
-                          <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: colors.mutedText }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                          <h3
+                            contentEditable={isVisualEditActiveNormalized}
+                            suppressContentEditableWarning={isVisualEditActiveNormalized}
+                            onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                            className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                            style={{ ...serviceTitleFontStyle, color: colors.bodyText }}
+                          >
+                            {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                          </h3>
+                          {(item.description || isVisualEditActiveNormalized) ? (
+                            <p
+                              contentEditable={isVisualEditActiveNormalized}
+                              suppressContentEditableWarning={isVisualEditActiveNormalized}
+                              onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                              className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                              style={{ ...serviceBodyFontStyle, color: colors.mutedText }}
+                            >
+                              {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                            </p>
+                          ) : null}
                         </div>
                       </>
                     ) : (
@@ -441,8 +510,26 @@ export const ServicesSectionCore = ({
                           surfaceClassName: 'flex h-11 w-11 items-center justify-center rounded-full',
                           surfaceColor: colors.primaryTint,
                         })}
-                        <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: colors.bodyText }}>{item.title || 'Tiêu đề'}</h3>
-                        <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: colors.mutedText }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                        <h3
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceTitleFontStyle, color: colors.bodyText }}
+                        >
+                          {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                        </h3>
+                        {(item.description || isVisualEditActiveNormalized) ? (
+                          <p
+                            contentEditable={isVisualEditActiveNormalized}
+                            suppressContentEditableWarning={isVisualEditActiveNormalized}
+                            onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                            className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                            style={{ ...serviceBodyFontStyle, color: colors.mutedText }}
+                          >
+                            {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                          </p>
+                        ) : null}
                       </>
                     )}
                   </article>
@@ -458,7 +545,7 @@ export const ServicesSectionCore = ({
   if (style === 'cards') {
     return (
       <section className="px-4">
-        <div className="mx-auto max-w-7xl space-y-2">
+        <div className="mx-auto max-w-7xl tv:max-w-[1536px] space-y-2">
           {renderSectionHeader()}
           <div className={cardsGridClassName}>
             {displayFeaturedItems.map((item, idx) => (
@@ -477,8 +564,26 @@ export const ServicesSectionCore = ({
                       surfaceColor: colors.neutralSurface,
                     })}
                     <div className="min-w-0 flex-1">
-                      <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: colors.bodyText }}>{item.title || 'Tiêu đề'}</h3>
-                      <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: colors.mutedText }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                      <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceTitleFontStyle, color: colors.bodyText }}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                      </h3>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceBodyFontStyle, color: colors.mutedText }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -493,8 +598,26 @@ export const ServicesSectionCore = ({
                       surfaceClassName: 'flex h-11 w-11 items-center justify-center rounded-lg mx-auto',
                       surfaceColor: colors.neutralSurface,
                     })}
-                    <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: colors.bodyText }}>{item.title || 'Tiêu đề'}</h3>
-                    <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: colors.mutedText }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                    <h3
+                      contentEditable={isVisualEditActiveNormalized}
+                      suppressContentEditableWarning={isVisualEditActiveNormalized}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                      className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      style={{ ...serviceTitleFontStyle, color: colors.bodyText }}
+                    >
+                      {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                    </h3>
+                    {(item.description || isVisualEditActiveNormalized) ? (
+                      <p
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceBodyFontStyle, color: colors.mutedText }}
+                      >
+                        {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </article>
@@ -513,7 +636,7 @@ export const ServicesSectionCore = ({
 
     return (
       <section className="px-4">
-        <div className="mx-auto max-w-7xl space-y-2">
+        <div className="mx-auto max-w-7xl tv:max-w-[1536px] space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               {renderSectionHeader()}
@@ -564,8 +687,26 @@ export const ServicesSectionCore = ({
                       surfaceColor: itemMediaSurface,
                     })}
                     <div className="min-w-0">
-                      <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: itemText }}>{item.title || 'Tiêu đề'}</h3>
-                      <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: itemSubtext }}>{item.description || 'Mô tả dịch vụ...'}</p>
+                      <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(serviceTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        style={{ ...serviceTitleFontStyle, color: itemText }}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
+                      </h3>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(serviceBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ ...serviceBodyFontStyle, color: itemSubtext }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </article>
                 );
@@ -622,12 +763,24 @@ export const ServicesSectionCore = ({
                       )}
                     </div>
                     <div className={`min-w-0 ${policyTextAlignClassName}`} style={{ color: getAPCATextColor(colors.primary, 16, 700) }}>
-                      <div className={cn('font-bold leading-6', responsivePolicyTitleClassName)}>
-                        {item.title || 'Tiêu đề'}
+                      <div
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn('font-bold leading-6', responsivePolicyTitleClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      >
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
                       </div>
-                      <div className={cn('font-normal opacity-85', responsivePolicyBodyClassName)}>
-                        {item.description || 'Mô tả dịch vụ...'}
-                      </div>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <div
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn('font-normal opacity-85', responsivePolicyBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </article>
@@ -713,21 +866,30 @@ export const ServicesSectionCore = ({
                   const textElement = (
                     <div className="min-w-0">
                       <h3
+                        contentEditable={isVisualEditActiveNormalized}
+                        suppressContentEditableWarning={isVisualEditActiveNormalized}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
                         className={cn(
                           'relative mb-3 min-h-[2.45em] pb-3 font-bold uppercase leading-[1.25] text-balance after:absolute after:bottom-0 after:h-[2px] after:w-[54px] after:bg-slate-900',
                           featureUnderlineClassName,
                           responsivePolicyTitleClassName,
+                          isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.bodyText, fontFamily: 'var(--font-active), var(--font-be-vietnam-pro), sans-serif' }}
                       >
-                        {item.title || 'Tiêu đề'}
+                        {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
                       </h3>
-                      <p
-                        className={cn('max-w-[270px] font-normal text-balance', featureTextWidthClassName, responsivePolicyBodyClassName)}
-                        style={{ color: colors.mutedText, fontFamily: 'var(--font-active), var(--font-be-vietnam-pro), sans-serif' }}
-                      >
-                        {item.description || 'Mô tả dịch vụ...'}
-                      </p>
+                      {(item.description || isVisualEditActiveNormalized) ? (
+                        <p
+                          contentEditable={isVisualEditActiveNormalized}
+                          suppressContentEditableWarning={isVisualEditActiveNormalized}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn('max-w-[270px] font-normal text-balance', featureTextWidthClassName, responsivePolicyBodyClassName, isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                          style={{ color: colors.mutedText, fontFamily: 'var(--font-active), var(--font-be-vietnam-pro), sans-serif' }}
+                        >
+                          {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   );
 
@@ -768,14 +930,19 @@ export const ServicesSectionCore = ({
 
   return (
     <section className="px-4">
-      <div className="mx-auto max-w-7xl space-y-2">
+      <div className="mx-auto max-w-7xl tv:max-w-[1536px] space-y-2">
         {renderSectionHeader()}
         <div className={cardsGridClassName}>
           {displayFeaturedItems.map((item, idx) => {
             return (
               <article
                 key={getServiceKey(item, idx)}
-                className="relative flex min-h-[54px] flex-col justify-center rounded-md py-2.5 pl-[76px] pr-4 text-left shadow-sm"
+                className={cn(
+                  "relative flex min-h-[54px] flex-col justify-center rounded-md py-2.5 pr-4 text-left shadow-sm",
+                  isPreview
+                    ? (device === 'mobile' ? 'pl-4' : 'pl-[76px]')
+                    : 'pl-4 md:pl-[76px]'
+                )}
                 style={{ backgroundColor: cardBg }}
               >
                 <div
@@ -820,12 +987,39 @@ export const ServicesSectionCore = ({
                 </div>
 
                 <div className="relative z-0">
-                  <h3 className={serviceTitleClassName} style={{ ...serviceTitleFontStyle, color: cardTitleColor }}>
-                    {item.title || 'Tiêu đề'}
+                  <h3
+                    contentEditable={isVisualEditActiveNormalized}
+                    suppressContentEditableWarning={isVisualEditActiveNormalized}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      serviceTitleClassName,
+                      isPreview
+                        ? (device === 'mobile' ? 'pl-[56px] min-h-[42px] text-[11px]' : 'pl-0 min-h-0 text-[13px]')
+                        : 'pl-[56px] md:pl-0 min-h-[42px] md:min-h-0 text-[11px] md:text-[13px]',
+                      isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ ...serviceTitleFontStyle, color: cardTitleColor }}
+                  >
+                    {item.title || (isVisualEditActiveNormalized ? 'Tiêu đề' : '')}
                   </h3>
-                  <p className={serviceBodyClassName} style={{ ...serviceBodyFontStyle, color: cardDescColor }}>
-                    {item.description || 'Mô tả dịch vụ...'}
-                  </p>
+                  {(item.description || isVisualEditActiveNormalized) ? (
+                    <p
+                      contentEditable={isVisualEditActiveNormalized}
+                      suppressContentEditableWarning={isVisualEditActiveNormalized}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        serviceBodyClassName,
+                        "pl-0",
+                        isPreview
+                          ? (device === 'mobile' ? 'mt-2 text-[10px]' : 'mt-0.5 text-[12px]')
+                          : 'mt-2 md:mt-0.5 text-[10px] md:text-[12px]',
+                        isVisualEditActiveNormalized && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ ...serviceBodyFontStyle, color: cardDescColor }}
+                    >
+                      {item.description || (isVisualEditActiveNormalized ? 'Mô tả dịch vụ...' : '')}
+                    </p>
+                  ) : null}
                 </div>
               </article>
             );

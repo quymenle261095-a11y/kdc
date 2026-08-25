@@ -102,6 +102,8 @@ export default function FeaturesEditPage({
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
   const component = snapshotComponent ?? liveComponent;
@@ -643,6 +645,19 @@ export default function FeaturesEditPage({
               spacing={spacing}
               desktopColumns={desktopColumns}
               cornerRadius={cornerRadius}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemsChange={(nextItems) => {
+                setFeaturesItems(nextItems.map((item, idx) => ({
+                  id: featuresItems[idx]?.id ?? item.id,
+                  title: item.title,
+                  description: item.description,
+                  icon: item.icon,
+                  image: item.image,
+                })));
+              }}
             />
           </div>
         </div>

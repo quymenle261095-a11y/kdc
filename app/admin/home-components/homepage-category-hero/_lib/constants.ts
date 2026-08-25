@@ -10,12 +10,12 @@ import type {
 import { DEFAULT_SECTION_SPACING } from '../../_shared/types/sectionSpacing';
 
 export const HOMEPAGE_CATEGORY_HERO_STYLES: Array<{ id: HomepageCategoryHeroStyle; label: string }> = [
-  { id: 'sidebar', label: 'Sidebar' },
-  { id: 'classic', label: 'Classic' },
-  { id: 'flush', label: 'Flush' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'soft', label: 'Soft' },
-  { id: 'top-nav', label: 'Top Nav' },
+  { id: 'sidebar', label: '(1) Thanh bên' },
+  { id: 'classic', label: '(2) Cổ điển' },
+  { id: 'flush', label: '(3) Tràn viền' },
+  { id: 'minimal', label: '(4) Tối giản' },
+  { id: 'soft', label: '(5) Bo mềm' },
+  { id: 'top-nav', label: '(6) Thanh trên' },
 ];
 
 const HOMEPAGE_CATEGORY_HERO_STYLE_SET = new Set<HomepageCategoryHeroStyle>(

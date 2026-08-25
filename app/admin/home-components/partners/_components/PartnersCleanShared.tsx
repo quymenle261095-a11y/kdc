@@ -30,6 +30,8 @@ export const PartnersCleanShared = ({
   openInNewTab = false,
   skipHeader = false,
   className,
+  visualEditEnabled,
+  onItemNameChange,
 }: {
   items: PartnersCleanItem[];
   title?: string;
@@ -46,6 +48,8 @@ export const PartnersCleanShared = ({
   openInNewTab?: boolean;
   skipHeader?: boolean;
   className?: string;
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   if (items.length === 0) {return null;}
 
@@ -101,8 +105,24 @@ export const PartnersCleanShared = ({
                 )
                 : <ImageIcon size={fallbackIconSize} className="text-slate-400" />}
               {showName && (
-                <span className="whitespace-nowrap text-sm font-medium text-slate-600 md:text-base">
-                  {item.name ?? `Đối tác ${index + 1}`}
+                <span
+                  contentEditable={visualEditEnabled}
+                  suppressContentEditableWarning={visualEditEnabled}
+                  onClick={(e) => {
+                    if (visualEditEnabled) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                  onBlur={visualEditEnabled ? (e) => {
+                    onItemNameChange?.(index, e.currentTarget.textContent ?? '');
+                  } : undefined}
+                  className={cn(
+                    "whitespace-nowrap text-sm font-medium text-slate-600 md:text-base",
+                    visualEditEnabled && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text"
+                  )}
+                >
+                  {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${index + 1}`)}
                 </span>
               )}
             </a>

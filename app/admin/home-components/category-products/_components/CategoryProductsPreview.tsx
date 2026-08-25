@@ -1,4 +1,5 @@
-import React from 'react';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+import React, { useState } from 'react';
 import { ArrowRight, ArrowUpRight, ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useQuery } from 'convex/react';
@@ -7,14 +8,21 @@ import { cn } from '../../../components/ui';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { ProductImageWithOverlayAuto } from '@/components/shared/ProductImageWithOverlay';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { CATEGORY_PRODUCTS_STYLES } from '../_lib/constants';
 import { getCategoryProductsColors } from '../_lib/colors';
+import { ProductCardActions } from '@/components/site/shared/ProductCardActions';
+import { getProductsListColors } from '@/components/site/products/colors';
 import { getHomeComponentPriceLabel, resolveSaleMode } from '../../_shared/lib/productPrice';
 import { getSectionSpacingClassName, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 import { getProductImageAspectRatioCssValue, getProductImageAspectRatioLabel, resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import { QuickAddVariantModal } from '@/components/products/QuickAddVariantModal';
+import type { Id } from '@/convex/_generated/dataModel';
+import { buildPreviewQuickAddProduct, type PreviewQuickAddAction, type PreviewQuickAddProduct } from '../../_shared/lib/previewQuickAdd';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+import { SectionHeader } from '../../_shared/components/SectionHeader';
 import type {
   CategoryProductsBrandMode,
   CategoryProductsConfig,
@@ -37,10 +45,13 @@ interface CategoryProductsPreviewProps {
   mode: CategoryProductsBrandMode;
   selectedStyle: CategoryProductsStyle;
   onStyleChange: (style: CategoryProductsStyle) => void;
-  categoriesData: { _id: string; name: string; slug?: string; image?: string }[];
-  productsData: CategoryProductsProduct[];
+  categoriesData?: { _id: string; name: string; slug?: string; image?: string }[];
+  productsData?: CategoryProductsProduct[];
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  title?: string;
+  onTitleChange?: (val: string) => void;
+  isVisualEditAllowed?: boolean;
 }
 
 export const CategoryProductsPreview = ({ 
@@ -50,17 +61,39 @@ export const CategoryProductsPreview = ({
   mode,
   selectedStyle,
   onStyleChange, 
-  categoriesData,
-  productsData,
+  categoriesData = [],
+  productsData = [],
   fontStyle,
   fontClassName,
+  title = 'Sản phẩm theo danh mục',
+  onTitleChange,
+  isVisualEditAllowed = true,
 }: CategoryProductsPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
   const previewStyle = selectedStyle || 'grid';
   const setPreviewStyle = (s: string) =>{  onStyleChange(s as CategoryProductsStyle); };
   const colors = React.useMemo(
-    () => getCategoryProductsColors(_brandColor, secondary, mode),
-    [_brandColor, secondary, mode]
+    () => adaptTokensForDarkMode(getCategoryProductsColors(_brandColor, secondary, mode), isDark),
+    [_brandColor, secondary, mode, isDark]
+  );
+  const listTokens = React.useMemo(
+    () => adaptTokensForDarkMode(getProductsListColors(_brandColor, secondary, mode || 'single'), isDark),
+    [_brandColor, secondary, mode, isDark]
   );
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
   const aspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
@@ -81,6 +114,20 @@ export const CategoryProductsPreview = ({
   const cornerRadius = normalizeCategoryProductsCornerRadius(config.cornerRadius);
   const cardRadiusClassName = getCategoryProductsCardRadiusClassName(cornerRadius);
   const imageRadiusClassName = getCategoryProductsImageRadiusClassName(cornerRadius);
+  const [quickAddTarget, setQuickAddTarget] = React.useState<{ product: PreviewQuickAddProduct; action: PreviewQuickAddAction } | null>(null);
+  const onPreviewAction = React.useCallback((item: CategoryProductsProduct | undefined, action: PreviewQuickAddAction) => {
+    if (!item) {
+      return;
+    }
+    const product = buildPreviewQuickAddProduct(item);
+    if (!product.hasVariants || !product._id) {
+      return;
+    }
+    setQuickAddTarget({ product, action });
+  }, []);
+  const quickAddModalProduct = React.useMemo(() => quickAddTarget
+    ? { ...quickAddTarget.product, _id: quickAddTarget.product._id as Id<'products'> }
+    : null, [quickAddTarget]);
 
   const resolvedSections = React.useMemo(() => {
     if (config.selectionMode === 'demo') {
@@ -108,7 +155,7 @@ export const CategoryProductsPreview = ({
         }));
     }
 
-    return config.sections
+    return (config.sections ?? [])
       .map((section) => {
         const category = categoriesData.find(c => c._id === section.categoryId);
         if (!category) {return null;}
@@ -128,6 +175,11 @@ export const CategoryProductsPreview = ({
         products: CategoryProductsProduct[];
       })[];
   }, [categoriesData, config.demoSections, config.sections, config.selectionMode, productsData]);
+
+  const getSectionKey = (section: typeof resolvedSections[number], index: number) => {
+    const sectionId = section.categoryId || section.category._id || section.id;
+    return `${sectionId ?? 'section'}-${index}`;
+  };
 
   const getGridCols = () => getCategoryProductsPreviewGridClassName(config.columnsDesktop, device);
 
@@ -200,54 +252,76 @@ export const CategoryProductsPreview = ({
   };
 
   // Product Card Component with Equal Height (line-clamp + min-height)
-  const ProductCard = ({ product }: { product: CategoryProductsProduct }) => (
-    <div className="group cursor-pointer flex flex-col h-full">
-      <div className={cn('overflow-hidden mb-2', imageRadiusClassName)} style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
-        {product.image ? (
-          <FramePreviewImage
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package size={24} style={{ color: colors.emptyStateIcon }} />
+  const ProductCard = ({ product }: { product: CategoryProductsProduct }) => {
+    const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+    const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+    const cartButtonsLayout = config.cartButtonsLayout || 'stack';
+
+    return (
+      <div className="group cursor-pointer flex flex-col h-full bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300">
+        <div className={cn('overflow-hidden mb-2', imageRadiusClassName)} style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}>
+          {product.image ? (
+            <FramePreviewImage
+              src={product.image}
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Package size={24} style={{ color: colors.emptyStateIcon }} />
+            </div>
+          )}
+        </div>
+        <h4
+          className={cn(
+            'font-medium line-clamp-2',
+            device === 'mobile' ? 'text-xs min-h-[2rem]' : 'text-sm min-h-[2.5rem]'
+          )}
+          style={{ color: colors.bodyText }}
+        >
+          {product.name || 'Tên sản phẩm'}
+        </h4>
+        <div className="flex flex-col mt-auto mb-2">
+          {(() => {
+            const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+            if (priceDisplay.comparePrice) {
+              return (
+                <>
+                  <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')} style={{ color: colors.priceText }}>
+                    {priceDisplay.label}
+                  </span>
+                  <span className="text-[10px] text-slate-400 line-through">
+                    {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
+                  </span>
+                </>
+              );
+            }
+            return (
+              <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')} style={{ color: colors.priceText }}>
+                {priceDisplay.label}
+              </span>
+            );
+          })()}
+        </div>
+        {(showAddToCartButton || showBuyNowButton) && (
+          <div className="mt-auto">
+            <ProductCardActions
+              product={product as any}
+              tokens={listTokens}
+              showStock={false}
+              showAddToCartButton={showAddToCartButton}
+              showBuyNowButton={showBuyNowButton}
+              buyNowLabel="Mua ngay"
+              onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+              onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+              cartButtonsLayout={cartButtonsLayout}
+              device={device}
+            />
           </div>
         )}
       </div>
-      <h4
-        className={cn(
-          'font-medium line-clamp-2',
-          device === 'mobile' ? 'text-xs min-h-[2rem]' : 'text-sm min-h-[2.5rem]'
-        )}
-        style={{ color: colors.bodyText }}
-      >
-        {product.name || 'Tên sản phẩm'}
-      </h4>
-      <div className="flex flex-col mt-auto">
-        {(() => {
-          const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-          if (priceDisplay.comparePrice) {
-            return (
-              <>
-                <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')} style={{ color: colors.priceText }}>
-                  {priceDisplay.label}
-                </span>
-                <span className="text-[10px] text-slate-400 line-through">
-                  {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
-                </span>
-              </>
-            );
-          }
-          return (
-            <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')} style={{ color: colors.priceText }}>
-              {priceDisplay.label}
-            </span>
-          );
-        })()}
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Style 1: Grid - Classic grid layout per section
   const renderGridStyle = () => (
@@ -257,8 +331,8 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => (
-          <section key={section.id} className="px-4">
+        resolvedSections.map((section, sectionIndex) => (
+          <section key={getSectionKey(section, sectionIndex)} className="px-4">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-between mb-4 md:mb-6">
                 <h2
@@ -378,36 +452,59 @@ export const CategoryProductsPreview = ({
           ) : (
             <div className="overflow-hidden px-4" ref={emblaRef}>
               <div className="flex gap-4 backface-hidden touch-pan-y">
-                {section.products.map((product) => (
-                  <div 
-                    key={product._id}
-                    className={cn(
-                      'flex-none group cursor-grab active:cursor-grabbing select-none',
-                      device === 'mobile' ? 'w-36' : 'w-48'
-                    )}
-                  >
-                    <div className={cn('overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2', imageRadiusClassName)} style={imageAspectRatioStyle}>
-                      {product.image ? (
-                        <FramePreviewImage 
-                          src={product.image} 
-                          alt={product.name} 
-                          className="w-full h-full object-cover" 
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package size={24} className="text-slate-300" />
+                {section.products.map((product) => {
+                  const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+                  const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+                  const cartButtonsLayout = config.cartButtonsLayout || 'stack';
+                  return (
+                    <div 
+                      key={product._id}
+                      className={cn(
+                        'flex-none group cursor-grab active:cursor-grabbing select-none flex flex-col justify-between',
+                        device === 'mobile' ? 'w-36' : 'w-48'
+                      )}
+                    >
+                      <div className="flex-1 flex flex-col">
+                        <div className={cn('overflow-hidden bg-slate-100 dark:bg-slate-800 mb-2', imageRadiusClassName)} style={imageAspectRatioStyle}>
+                          {product.image ? (
+                            <FramePreviewImage 
+                              src={product.image} 
+                              alt={product.name} 
+                              className="w-full h-full object-cover" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package size={24} className="text-slate-300" />
+                            </div>
+                          )}
+                        </div>
+                        <h4 className={cn(
+                          'font-medium line-clamp-2 mb-1',
+                          device === 'mobile' ? 'text-xs' : 'text-sm'
+                        )}>{product.name}</h4>
+                        <span className={cn('font-bold mb-2 block', device === 'mobile' ? 'text-sm' : 'text-base')} style={{ color: colors.buttonText }}>
+                          {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
+                        </span>
+                      </div>
+                      {(showAddToCartButton || showBuyNowButton) && (
+                        <div className="mt-auto">
+                          <ProductCardActions
+                            product={product as any}
+                            tokens={listTokens}
+                            showStock={false}
+                            showAddToCartButton={showAddToCartButton}
+                            showBuyNowButton={showBuyNowButton}
+                            buyNowLabel="Mua ngay"
+                            onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                            onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                            cartButtonsLayout={cartButtonsLayout}
+                            device={device}
+                          />
                         </div>
                       )}
                     </div>
-                    <h4 className={cn(
-                      'font-medium line-clamp-2 mb-1',
-                      device === 'mobile' ? 'text-xs' : 'text-sm'
-                    )}>{product.name}</h4>
-                    <span className={cn('font-bold', device === 'mobile' ? 'text-sm' : 'text-base')} style={{ color: colors.buttonText }}>
-                      {getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -423,8 +520,8 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => (
-          <CarouselSection key={section.id} section={section} />
+        resolvedSections.map((section, sectionIndex) => (
+          <CarouselSection key={getSectionKey(section, sectionIndex)} section={section} />
         ))
       )}
     </div>
@@ -438,8 +535,8 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => (
-          <section key={section.id} className="px-4">
+        resolvedSections.map((section, sectionIndex) => (
+          <section key={getSectionKey(section, sectionIndex)} className="px-4">
             <div className="max-w-7xl mx-auto">
               <div
                 className={cn('overflow-hidden', cardRadiusClassName)}
@@ -509,12 +606,12 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => {
+        resolvedSections.map((section, sectionIndex) => {
           const featured = section.products[0];
           const others = section.products.slice(1, 5);
 
           return (
-            <section key={section.id} className="px-4">
+            <section key={getSectionKey(section, sectionIndex)} className="px-4">
               <div className="max-w-7xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -577,7 +674,7 @@ export const CategoryProductsPreview = ({
                             Nổi bật
                           </span>
                           <h3 className="font-bold text-base line-clamp-2 mb-1">{featured.name}</h3>
-                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0 mb-3">
                             {(() => {
                               const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
                               if (priceDisplay.comparePrice) {
@@ -593,29 +690,69 @@ export const CategoryProductsPreview = ({
                               return <span className="font-bold text-base">{priceDisplay.label}</span>;
                             })()}
                           </div>
+                          {(saleMode === 'cart' && (config.showAddToCartButton !== false || config.showBuyNowButton !== false)) && (
+                            <div className="mt-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                              <ProductCardActions
+                                product={featured as any}
+                                tokens={listTokens}
+                                showStock={false}
+                                showAddToCartButton={saleMode === 'cart' && config.showAddToCartButton !== false}
+                                showBuyNowButton={saleMode === 'cart' && config.showBuyNowButton !== false}
+                                buyNowLabel="Mua ngay"
+                                onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                cartButtonsLayout={config.cartButtonsLayout || 'stack'}
+                                device={device}
+                                isOnDarkBg={true}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    {others.map((product) => (
-                      <div key={product._id} className={cn('group cursor-pointer relative overflow-hidden bg-slate-100 dark:bg-slate-800', imageRadiusClassName)}>
-                        {product.image ? (
-                          <FramePreviewImage 
-                            src={product.image} 
-                            alt={product.name} 
-                            className="w-full h-full object-cover" 
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package size={24} className="text-slate-300" />
+                    {others.map((product) => {
+                      const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+                      const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+                      const cartButtonsLayout = config.cartButtonsLayout || 'stack';
+                      return (
+                        <div key={product._id} className={cn('group cursor-pointer relative overflow-hidden bg-slate-100 dark:bg-slate-800', imageRadiusClassName)}>
+                          {product.image ? (
+                            <FramePreviewImage 
+                              src={product.image} 
+                              alt={product.name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package size={24} className="text-slate-300" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20" />
+                          <div className="absolute bottom-0 left-0 right-0 p-3 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-30 flex flex-col justify-end bg-black/60 max-h-full overflow-y-auto">
+                            <h4 className="font-medium text-xs line-clamp-1">{product.name}</h4>
+                            <span className="font-bold text-xs mb-2">{getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}</span>
+                            {(showAddToCartButton || showBuyNowButton) && (
+                              <div className="mt-1" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                                <ProductCardActions
+                                  product={product as any}
+                                  tokens={listTokens}
+                                  showStock={false}
+                                  showAddToCartButton={showAddToCartButton}
+                                  showBuyNowButton={showBuyNowButton}
+                                  buyNowLabel="Mua ngay"
+                                  onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                  onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                  cartButtonsLayout={cartButtonsLayout}
+                                  device={device}
+                                  isOnDarkBg={true}
+                                />
+                              </div>
+                            )}
                           </div>
-                        )}
-                        <div className="absolute inset-x-0 bottom-0 p-3 text-white bg-black/55">
-                          <h4 className="font-medium text-xs line-clamp-1">{product.name}</h4>
-                          <span className="font-bold text-xs">{getPriceDisplay(product.price, product.salePrice, product.hasVariants).label}</span>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ))}
               </div>
@@ -634,12 +771,12 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => {
+        resolvedSections.map((section, sectionIndex) => {
           const featured = section.products[0];
           const gridItems = section.products.slice(1, 5);
 
           return (
-            <section key={section.id} className="px-4">
+            <section key={getSectionKey(section, sectionIndex)} className="px-4">
               <div className="max-w-7xl mx-auto">
                 <div className="flex items-end justify-between mb-6 pb-4 border-b-2" style={{ borderColor: colors.neutralBorder }}>
                   <div>
@@ -704,7 +841,7 @@ export const CategoryProductsPreview = ({
                             Nổi bật
                           </span>
                           <h3 className="font-bold text-xl md:text-2xl line-clamp-2 mb-2">{featured.name}</h3>
-                          <div className="flex items-baseline gap-3">
+                          <div className="flex items-baseline gap-3 mb-3">
                             {(() => {
                               const priceDisplay = getPriceDisplay(featured?.price, featured?.salePrice, featured?.hasVariants);
                               if (priceDisplay.comparePrice) {
@@ -720,64 +857,102 @@ export const CategoryProductsPreview = ({
                               return <span className="font-bold text-2xl">{priceDisplay.label}</span>;
                             })()}
                           </div>
+                          {(saleMode === 'cart' && (config.showAddToCartButton !== false || config.showBuyNowButton !== false)) && (
+                            <div className="mt-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                              <ProductCardActions
+                                product={featured as any}
+                                tokens={listTokens}
+                                showStock={false}
+                                showAddToCartButton={saleMode === 'cart' && config.showAddToCartButton !== false}
+                                showBuyNowButton={saleMode === 'cart' && config.showBuyNowButton !== false}
+                                buyNowLabel="Mua ngay"
+                                onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                cartButtonsLayout={config.cartButtonsLayout || 'stack'}
+                                device={device}
+                                isOnDarkBg={true}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
 
                     <div className="grid grid-cols-2 gap-4">
-                      {gridItems.map((product) => (
-                        <div key={product._id} className="group cursor-pointer">
-                          <div 
-                            className={cn('overflow-hidden mb-3 relative', imageRadiusClassName)}
-                            style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
-                          >
-                            {product.image ? (
-                              <FramePreviewImage 
-                                src={product.image} 
-                                alt={product.name} 
-                                className="w-full h-full object-cover" 
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package size={24} style={{ color: colors.emptyStateIcon }} />
+                      {gridItems.map((product) => {
+                        const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+                        const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+                        const cartButtonsLayout = config.cartButtonsLayout || 'stack';
+                        return (
+                          <div key={product._id} className="group cursor-pointer">
+                            <div 
+                              className={cn('overflow-hidden mb-3 relative', imageRadiusClassName)}
+                              style={{ ...imageAspectRatioStyle, backgroundColor: colors.imageBackground }}
+                            >
+                              {product.image ? (
+                                <FramePreviewImage 
+                                  src={product.image} 
+                                  alt={product.name} 
+                                  className="w-full h-full object-cover" 
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Package size={24} style={{ color: colors.emptyStateIcon }} />
+                                </div>
+                              )}
+                              <div
+                                className="absolute inset-x-2 bottom-2 flex items-center justify-center"
+                              >
+                                <span
+                                  className="px-4 py-2 rounded-full text-sm font-medium"
+                                  style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
+                                >
+                                  Xem nhanh
+                                </span>
+                              </div>
+                            </div>
+                            <h4 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">{product.name}</h4>
+                            <div className="flex items-baseline gap-2 mt-1">
+                              {(() => {
+                                const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+                                if (priceDisplay.comparePrice) {
+                                  return (
+                                    <>
+                                      <span className={cn('font-bold', 'text-sm')}>
+                                        {priceDisplay.label}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 line-through">
+                                        {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
+                                      </span>
+                                    </>
+                                  );
+                                }
+                                return (
+                                  <span className={cn('font-bold', 'text-sm')}>
+                                    {priceDisplay.label}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            {(showAddToCartButton || showBuyNowButton) && (
+                              <div className="mt-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                                <ProductCardActions
+                                  product={product as any}
+                                  tokens={listTokens}
+                                  showStock={false}
+                                  showAddToCartButton={showAddToCartButton}
+                                  showBuyNowButton={showBuyNowButton}
+                                  buyNowLabel="Mua ngay"
+                                  onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                  onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                  cartButtonsLayout={cartButtonsLayout}
+                                  device={device}
+                                />
                               </div>
                             )}
-                            <div
-                              className="absolute inset-x-2 bottom-2 flex items-center justify-center"
-                            >
-                              <span
-                                className="px-4 py-2 rounded-full text-sm font-medium"
-                                style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
-                              >
-                                Xem nhanh
-                              </span>
-                            </div>
                           </div>
-                          <h4 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">{product.name}</h4>
-                          <div className="flex items-baseline gap-2 mt-1">
-                            {(() => {
-                              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-                              if (priceDisplay.comparePrice) {
-                                return (
-                                  <>
-                                    <span className={cn('font-bold', 'text-sm')}>
-                                      {priceDisplay.label}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 line-through">
-                                      {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
-                                    </span>
-                                  </>
-                                );
-                              }
-                              return (
-                                <span className={cn('font-bold', 'text-sm')}>
-                                  {priceDisplay.label}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
 
                       {gridItems.length < 4 && Array.from({ length: 4 - gridItems.length }).map((_, i) => (
                         <div
@@ -807,8 +982,8 @@ export const CategoryProductsPreview = ({
           <EmptyState message="Chưa chọn danh mục nào" />
         </div>
       ) : (
-        resolvedSections.map((section) => (
-          <section key={section.id}>
+        resolvedSections.map((section, sectionIndex) => (
+          <section key={getSectionKey(section, sectionIndex)}>
             <div className="max-w-7xl mx-auto px-4">
               <div className="flex items-end justify-between mb-8">
                 <div>
@@ -858,81 +1033,108 @@ export const CategoryProductsPreview = ({
                   'grid gap-4',
                   getGridCols()
                 )}>
-                  {section.products.map((product) => (
-                    <div key={product._id} className="cursor-pointer">
-                      <div
-                        className={cn('relative overflow-hidden border', cardRadiusClassName)}
-                        style={{ ...imageAspectRatioStyle, borderColor: colors.cardBorder, backgroundColor: colors.imageBackground }}
-                      >
-                        {product.image ? (
-                          <FramePreviewImage
-                            src={product.image}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
+                  {section.products.map((product) => {
+                    const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+                    const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+                    const cartButtonsLayout = config.cartButtonsLayout || 'stack';
+                    return (
+                      <div key={product._id} className="cursor-pointer group block">
+                        <div
+                          className={cn('relative overflow-hidden border mb-3', cardRadiusClassName)}
+                          style={{ ...imageAspectRatioStyle, borderColor: colors.cardBorder, backgroundColor: colors.imageBackground }}
+                        >
+                          <div 
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20"
+                            style={{ background: `linear-gradient(135deg, ${colors.neutralBorder} 0%, transparent 50%, ${colors.neutralBackground} 100%)` }}
                           />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package size={32} style={{ color: colors.emptyStateIcon }} />
+                          {product.image ? (
+                            <FramePreviewImage
+                              src={product.image}
+                              alt={product.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package size={32} style={{ color: colors.emptyStateIcon }} />
+                            </div>
+                          )}
+
+                          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10" />
+
+                          <div className="absolute bottom-3 left-3 right-3 transform translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-30">
+                            <span
+                              className="block w-full py-2.5 rounded-xl text-sm font-medium text-center backdrop-blur-sm"
+                              style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
+                            >
+                              Xem chi tiết
+                            </span>
                           </div>
-                        )}
 
-                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/75 via-black/45 to-transparent" />
+                          {(() => {
+                            const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+                            if (!priceDisplay.comparePrice) {return null;}
+                            return (
+                              <div className="absolute top-3 left-3 px-2 py-1 rounded-lg text-xs font-bold text-white bg-red-500 z-30">
+                                -{Math.round((1 - (product.price ?? 0) / priceDisplay.comparePrice) * 100)}%
+                              </div>
+                            );
+                          })()}
+                        </div>
 
-                        <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
-                          <h4 className={cn('font-medium line-clamp-2', device === 'mobile' ? 'text-xs' : 'text-sm')}>
+                        <div className="space-y-1">
+                          <h4 className="font-medium text-sm line-clamp-2 group-hover:opacity-80 transition-opacity" style={{ color: colors.bodyText }}>
                             {product.name}
                           </h4>
-                          <div className="flex flex-col mt-1">
+                          <div className="flex flex-col mb-2">
                             {(() => {
                               const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
                               if (priceDisplay.comparePrice) {
                                 return (
                                   <>
-                                    <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')}>
+                                    <span className="font-bold text-sm" style={{ color: colors.priceText }}>
                                       {priceDisplay.label}
                                     </span>
-                                    <span className="text-[10px] text-white/70 line-through">
+                                    <span className="text-xs line-through" style={{ color: colors.mutedText }}>
                                       {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
                                     </span>
                                   </>
                                 );
                               }
                               return (
-                                <span className={cn('font-bold', device === 'mobile' ? 'text-xs' : 'text-sm')}>
+                                <span className="font-bold text-sm" style={{ color: colors.priceText }}>
                                   {priceDisplay.label}
                                 </span>
                               );
                             })()}
                           </div>
+                          {(showAddToCartButton || showBuyNowButton) && (
+                            <div className="mt-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                              <ProductCardActions
+                                product={product as any}
+                                tokens={listTokens}
+                                showStock={false}
+                                  showAddToCartButton={showAddToCartButton}
+                                  showBuyNowButton={showBuyNowButton}
+                                  buyNowLabel="Mua ngay"
+                                  onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                  onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                  cartButtonsLayout={cartButtonsLayout}
+                                  device={device}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-
-                        <span
-                          className="absolute top-3 right-3 px-2 py-1 rounded-md text-[11px] font-medium"
-                          style={{ backgroundColor: colors.buttonBackground, border: `1px solid ${colors.buttonBorder}`, color: colors.buttonText }}
-                        >
-                          Chi tiết
-                        </span>
-
-                        {(() => {
-                          const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-                          if (!priceDisplay.comparePrice) {return null;}
-                          return (
-                            <div className="absolute top-3 left-3 px-2 py-1 rounded-lg text-xs font-bold text-white bg-red-500">
-                              -{Math.round((1 - (product.price ?? 0) / priceDisplay.comparePrice) * 100)}%
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        ))
-      )}
-    </div>
-  );
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
+    );
 
   const getProductDiscount = (product: CategoryProductsProduct) => {
     const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
@@ -947,12 +1149,12 @@ export const CategoryProductsPreview = ({
         <EmptyState message="Chưa chọn danh mục nào" />
       ) : (
         <div className="mx-auto flex w-full max-w-[1152px] flex-col gap-6">
-          {resolvedSections.map((section) => {
+          {resolvedSections.map((section, sectionIndex) => {
             const productGridClassName = cn(getGridCols(), 'gap-2 md:gap-3');
 
             return (
             <section
-              key={section.id}
+              key={getSectionKey(section, sectionIndex)}
               className={cn('border bg-white', cardRadiusClassName)}
               style={{ borderColor: colors.cardBorder }}
             >
@@ -997,6 +1199,9 @@ export const CategoryProductsPreview = ({
                     {section.products.map((product) => {
                       const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
                       const discount = getProductDiscount(product);
+                      const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+                      const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+                      const cartButtonsLayout = config.cartButtonsLayout || 'stack';
 
                       return (
                         <article
@@ -1030,24 +1235,44 @@ export const CategoryProductsPreview = ({
                               {product.name || 'Tên sản phẩm'}
                             </h3>
                             <div className="mb-2 flex flex-col gap-1" />
-                            <div className="mt-auto flex min-w-0 flex-row items-end justify-between gap-1.5 border-t pt-2" style={{ borderColor: colors.cardBorder }}>
-                              <div className="min-w-0 flex flex-col">
-                                {priceDisplay.comparePrice && (
-                                  <span className="max-w-full truncate text-xs font-medium leading-4 line-through" style={{ color: colors.mutedText }}>
-                                    {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
+                            <div className="mt-auto flex flex-col gap-2 border-t pt-2" style={{ borderColor: colors.cardBorder }}>
+                              <div className="flex min-w-0 flex-row items-end justify-between gap-1.5">
+                                <div className="min-w-0 flex flex-col">
+                                  {priceDisplay.comparePrice && (
+                                    <span className="max-w-full truncate text-xs font-medium leading-4 line-through" style={{ color: colors.mutedText }}>
+                                      {getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label}
+                                    </span>
+                                  )}
+                                  <span className="max-w-full truncate whitespace-nowrap text-[12px] font-bold leading-4 md:text-[13px] md:leading-5 lg:text-sm" style={{ color: colors.bodyText }}>
+                                    {priceDisplay.label}
                                   </span>
+                                </div>
+                                {!showAddToCartButton && !showBuyNowButton && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-6 min-w-9 shrink-0 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-medium leading-none transition-colors md:min-w-10 md:px-2.5 md:text-[11px]"
+                                    style={{ backgroundColor: colors.buttonSolidBackground, color: colors.buttonSolidText }}
+                                  >
+                                    Xem
+                                  </button>
                                 )}
-                                <span className="max-w-full truncate whitespace-nowrap text-[12px] font-bold leading-4 md:text-[13px] md:leading-5 lg:text-sm" style={{ color: colors.bodyText }}>
-                                  {priceDisplay.label}
-                                </span>
                               </div>
-                              <button
-                                type="button"
-                                className="inline-flex h-6 min-w-9 shrink-0 items-center justify-center whitespace-nowrap rounded px-2 text-[10px] font-medium leading-none transition-colors md:min-w-10 md:px-2.5 md:text-[11px]"
-                                style={{ backgroundColor: colors.buttonSolidBackground, color: colors.buttonSolidText }}
-                              >
-                                Xem
-                              </button>
+                              {(showAddToCartButton || showBuyNowButton) && (
+                                <div className="mt-1" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                                  <ProductCardActions
+                                    product={product as any}
+                                    tokens={listTokens}
+                                    showStock={false}
+                                    showAddToCartButton={showAddToCartButton}
+                                    showBuyNowButton={showBuyNowButton}
+                                    buyNowLabel="Mua ngay"
+                                    onAddToCart={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'addToCart')}
+                                    onBuyNow={(actionProduct) => onPreviewAction(actionProduct as CategoryProductsProduct, 'buyNow')}
+                                    cartButtonsLayout={cartButtonsLayout}
+                                    device={device}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </article>
@@ -1077,18 +1302,43 @@ export const CategoryProductsPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame>
-          {previewStyle === 'grid' && renderGridStyle()}
-          {previewStyle === 'carousel' && renderCarouselStyle()}
-          {previewStyle === 'cards' && renderCardsStyle()}
-          {previewStyle === 'bento' && renderBentoStyle()}
-          {previewStyle === 'magazine' && renderMagazineStyle()}
-          {previewStyle === 'showcase' && renderShowcaseStyle()}
-          {previewStyle === 'wine-grid' && renderWineGridStyle()}
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <BrowserFrame>
+            <div className="p-4 md:p-6 bg-white dark:bg-slate-900">
+              <SectionHeader
+                title={title}
+                hideHeader={false}
+                showTitle={true}
+                visualEditEnabled={isVisualEditActive}
+                onTitleChange={onTitleChange}
+                brandColor={_brandColor}
+                className="mb-6"
+              />
+              {previewStyle === 'grid' && renderGridStyle()}
+              {previewStyle === 'carousel' && renderCarouselStyle()}
+              {previewStyle === 'cards' && renderCardsStyle()}
+              {previewStyle === 'bento' && renderBentoStyle()}
+              {previewStyle === 'magazine' && renderMagazineStyle()}
+              {previewStyle === 'showcase' && renderShowcaseStyle()}
+              {previewStyle === 'wine-grid' && renderWineGridStyle()}
+            </div>
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
       <ColorInfoPanel brandColor={_brandColor} secondary={colors.secondary} />
+      <QuickAddVariantModal
+        isOpen={quickAddTarget !== null}
+        product={quickAddModalProduct}
+        brandColor={_brandColor}
+        actionLabel={quickAddTarget?.action === 'addToCart' ? 'Thêm vào giỏ' : 'Mua ngay'}
+        onClose={() => setQuickAddTarget(null)}
+        onConfirm={() => setQuickAddTarget(null)}
+      />
     </>
   );
 };

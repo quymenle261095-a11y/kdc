@@ -8,60 +8,30 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { toast } from 'sonner';
 import { 
-  Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Label, cn
+  Button, Card, Dialog, DialogContent, DialogHeader, DialogTitle, Input, cn
 } from '../components/ui';
+import { useRouter } from 'next/navigation';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { BulkActionBar, SelectCheckbox } from '../components/TableUtilities';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
-import { buildCategoryPath, buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 import { 
-  ArrowDown, ArrowUp, Bot, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff, 
-  GripVertical, Loader2, Menu, Plus, Sparkles, Trash2
+  AdminFormPageWrapper, 
+  AdminFormGrid, 
+  AdminFormMain, 
+  AdminFormSidebar, 
+  AdminFormCard 
+} from '@/app/admin/components/FormUtilities';
+import { AdminStickyFooter } from '@/app/admin/components/AdminStickyFooter';
+import { QuickRoutePickerModal } from '@/app/admin/components/QuickRoutePickerModal';
+import { buildCategoryPath, buildModuleListPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import { 
+  ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, EyeOff, 
+  GripVertical, Link2, Loader2, Menu, Plus, Sparkles, Trash2
 } from 'lucide-react';
 import { SimpleMenuPreview } from './SimpleMenuPreview';
 import { MENU_MAX_LEVEL, resolveMenuMaxDepthLevel } from '@/lib/utils/menu-tree';
 
 const MODULE_KEY = 'menus';
 const MENU_ITEMS_LIMIT = 500;
-
-type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục';
-
-type QuickRouteOption = {
-  group: QuickRouteGroup;
-  label: string;
-  source: string;
-  url: string;
-};
-
-const CORE_ROUTE_OPTIONS: QuickRouteOption[] = [
-  { label: 'Trang chủ', url: '/', source: 'Core', group: 'Trang cơ bản' },
-  { label: 'Liên hệ', url: '/contact', source: 'Core', group: 'Trang cơ bản' },
-];
-
-const MODULE_SITE_ROUTE_CATALOG: Record<string, { label: string; url: string }[]> = {
-  cart: [
-    { label: 'Giỏ hàng', url: '/cart' },
-  ],
-  customers: [
-    { label: 'Đăng nhập', url: '/account/login' },
-    { label: 'Đăng ký', url: '/account/register' },
-    { label: 'Tài khoản', url: '/account/profile' },
-    { label: 'Đơn hàng', url: '/account/orders' },
-  ],
-  orders: [
-    { label: 'Đơn hàng', url: '/account/orders' },
-    { label: 'Checkout', url: '/checkout' },
-  ],
-  posts: [],
-  products: [],
-  promotions: [
-    { label: 'Khuyến mãi', url: '/promotions' },
-  ],
-  services: [],
-  wishlist: [
-    { label: 'Wishlist', url: '/wishlist' },
-  ],
-};
 
 
 interface MenuItem {
@@ -74,6 +44,7 @@ interface MenuItem {
   depth: number;
   parentId?: Id<"menuItems">;
   icon?: string;
+  isSpecial?: boolean;
   openInNewTab?: boolean;
   active: boolean;
 }
@@ -87,6 +58,7 @@ interface DraftMenuItem {
   depth: number;
   parentId?: Id<"menuItems">;
   icon?: string;
+  isSpecial?: boolean;
   openInNewTab?: boolean;
   active: boolean;
 }
@@ -135,20 +107,13 @@ function MenuBuilderPage() {
     );
   }
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Header Menu</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý menu điều hướng chính trên thanh header</p>
-        </div>
-        <div />
-      </div>
-
-      {headerMenu ? (
-        <MenuItemsEditor menuId={headerMenu._id} />
-      ) : (
-        <Card className="p-8 text-center">
+  if (!headerMenu) {
+    return (
+      <AdminFormPageWrapper
+        title="Header Menu"
+        subtitle="Quản lý menu điều hướng chính trên thanh header"
+      >
+        <Card className="p-8 text-center max-w-md mx-auto my-8">
           <Menu className="w-12 h-12 mx-auto mb-4 text-slate-400" />
           <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">Chưa có Header Menu</h3>
           <p className="text-slate-500 mb-4">Chưa có dữ liệu menu.</p>
@@ -156,12 +121,15 @@ function MenuBuilderPage() {
             Tạo Header Menu
           </Button>
         </Card>
-      )}
-    </div>
-  );
+      </AdminFormPageWrapper>
+    );
+  }
+
+  return <MenuItemsEditor menuId={headerMenu._id} />;
 }
 
 function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
+  const router = useRouter();
   const menuItemsData = useQuery(api.menus.listMenuItems, { menuId });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: MODULE_KEY });
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: MODULE_KEY });
@@ -169,6 +137,12 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   const productCategories = useQuery(api.productCategories.listActive);
   const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
   const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
+  const projectCategories = useQuery(api.projectCategories.listActive, { limit: 100 });
+  const courseCategories = useQuery(api.courseCategories.listActive, { limit: 100 });
+  const resourceCategories = useQuery(api.resourceCategories.listActive, { limit: 100 });
+  const trustPageRoutes = useQuery(api.menus.listTrustPageRoutesForPicker, {});
+  const coursesEnabled = enabledModules?.some(moduleItem => moduleItem.key === 'courses') ?? false;
+  const publishedCourseCount = useQuery(api.courses.countPublished, coursesEnabled ? {} : 'skip');
   const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
   const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
   const saveMenuItemsBulk = useMutation(api.menus.saveMenuItemsBulk);
@@ -182,11 +156,20 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isQuickPickerOpen, setIsQuickPickerOpen] = useState(false);
   const [quickPickerTargetId, setQuickPickerTargetId] = useState<string | null>(null);
-  const [quickRouteSearch, setQuickRouteSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pickerStep, setPickerStep] = useState<1 | 2 | 3>(1);
-  const [selectedType, setSelectedType] = useState<'core' | 'module' | 'category' | 'detail' | null>(null);
-  const [selectedModule, setSelectedModule] = useState<'posts' | 'products' | 'services' | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  const toggleCollapse = (localId: string) => {
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(localId)) {
+        next.delete(localId);
+      } else {
+        next.add(localId);
+      }
+      return next;
+    });
+  };
 
   // AI Import state
   const [isAiImportOpen, setIsAiImportOpen] = useState(false);
@@ -198,24 +181,6 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   const enableProductTypes = enableProductTypesSetting?.value === true;
   const smartMenuBuilderData = useQuery(api.menus.getSmartMenuBuilderData, isUseProductTypeLogic ? {} : 'skip');
 
-  const detailPosts = useQuery(
-    api.menus.listPostsForPicker,
-    selectedModule === 'posts' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailProducts = useQuery(
-    api.menus.listProductsForPicker,
-    selectedModule === 'products' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailServices = useQuery(
-    api.menus.listServicesForPicker,
-    selectedModule === 'services' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
 
   const maxDepthLevel = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'maxDepth');
@@ -232,71 +197,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   }, [featuresData]);
 
   const showNested = enabledFeatures.enableNested ?? true;
-  const showNewTab = enabledFeatures.enableNewTab ?? true;
 
-  const quickRouteOptions = useMemo(() => {
-    const enabledKeys = new Set((enabledModules ?? []).map(moduleItem => moduleItem.key));
-    const options: QuickRouteOption[] = [...CORE_ROUTE_OPTIONS];
-
-    Object.entries(MODULE_SITE_ROUTE_CATALOG).forEach(([moduleKey, routes]) => {
-      if (!enabledKeys.has(moduleKey)) {return;}
-      routes.forEach(route => {
-        options.push({ ...route, source: moduleKey, group: 'Module' });
-      });
-    });
-
-    if (enabledKeys.has('products')) {
-      (productCategories ?? []).forEach(category => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'products',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'products' }),
-        });
-      });
-    }
-
-    if (enabledKeys.has('posts')) {
-      (postCategories ?? []).forEach(category => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'posts',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'posts' }),
-        });
-      });
-    }
-
-    if (enabledKeys.has('services')) {
-      (serviceCategories ?? []).forEach(category => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'services',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'services' }),
-        });
-      });
-    }
-
-    const deduped = new Map<string, QuickRouteOption>();
-    options.forEach(option => {
-      if (!deduped.has(option.url)) {
-        deduped.set(option.url, option);
-      }
-    });
-
-    return Array.from(deduped.values());
-  }, [enabledModules, postCategories, productCategories, routeMode, serviceCategories]);
-
-  const filteredQuickRoutes = useMemo(() => {
-    const keyword = quickRouteSearch.trim().toLowerCase();
-    if (!keyword) {return quickRouteOptions;}
-    return quickRouteOptions.filter(option =>
-      option.label.toLowerCase().includes(keyword)
-      || option.url.toLowerCase().includes(keyword)
-      || option.source.toLowerCase().includes(keyword)
-    );
-  }, [quickRouteOptions, quickRouteSearch]);
 
   const buildDraftItems = (items: MenuItem[]) => items
     .slice()
@@ -310,6 +211,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       depth: item.depth,
       parentId: item.parentId,
       icon: item.icon,
+      isSpecial: item.isSpecial,
       openInNewTab: item.openInNewTab,
       active: item.active,
     }));
@@ -332,6 +234,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     depth: 0,
     order: 0,
     active: true,
+    isSpecial: false,
     ...partial,
   });
 
@@ -341,17 +244,51 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     const seen = new Set<string>();
     const items: SmartMenuPlanItem[] = [];
     const add = (item: SmartMenuPlanItem) => {
-      if (seen.has(item.url)) {return;}
+      const uniqueKey = `${item.url}::${item.label}`;
+      if (seen.has(uniqueKey)) {return;}
       if (item.depth > maxChildDepth) {return;}
-      seen.add(item.url);
+      seen.add(uniqueKey);
       items.push(item);
+    };
+    const hasPublishedCourses = enabledKeys.has('courses') && (publishedCourseCount ?? 0) > 0;
+    const appendTrustPages = (scoreBase: number) => {
+      const routes = (trustPageRoutes ?? []).slice(0, maxChildDepth >= 1 ? 6 : 3);
+      if (routes.length === 0) {return;}
+      if (maxChildDepth >= 1) {
+        add({
+          depth: 0,
+          label: 'Chính sách',
+          reasons: ['Có trang tin cậy đã xuất bản từ Trust Pages'],
+          score: scoreBase,
+          url: '#',
+        });
+        routes.forEach((route, index) => {
+          add({
+            depth: 1,
+            label: route.label,
+            reasons: ['Trang chính sách đã map dữ liệu'],
+            score: scoreBase - 1 - index,
+            url: route.url,
+          });
+        });
+        return;
+      }
+      routes.forEach((route, index) => {
+        add({
+          depth: 0,
+          label: route.label,
+          reasons: ['Trang chính sách đã map dữ liệu'],
+          score: scoreBase - index,
+          url: route.url,
+        });
+      });
     };
 
     if (isUseProductTypeLogic && smartMenuBuilderData && enableProductTypes) {
       const { productTypes, productCategoryTypes, attributeGroups, productTypeAttributeGroups, attributeTerms } = smartMenuBuilderData;
 
       add({ depth: 0, label: 'Trang chủ', reasons: ['Luôn nên có trong menu chính'], score: 100, url: '/' });
-      add({ depth: 0, label: 'Sản phẩm', reasons: ['Khu vực chính'], score: 90, url: '/products' });
+      add({ depth: 0, label: 'Sản phẩm', reasons: ['Khu vực chính'], score: 90, url: buildModuleListPath('products') });
 
       if (maxChildDepth >= 1) {
         productTypes.forEach((pt, ptIndex) => {
@@ -360,7 +297,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
             label: pt.name,
             reasons: ['Loại sản phẩm'],
             score: 89 - ptIndex,
-            url: `/products?type=${pt.slug}`
+            url: `/${pt.slug}`
           });
 
           if (maxChildDepth >= 2) {
@@ -372,7 +309,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                 label: cat.name,
                 reasons: [`Danh mục thuộc ${pt.name}`],
                 score: 80 - catIndex,
-                url: buildCategoryPath({ categorySlug: cat.slug, mode: routeMode, moduleKey: 'products' })
+                url: `/${pt.slug}/${cat.slug}`
               });
             });
 
@@ -385,7 +322,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                 label: group.name,
                 reasons: [`Bộ lọc đặc biệt của ${pt.name}`],
                 score: 70 - groupIndex,
-                url: `/products?type=${pt.slug}&${group.code}=all`
+                url: `/${pt.slug}`
               });
 
               if (maxChildDepth >= 3) {
@@ -396,7 +333,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                     label: term.name,
                     reasons: [`Giá trị của ${group.name}`],
                     score: 60 - termIndex,
-                    url: `/products?type=${pt.slug}&${group.code}=${term.slug}`
+                    url: `/${pt.slug}/${group.slug}/${term.slug}`
                   });
                 });
               }
@@ -408,7 +345,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                 label: 'Mức giá',
                 reasons: [`Khoảng giá của ${pt.name}`],
                 score: 50,
-                url: `/products?type=${pt.slug}&price=all`
+                url: `/${pt.slug}`
               });
               if (maxChildDepth >= 3) {
                 pt.priceRanges.forEach((range, rangeIndex) => {
@@ -417,7 +354,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
                     label: range.label,
                     reasons: [`Mức giá`],
                     score: 40 - rangeIndex,
-                    url: `/products?type=${pt.slug}&price=${range.slug}`
+                    url: `/${pt.slug}/${range.slug}`
                   });
                 });
               }
@@ -426,23 +363,25 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
         });
       }
 
-      const globalSpecialGroups = attributeGroups.filter(g => g.isSpecialFilter);
-      globalSpecialGroups.forEach((group, idx) => {
+      if (enabledKeys.has('services')) {
+        add({ depth: 0, label: 'Dịch vụ', reasons: ['Khu vực dịch vụ'], score: 75, url: buildModuleListPath('services') });
+      }
+      if (enabledKeys.has('projects')) {
+        add({ depth: 0, label: 'Dự án', reasons: ['Khu vực dự án'], score: 74, url: buildModuleListPath('projects') });
+      }
+      if (hasPublishedCourses) {
         add({
           depth: 0,
-          label: group.name,
-          reasons: ['Bộ lọc đặc biệt'],
-          score: 85 - idx,
-          url: `/products?${group.code}=all`
+          label: 'Khóa học',
+          reasons: [`Có ${publishedCourseCount ?? 0} khóa học đã xuất bản`],
+          score: 73,
+          url: buildModuleListPath('courses'),
         });
-      });
-
-      if (enabledKeys.has('services')) {
-        add({ depth: 0, label: 'Dịch vụ', reasons: ['Khu vực dịch vụ'], score: 75, url: '/services' });
       }
       if (enabledKeys.has('posts')) {
-        add({ depth: 0, label: 'Bài viết', reasons: ['Khu vực bài viết'], score: 70, url: '/posts' });
+        add({ depth: 0, label: 'Bài viết', reasons: ['Khu vực bài viết'], score: 70, url: buildModuleListPath('posts') });
       }
+      appendTrustPages(66);
       add({ depth: 0, label: 'Liên hệ', reasons: ['Nên đặt cuối menu'], score: 65, url: '/contact' });
 
       // Build tree ordering manually or rely on scores.
@@ -453,7 +392,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       const categoryLimit = maxDepth >= 3 ? 6 : 4;
       const appendCategories = (
         categories: Array<{ name: string; slug: string }> | undefined,
-        moduleKey: 'posts' | 'products' | 'services',
+        moduleKey: 'posts' | 'products' | 'services' | 'courses' | 'projects' | 'resources',
         scoreBase: number,
       ) => {
         if (maxChildDepth < 1) {return;}
@@ -488,7 +427,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           `${productCategories?.length ?? 0} danh mục sản phẩm có thể làm menu con`,
         ],
         score: 96 + Math.min(12, productCategories?.length ?? 0),
-        url: '#',
+        url: buildModuleListPath('products'),
       });
       appendCategories(productCategories, 'products', 88);
     }
@@ -502,9 +441,51 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           `${serviceCategories?.length ?? 0} danh mục dịch vụ có thể làm menu con`,
         ],
         score: 90 + Math.min(8, serviceCategories?.length ?? 0),
-        url: '#',
+        url: buildModuleListPath('services'),
       });
       appendCategories(serviceCategories, 'services', 78);
+    }
+
+    if (enabledKeys.has('projects')) {
+      add({
+        depth: 0,
+        label: 'Dự án',
+        reasons: [
+          'Khu vực dự án đang bật',
+          `${projectCategories?.length ?? 0} danh mục dự án có thể làm menu con`,
+        ],
+        score: 88 + Math.min(8, projectCategories?.length ?? 0),
+        url: buildModuleListPath('projects'),
+      });
+      appendCategories(projectCategories, 'projects', 76);
+    }
+
+    if (hasPublishedCourses) {
+      add({
+        depth: 0,
+        label: 'Khóa học',
+        reasons: [
+          'Khu vực khóa học đang bật',
+          `${courseCategories?.length ?? 0} danh mục khóa học và ${publishedCourseCount ?? 0} khóa học đã xuất bản`,
+        ],
+        score: 86 + Math.min(8, courseCategories?.length ?? 0),
+        url: buildModuleListPath('courses'),
+      });
+      appendCategories(courseCategories, 'courses', 74);
+    }
+
+    if (enabledKeys.has('resources')) {
+      add({
+        depth: 0,
+        label: 'Tài nguyên',
+        reasons: [
+          'Khu vực tài nguyên đang bật',
+          `${resourceCategories?.length ?? 0} danh mục tài nguyên có thể làm menu con`,
+        ],
+        score: 84 + Math.min(8, resourceCategories?.length ?? 0),
+        url: buildModuleListPath('resources'),
+      });
+      appendCategories(resourceCategories, 'resources', 72);
     }
 
     if (enabledKeys.has('posts')) {
@@ -516,7 +497,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           `${postCategories?.length ?? 0} danh mục bài viết có thể làm menu con`,
         ],
         score: 82 + Math.min(6, postCategories?.length ?? 0),
-        url: '#',
+        url: buildModuleListPath('posts'),
       });
       appendCategories(postCategories, 'posts', 68);
     }
@@ -550,6 +531,8 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
         url: '/cart',
       });
     }
+
+    appendTrustPages(77);
 
     add({
       depth: 0,
@@ -603,7 +586,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       root,
       ...(childrenByRoot.get(root.url) ?? [])
     ]).slice(0, MENU_ITEMS_LIMIT);
-  }, [enabledModules, maxDepth, postCategories, productCategories, routeMode, serviceCategories, isUseProductTypeLogic, smartMenuBuilderData, enableProductTypes]);
+  }, [courseCategories, enabledModules, maxDepth, postCategories, productCategories, projectCategories, resourceCategories, publishedCourseCount, routeMode, serviceCategories, isUseProductTypeLogic, smartMenuBuilderData, enableProductTypes, trustPageRoutes]);
 
   const hasChanges = useMemo(() => {
     const normalize = (items: DraftMenuItem[]) => items.map(item => ({
@@ -613,6 +596,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
       depth: item.depth,
       active: item.active,
       icon: item.icon,
+      isSpecial: item.isSpecial,
       openInNewTab: item.openInNewTab,
       parentId: item.parentId,
       order: item.order,
@@ -632,21 +616,76 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     }
   }, [menuItemsData, pendingSync, originalItems.length, draftItems.length, hasChanges]);
 
-  useEffect(() => {
-    if (isQuickPickerOpen) {return;}
-    if (!quickRouteSearch) {return;}
-    setQuickRouteSearch('');
-  }, [isQuickPickerOpen, quickRouteSearch]);
+
+  // Hàm tính số lượng menu con liền sau item tại vị trí index
+  const getDescendantCount = (index: number, list: DraftMenuItem[]) => {
+    const currentDepth = list[index].depth;
+    let count = 0;
+    for (let i = index + 1; i < list.length; i++) {
+      if (list[i].depth > currentDepth) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  };
+
+  const visibleItemsInfo = useMemo(() => {
+    const result: Array<{
+      item: DraftMenuItem;
+      actualIndex: number;
+      childCount: number;
+      isCollapsed: boolean;
+      isVisible: boolean;
+    }> = [];
+
+    let hiddenUnderDepth: number | null = null;
+
+    draftItems.forEach((item, index) => {
+      const childCount = getDescendantCount(index, draftItems);
+      const isCollapsed = collapsedIds.has(item.localId);
+
+      if (hiddenUnderDepth !== null) {
+        if (item.depth > hiddenUnderDepth) {
+          result.push({
+            item,
+            actualIndex: index,
+            childCount,
+            isCollapsed,
+            isVisible: false,
+          });
+          return;
+        }
+        hiddenUnderDepth = null;
+      }
+
+      result.push({
+        item,
+        actualIndex: index,
+        childCount,
+        isCollapsed,
+        isVisible: true,
+      });
+
+      if (isCollapsed && childCount > 0) {
+        hiddenUnderDepth = item.depth;
+      }
+    });
+
+    return result;
+  }, [draftItems, collapsedIds]);
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(draftItems.length / MENU_ITEMS_LIMIT));
+  const visibleItems = useMemo(() => visibleItemsInfo.filter(info => info.isVisible), [visibleItemsInfo]);
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / MENU_ITEMS_LIMIT));
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * MENU_ITEMS_LIMIT;
-    return draftItems.slice(start, start + MENU_ITEMS_LIMIT);
-  }, [draftItems, currentPage]);
+    return visibleItems.slice(start, start + MENU_ITEMS_LIMIT);
+  }, [visibleItems, currentPage]);
 
-  const allPageSelected = paginatedItems.length > 0 && paginatedItems.every(item => selectedIds.includes(item.localId));
-  const somePageSelected = paginatedItems.some(item => selectedIds.includes(item.localId));
+  const allPageSelected = paginatedItems.length > 0 && paginatedItems.every(info => selectedIds.includes(info.item.localId));
+  const somePageSelected = paginatedItems.some(info => selectedIds.includes(info.item.localId));
 
   useEffect(() => {
     if (totalPages === 0 && currentPage !== 1) {
@@ -741,6 +780,10 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     setDraftItems(prev => prev.map(current => current.localId === item.localId ? { ...current, active: !current.active } : current));
   };
 
+  const handleToggleSpecial = (item: DraftMenuItem) => {
+    setDraftItems(prev => prev.map(current => current.localId === item.localId ? { ...current, isSpecial: !current.isSpecial } : current));
+  };
+
   const handleDelete = (item: DraftMenuItem) => {
     if (confirm('Xóa liên kết này?')) {
       setDraftItems(prev => normalizeOrders(prev.filter(current => current.localId !== item.localId)));
@@ -753,7 +796,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   };
 
   const toggleSelectAllPage = () => {
-    const pageIds = paginatedItems.map(item => item.localId);
+    const pageIds = paginatedItems.map(info => info.item.localId);
     if (allPageSelected) {
       setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
       return;
@@ -826,26 +869,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     setDraftItems(prev => prev.map(item => item.localId === itemId ? { ...item, [field]: value } : item));
   };
 
-  const handleOpenQuickPicker = (itemId: string) => {
-    setQuickPickerTargetId(itemId);
-    setIsQuickPickerOpen(true);
-  };
 
-  const handleCloseQuickPicker = () => {
-    setIsQuickPickerOpen(false);
-    setQuickPickerTargetId(null);
-    setQuickRouteSearch('');
-    setPickerStep(1);
-    setSelectedType(null);
-    setSelectedModule(null);
-  };
-
-  const handleSelectQuickRoute = (option: QuickRouteOption) => {
-    if (!quickPickerTargetId) {return;}
-    handleUpdateField(quickPickerTargetId, 'url', option.url);
-    handleUpdateField(quickPickerTargetId, 'label', option.label);
-    handleCloseQuickPicker();
-  };
 
   // AI Import handler
   const handleAiImportApply = (lines: AiMenuLine[]) => {
@@ -927,6 +951,7 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           depth: item.depth,
           active: item.active,
           icon: item.icon,
+          isSpecial: item.isSpecial,
           openInNewTab: item.openInNewTab,
           parentId: item.parentId,
         })),
@@ -948,62 +973,9 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
     );
   }
 
-  // Get actual index in full items array for move operations
-  const getActualIndex = (item: DraftMenuItem) => draftItems.findIndex(i => i.localId === item.localId);
 
-  const quickRouteKeyword = quickRouteSearch.trim().toLowerCase();
 
-  const pickerTypeOptions = [
-    { type: 'core' as const, label: 'Trang cơ bản', description: 'Trang chủ, Liên hệ...' },
-    { type: 'module' as const, label: 'Module', description: 'Posts, Products, Services...' },
-    { type: 'category' as const, label: 'Danh mục', description: 'Category filters' },
-    { type: 'detail' as const, label: 'Chi tiết', description: 'Bài viết, Sản phẩm, Dịch vụ' },
-  ];
 
-  const detailModuleOptions = [
-    {
-      key: 'posts' as const,
-      label: 'Bài viết chi tiết',
-      description: 'Chọn 1 bài viết cụ thể',
-      enabled: enabledModules?.some(moduleItem => moduleItem.key === 'posts'),
-    },
-    {
-      key: 'products' as const,
-      label: 'Sản phẩm chi tiết',
-      description: 'Chọn 1 sản phẩm cụ thể',
-      enabled: enabledModules?.some(moduleItem => moduleItem.key === 'products'),
-    },
-    {
-      key: 'services' as const,
-      label: 'Dịch vụ chi tiết',
-      description: 'Chọn 1 dịch vụ cụ thể',
-      enabled: enabledModules?.some(moduleItem => moduleItem.key === 'services'),
-    },
-  ];
-
-  const availableDetailModules = detailModuleOptions.filter(option => option.enabled);
-  const filteredDetailModules = quickRouteKeyword
-    ? availableDetailModules.filter(option =>
-      option.label.toLowerCase().includes(quickRouteKeyword)
-      || option.description.toLowerCase().includes(quickRouteKeyword)
-    )
-    : availableDetailModules;
-  const resolvedDetailModules = filteredDetailModules.length > 0
-    ? filteredDetailModules
-    : availableDetailModules;
-
-  const filteredPickerRoutes = filteredQuickRoutes.filter(option => {
-    if (selectedType === 'core') {return option.group === 'Trang cơ bản';}
-    if (selectedType === 'module') {return option.group === 'Module';}
-    if (selectedType === 'category') {return option.group === 'Danh mục';}
-    return false;
-  });
-
-  const isDetailLoading = pickerStep === 3 && (
-    (selectedModule === 'posts' && detailPosts === undefined)
-    || (selectedModule === 'products' && detailProducts === undefined)
-    || (selectedModule === 'services' && detailServices === undefined)
-  );
 
   const stats = [
     { label: 'Tổng', value: draftItems.length },
@@ -1014,490 +986,380 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
   const hasInvalidStructure = !isValidMenuStructure(draftItems);
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(180px,1fr)] gap-4 xl:gap-6">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-500">Chỉnh sửa menu và bấm lưu để áp dụng. Tối đa {MENU_ITEMS_LIMIT} menu items.</p>
-        </div>
-
-        <BulkActionBar
-          selectedCount={selectedIds.length}
-          entityLabel="liên kết"
-          onDelete={handleBulkDelete}
-          onClearSelection={() => { setSelectedIds([]); }}
+    <AdminFormPageWrapper
+      title="Header Menu"
+      subtitle="Quản lý menu điều hướng chính trên thanh header"
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSavingAll}
+          hasChanges={hasChanges}
+          onClickSave={handleSaveAll}
+          submitType="button"
+          submitLabel="Lưu tất cả"
+          savedLabel="Đã lưu"
+          disableSave={!hasChanges || isSavingAll || hasInvalidStructure}
+          onCancel={() => router.back()}
+          cancelLabel="Hủy bỏ"
+          statusText={hasInvalidStructure ? 'Cấu trúc menu chưa hợp lệ' : `${draftItems.length}/${MENU_ITEMS_LIMIT} mục menu`}
+          onAdd={handleAdd}
+          addLabel="Thêm liên kết"
+          disableAdd={isAtMenuLimit || isSavingAll}
+          onAiImport={() => setIsAiImportOpen(true)}
+          disableAiImport={isAtMenuLimit || isSavingAll}
+          onAiSuggest={() => setIsSmartBuilderOpen(true)}
+          disableAiSuggest={isSavingAll}
         />
+      }
+    >
+      <AdminFormGrid>
+        <AdminFormMain className="lg:col-span-8 xl:col-span-9 space-y-4">
+          <BulkActionBar
+            selectedCount={selectedIds.length}
+            entityLabel="liên kết"
+            onDelete={handleBulkDelete}
+            onClearSelection={() => { setSelectedIds([]); }}
+          />
 
-        {paginatedItems.length > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <SelectCheckbox
-              checked={allPageSelected}
-              indeterminate={!allPageSelected && somePageSelected}
-              onChange={toggleSelectAllPage}
-              title="Chọn tất cả trên trang"
-            />
-            <span className="text-slate-600 dark:text-slate-300">Chọn tất cả menu ở trang hiện tại</span>
-          </div>
-        )}
-
-        {paginatedItems.map((item) => {
-          const actualIndex = getActualIndex(item);
-          const canMoveUp = actualIndex > 0 && canApplyDraftItems((() => {
-            const next = [...draftItems];
-            [next[actualIndex], next[actualIndex - 1]] = [next[actualIndex - 1], next[actualIndex]];
-            return next;
-          })());
-          const canMoveDown = actualIndex < draftItems.length - 1 && canApplyDraftItems((() => {
-            const next = [...draftItems];
-            [next[actualIndex], next[actualIndex + 1]] = [next[actualIndex + 1], next[actualIndex]];
-            return next;
-          })());
-          const canIndentOut = item.depth > 0 && canApplyDraftItems(
-            draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.max(item.depth - 1, 0) } : current)
-          );
-          const canIndentIn = item.depth < maxDepth - 1 && canApplyDraftItems(
-            draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.min(item.depth + 1, maxDepth - 1) } : current)
-          );
-
-          return (
-            <div 
-              key={item.localId}
-              draggable
-              onDragStart={(e) =>{  handleDragStart(e, actualIndex); }}
-              onDragOver={(e) =>{  handleDragOver(e, actualIndex); }}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, actualIndex)}
-              onDragEnd={handleDragEnd}
-              className={cn(
-                "flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border rounded-lg shadow-sm transition-all min-w-0 border-slate-200 dark:border-slate-700",
-                selectedIds.includes(item.localId) && "ring-2 ring-blue-500/40 border-blue-300 dark:border-blue-700",
-                !item.active && "opacity-50",
-                draggedIndex === actualIndex && "opacity-50 scale-[0.98]",
-                dragOverIndex === actualIndex && "border-orange-500 border-2 bg-orange-50 dark:bg-orange-900/20"
-              )}
-              style={showNested ? { marginLeft: Math.min(item.depth, MENU_MAX_LEVEL - 1) * 24 } : undefined}
-            >
-              <div className="flex items-center self-start pt-1">
-                <SelectCheckbox
-                  checked={selectedIds.includes(item.localId)}
-                  onChange={() => toggleSelectItem(item.localId)}
-                  title="Chọn menu item"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1 text-slate-300 cursor-grab active:cursor-grabbing">
-                <button type="button" onClick={ async () => handleMove(actualIndex, 'up')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveUp}><ArrowUp size={14}/></button>
-                <GripVertical size={14} className="text-slate-400" />
-                <button type="button" onClick={ async () => handleMove(actualIndex, 'down')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveDown}><ArrowDown size={14}/></button>
-              </div>
-              
-              <div className="flex-1 grid grid-cols-2 gap-3 min-w-0">
-                <div className="space-y-1">
-                  <Label className="text-xs text-slate-500">Nhãn hiển thị</Label>
-                  <Input 
-                    value={item.label} 
-                    onChange={(e) =>{  handleUpdateField(item.localId, 'label', e.target.value); }} 
-                    className="h-8 text-sm min-w-0" 
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-slate-500">URL</Label>
-                  <div className="flex items-center gap-2">
-                    <Input 
-                      value={item.url} 
-                      onChange={(e) =>{  handleUpdateField(item.localId, 'url', e.target.value); }} 
-                      className="h-8 text-sm font-mono text-xs min-w-0" 
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 whitespace-nowrap"
-                      onClick={() => handleOpenQuickPicker(item.localId)}
-                    >
-                      Gợi ý
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-0.5 border-l border-slate-100 dark:border-slate-700 pl-2">
-                {showNested && (
-                  <>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'out')} disabled={!canIndentOut} title="Thụt lề trái">
-                      <ChevronRight size={14} className="rotate-180"/>
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleIndent(item, 'in')} disabled={!canIndentIn} title={`Thụt lề phải (tối đa ${MENU_MAX_LEVEL} tầng)`}>
-                      <ChevronRight size={14}/>
-                    </Button>
-                  </>
-                )}
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleAddBelow(item)} title="Thêm ngay bên dưới" disabled={isAtMenuLimit}>
-                  <Plus size={14}/>
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCopy(item)} title="Copy menu item" disabled={isAtMenuLimit}>
-                  <Copy size={14}/>
-                </Button>
-                {showNewTab && item.openInNewTab && (
-                  <span title="Mở tab mới"><ExternalLink size={14} className="text-slate-400" /></span>
-                )}
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleActive(item)} title={item.active ? 'Ẩn' : 'Hiện'}>
-                  {item.active ? <Eye size={14}/> : <EyeOff size={14} className="text-slate-400"/>}
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDelete(item)}>
-                  <Trash2 size={14}/>
-                </Button>
-              </div>
+          {paginatedItems.length > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <SelectCheckbox
+                checked={allPageSelected}
+                indeterminate={!allPageSelected && somePageSelected}
+                onChange={toggleSelectAllPage}
+                title="Chọn tất cả trên trang"
+              />
+              <span className="text-slate-600 dark:text-slate-300">Chọn tất cả menu ở trang hiện tại</span>
             </div>
-          );
-        })}
+          )}
 
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 border-dashed" onClick={handleAdd} disabled={isAtMenuLimit}>
-            <Plus size={16} className="mr-2"/> {isAtMenuLimit ? `Đã đạt tối đa ${MENU_ITEMS_LIMIT} mục menu` : 'Thêm liên kết mới'}
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={() => setIsSmartBuilderOpen(true)} title="Tự gợi ý menu từ dữ liệu đang có">
-            <Sparkles size={16} /> Gợi ý menu
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={() => setIsAiImportOpen(true)} disabled={isAtMenuLimit} title="Import menu từ AI">
-            <Bot size={16} /> Nhập AI
-          </Button>
-        </div>
+          <div className="space-y-2">
+            {paginatedItems.map(({ item, actualIndex, childCount, isCollapsed }) => {
+              const canMoveUp = actualIndex > 0 && canApplyDraftItems((() => {
+                const next = [...draftItems];
+                [next[actualIndex], next[actualIndex - 1]] = [next[actualIndex - 1], next[actualIndex]];
+                return next;
+              })());
+              const canMoveDown = actualIndex < draftItems.length - 1 && canApplyDraftItems((() => {
+                const next = [...draftItems];
+                [next[actualIndex], next[actualIndex + 1]] = [next[actualIndex + 1], next[actualIndex]];
+                return next;
+              })());
+              const canIndentOut = item.depth > 0 && canApplyDraftItems(
+                draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.max(item.depth - 1, 0) } : current)
+              );
+              const canIndentIn = item.depth < maxDepth - 1 && canApplyDraftItems(
+                draftItems.map(current => current.localId === item.localId ? { ...current, depth: Math.min(item.depth + 1, maxDepth - 1) } : current)
+              );
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
-            <div className="text-sm text-slate-500">
-              Hiển thị {(currentPage - 1) * MENU_ITEMS_LIMIT + 1}-{Math.min(currentPage * MENU_ITEMS_LIMIT, draftItems.length)} / {draftItems.length}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() =>{  setCurrentPage(p => Math.max(1, p - 1)); }}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft size={14} />
-              </Button>
-              <span className="text-sm text-slate-600 dark:text-slate-400">
-                Trang {currentPage} / {totalPages}
-              </span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() =>{  setCurrentPage(p => Math.min(totalPages, p + 1)); }}
-                disabled={currentPage === totalPages}
-              >
-                <ChevronRight size={14} />
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Thống kê</CardTitle></CardHeader>
-          <CardContent className="space-y-2 pt-0">
-            {stats.map((stat) => (
-              <div key={stat.label} className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">{stat.label}</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{stat.value}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Menu Preview Section */}
-      <div className="lg:col-span-3">
-        <SimpleMenuPreview
-          items={draftItems.map(item => ({
-            _id: (item.id ?? item.localId) as Id<"menuItems">,
-            label: item.label,
-            url: item.url,
-            order: item.order,
-            depth: item.depth,
-            active: item.active,
-          }))}
-        />
-      </div>
-
-      <Dialog
-        open={isQuickPickerOpen}
-        onOpenChange={(open) =>{ if (open) { setIsQuickPickerOpen(true); } else { handleCloseQuickPicker(); } }}
-      >
-        <DialogContent className="max-w-2xl w-[80vw]">
-          <DialogHeader>
-            <DialogTitle>Chọn URL - Bước {pickerStep}/3</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              value={quickRouteSearch}
-              onChange={(e) => setQuickRouteSearch(e.target.value)}
-              placeholder={
-                pickerStep === 1
-                  ? 'Tìm theo loại...'
-                  : pickerStep === 2
-                    ? (selectedType === 'detail' ? 'Tìm module...' : 'Tìm theo tên hoặc URL...')
-                    : 'Tìm theo tên...'
-              }
-              className="h-9 text-sm"
-            />
-
-            <div className="space-y-3">
-              {pickerStep === 1 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {pickerTypeOptions.map(option => (
-                    <Button
-                      key={option.type}
-                      type="button"
-                      variant="outline"
-                      className="h-20 flex-col items-start gap-1.5 text-left"
-                      onClick={() => {
-                        setSelectedType(option.type);
-                        setPickerStep(2);
-                      }}
-                    >
-                      <span className="font-semibold">{option.label}</span>
-                      <span className="text-xs text-slate-500">{option.description}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-
-              {pickerStep === 2 && selectedType === 'detail' && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(1);
-                      setSelectedType(null);
-                    }}
-                  >
-                    ← Quay lại
-                  </Button>
-
-                  {resolvedDetailModules.length === 0 ? (
-                    <div className="rounded-md border border-slate-200 px-4 py-6 text-sm text-slate-500">
-                      Không có module phù hợp.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2">
-                      {resolvedDetailModules.map(option => (
-                        <Button
-                          key={option.key}
-                          type="button"
-                          variant="outline"
-                          className="justify-start h-16"
-                          onClick={() => {
-                            setSelectedModule(option.key);
-                            setPickerStep(3);
-                          }}
-                        >
-                          <div className="text-left">
-                            <div className="font-semibold">{option.label}</div>
-                            <div className="text-xs text-slate-500">{option.description}</div>
+              return (
+                <div key={item.localId} className="relative" style={showNested ? { paddingLeft: Math.min(item.depth, MENU_MAX_LEVEL - 1) * 24 } : undefined}>
+                  {/* Tree guide lines */}
+                  {showNested && item.depth > 0 && (
+                    <div className="absolute left-0 top-0 bottom-0 pointer-events-none" style={{ width: Math.min(item.depth, MENU_MAX_LEVEL - 1) * 24 }}>
+                      {Array.from({ length: Math.min(item.depth, MENU_MAX_LEVEL - 1) }).map((_, i) => {
+                        const isLast = i === Math.min(item.depth, MENU_MAX_LEVEL - 1) - 1;
+                        return (
+                          <div
+                            key={i}
+                            className="absolute top-0 bottom-0"
+                            style={{ left: i * 24, width: 24 }}
+                          >
+                            {/* Vertical line */}
+                            <div 
+                              className={cn(
+                                "absolute left-3 top-0 border-l-2 border-slate-200 dark:border-slate-800",
+                                isLast ? "h-1/2" : "h-full"
+                              )}
+                            />
+                            {/* Horizontal branch line */}
+                            {isLast && (
+                              <div className="absolute left-3 top-1/2 w-3 border-t-2 border-slate-200 dark:border-slate-800" />
+                            )}
                           </div>
-                        </Button>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
-                </>
-              )}
 
-              {pickerStep === 2 && selectedType && selectedType !== 'detail' && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(1);
-                      setSelectedType(null);
-                    }}
+                  {/* Main Menu Item */}
+                  <div 
+                    draggable
+                    onDragStart={(e) =>{  handleDragStart(e, actualIndex); }}
+                    onDragOver={(e) =>{  handleDragOver(e, actualIndex); }}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, actualIndex)}
+                    onDragEnd={handleDragEnd}
+                    className={cn(
+                      "flex items-center gap-2 p-3 border rounded-lg shadow-sm transition-all min-w-0 border-slate-200 dark:border-slate-700",
+                      item.depth === 0 && "bg-white dark:bg-slate-900",
+                      item.depth === 1 && "bg-slate-50/70 dark:bg-slate-900/60",
+                      item.depth >= 2 && "bg-slate-100/40 dark:bg-slate-950/40",
+                      selectedIds.includes(item.localId) && "ring-2 ring-blue-500/40 border-blue-300 dark:border-blue-700",
+                      !item.active && "opacity-50",
+                      draggedIndex === actualIndex && "opacity-50 scale-[0.98]",
+                      dragOverIndex === actualIndex && "border-orange-500 border-2 bg-orange-50 dark:bg-orange-900/20"
+                    )}
                   >
-                    ← Quay lại
-                  </Button>
+                    <div className="flex items-center self-start pt-1">
+                      <SelectCheckbox
+                        checked={selectedIds.includes(item.localId)}
+                        onChange={() => toggleSelectItem(item.localId)}
+                        title="Chọn menu item"
+                      />
+                    </div>
 
-                  <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                    {filteredPickerRoutes.length === 0 ? (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không có gợi ý phù hợp.</div>
-                    ) : (
-                      <div className="space-y-1 p-2">
-                        {filteredPickerRoutes.map(option => (
-                          <button
-                            key={`${option.url}-${option.source}`}
-                            type="button"
-                            onClick={() => handleSelectQuickRoute(option)}
-                            className="flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0">
-                              <div className="font-semibold text-slate-700 dark:text-slate-200 truncate">
-                                {option.label}
-                              </div>
-                              <div className="text-xs text-slate-500 font-mono truncate">{option.url}</div>
-                            </div>
-                          </button>
-                        ))}
+                    <div className="flex flex-col gap-1 text-slate-300 cursor-grab active:cursor-grabbing">
+                      <button type="button" onClick={ async () => handleMove(actualIndex, 'up')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveUp}><ArrowUp size={14}/></button>
+                      <GripVertical size={14} className="text-slate-400" />
+                      <button type="button" onClick={ async () => handleMove(actualIndex, 'down')} className="hover:text-orange-600 disabled:opacity-30" disabled={!canMoveDown}><ArrowDown size={14}/></button>
+                    </div>
+                    
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      {/* Header Bar của MenuItem: Trải rộng toàn bộ chiều ngang, không bị bó hẹp trong 50% */}
+                      <div className="flex items-center justify-between gap-2 text-xs text-slate-500 select-none">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-nowrap overflow-hidden">
+                          <span className="font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap text-xs">
+                            Nhãn hiển thị
+                          </span>
+                          <span className={cn(
+                            "rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 whitespace-nowrap",
+                            item.depth === 0 && "bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/50",
+                            item.depth === 1 && "bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/50",
+                            item.depth >= 2 && "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50"
+                          )}>
+                            {`Cấp ${item.depth + 1}`}
+                          </span>
+
+                          {childCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleCollapse(item.localId)}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-all shrink-0 whitespace-nowrap",
+                                isCollapsed
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs"
+                                  : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              )}
+                              title={isCollapsed ? `Mở rộng (${childCount} mục con)` : `Thu gọn (${childCount} mục con)`}
+                            >
+                              <ChevronDown
+                                size={12}
+                                className={cn("transition-transform duration-200 shrink-0", isCollapsed && "-rotate-90 text-amber-600 dark:text-amber-400")}
+                              />
+                              <span>{childCount} con{isCollapsed ? ' (ẩn)' : ''}</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          {item.depth === 0 && (
+                            <label className="relative inline-flex items-center cursor-pointer select-none whitespace-nowrap">
+                              <input 
+                                type="checkbox" 
+                                checked={item.isSpecial || false} 
+                                onChange={() => handleToggleSpecial(item)} 
+                                className="sr-only peer" 
+                              />
+                              <div className="w-7 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-orange-500"></div>
+                              <span className="ms-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Nổi bật</span>
+                            </label>
+                          )}
+                          <span className="text-xs text-slate-500 font-medium whitespace-nowrap hidden sm:inline">
+                            URL
+                          </span>
+                        </div>
                       </div>
-                    )}
+
+                      {/* Hàng 2 ô Input: Nhãn & URL */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 min-w-0">
+                        <Input 
+                          value={item.label} 
+                          onChange={(e) => { handleUpdateField(item.localId, 'label', e.target.value); }} 
+                          placeholder="Nhập nhãn menu..."
+                          className="h-8 text-sm min-w-0 bg-white dark:bg-slate-900" 
+                        />
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Input 
+                            value={item.url} 
+                            onChange={(e) => { handleUpdateField(item.localId, 'url', e.target.value); }} 
+                            placeholder="/duong-dan"
+                            className="h-8 text-sm font-mono text-xs min-w-0 flex-1 bg-white dark:bg-slate-900" 
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-slate-400 hover:text-blue-600 hover:border-blue-400 transition-colors"
+                            onClick={() => {
+                              setQuickPickerTargetId(item.localId);
+                              setIsQuickPickerOpen(true);
+                            }}
+                            title="Chọn link gợi ý"
+                          >
+                            <Link2 size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-0.5 shrink-0 border-l border-slate-100 dark:border-slate-800 pl-2 self-center">
+                      {/* Hàng 1: Thụt trái (<), Thụt phải (>), Thêm bên dưới (+) */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        onClick={() => handleIndent(item, 'out')}
+                        disabled={!canIndentOut || !showNested}
+                        title="Thụt lề trái (giảm cấp)"
+                      >
+                        <ChevronLeft size={13} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        onClick={() => handleIndent(item, 'in')}
+                        disabled={!canIndentIn || !showNested}
+                        title={`Thụt lề phải (tăng cấp, tối đa ${MENU_MAX_LEVEL} tầng)`}
+                      >
+                        <ChevronRight size={13} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        onClick={() => handleAddBelow(item)}
+                        title="Thêm mục bên dưới"
+                        disabled={isAtMenuLimit}
+                      >
+                        <Plus size={13} />
+                      </Button>
+
+                      {/* Hàng 2: Sao chép, Ẩn/Hiện, Xóa */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                        onClick={() => handleCopy(item)}
+                        title="Nhân bản (sao chép)"
+                        disabled={isAtMenuLimit}
+                      >
+                        <Copy size={12} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-6 w-6 rounded p-0",
+                          item.active
+                            ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            : "text-slate-400 bg-slate-100/80 dark:bg-slate-800/80"
+                        )}
+                        onClick={() => handleToggleActive(item)}
+                        title={item.active ? 'Ẩn liên kết' : 'Hiện liên kết'}
+                      >
+                        {item.active ? <Eye size={12} /> : <EyeOff size={12} />}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600"
+                        onClick={() => handleDelete(item)}
+                        title="Xóa liên kết"
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
                   </div>
-                </>
-              )}
-
-              {pickerStep === 3 && selectedModule && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(2);
-                      setSelectedModule(null);
-                    }}
-                  >
-                    ← Quay lại
-                  </Button>
-
-                  <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                    {isDetailLoading && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Đang tải dữ liệu...</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy bài viết.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy sản phẩm.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy dịch vụ.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailPosts?.map(post => (
-                          <button
-                            key={post._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: post.title,
-                                url: buildDetailPath({
-                                  categorySlug: post.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'posts',
-                                  recordSlug: post.slug,
-                                }),
-                                source: 'posts',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="font-semibold text-slate-700 truncate">{post.title}</div>
-                              <div className="text-xs text-slate-500 font-mono truncate">
-                                {buildDetailPath({
-                                  categorySlug: post.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'posts',
-                                  recordSlug: post.slug,
-                                })}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailProducts?.map(product => (
-                          <button
-                            key={product._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: product.name,
-                                url: buildDetailPath({
-                                  categorySlug: product.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'products',
-                                  recordSlug: product.slug,
-                                }),
-                                source: 'products',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="font-semibold text-slate-700 truncate">{product.name}</div>
-                              <div className="text-xs text-slate-500 font-mono truncate">
-                                {buildDetailPath({
-                                  categorySlug: product.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'products',
-                                  recordSlug: product.slug,
-                                })}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailServices?.map(service => (
-                          <button
-                            key={service._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: service.title,
-                                url: buildDetailPath({
-                                  categorySlug: service.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'services',
-                                  recordSlug: service.slug,
-                                }),
-                                source: 'services',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="font-semibold text-slate-700 truncate">{service.title}</div>
-                              <div className="text-xs text-slate-500 font-mono truncate">
-                                {buildDetailPath({
-                                  categorySlug: service.categorySlug,
-                                  mode: routeMode,
-                                  moduleKey: 'services',
-                                  recordSlug: service.slug,
-                                })}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+                </div>
+              );
+            })}
           </div>
-        </DialogContent>
-      </Dialog>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="text-sm text-slate-500">
+                Hiển thị {(currentPage - 1) * MENU_ITEMS_LIMIT + 1}-{Math.min(currentPage * MENU_ITEMS_LIMIT, draftItems.length)} / {draftItems.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() =>{  setCurrentPage(p => Math.max(1, p - 1)); }}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft size={14} />
+                </Button>
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  Trang {currentPage} / {totalPages}
+                </span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() =>{  setCurrentPage(p => Math.min(totalPages, p + 1)); }}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight size={14} />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Menu Preview Section */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <SimpleMenuPreview
+              items={draftItems.map(item => ({
+                _id: (item.id ?? item.localId) as Id<"menuItems">,
+                label: item.label,
+                url: item.url,
+                order: item.order,
+                depth: item.depth,
+                active: item.active,
+              }))}
+            />
+          </div>
+        </AdminFormMain>
+
+        <AdminFormSidebar className="lg:col-span-4 xl:col-span-3 space-y-4">
+          <AdminFormCard title="Thống kê">
+            <div className="space-y-2">
+              {stats.map((stat) => (
+                <div key={stat.label} className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">{stat.label}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{stat.value}</span>
+                </div>
+              ))}
+            </div>
+          </AdminFormCard>
+        </AdminFormSidebar>
+      </AdminFormGrid>
+
+      <QuickRoutePickerModal
+        open={isQuickPickerOpen}
+        onOpenChange={(open) => {
+          setIsQuickPickerOpen(open);
+          if (!open) setQuickPickerTargetId(null);
+        }}
+        onSelect={(option) => {
+          if (quickPickerTargetId) {
+            handleUpdateField(quickPickerTargetId, 'url', option.url);
+            handleUpdateField(quickPickerTargetId, 'label', option.label);
+          }
+          setIsQuickPickerOpen(false);
+          setQuickPickerTargetId(null);
+        }}
+      />
 
       {/* AI Import Dialog */}
       <AiMenuImportDialog
+        currentItems={draftItems.map((item) => ({ depth: item.depth, label: item.label }))}
         open={isAiImportOpen}
         onOpenChange={setIsAiImportOpen}
         onApply={handleAiImportApply}
@@ -1604,43 +1466,6 @@ function MenuItemsEditor({ menuId }: { menuId: Id<"menus"> }) {
           </div>
         </DialogContent>
       </Dialog>
-
-      <HomeComponentStickyFooter
-        isSubmitting={isSavingAll}
-        hasChanges={hasChanges}
-        onClickSave={handleSaveAll}
-        submitType="button"
-        submitLabel="Lưu tất cả"
-        savedLabel="Đã lưu"
-        disableSave={!hasChanges || isSavingAll || hasInvalidStructure}
-        align="between"
-      >
-        <div className="hidden text-xs text-slate-500 md:block">
-          {hasInvalidStructure ? 'Cấu trúc menu chưa hợp lệ' : `${draftItems.length}/${MENU_ITEMS_LIMIT} mục menu`}
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" onClick={handleAdd} disabled={isAtMenuLimit || isSavingAll}>
-            <Plus size={16} className="mr-1" />
-            Thêm liên kết
-          </Button>
-          <Button type="button" variant="outline" onClick={() => setIsAiImportOpen(true)} disabled={isAtMenuLimit || isSavingAll}>
-            <Bot size={16} className="mr-1" />
-            Nhập từ AI
-          </Button>
-          <Button type="button" variant="outline" onClick={() => setIsSmartBuilderOpen(true)} disabled={isSavingAll}>
-            <Sparkles size={16} className="mr-1" />
-            Gợi ý menu
-          </Button>
-          <Button
-            type="button"
-            variant="accent"
-            onClick={handleSaveAll}
-            disabled={!hasChanges || isSavingAll || hasInvalidStructure}
-          >
-            {isSavingAll ? 'Đang lưu...' : hasChanges ? 'Lưu tất cả' : 'Đã lưu'}
-          </Button>
-        </div>
-      </HomeComponentStickyFooter>
-    </div>
+    </AdminFormPageWrapper>
   );
 }

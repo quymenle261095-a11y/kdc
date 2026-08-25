@@ -237,6 +237,9 @@ type ProductDetailExperienceConfig = {
   accentColors?: ProductDetailAccentColorConfig;
   showSocialButtons?: boolean;
   socialButtons?: Array<{ id: string; icon: string; label: string; url: string; active: boolean }>;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
 };
 
 type BaseImageLayoutConfig = {
@@ -279,6 +282,7 @@ type PremiumLayoutConfig = BaseImageLayoutConfig & {
   priceRightIcon?: string;
   showPriceLeftIcon?: boolean;
   showPriceRightIcon?: boolean;
+  cornerRadius?: 'none' | 'sm' | 'lg';
 };
 
 type ClassicHighlightIcon =
@@ -307,8 +311,6 @@ type ClassicHighlightIcon =
 type ClassicHighlightItem = { icon: ClassicHighlightIcon; text: string };
 
 const EXPERIENCE_KEY = 'product_detail_ui';
-const LEGACY_DETAIL_STYLE_KEY = 'products_detail_style';
-const LEGACY_HIGHLIGHTS_KEY = 'products_detail_classic_highlights_enabled';
 const CLASSIC_HIGHLIGHTS_KEY = 'products_detail_classic_highlights';
 
 const LAYOUT_STYLES: LayoutOption<ProductsDetailStyle>[] = [
@@ -345,6 +347,7 @@ const DEFAULT_CONFIG: ProductDetailExperienceConfig = {
     priceRightIcon: 'Gift',
     showPriceLeftIcon: true,
     showPriceRightIcon: true,
+    cornerRadius: 'lg',
     },
   },
   showBuyNow: true,
@@ -360,17 +363,10 @@ const DEFAULT_CONFIG: ProductDetailExperienceConfig = {
   },
   showSocialButtons: false,
   socialButtons: [],
+  cartButtonsLayout: 'stack',
+  highlightsPosition: 'image_column',
+  highlightsSpacing: 'high',
 };
-
-const LEGACY_COMBO_EFFECT_MAP = {
-  'sparkle-gradient': { type: 'sparkle', color: 'gradient-1' },
-  'sparkle-black': { type: 'sparkle', color: 'black' },
-  'sparkle-gold': { type: 'sparkle', color: 'gradient-2' },
-  'sparkle-emerald': { type: 'sparkle', color: 'gradient-3' },
-  'sparkle-red': { type: 'sparkle', color: 'red' },
-  'sparkle-primary': { type: 'sparkle', color: 'primary' },
-  'sparkle-secondary': { type: 'sparkle', color: 'secondary' },
-} as const;
 
 const HINTS = [
   'Classic layout phù hợp shop truyền thống.',
@@ -495,9 +491,8 @@ const normalizeClassicHighlights = (value: unknown): ClassicHighlightItem[] => {
 
 export default function ProductDetailExperiencePage() {
   const experienceSetting = useQuery(api.settings.getByKey, { key: EXPERIENCE_KEY });
-  const legacyStyleSetting = useQuery(api.settings.getByKey, { key: LEGACY_DETAIL_STYLE_KEY });
-  const legacyHighlightsSetting = useQuery(api.settings.getByKey, { key: LEGACY_HIGHLIGHTS_KEY });
   const highlightsSetting = useQuery(api.settings.getByKey, { key: CLASSIC_HIGHLIGHTS_KEY });
+  const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
   const moduleAspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
   const commentsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'comments' });
   const commentsLikesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableLikes', moduleKey: 'comments' });
@@ -525,8 +520,6 @@ export default function ProductDetailExperiencePage() {
   const [secondaryColor, setSecondaryColor] = useState(brandColors.secondary || '');
   const [colorMode, setColorMode] = useState<'single' | 'dual'>(brandColors.mode || 'single');
 
-  const legacyStyle = legacyStyleSetting?.value as ProductsDetailStyle | undefined;
-  const legacyHighlights = (legacyHighlightsSetting?.value as boolean) ?? true;
   const serverHighlights = useMemo(
     () => normalizeClassicHighlights(highlightsSetting?.value),
     [highlightsSetting?.value]
@@ -671,19 +664,21 @@ export default function ProductDetailExperiencePage() {
       imageAspectRatioSource?: ProductImageAspectRatioSource;
       showAllProductImagesSection?: boolean;
       enableImageLightbox?: boolean;
-      comboAnimateType?: ComboAnimateType | 'pulse' | 'bounce' | keyof typeof LEGACY_COMBO_EFFECT_MAP;
+      comboAnimateType?: ComboAnimateType;
       comboEffectColor?: ComboEffectColor;
       accentColors?: ProductDetailAccentColorConfig;
       showSocialButtons?: boolean;
       socialButtons?: Array<{ id: string; icon: string; label: string; url: string; active: boolean }>;
+      cartButtonsLayout?: 'stack' | 'grid-2';
+      highlightsPosition?: 'info_column' | 'image_column';
       layouts?: Partial<Record<ProductsDetailStyle, Partial<ClassicLayoutConfig & ModernLayoutConfig & MinimalLayoutConfig & PremiumLayoutConfig & BaseImageLayoutConfig & {
         imageAspectRatio?: ProductImageAspectRatio;
       }>>>;
     }> | undefined;
     const classicHighlightsSetting = raw?.layouts?.classic?.showClassicHighlights
       ?? raw?.showClassicHighlights
-      ?? legacyHighlights;
-    const legacyAspectRatio = isProductImageAspectRatio(raw?.imageAspectRatio)
+      ?? DEFAULT_CONFIG.layouts.classic.showClassicHighlights;
+    const selectedImageAspectRatio = isProductImageAspectRatio(raw?.imageAspectRatio)
       ? raw.imageAspectRatio
       : isProductImageAspectRatio(raw?.layouts?.classic?.imageAspectRatio)
         ? raw.layouts.classic.imageAspectRatio
@@ -700,16 +695,11 @@ export default function ProductDetailExperiencePage() {
         || isProductImageAspectRatio(raw?.layouts?.minimal?.imageAspectRatio)
         ? 'custom'
         : 'module';
-    const legacyComboEffect = raw?.comboAnimateType && (raw.comboAnimateType in LEGACY_COMBO_EFFECT_MAP)
-      ? LEGACY_COMBO_EFFECT_MAP[raw.comboAnimateType as keyof typeof LEGACY_COMBO_EFFECT_MAP]
-      : undefined;
-    const comboAnimateType: ComboAnimateType = raw?.comboAnimateType === 'pulse' || raw?.comboAnimateType === 'bounce'
-      ? 'luxury-sheen'
-      : legacyComboEffect?.type ?? (raw?.comboAnimateType as ComboAnimateType | undefined) ?? DEFAULT_CONFIG.comboAnimateType ?? 'luxury-sheen';
+    const comboAnimateType: ComboAnimateType = raw?.comboAnimateType ?? DEFAULT_CONFIG.comboAnimateType ?? 'luxury-sheen';
     return {
-      layoutStyle: raw?.layoutStyle ?? legacyStyle ?? DEFAULT_CONFIG.layoutStyle,
+      layoutStyle: raw?.layoutStyle ?? DEFAULT_CONFIG.layoutStyle,
       imageAspectRatioSource,
-      imageAspectRatio: legacyAspectRatio,
+      imageAspectRatio: selectedImageAspectRatio,
       showAllProductImagesSection: raw?.showAllProductImagesSection ?? false,
       enableImageLightbox: raw?.enableImageLightbox ?? false,
       layouts: {
@@ -746,6 +736,7 @@ export default function ProductDetailExperiencePage() {
            priceRightIcon: (raw?.layouts?.premium as Partial<PremiumLayoutConfig>)?.priceRightIcon ?? DEFAULT_CONFIG.layouts.premium.priceRightIcon,
            showPriceLeftIcon: (raw?.layouts?.premium as Partial<PremiumLayoutConfig>)?.showPriceLeftIcon ?? DEFAULT_CONFIG.layouts.premium.showPriceLeftIcon,
            showPriceRightIcon: (raw?.layouts?.premium as Partial<PremiumLayoutConfig>)?.showPriceRightIcon ?? DEFAULT_CONFIG.layouts.premium.showPriceRightIcon,
+           cornerRadius: (raw?.layouts?.premium as Partial<PremiumLayoutConfig>)?.cornerRadius ?? DEFAULT_CONFIG.layouts.premium.cornerRadius,
          },
        },
       showBuyNow: raw?.showBuyNow ?? true,
@@ -756,19 +747,23 @@ export default function ProductDetailExperiencePage() {
         ? raw.relatedProductsPerPage
         : DEFAULT_CONFIG.relatedProductsPerPage,
       comboAnimateType,
-      comboEffectColor: raw?.comboEffectColor ?? legacyComboEffect?.color ?? DEFAULT_CONFIG.comboEffectColor,
+      comboEffectColor: raw?.comboEffectColor ?? DEFAULT_CONFIG.comboEffectColor,
       accentColors: {
         ...DEFAULT_CONFIG.accentColors,
         ...raw?.accentColors,
       },
       showSocialButtons: raw?.showSocialButtons ?? false,
       socialButtons: raw?.socialButtons ?? [],
+      cartButtonsLayout: raw?.cartButtonsLayout ?? 'stack',
+      highlightsPosition: raw?.highlightsPosition ?? 'image_column',
+      highlightsSpacing: raw?.highlightsSpacing ?? 'high',
     };
-  }, [experienceSetting?.value, legacyStyle, legacyHighlights]);
+  }, [experienceSetting?.value]);
 
-  const isLoading = experienceSetting === undefined || legacyStyleSetting === undefined || legacyHighlightsSetting === undefined || highlightsSetting === undefined;
+  const isLoading = experienceSetting === undefined || highlightsSetting === undefined || saleModeSetting === undefined;
 
   const { config, setConfig, hasChanges } = useExperienceConfig(serverConfig, DEFAULT_CONFIG, isLoading);
+  const saleMode = (saleModeSetting?.value as string | undefined) ?? 'cart';
 
   const currentLayoutConfig = config.layouts[config.layoutStyle];
   const resolvedImageAspectRatio = config.imageAspectRatioSource === 'module'
@@ -821,13 +816,6 @@ export default function ProductDetailExperiencePage() {
       },
     }));
   };
-
-  const additionalSettings = useMemo(() => {
-    return [
-      { group: 'products', key: LEGACY_DETAIL_STYLE_KEY, value: config.layoutStyle },
-      { group: 'products', key: LEGACY_HIGHLIGHTS_KEY, value: config.layouts.classic.showClassicHighlights ?? true },
-    ];
-  }, [config.layoutStyle, config.layouts.classic.showClassicHighlights]);
 
   const hasHighlightsChanges = useMemo(
     () => JSON.stringify(classicHighlights) !== JSON.stringify(serverHighlights),
@@ -885,7 +873,6 @@ export default function ProductDetailExperiencePage() {
       const settingsToSave = [
         { group: EXPERIENCE_GROUP, key: EXPERIENCE_KEY, value: normalizedConfig },
         { group: 'products', key: CLASSIC_HIGHLIGHTS_KEY, value: classicHighlights },
-        ...additionalSettings,
       ];
       await setMultipleSettings({ settings: settingsToSave });
       toast.success(MESSAGES.saveSuccess(EXPERIENCE_NAMES[EXPERIENCE_KEY]));
@@ -952,6 +939,10 @@ export default function ProductDetailExperiencePage() {
       priceRightIcon: premiumLayoutConfig.priceRightIcon,
       showPriceLeftIcon: premiumLayoutConfig.showPriceLeftIcon,
       showPriceRightIcon: premiumLayoutConfig.showPriceRightIcon,
+      cartButtonsLayout: config.cartButtonsLayout,
+      highlightsPosition: config.highlightsPosition,
+      highlightsSpacing: config.highlightsSpacing,
+      cornerRadius: premiumLayoutConfig.cornerRadius,
     };
 
     return base;
@@ -994,6 +985,34 @@ export default function ProductDetailExperiencePage() {
         onChange={(v) => updateClassicLayoutConfig('showClassicHighlights', v)}
         accentColor={brandColor}
       />
+      {config.layouts.classic.showClassicHighlights && (
+        <SelectRow
+          label="Vị trí hiển thị"
+          value={config.highlightsPosition || 'image_column'}
+          options={[
+            { label: 'Dưới thông tin sản phẩm (cột phải)', value: 'info_column' },
+            { label: 'Dưới ảnh sản phẩm (cột trái)', value: 'image_column' },
+          ]}
+          onChange={(v) => setConfig(prev => ({ ...prev, highlightsPosition: v as 'info_column' | 'image_column' }))}
+        />
+      )}
+      {config.layouts.classic.showClassicHighlights && (
+        <SelectRow
+          label={config.highlightsPosition === 'image_column' ? 'Khoảng cách dưới ảnh (Highlights)' : 'Khoảng cách cột phải (Highlights)'}
+          value={config.highlightsSpacing || 'high'}
+          options={config.highlightsPosition === 'image_column'
+            ? [
+                { label: 'Dính sát (Không khoảng cách)', value: 'none' },
+                { label: 'Nhiều (Mặc định)', value: 'high' },
+              ]
+            : [
+                { label: 'Nhiều (Mặc định)', value: 'high' },
+                { label: 'Bỏ (Không khoảng cách)', value: 'none' },
+              ]
+          }
+          onChange={(v) => setConfig(prev => ({ ...prev, highlightsSpacing: v as 'low' | 'high' | 'none' }))}
+        />
+      )}
       {classicHighlights.map((item, index) => {
         const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon];
         return (
@@ -1338,6 +1357,17 @@ export default function ProductDetailExperiencePage() {
               accentColor={brandColor}
               disabled={!canUseOrders}
             />
+            {currentLayoutConfig.showAddToCart && saleMode === 'cart' && (
+              <SelectRow
+                label="Bố cục nút"
+                value={config.cartButtonsLayout ?? 'stack'}
+                options={[
+                  { value: 'stack', label: 'Xếp dọc (Stack)' },
+                  { value: 'grid-2', label: 'Xếp ngang (Grid 2)' },
+                ]}
+                onChange={(v) => setConfig(prev => ({ ...prev, cartButtonsLayout: v as 'stack' | 'grid-2' }))}
+              />
+            )}
             <ToggleRow
               label="Section toàn bộ ảnh"
               description="Hiển thị toàn bộ ảnh sản phẩm dưới mô tả"
@@ -1607,27 +1637,6 @@ export default function ProductDetailExperiencePage() {
 
                       <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
                         <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Cấu hình Icon nền giá</p>
-                        
-                        <div className="grid grid-cols-2 gap-2">
-                          <ToggleRow
-                            label="Hiện Icon Trái"
-                            checked={premiumLayoutConfig.showPriceLeftIcon ?? true}
-                            onChange={(v) => updateLayoutConfig('showPriceLeftIcon' as keyof typeof currentLayoutConfig, v as never)}
-                            accentColor={brandColor}
-                          />
-                          {premiumLayoutConfig.showPriceLeftIcon !== false && (
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-1">Icon Trái (Mặc định Ribbon)</label>
-                              <IconPopoverPicker
-                                value={premiumLayoutConfig.priceLeftIcon ?? 'Award'}
-                                onChange={(v) => updateLayoutConfig('priceLeftIcon' as keyof typeof currentLayoutConfig, v as never)}
-                                options={PREMIUM_ICON_OPTIONS}
-                                brandColor={brandColor}
-                                compact
-                              />
-                            </div>
-                          )}
-                        </div>
 
                         <div className="grid grid-cols-2 gap-2">
                           <ToggleRow
@@ -1649,6 +1658,19 @@ export default function ProductDetailExperiencePage() {
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                        <SelectRow
+                          label="Độ bo góc"
+                          value={premiumLayoutConfig.cornerRadius ?? 'lg'}
+                          options={[
+                            { value: 'lg', label: 'Nhiều (Mặc định)' },
+                            { value: 'sm', label: 'Ít (1/2)' },
+                            { value: 'none', label: 'Không bo' },
+                          ]}
+                          onChange={(v) => updateLayoutConfig('cornerRadius' as keyof typeof currentLayoutConfig, v as never)}
+                        />
                       </div>
                     </div>
                   </div>

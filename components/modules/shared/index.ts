@@ -5,4 +5,5 @@ export { ModuleStatus } from './ModuleStatus';
 export { ConventionNote, Code } from './ConventionNote';
 export { SettingsCard, SettingInput, SettingSelect, SettingToggle, SettingTextarea } from './settings-card';
 export { FeaturesCard } from './FeaturesCard';
+export { CapabilitiesCard } from './CapabilitiesCard';
 export { FieldsCard } from './FieldsCard';

@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent scratch workspace
+/scratch/*
+!/scratch/.gitkeep
+
+# upgrade runs
+.vietadmin-upgrade-runs/
+
+# typecheck & temp logs
+ts_errors*.txt
+.claude/*.log
+
+# factory local docs
+/.factory/docs/*
+!/.factory/docs/.gitkeep

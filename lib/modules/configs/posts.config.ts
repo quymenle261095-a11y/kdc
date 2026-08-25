@@ -1,4 +1,4 @@
-import { FileText, Tag, Star, Clock, Code } from 'lucide-react';
+import { FileText, Tag, Star, Clock, Code, Search } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
  
 export const postsModule = defineModuleWithRuntime({
@@ -10,6 +10,7 @@ export const postsModule = defineModuleWithRuntime({
    categoryModuleKey: 'postCategories',
    
    features: [
+     { key: 'enableAdvancedSEO', label: 'SEO nâng cao', icon: Search, linkedField: 'focusKeyword', enabled: true },
      { key: 'enableTags', label: 'Tags', icon: Tag, linkedField: 'tags', enabled: false },
      { key: 'enableFeatured', label: 'Nổi bật', icon: Star, linkedField: 'featured', enabled: false },
      { key: 'enableScheduling', label: 'Hẹn giờ', icon: Clock, linkedField: 'publish_date', enabled: false },
@@ -66,9 +67,12 @@ export const postsModule = defineModuleWithRuntime({
       { enabled: false, fieldKey: 'publish_date', isSystem: false, linkedFeature: 'enableScheduling', name: 'Ngày xuất bản', order: 10, required: false, type: 'date' },
       { enabled: true, fieldKey: 'metaTitle', group: 'seo', isSystem: false, name: 'Meta Title', order: 11, required: false, type: 'text' },
       { enabled: true, fieldKey: 'metaDescription', group: 'seo', isSystem: false, name: 'Meta Description', order: 12, required: false, type: 'textarea' },
-      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 13, required: false, type: 'select' },
-      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 14, required: false, type: 'textarea' },
-      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 15, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'focusKeyword', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Từ khóa chính', order: 13, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'relatedQueries', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Cách khách hay tìm', order: 14, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'faqItems', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'FAQ', order: 15, required: false, type: 'json' },
+      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 16, required: false, type: 'select' },
+      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 17, required: false, type: 'textarea' },
+      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 18, required: false, type: 'textarea' },
     ],
   },
    

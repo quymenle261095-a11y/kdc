@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { Button } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -39,6 +41,8 @@ const toPersistItems = (items: ClientEditorItem[]): ClientsConfig['items'] => (
 export default function ClientsCreatePage() {
   const COMPONENT_TYPE = 'Clients';
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Banner ảnh thương hiệu', COMPONENT_TYPE);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { primary, secondary, mode } = effectiveColors;
@@ -185,6 +189,10 @@ export default function ClientsCreatePage() {
         badgeText={badgeText}
         spacing={spacing}
         cornerRadius={cornerRadius}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
       />
     </ComponentFormWrapper>
   );

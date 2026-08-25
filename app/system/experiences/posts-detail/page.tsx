@@ -44,9 +44,6 @@ type PostDetailExperienceConfig = {
 const EXPERIENCE_KEY = 'posts_detail_ui';
 const AUTHOR_FIELD_KEY = 'author_name';
 
-// Legacy key for backward compatibility
-const LEGACY_DETAIL_STYLE_KEY = 'posts_detail_style';
-
 const LAYOUT_STYLES: LayoutOption<DetailLayoutStyle>[] = [
   { description: 'Layout truyền thống với sidebar', id: 'classic', label: 'Classic' },
   { description: 'Hero image, full-width', id: 'modern', label: 'Modern' },
@@ -102,7 +99,6 @@ export default function PostDetailExperiencePage() {
   const [colorMode, setColorMode] = useState<'single' | 'dual'>(brandColors.mode || 'single');
   const postFields = useQuery(api.admin.modules.listModuleFields, { moduleKey: 'posts' });
   const examplePostSlug = useExamplePostSlug();
-  const legacyDetailStyleSetting = useQuery(api.settings.getByKey, { key: LEGACY_DETAIL_STYLE_KEY });
   const [previewDevice, setPreviewDevice] = useState<DeviceType>('desktop');
   const setMultipleSettings = useMutation(api.settings.setMultiple);
   const updateField = useMutation(api.admin.modules.updateModuleField);
@@ -120,16 +116,23 @@ export default function PostDetailExperiencePage() {
         minimal?: Partial<PostDetailExperienceConfig>;
       };
     }) | undefined;
-    const legacyStyle = legacyDetailStyleSetting?.value as DetailLayoutStyle | undefined;
-    const legacyShared = raw?.layouts?.classic ?? raw?.layouts?.modern ?? raw?.layouts?.minimal;
+    const layoutStyle = raw?.layoutStyle ?? DEFAULT_CONFIG.layoutStyle;
+    const layoutConfig = raw?.layouts?.[layoutStyle];
 
     return {
       ...DEFAULT_CONFIG,
-      ...legacyShared,
-      ...raw,
-      layoutStyle: raw?.layoutStyle ?? legacyStyle ?? DEFAULT_CONFIG.layoutStyle,
+      ...layoutConfig,
+      showAuthor: raw?.showAuthor ?? layoutConfig?.showAuthor ?? DEFAULT_CONFIG.showAuthor,
+      showTags: raw?.showTags ?? layoutConfig?.showTags ?? DEFAULT_CONFIG.showTags,
+      showShare: raw?.showShare ?? layoutConfig?.showShare ?? DEFAULT_CONFIG.showShare,
+      showComments: raw?.showComments ?? layoutConfig?.showComments ?? DEFAULT_CONFIG.showComments,
+      showCommentLikes: raw?.showCommentLikes ?? layoutConfig?.showCommentLikes ?? DEFAULT_CONFIG.showCommentLikes,
+      showCommentReplies: raw?.showCommentReplies ?? layoutConfig?.showCommentReplies ?? DEFAULT_CONFIG.showCommentReplies,
+      showRelated: raw?.showRelated ?? layoutConfig?.showRelated ?? DEFAULT_CONFIG.showRelated,
+      showThumbnail: raw?.showThumbnail ?? layoutConfig?.showThumbnail ?? DEFAULT_CONFIG.showThumbnail,
+      layoutStyle,
     };
-  }, [experienceSetting?.value, legacyDetailStyleSetting?.value]);
+  }, [experienceSetting?.value]);
 
   const isLoading = experienceSetting === undefined || postsModule === undefined || postFields === undefined;
   const { config, setConfig, hasChanges } = useExperienceConfig(serverConfig, DEFAULT_CONFIG, isLoading);
@@ -159,11 +162,6 @@ export default function PostDetailExperiencePage() {
     setColorMode(brandColors.mode || 'single');
   }, [brandColors.primary, brandColors.secondary, brandColors.mode]);
 
-  // Sync with legacy key
-  const additionalSettings = useMemo(() => [
-    { group: 'posts', key: LEGACY_DETAIL_STYLE_KEY, value: config.layoutStyle }
-  ], [config.layoutStyle]);
-  
   const [isSaving, setIsSaving] = React.useState(false);
 
   const handleSave = async () => {
@@ -179,7 +177,6 @@ export default function PostDetailExperiencePage() {
 
       const settingsToSave: Array<{ group: string; key: string; value: unknown }> = [
         { group: EXPERIENCE_GROUP, key: EXPERIENCE_KEY, value: normalizedConfig },
-        ...additionalSettings,
       ];
 
       const tasks: Promise<unknown>[] = [setMultipleSettings({ settings: settingsToSave })];

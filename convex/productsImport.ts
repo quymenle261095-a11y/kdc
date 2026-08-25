@@ -3,8 +3,11 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 
 const bulkVariantDoc = v.object({
+  sku: v.optional(v.string()),
   variantOption1: v.optional(v.string()),
+  variantOption1Name: v.optional(v.string()),
   variantOption2: v.optional(v.string()),
+  variantOption2Name: v.optional(v.string()),
   price: v.optional(v.number()),
   salePrice: v.optional(v.number()),
   stock: v.optional(v.number()),
@@ -16,6 +19,7 @@ const bulkProductDoc = v.object({
   sku: v.string(),
   name: v.optional(v.string()),
   categoryId: v.optional(v.string()),
+  categoryName: v.optional(v.string()),
   productType: v.optional(v.union(v.literal("physical"), v.literal("digital"))),
   price: v.optional(v.number()),
   salePrice: v.optional(v.number()),
@@ -46,6 +50,22 @@ export const upsertBulk = mutation({
     // TỐI ƯU BANDWIDTH 2: Load danh mục 1 lần
     const categories = await ctx.db.query("productCategories").collect();
     const categoryMap = new Map(categories.map(c => [c._id.toString(), c._id]));
+    const categoryByNameMap = new Map(categories.map(c => [c.name.toLowerCase().trim(), c._id]));
+
+    let defaultCategoryId: Id<"productCategories"> | undefined = undefined;
+    if (categories.length > 0) {
+      defaultCategoryId = categories[0]._id;
+    } else {
+      const defaultId = await ctx.db.insert("productCategories", {
+        name: "Chưa phân loại",
+        slug: "chua-phan-loai",
+        active: true,
+        order: 0,
+      });
+      defaultCategoryId = defaultId;
+      categoryMap.set(defaultId.toString(), defaultId);
+      categoryByNameMap.set("chưa phân loại", defaultId);
+    }
 
     // TỐI ƯU BANDWIDTH 3: Load toàn bộ Options & Values (số lượng thường rất ít < 1000, 
     // fetch 1 lần rẻ hơn nhiều so với query từng dòng)
@@ -66,7 +86,7 @@ export const upsertBulk = mutation({
       if (!option) {
         const optionId = await ctx.db.insert("productOptions", {
           name: optionName,
-          slug: optionName.toLowerCase().replace(/\\s+/g, '-'),
+          slug: optionName.toLowerCase().replace(/\s+/g, '-'),
           active: true,
           displayType: "dropdown",
           isPreset: false,
@@ -104,7 +124,38 @@ export const upsertBulk = mutation({
 
     for (const p of args.products) {
       const existing = existingProductsMap.get(p.sku);
-      const categoryId = p.categoryId ? categoryMap.get(p.categoryId) : undefined;
+      let categoryId = p.categoryId ? categoryMap.get(p.categoryId) : undefined;
+      
+      // Nếu không khớp categoryId nhưng có categoryName từ Excel, thử map theo tên hoặc tự tạo mới
+      if (!categoryId && p.categoryName?.trim()) {
+        const cleanName = p.categoryName.trim();
+        const cleanKey = cleanName.toLowerCase();
+        const matchedId = categoryByNameMap.get(cleanKey);
+        
+        if (matchedId) {
+          categoryId = matchedId;
+        } else {
+          // Tạo danh mục mới tự động
+          const rawSlug = cleanKey
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, '-')
+            .replace(/[^\w-]/g, '');
+          const newCatId = await ctx.db.insert("productCategories", {
+            name: cleanName,
+            slug: rawSlug || `danh-muc-${Date.now()}`,
+            active: true,
+            order: 0,
+          });
+          categoryId = newCatId;
+          categoryMap.set(newCatId.toString(), newCatId);
+          categoryByNameMap.set(cleanKey, newCatId);
+        }
+      }
+      
+      if (!categoryId) {
+        categoryId = defaultCategoryId;
+      }
       
       if (!existing && !categoryId) {
         errors.push({ sku: p.sku, message: "Thiếu danh mục khi tạo mới." });
@@ -121,14 +172,16 @@ export const upsertBulk = mutation({
           const optionValuesData = [];
           
           if (vData.variantOption1) {
-            const vDoc = await getOrCreateOptionValue(opt1Name, vData.variantOption1);
+            const optName = vData.variantOption1Name || opt1Name;
+            const vDoc = await getOrCreateOptionValue(optName, vData.variantOption1);
             if (vDoc) {
               optionValuesData.push({ optionId: vDoc.optionId, valueId: vDoc._id });
               if (!optionIdsToLink.includes(vDoc.optionId)) optionIdsToLink.push(vDoc.optionId);
             }
           }
           if (vData.variantOption2) {
-            const vDoc = await getOrCreateOptionValue(opt2Name, vData.variantOption2);
+            const optName = vData.variantOption2Name || opt2Name;
+            const vDoc = await getOrCreateOptionValue(optName, vData.variantOption2);
             if (vDoc) {
               optionValuesData.push({ optionId: vDoc.optionId, valueId: vDoc._id });
               if (!optionIdsToLink.includes(vDoc.optionId)) optionIdsToLink.push(vDoc.optionId);
@@ -151,7 +204,7 @@ export const upsertBulk = mutation({
         await ctx.db.patch(targetProductId, {
           name: p.name ?? existing.name,
           price: p.price ?? existing.price,
-          salePrice: p.salePrice ?? existing.salePrice,
+          salePrice: p.salePrice,
           stock: p.stock ?? existing.stock,
           categoryId: categoryId ?? existing.categoryId,
           image: p.imageUrl ?? existing.image,
@@ -187,32 +240,52 @@ export const upsertBulk = mutation({
         totalProductsCreated++;
       }
 
-      // Xử lý ghi đè Variants (Để tránh rác, ta xóa variants cũ và tạo mới, hoặc patch)
-      // Tối ưu nhất là query existing variants cho SP này
+      // Xử lý ghi đè/cập nhật Variants sử dụng đối khớp SKU
       if (hasVariants) {
         const existingVariants = await ctx.db
           .query("productVariants")
           .withIndex("by_product", q => q.eq("productId", targetProductId))
           .collect();
         
-        // Vì số lượng biến thể ít (3-10), delete insert lại là nhanh nhất và ít rác nhất
-        for (const ev of existingVariants) {
-          await ctx.db.delete(ev._id);
-        }
-
+        const existingVariantsMap = new Map(existingVariants.map(ev => [ev.sku, ev]));
+        const newVariantSkus = new Set<string>();
+        
         for (let i = 0; i < resolvedVariants.length; i++) {
           const rv = resolvedVariants[i];
-          await ctx.db.insert("productVariants", {
-            productId: targetProductId,
-            sku: `${p.sku}-${i + 1}`,
-            optionValues: rv.optionValuesData,
-            price: rv.vData.price,
-            salePrice: rv.vData.salePrice,
-            stock: rv.vData.stock ?? 0,
-            status: "Active",
-            order: i,
-            image: rv.vData.imageUrl,
-          });
+          const variantSku = rv.vData.sku || `${p.sku}-${i + 1}`;
+          newVariantSkus.add(variantSku);
+
+          const existingVariant = existingVariantsMap.get(variantSku);
+          if (existingVariant) {
+            // Cập nhật biến thể cũ
+            await ctx.db.patch(existingVariant._id, {
+              optionValues: rv.optionValuesData,
+              price: rv.vData.price ?? existingVariant.price,
+              salePrice: rv.vData.salePrice,
+              stock: rv.vData.stock ?? 0,
+              image: rv.vData.imageUrl ?? existingVariant.image,
+            });
+          } else {
+            // Chèn biến thể mới
+            await ctx.db.insert("productVariants", {
+              productId: targetProductId,
+              sku: variantSku,
+              optionValues: rv.optionValuesData,
+              price: rv.vData.price,
+              salePrice: rv.vData.salePrice,
+              stock: rv.vData.stock ?? 0,
+              status: "Active",
+              order: i,
+              image: rv.vData.imageUrl,
+            });
+          }
+        }
+
+        // Cập nhật tồn kho về 0 cho các biến thể cũ không xuất hiện trong file Excel Sapo
+        for (const ev of existingVariants) {
+          if (!newVariantSkus.has(ev.sku)) {
+            await ctx.db.patch(ev._id, { stock: 0 });
+          }
         }
       }
     }

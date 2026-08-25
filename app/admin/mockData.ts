@@ -9,7 +9,7 @@ export const mockPosts: Post[] = Array.from({ length: 10 }, (_, i) => ({
   category: ["Ẩm thực", "Công nghệ", "Du lịch", "Ẩm thực", "Công nghệ", "Thời trang", "Tài chính", "Giáo dục", "Sức khỏe", "Công nghệ"][i],
   created: randomDate(new Date(2023, 0, 1), new Date()),
   id: `POST-${1000 + i}`,
-  status: ["Published", "Published", "Draft", "Published", "Archived", "Published", "Published", "Draft", "Published", "Published"][i] as Post['status'],
+  status: ["Published", "Published", "Draft", "Published", "Draft", "Published", "Published", "Draft", "Published", "Published"][i] as Post['status'],
   thumbnail: `https://picsum.photos/300/200?random=${i}`,
   title: [
     "Cách làm cà phê muối ngon chuẩn vị Huế",
@@ -54,7 +54,7 @@ export const mockProducts: Product[] = Array.from({ length: 15 }, (_, i) => {
     salePrice: randomInt(0, 1) ? price * 0.9 : undefined,
     sales: randomInt(0, 500),
     sku: `SKU-${randomInt(10_000, 99_999)}`,
-    status: randomInt(0, 10) > 2 ? "Active" : (randomInt(0, 1) ? "Draft" : "Archived"),
+    status: (randomInt(0, 10) > 2 ? "Active" : "Draft") as Product['status'],
     stock: randomInt(0, 100),
   }
 });

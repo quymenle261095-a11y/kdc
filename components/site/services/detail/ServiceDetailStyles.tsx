@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { PublicImage as Image } from '@/components/shared/PublicImage';
 import { QuickContactButtons } from '@/components/site/QuickContact';
-import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Copy, Eye, Image as ImageIcon, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Copy, Eye, Image as ImageIcon, ShoppingCart, Star } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { ServiceDetailColors } from './_lib/colors';
 import { RichContent, withFormatMarker } from '@/components/common/RichContent';
@@ -66,6 +66,13 @@ type MinimalConfig = {
   ctaButtonLink: string;
 };
 
+type CommerceCtaConfig = {
+  mode: 'cart' | 'contact';
+  buttonText?: string;
+  buttonHref?: string;
+  onAddToCart?: () => Promise<void> | void;
+};
+
 function resolveServiceContent(service: ServiceDetailData): string {
   const renderType = service.renderType ?? 'content';
 
@@ -94,6 +101,7 @@ export interface StyleProps {
   quickContact?: QuickContactConfig;
   modernConfig?: ModernConfig;
   minimalConfig?: MinimalConfig;
+  commerceCta?: CommerceCtaConfig;
   routeMode?: 'unified' | 'namespace';
   categorySlugMap?: Map<string, string>;
 }
@@ -106,6 +114,43 @@ function formatPrice(price?: number): string {
 function formatDate(timestamp?: number): string {
   if (!timestamp) {return '';}
   return new Date(timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function ServiceCtaButton({
+  service,
+  brandColor,
+  buttonLabel,
+  buttonHref,
+  commerceCta,
+}: {
+  service: ServiceDetailData;
+  brandColor: string;
+  buttonLabel: string;
+  buttonHref?: string;
+  commerceCta?: CommerceCtaConfig;
+}) {
+  if (commerceCta?.mode === 'cart' && commerceCta.onAddToCart) {
+    return (
+      <button
+        type="button"
+        onClick={() => void commerceCta.onAddToCart?.()}
+        className="w-full min-h-11 px-6 rounded-xl text-white font-semibold transition-all hover:shadow-lg hover:scale-[1.01] flex items-center justify-center gap-2"
+        style={{ backgroundColor: brandColor }}
+      >
+        <ShoppingCart size={18} />
+        {commerceCta.buttonText ?? 'Thêm vào giỏ hàng'}
+      </button>
+    );
+  }
+
+  return (
+    <QuickContactButtons
+      serviceName={service.title}
+      brandColor={brandColor}
+      buttonLabel={commerceCta?.buttonText ?? buttonLabel}
+      buttonHref={commerceCta?.buttonHref ?? buttonHref}
+    />
+  );
 }
 
 function getServiceDetailHref(params: {
@@ -154,7 +199,7 @@ function RelatedServiceThumb({ title, thumbnail, tokens, size }: { title: string
 }
 
 // STYLE 1: CLASSIC - Professional service page with sticky CTA sidebar
-export function ClassicStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, showShare = true, quickContact, routeMode, categorySlugMap }: StyleProps) {
+export function ClassicStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, showShare = true, quickContact, commerceCta, routeMode, categorySlugMap }: StyleProps) {
   const showPrice = enabledFields.has('price');
   const showDuration = enabledFields.has('duration');
   const showFeatured = enabledFields.has('featured');
@@ -275,7 +320,7 @@ export function ClassicStyle({ service, brandColor: _brandColor, tokens, related
             {resolvedContent && (
               <RichContent
                 content={resolvedContent}
-                className="prose prose-lg max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl"
+                className="prose prose-lg max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-xl dark:prose-invert"
                 style={{ '--tw-prose-body': tokens.bodyText, '--tw-prose-headings': tokens.headingColor, '--tw-prose-links': tokens.linkColor, '--tw-prose-bold': tokens.bodyText } as React.CSSProperties}
               />
             )}
@@ -347,11 +392,12 @@ export function ClassicStyle({ service, brandColor: _brandColor, tokens, related
                       <p className="text-sm" style={{ color: tokens.quickContactDescription }}>{quickContactConfig.description}</p>
                     )}
                   </div>
-                  <QuickContactButtons 
-                    serviceName={service.title}
+                  <ServiceCtaButton
+                    service={service}
                     brandColor={tokens.ctaPrimaryBg}
                     buttonLabel={quickContactConfig.buttonText}
                     buttonHref={quickContactConfig.buttonLink}
+                    commerceCta={commerceCta}
                   />
                 </div>
               )}
@@ -364,7 +410,7 @@ export function ClassicStyle({ service, brandColor: _brandColor, tokens, related
 }
 
 // STYLE 2: MODERN - Landing page style with full-width hero and floating CTA
-export function ModernStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, modernConfig, routeMode, categorySlugMap }: StyleProps) {
+export function ModernStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, modernConfig, commerceCta, routeMode, categorySlugMap }: StyleProps) {
   const showPrice = enabledFields.has('price');
   const showDuration = enabledFields.has('duration');
   const showFeatured = enabledFields.has('featured');
@@ -449,11 +495,12 @@ export function ModernStyle({ service, brandColor: _brandColor, tokens, relatedS
                   </div>
                 )}
                 <div className="min-w-[180px]">
-                  <QuickContactButtons 
-                    serviceName={service.title}
+                  <ServiceCtaButton
+                    service={service}
                     brandColor={tokens.ctaPrimaryBg}
                     buttonLabel={config.heroCtaText}
                     buttonHref={config.heroCtaLink}
+                    commerceCta={commerceCta}
                   />
                 </div>
               </div>
@@ -497,7 +544,7 @@ export function ModernStyle({ service, brandColor: _brandColor, tokens, relatedS
         {resolvedContent && (
           <RichContent
             content={resolvedContent}
-            className="prose max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg"
+            className="prose max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg dark:prose-invert"
             style={{ '--tw-prose-body': tokens.bodyText, '--tw-prose-headings': tokens.headingColor, '--tw-prose-links': tokens.linkColor, '--tw-prose-bold': tokens.bodyText } as React.CSSProperties}
           />
         )}
@@ -562,7 +609,7 @@ export function ModernStyle({ service, brandColor: _brandColor, tokens, relatedS
 }
 
 // STYLE 3: MINIMAL - Clean, distraction-free reading experience
-export function MinimalStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, minimalConfig, routeMode, categorySlugMap }: StyleProps) {
+export function MinimalStyle({ service, brandColor: _brandColor, tokens, relatedServices, enabledFields, minimalConfig, commerceCta, routeMode, categorySlugMap }: StyleProps) {
   const showDuration = enabledFields.has('duration');
   const showFeatured = enabledFields.has('featured');
   const resolvedContent = resolveServiceContent(service);
@@ -670,7 +717,7 @@ export function MinimalStyle({ service, brandColor: _brandColor, tokens, related
         {resolvedContent && (
           <RichContent
             content={resolvedContent}
-            className="prose max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-2xl prose-blockquote:border-l-2 prose-blockquote:not-italic"
+            className="prose max-w-none prose-headings:font-semibold prose-p:leading-relaxed prose-a:no-underline hover:prose-a:underline prose-img:rounded-2xl prose-blockquote:border-l-2 prose-blockquote:not-italic dark:prose-invert"
             style={{ '--tw-prose-body': tokens.bodyText, '--tw-prose-headings': tokens.headingColor, '--tw-prose-links': tokens.linkColor, '--tw-prose-bold': tokens.bodyText, '--tw-prose-quote-borders': tokens.linkColor } as React.CSSProperties}
           />
         )}
@@ -680,11 +727,12 @@ export function MinimalStyle({ service, brandColor: _brandColor, tokens, related
             <p className="mb-5" style={{ color: tokens.metaText }}>{config.ctaText}</p>
             
             <div className="max-w-xs mx-auto">
-              <QuickContactButtons 
-                serviceName={service.title}
+              <ServiceCtaButton
+                service={service}
                 brandColor={tokens.ctaPrimaryBg}
                 buttonLabel={config.ctaButtonText}
                 buttonHref={config.ctaButtonLink}
+                commerceCta={commerceCta}
               />
             </div>
           </div>

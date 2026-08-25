@@ -125,13 +125,30 @@ export type ServicesListColors = {
   loadingDotSoft: string;
   highlightNumber: string;
   accentBorder: string;
+  bodyText: string;
+  metaText: string;
+  neutralTextLight: string;
+  cardBackground: string;
+  cardBorder: string;
+  inputBackground: string;
+  inputBorder: string;
+  inputText: string;
+  inputPlaceholder: string;
+  inputIcon: string;
 };
 
 export const getServicesListColors = (
   primary: string,
   secondary: string | undefined,
-  mode: ServicesListColorMode = 'single'
+  mode: ServicesListColorMode = 'single',
+  isDark?: boolean
 ): ServicesListColors => {
+  const neutralSurface = isDark ? '#161617' : '#ffffff';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
+
   const resolvedSecondary = resolveSecondaryForMode(primary, secondary, mode);
   const primarySoft = getSolidTint(primary, primary, 0.42);
   const primarySoftStrong = getSolidTint(primary, primary, 0.32);
@@ -140,14 +157,21 @@ export const getServicesListColors = (
   return {
     primary,
     secondary: resolvedSecondary,
-    headingColor: primary,
-    sectionHeadingColor: primary,
+    headingColor: ensureAPCATextColor(primary, neutralSurface, 28, 700),
+    sectionHeadingColor: ensureAPCATextColor(primary, neutralSurface, 18, 700),
     primaryActionBg: primary,
     primaryActionText: '#ffffff',
     badgeBg: secondarySoft,
     badgeText: ensureAPCATextColor(getAPCATextColor(secondarySoft, 12, 600), secondarySoft, 12, 600),
     badgeBorder: secondarySoft,
-    priceColor: resolvedSecondary,
+    priceColor: ensureAPCATextColor(
+      isDark && getAPCALc(resolvedSecondary, neutralSurface) < 45
+        ? (getAPCALc(primary, neutralSurface) >= 45 ? primary : '#ffffff')
+        : resolvedSecondary,
+      neutralSurface,
+      14,
+      700
+    ),
     filterRing: primary,
     filterIcon: primary,
     filterActiveBg: primarySoft,
@@ -164,5 +188,15 @@ export const getServicesListColors = (
     loadingDotSoft: primarySoft,
     highlightNumber: primary,
     accentBorder: primary,
+    bodyText: ensureAPCATextColor(neutralText, neutralSurface, 16, 500),
+    metaText: ensureAPCATextColor(neutralMuted, neutralSurface, 14, 500),
+    neutralTextLight: ensureAPCATextColor(neutralSoft, neutralSurface, 12, 500),
+    cardBackground: neutralSurface,
+    cardBorder: neutralBorder,
+    inputBackground: neutralSurface,
+    inputBorder: neutralBorder,
+    inputText: ensureAPCATextColor(neutralText, neutralSurface, 14, 500),
+    inputPlaceholder: ensureAPCATextColor(neutralSoft, neutralSurface, 14, 500),
+    inputIcon: ensureAPCATextColor(neutralSoft, neutralSurface, 14, 500),
   };
 };

@@ -24,7 +24,7 @@ export default async function SnapshotDemoPage({
   const systemStyle = (snapshot as any).systemStyle ?? null;
   const enrichedBundle = { ...bundle, systemStyle };
   const site = enrichedBundle.settings?.site ?? {};
-  const brandPrimary = site.site_brand_primary || site.site_brand_color || '#3b82f6';
+  const brandPrimary = site.site_brand_primary || '#3b82f6';
   const brandMode = site.site_brand_mode === 'single' ? 'single' : 'dual';
   const brandSecondary = brandMode === 'single' ? '' : (site.site_brand_secondary || '');
 

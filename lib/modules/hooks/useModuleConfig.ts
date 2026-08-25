@@ -9,6 +9,8 @@ import type { FieldConfig, FieldType } from '@/types/module-config';
 
 type FeaturesState = Record<string, boolean>;
 type SettingsState = Record<string, string | number | boolean>;
+const ADVANCED_SEO_MODULES = new Set(['posts', 'products', 'services', 'projects', 'courses', 'resources']);
+const ADVANCED_SEO_FIELD_KEYS = new Set(['faqItems', 'focusKeyword', 'relatedQueries', 'tags']);
 
 export function useModuleConfig(config: ModuleDefinition) {
   const moduleKey = config.key;
@@ -75,6 +77,11 @@ export function useModuleConfig(config: ModuleDefinition) {
    useEffect(() => {
      if (featuresData) {
        const state: FeaturesState = {};
+       if (config.features) {
+         for (const feature of config.features) {
+           state[feature.key] = feature.enabled ?? false;
+         }
+       }
        for (const f of featuresData) {
          state[f.featureKey] = f.enabled;
        }
@@ -83,7 +90,7 @@ export function useModuleConfig(config: ModuleDefinition) {
       }
        setLocalFeatures(state);
      }
-  }, [featuresData, moduleKey]);
+  }, [featuresData, moduleKey, config.features]);
    
    useEffect(() => {
      if (fieldsData) {
@@ -184,13 +191,18 @@ export function useModuleConfig(config: ModuleDefinition) {
    // ============ SERVER STATE FOR COMPARISON ============
    const serverFeatures = useMemo<FeaturesState>(() => {
      const state: FeaturesState = {};
+     if (config.features) {
+       for (const feature of config.features) {
+         state[feature.key] = feature.enabled ?? false;
+       }
+     }
      if (featuresData) {
        for (const f of featuresData) {
          state[f.featureKey] = f.enabled;
        }
      }
      return state;
-   }, [featuresData]);
+   }, [featuresData, config.features]);
    
    const serverSettings = useMemo<SettingsState>(() => {
      const state: SettingsState = {};
@@ -238,11 +250,12 @@ export function useModuleConfig(config: ModuleDefinition) {
    
    // ============ HANDLERS ============
    const handleToggleFeature = useCallback((key: string) => {
-     const newState = !localFeatures[key];
+     const feature = config.features?.find(f => f.key === key);
+     const currentState = localFeatures[key] ?? feature?.enabled ?? false;
+     const newState = !currentState;
      setLocalFeatures(prev => ({ ...prev, [key]: newState }));
      
      // Auto-update linked fields
-     const feature = config.features?.find(f => f.key === key);
      if (feature?.linkedField) {
        setLocalFields(prev => prev.map(f => {
         if (f.linkedFeature !== key) {return f;}
@@ -250,6 +263,13 @@ export function useModuleConfig(config: ModuleDefinition) {
         return { ...f, enabled: newState };
       }));
      }
+
+    if (ADVANCED_SEO_MODULES.has(moduleKey) && key === 'enableAdvancedSEO') {
+      setLocalFeatures(prev => (prev.enableTags === undefined ? prev : { ...prev, enableTags: newState }));
+      setLocalFields(prev => prev.map(field => (
+        ADVANCED_SEO_FIELD_KEYS.has(field.key) ? { ...field, enabled: newState } : field
+      )));
+    }
 
     if (moduleKey === 'subscriptions' && key === 'enablePriority') {
       setLocalFields(prev => prev.map(field => (

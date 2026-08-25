@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 const valueDoc = v.object({
   _creationTime: v.number(),
@@ -45,13 +45,17 @@ export const listByOptionActive = query({
 });
 
 export const listByIds = query({
-  args: { ids: v.array(v.id("productOptionValues")) },
+  args: { ids: v.array(v.string()) },
   handler: async (ctx, args) => {
-    if (args.ids.length === 0) {
+    const ids = args.ids
+      .map((id) => ctx.db.normalizeId("productOptionValues", id))
+      .filter((id): id is Id<"productOptionValues"> => id !== null);
+
+    if (ids.length === 0) {
       return [];
     }
 
-    const items = await Promise.all(args.ids.map((id) => ctx.db.get(id)));
+    const items = await Promise.all(ids.map((id) => ctx.db.get(id)));
     return items.filter((item): item is Doc<"productOptionValues"> => item !== null).sort((a, b) => a.order - b.order);
   },
   returns: v.array(valueDoc),

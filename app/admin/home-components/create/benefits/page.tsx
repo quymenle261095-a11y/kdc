@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { AlertTriangle } from 'lucide-react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -113,6 +115,8 @@ const buildPreviewConfig = ({
 
 export default function BenefitsCreatePage() {
   const COMPONENT_TYPE = 'Benefits';
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Lợi ích', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -269,6 +273,27 @@ export default function BenefitsCreatePage() {
         mode={brandMode}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
+        onButtonTextChange={(nextText) => {
+          setEditorState((prev) => ({
+            ...prev,
+            buttonText: nextText,
+          }));
+        }}
+        onItemsChange={(nextItems) => {
+          setEditorState((prev) => ({
+            ...prev,
+            items: nextItems.map((item, idx) => ({
+              id: prev.items[idx]?.id ?? item.id,
+              title: item.title,
+              description: item.description,
+              icon: item.icon,
+            })),
+          }));
+        }}
       />
     </ComponentFormWrapper>
   );

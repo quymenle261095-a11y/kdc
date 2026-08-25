@@ -244,6 +244,8 @@ export default function BenefitsEditPage({
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const brandMode: BenefitsBrandMode = effectiveColors.mode === 'single' ? 'single' : 'dual';
 
@@ -575,6 +577,27 @@ export default function BenefitsEditPage({
               })}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onButtonTextChange={(nextText) => {
+                setEditorState((prev) => ({
+                  ...prev,
+                  buttonText: nextText,
+                }));
+              }}
+              onItemsChange={(nextItems) => {
+                setEditorState((prev) => ({
+                  ...prev,
+                  items: nextItems.map((item, idx) => ({
+                    id: prev.items[idx]?.id ?? item.id,
+                    title: item.title,
+                    description: item.description,
+                    icon: item.icon,
+                  })),
+                }));
+              }}
             />
           </div>
         </div>

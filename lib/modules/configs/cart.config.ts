@@ -4,7 +4,7 @@ import { defineModuleWithRuntime } from '../define-module';
 export const cartModule = defineModuleWithRuntime({
   key: 'cart',
   name: 'Giỏ hàng',
-  description: 'Cấu hình chức năng giỏ hàng cho khách đã đăng nhập',
+  description: 'Cấu hình chức năng giỏ hàng cho khách hàng vãng lai và thành viên',
   icon: ShoppingCart,
   color: 'emerald',
 
@@ -19,7 +19,7 @@ export const cartModule = defineModuleWithRuntime({
     { key: 'maxItemsPerCart', label: 'Tối đa SP / giỏ', type: 'number', default: 50 },
   ],
 
-  conventionNote: 'Giỏ hàng phụ thuộc module Sản phẩm. Chỉ hỗ trợ khách đã đăng nhập. Giá lưu tại thời điểm thêm vào giỏ. Trạng thái: Active, Converted, Abandoned.',
+  conventionNote: 'Giỏ hàng phụ thuộc module Sản phẩm. Hỗ trợ khách vãng lai và thành viên (tự động gộp giỏ hàng sau khi đăng nhập). Giá lưu tại thời điểm thêm vào giỏ. Trạng thái: Active, Converted, Abandoned.',
 
   runtimeConfig: {
     fields: [],

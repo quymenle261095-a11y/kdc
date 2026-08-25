@@ -32,6 +32,8 @@ export const PartnersDividerShared = ({
   skipHeader = false,
   columnsClassName,
   className,
+  visualEditEnabled,
+  onItemNameChange,
 }: {
   items: PartnersDividerItem[];
   title?: string;
@@ -50,6 +52,8 @@ export const PartnersDividerShared = ({
   skipHeader?: boolean;
   columnsClassName?: string;
   className?: string;
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   if (items.length === 0) {return null;}
 
@@ -107,8 +111,24 @@ export const PartnersDividerShared = ({
                   : <ImageIcon size={fallbackIconSize} className="text-slate-300" />}
               </div>
               {showName && (
-                <span className="w-full truncate text-xs font-medium text-slate-500 md:text-sm">
-                  {item.name ?? `Đối tác ${index + 1}`}
+                <span
+                  contentEditable={visualEditEnabled}
+                  suppressContentEditableWarning={visualEditEnabled}
+                  onClick={(e) => {
+                    if (visualEditEnabled) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                  onBlur={visualEditEnabled ? (e) => {
+                    onItemNameChange?.(index, e.currentTarget.textContent ?? '');
+                  } : undefined}
+                  className={cn(
+                    "w-full truncate text-xs font-medium text-slate-500 md:text-sm",
+                    visualEditEnabled && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text"
+                  )}
+                >
+                  {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${index + 1}`)}
                 </span>
               )}
             </a>

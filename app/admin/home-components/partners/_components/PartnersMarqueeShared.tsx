@@ -42,6 +42,14 @@ export const PartnersMarqueeShared = ({
   openInNewTab = false,
   skipHeader = false,
   className,
+  visualEditEnabled,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  showTitle = true,
+  showSubtitle = true,
+  showBadge = true,
+  onItemNameChange,
 }: {
   items: PartnerMarqueeItem[];
   title?: string;
@@ -59,6 +67,14 @@ export const PartnersMarqueeShared = ({
   openInNewTab?: boolean;
   skipHeader?: boolean;
   className?: string;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  showTitle?: boolean;
+  showSubtitle?: boolean;
+  showBadge?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   const normalizedItems = React.useMemo(() => normalizeItems(items), [items]);
   const _colors = React.useMemo(() => getPartnersColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
@@ -95,8 +111,24 @@ export const PartnersMarqueeShared = ({
             </div>
             {/* Partner name */}
             {showName && (
-              <span className="w-full truncate text-center text-[11px] font-medium text-slate-500 md:text-xs">
-                {item.name ?? `Đối tác ${index + 1}`}
+              <span
+                contentEditable={visualEditEnabled}
+                suppressContentEditableWarning={visualEditEnabled}
+                onClick={(e) => {
+                  if (visualEditEnabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+                onBlur={visualEditEnabled ? (e) => {
+                  onItemNameChange?.(index, e.currentTarget.textContent ?? '');
+                } : undefined}
+                className={cn(
+                  "w-full truncate text-center text-[11px] font-medium text-slate-500 md:text-xs",
+                  visualEditEnabled && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text"
+                )}
+              >
+                {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${index + 1}`)}
               </span>
             )}
           </a>
@@ -105,8 +137,20 @@ export const PartnersMarqueeShared = ({
     </div>
   );
 
-  // Skip header: chỉ render grid (parent sẽ handle header)
-  if (skipHeader) {
+  const resolvedTitle = typeof title === 'string' ? title.trim() : '';
+  const resolvedSubtitle = typeof subheading === 'string' ? subheading.trim() : '';
+  const resolvedBadgeText = typeof badgeText === 'string' ? badgeText.trim() : '';
+
+  const hasTitle = showTitle && (resolvedTitle.length > 0 || visualEditEnabled);
+  const hasSubtitle = showSubtitle && (resolvedSubtitle.length > 0 || visualEditEnabled);
+  const hasBadge = showBadge && (resolvedBadgeText.length > 0 || visualEditEnabled);
+
+  const displayTitle = resolvedTitle || (visualEditEnabled ? 'Nhập tiêu đề...' : '');
+  const displaySubtitle = resolvedSubtitle || (visualEditEnabled ? 'Nhập mô tả...' : '');
+  const displayBadgeText = resolvedBadgeText || (visualEditEnabled ? 'Nhập badge...' : '');
+
+  // Skip header: chỉ render grid (nếu skipHeader là true, hoặc không có nội dung header nào hiển thị)
+  if (skipHeader || (!hasTitle && !hasSubtitle && !hasBadge)) {
     return (
       <section className={cn('w-full', skipSectionSpacingClassName, className)} style={{ backgroundColor: '#f7f3ee' }}>
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
@@ -128,26 +172,48 @@ export const PartnersMarqueeShared = ({
               _align === 'left' ? "items-start text-left" : _align === 'right' ? "items-end text-right" : "items-center text-center"
             )}>
               {/* Badge — short label */}
-              {badgeText && (
+              {hasBadge && (
                 <span
-                  className={cn('inline-block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 md:text-[11px]', spacing === 'none' ? 'mb-0' : spacing === 'compact' ? 'mb-1' : 'mb-2')}
+                  contentEditable={visualEditEnabled}
+                  suppressContentEditableWarning={visualEditEnabled}
+                  onBlur={(e) => onBadgeTextChange?.(e.currentTarget.textContent ?? '')}
+                  className={cn(
+                    'inline-block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 md:text-[11px]',
+                    spacing === 'none' ? 'mb-0' : spacing === 'compact' ? 'mb-1' : 'mb-2',
+                    visualEditEnabled && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
                 >
-                  {badgeText}
+                  {displayBadgeText}
                 </span>
               )}
               {/* Title — italic style */}
-              {title && (
+              {hasTitle && (
                 <h2
-                  className="text-xl font-bold leading-snug tracking-tight md:text-2xl xl:text-[1.65rem]"
+                  contentEditable={visualEditEnabled}
+                  suppressContentEditableWarning={visualEditEnabled}
+                  onBlur={(e) => onTitleChange?.(e.currentTarget.textContent ?? '')}
+                  className={cn(
+                    "text-xl font-bold leading-snug tracking-tight md:text-2xl xl:text-[1.65rem]",
+                    visualEditEnabled && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
                   style={{ color: '#1a1a2e', fontStyle: 'italic' }}
                 >
-                  {title}
+                  {displayTitle}
                 </h2>
               )}
               {/* Description — subheading */}
-              {subheading && (
-                <p className={cn('text-sm leading-relaxed text-slate-500 md:text-[13px] md:leading-relaxed', spacing === 'none' ? 'mt-0' : spacing === 'compact' ? 'mt-1.5' : 'mt-3')}>
-                  {subheading}
+              {hasSubtitle && (
+                <p
+                  contentEditable={visualEditEnabled}
+                  suppressContentEditableWarning={visualEditEnabled}
+                  onBlur={(e) => onSubtitleChange?.(e.currentTarget.textContent ?? '')}
+                  className={cn(
+                    'text-sm leading-relaxed text-slate-500 md:text-[13px] md:leading-relaxed',
+                    spacing === 'none' ? 'mt-0' : spacing === 'compact' ? 'mt-1.5' : 'mt-3',
+                    visualEditEnabled && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
+                >
+                  {displaySubtitle}
                 </p>
               )}
             </div>

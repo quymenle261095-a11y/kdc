@@ -1,7 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, CardContent, Input, Label } from '../../components/ui';
+import { Input, Label } from '../../components/ui';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormSidebar,
+  AdminSelect,
+  AdminSlugInput,
+  AdminStickyFooter,
+  AdminTitleInput,
+  generateSlugFromTitle,
+} from '@/app/admin/components/FormUtilities';
 
 export type ProductOptionFormValues = {
   active: boolean;
@@ -20,34 +31,26 @@ interface OptionFormProps {
   onCancel: () => void;
   onSubmit: (values: ProductOptionFormValues) => Promise<void>;
   submitLabel: string;
-  title: string;
+  title?: string;
   autoSlug?: boolean;
 }
 
 const DISPLAY_TYPE_OPTIONS = [
-  { label: 'Dropdown', value: 'dropdown' },
-  { label: 'Buttons/Pills', value: 'buttons' },
-  { label: 'Radio', value: 'radio' },
-  { label: 'Color Swatch', value: 'color_swatch' },
-  { label: 'Image Swatch', value: 'image_swatch' },
-  { label: 'Color Picker', value: 'color_picker' },
-  { label: 'Number Input', value: 'number_input' },
-  { label: 'Text Input', value: 'text_input' },
+  { label: 'Dropdown (Danh sách thả xuống)', value: 'dropdown' },
+  { label: 'Buttons/Pills (Nút bấm chọn)', value: 'buttons' },
+  { label: 'Radio (Nút tròn đơn chọn)', value: 'radio' },
+  { label: 'Color Swatch (Ô màu sắc)', value: 'color_swatch' },
+  { label: 'Image Swatch (Ô ảnh mẫu)', value: 'image_swatch' },
+  { label: 'Color Picker (Bộ chọn mã màu)', value: 'color_picker' },
+  { label: 'Number Input (Ô nhập số lượng)', value: 'number_input' },
+  { label: 'Text Input (Ô nhập văn bản tự do)', value: 'text_input' },
 ];
 
 const INPUT_TYPE_OPTIONS = [
-  { label: 'Text', value: 'text' },
-  { label: 'Number', value: 'number' },
-  { label: 'Color', value: 'color' },
+  { label: 'Text (Chuỗi ký tự)', value: 'text' },
+  { label: 'Number (Số nguyên/thực)', value: 'number' },
+  { label: 'Color (Mã màu HEX)', value: 'color' },
 ];
-
-const slugify = (value: string) => value
-  .toLowerCase()
-  .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, '')
-  .replaceAll(/[đĐ]/g, 'd')
-  .replaceAll(/[^a-z0-9\s]/g, '')
-  .replaceAll(/\s+/g, '-')
-  .trim();
 
 const buildDefaults = (): ProductOptionFormValues => ({
   active: true,
@@ -66,23 +69,29 @@ export function OptionForm({
   onCancel,
   onSubmit,
   submitLabel,
-  title,
   autoSlug = false,
 }: OptionFormProps) {
   const [form, setForm] = useState<ProductOptionFormValues>(buildDefaults());
-  const [slugTouched, setSlugTouched] = useState(false);
+  const [initialForm, setInitialForm] = useState<ProductOptionFormValues | null>(null);
 
   useEffect(() => {
     if (initialValues) {
-      setForm({ ...buildDefaults(), ...initialValues });
+      const merged = { ...buildDefaults(), ...initialValues };
+      setForm(merged);
+      setInitialForm(merged);
     }
   }, [initialValues]);
 
+  const hasChanges = useMemo(() => {
+    if (!initialForm) return true;
+    return JSON.stringify(form) !== JSON.stringify(initialForm);
+  }, [form, initialForm]);
+
   const inputTypeOptions = useMemo(() => {
     if (form.displayType === 'color_picker') {
-      return INPUT_TYPE_OPTIONS.filter(option => option.value === 'color');
+      return INPUT_TYPE_OPTIONS.filter((option) => option.value === 'color');
     }
-    return INPUT_TYPE_OPTIONS.filter(option => option.value !== 'color');
+    return INPUT_TYPE_OPTIONS.filter((option) => option.value !== 'color');
   }, [form.displayType]);
 
   const requiresInputType = ['number_input', 'text_input', 'color_picker'].includes(form.displayType);
@@ -90,19 +99,20 @@ export function OptionForm({
   const showPriceCompare = form.displayType === 'radio';
 
   const handleNameChange = (value: string) => {
-    setForm(prev => ({ ...prev, name: value }));
-    if (autoSlug && !slugTouched) {
-      setForm(prev => ({ ...prev, slug: slugify(value) }));
-    }
+    setForm((prev) => ({
+      ...prev,
+      name: value,
+      slug: autoSlug && (!initialForm || prev.slug === initialForm.slug) ? generateSlugFromTitle(value) : prev.slug,
+    }));
   };
 
   const handleDisplayTypeChange = (value: string) => {
-    setForm(prev => {
+    setForm((prev) => {
       let nextInputType = prev.inputType;
-      if (value === 'number_input') {nextInputType = 'number';}
-      if (value === 'text_input') {nextInputType = 'text';}
-      if (value === 'color_picker') {nextInputType = 'color';}
-      if (!['number_input', 'text_input', 'color_picker'].includes(value)) {nextInputType = '';}
+      if (value === 'number_input') nextInputType = 'number';
+      if (value === 'text_input') nextInputType = 'text';
+      if (value === 'color_picker') nextInputType = 'color';
+      if (!['number_input', 'text_input', 'color_picker'].includes(value)) nextInputType = '';
 
       return {
         ...prev,
@@ -115,9 +125,9 @@ export function OptionForm({
     });
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!form.name.trim() || !form.slug.trim()) {return;}
+  const handleSubmit = async (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
+    if (!form.name.trim() || !form.slug.trim()) return;
     await onSubmit({
       ...form,
       name: form.name.trim(),
@@ -128,120 +138,115 @@ export function OptionForm({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{title}</h1>
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <AdminFormGrid>
+        <AdminFormMain>
+          <AdminFormCard title="Thông tin loại tùy chọn">
+            <AdminTitleInput
+              label="Tên tùy chọn"
+              value={form.name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              required
+              placeholder="VD: Màu sắc, Dung lượng, Size áo..."
+              autoFocus
+              copyLabel="tên option"
+            />
 
-      <Card className="max-w-xl mx-auto md:mx-0">
-        <form onSubmit={handleSubmit}>
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Tên option <span className="text-red-500">*</span></Label>
-              <Input
-                value={form.name}
-                onChange={(e) =>{  handleNameChange(e.target.value); }}
-                required
-                placeholder="VD: Màu sắc, Kích thước..."
-                autoFocus
-              />
-            </div>
+            <AdminSlugInput
+              slug={form.slug}
+              onChange={(val) => setForm((prev) => ({ ...prev, slug: val }))}
+              categorySlug="product-options"
+            />
+          </AdminFormCard>
 
-            <div className="space-y-2">
-              <Label>Slug</Label>
-              <Input
-                value={form.slug}
-                onChange={(e) =>{
-                  setSlugTouched(true);
-                  setForm(prev => ({ ...prev, slug: e.target.value }));
-                }}
-                placeholder="tu-dong-tao-tu-ten"
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Kiểu hiển thị</Label>
-              <select
-                value={form.displayType}
-                onChange={(e) =>{  handleDisplayTypeChange(e.target.value); }}
-                className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              >
-                {DISPLAY_TYPE_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {requiresInputType && (
+          <AdminFormCard title="Cấu hình hiển thị & dữ liệu">
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Kiểu dữ liệu</Label>
-                <select
-                  value={form.inputType || inputTypeOptions[0]?.value}
-                  onChange={(e) =>{  setForm(prev => ({ ...prev, inputType: e.target.value })); }}
-                  className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                >
-                  {inputTypeOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {showUnit && (
-              <div className="space-y-2">
-                <Label>Đơn vị</Label>
-                <Input
-                  value={form.unit}
-                  onChange={(e) =>{  setForm(prev => ({ ...prev, unit: e.target.value })); }}
-                  placeholder="VD: kg, ml"
+                <Label>Kiểu hiển thị trên trang sản phẩm</Label>
+                <AdminSelect
+                  value={form.displayType}
+                  onChange={handleDisplayTypeChange}
+                  options={DISPLAY_TYPE_OPTIONS}
                 />
               </div>
-            )}
 
-            {showPriceCompare && (
-              <div className="space-y-2">
-                <Label>So sánh giá theo</Label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.showPriceCompare}
-                    onChange={(e) =>{  setForm(prev => ({ ...prev, showPriceCompare: e.target.checked })); }}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              {requiresInputType && (
+                <div className="space-y-2">
+                  <Label>Kiểu dữ liệu nhập vào</Label>
+                  <AdminSelect
+                    value={form.inputType || inputTypeOptions[0]?.value}
+                    onChange={(val) => setForm((prev) => ({ ...prev, inputType: val }))}
+                    options={inputTypeOptions}
                   />
-                  <span className="text-sm text-slate-600 dark:text-slate-300">Hiển thị giá quy đổi</span>
                 </div>
-                {form.showPriceCompare && (
+              )}
+
+              {showUnit && (
+                <div className="space-y-2">
+                  <Label>Đơn vị đo lường</Label>
                   <Input
-                    value={form.compareUnit}
-                    onChange={(e) =>{  setForm(prev => ({ ...prev, compareUnit: e.target.value })); }}
-                    placeholder='VD: tháng'
+                    value={form.unit}
+                    onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
+                    placeholder="VD: kg, ml, cm..."
                   />
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
-            <div className="space-y-2">
-              <Label>Trạng thái</Label>
-              <select
-                value={form.active ? 'active' : 'inactive'}
-                onChange={(e) =>{  setForm(prev => ({ ...prev, active: e.target.value === 'active' })); }}
-                className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              >
-                <option value="active">Hoạt động</option>
-                <option value="inactive">Ẩn</option>
-              </select>
+              {showPriceCompare && (
+                <div className="space-y-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="showPriceCompare"
+                      checked={form.showPriceCompare}
+                      onChange={(e) => setForm((prev) => ({ ...prev, showPriceCompare: e.target.checked }))}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="showPriceCompare" className="text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                      Hiển thị giá quy đổi so sánh
+                    </label>
+                  </div>
+                  {form.showPriceCompare && (
+                    <div className="space-y-1.5 pl-6">
+                      <Label className="text-xs">Đơn vị so sánh</Label>
+                      <Input
+                        value={form.compareUnit}
+                        onChange={(e) => setForm((prev) => ({ ...prev, compareUnit: e.target.value }))}
+                        placeholder="VD: tháng, ngày, 100g..."
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </CardContent>
+          </AdminFormCard>
+        </AdminFormMain>
 
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-b-lg flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={onCancel}>Hủy bỏ</Button>
-            <Button type="submit" variant="accent" disabled={isSubmitting}>
-              {isSubmitting ? 'Đang lưu...' : submitLabel}
-            </Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+        <AdminFormSidebar>
+          <AdminFormCard title="Trạng thái">
+            <div className="space-y-2">
+              <Label>Trạng thái hoạt động</Label>
+              <AdminSelect
+                value={form.active ? 'active' : 'inactive'}
+                onChange={(val) => setForm((prev) => ({ ...prev, active: val === 'active' }))}
+                options={[
+                  { value: 'active', label: 'Hoạt động' },
+                  { value: 'inactive', label: 'Ẩn tạm thời' },
+                ]}
+              />
+            </div>
+          </AdminFormCard>
+        </AdminFormSidebar>
+      </AdminFormGrid>
+
+      <AdminStickyFooter
+        isSubmitting={isSubmitting}
+        hasChanges={hasChanges}
+        submitLabel={submitLabel}
+        onCancel={onCancel}
+        onClickSave={() => handleSubmit()}
+        disableSave={isSubmitting || !form.name.trim() || !form.slug.trim()}
+      />
+    </form>
   );
 }

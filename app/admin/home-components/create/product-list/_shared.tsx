@@ -58,6 +58,8 @@ const DEFAULT_TITLES: Record<ComponentType, string> = {
 const toIntOrDefault = (value: string, fallback: number) => Number.parseInt(value, 10) || fallback;
 
 export function ProductListCreateShared({ type, titleLabel }: ProductListCreateSharedProps) {
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[type]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm(titleLabel ?? DEFAULT_TITLES[type], type);
   const colorOverrideType = type === 'ProductList' ? 'ProductList' : type;
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(colorOverrideType, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -103,6 +105,11 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
   const [serviceCardRadius, setServiceCardRadius] = useState<ServiceListCardRadius>(DEFAULT_SERVICE_LIST_CARD_RADIUS);
   const [serviceDesktopColumns, setServiceDesktopColumns] = useState<ServiceListDesktopColumns>(DEFAULT_SERVICE_LIST_DESKTOP_COLUMNS);
 
+  // Cart buttons settings
+  const [showAddToCartButton, setShowAddToCartButton] = useState(true);
+  const [showBuyNowButton, setShowBuyNowButton] = useState(true);
+  const [cartButtonsLayout, setCartButtonsLayout] = useState<'stack' | 'grid-2'>('stack');
+
   const productsData = useQuery(api.products.listAll, type === 'ProductList' ? { limit: 100 } : 'skip');
   const resolvedProductsData = useQuery(api.products.listPublicResolved, type === 'ProductList' ? { limit: 100 } : 'skip');
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, type === 'ProductList' ? { moduleKey: 'products', settingKey: 'saleMode' } : 'skip');
@@ -137,14 +144,20 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
     const priceDisplay = getHomeComponentPriceLabel({ saleMode, price: priceValue, salePrice: salePriceValue, isRangeFromVariant: resolvedProduct?.hasVariants ?? product.hasVariants });
     const hasBasePrice = priceValue != null || salePriceValue != null;
     return {
+      categoryId: product.categoryId,
       description: product.description,
+      hasVariants: resolvedProduct?.hasVariants ?? product.hasVariants,
       id: product._id,
       image: product.image,
       name: product.name,
       price: !hasBasePrice && saleMode === 'cart' ? undefined : priceDisplay.label,
+      priceValue,
       originalPrice: priceDisplay.comparePrice
         ? getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label
         : undefined,
+      salePriceValue,
+      slug: product.slug,
+      stock: resolvedProduct?.stock ?? product.stock,
     };
   }), [resolvedProductMap, selectedProducts, saleMode]);
 
@@ -158,14 +171,20 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
         const priceDisplay = getHomeComponentPriceLabel({ saleMode, price: product.price, salePrice: product.salePrice, isRangeFromVariant: product.hasVariants });
         const hasBasePrice = product.price != null || product.salePrice != null;
         return {
+          categoryId: product.categoryId,
           description: product.description,
+          hasVariants: product.hasVariants,
           id: product._id,
           image: product.image,
           name: product.name,
           price: !hasBasePrice && saleMode === 'cart' ? undefined : priceDisplay.label,
+          priceValue: product.price,
           originalPrice: priceDisplay.comparePrice
             ? getHomeComponentPriceLabel({ saleMode: 'cart', price: priceDisplay.comparePrice }).label
             : undefined,
+          salePriceValue: product.salePrice,
+          slug: product.slug,
+          stock: product.stock,
         };
       });
   }, [productsData, resolvedProductsData, itemCount, saleMode]);
@@ -262,9 +281,6 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
     };
 
     if (type === 'ProductList') {
-      config.subTitle = subTitle;
-      config.sectionTitle = sectionTitle;
-      // Header config fields
       config.hideHeader = hideHeader;
       config.showTitle = showTitleHeader;
       config.showSubtitle = showSubtitle;
@@ -280,6 +296,9 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
       config.cardRadius = cardRadius;
       config.desktopColumns = productDesktopColumns;
       config.lookbookDesktopColumns = productDesktopColumns;
+      config.showAddToCartButton = showAddToCartButton;
+      config.showBuyNowButton = showBuyNowButton;
+      config.cartButtonsLayout = cartButtonsLayout;
     }
 
     if (type === 'ServiceList') {
@@ -420,6 +439,50 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
                   <p className="text-xs text-slate-500 md:col-span-2">
                     Ảnh hưởng layout Commerce, Compact và Lookbook. 4 cột: tablet/mobile 2 cột. 3 cột: tablet 3 cột, mobile 1 cột.
                   </p>
+                  
+                  {saleMode === 'cart' && (
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4 space-y-4 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Hiển thị nút Thêm vào giỏ</Label>
+                          <p className="text-xs text-slate-500">Cho phép khách hàng thêm nhanh sản phẩm vào giỏ</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={showAddToCartButton}
+                          onChange={(e) => setShowAddToCartButton(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Hiển thị nút Mua ngay</Label>
+                          <p className="text-xs text-slate-500">Khách hàng có thể nhấn mua và đi thẳng tới trang checkout</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={showBuyNowButton}
+                          onChange={(e) => setShowBuyNowButton(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {showAddToCartButton && showBuyNowButton && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Bố cục nút hiển thị</Label>
+                          <select
+                            className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                            value={cartButtonsLayout}
+                            onChange={(e) => setCartButtonsLayout(e.target.value as 'stack' | 'grid-2')}
+                          >
+                            <option value="stack">Xếp dọc (Stack)</option>
+                            <option value="grid-2">Xếp ngang (Grid 2)</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
               </>
             )}
             {type === 'ServiceList' && (
@@ -660,7 +723,12 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
                       <SettingsImageUploader
                         label="Ảnh thumbnail"
                         value={item.image ?? ''}
-                        onChange={(url) => setDemoServices(prev => prev.map(d => d.id === item.id ? { ...d, image: url ?? '' } : d))}
+                        storageId={item.storageId as any}
+                        onChange={(url, storageId) => setDemoServices(prev => prev.map(d => d.id === item.id ? {
+                          ...d,
+                          image: url ?? '',
+                          storageId: storageId ? String(storageId) : null
+                        } : d))}
                         folder="home-components/service-list"
                         naming={{ entityName: item.name || 'demo-service', field: 'thumbnail', index: index + 1 }}
                         previewSize="sm"
@@ -992,6 +1060,10 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
             categoryMap={blogCategoryMap}
             fontStyle={fontStyle}
             fontClassName="font-active"
+            isVisualEditAllowed={isVisualEditAllowed}
+            onTitleChange={setTitle}
+            onSubtitleChange={setSectionTitle}
+            onBadgeTextChange={setSubTitle}
           />
         </div>
       ) : (type === 'ServiceList' ? (
@@ -1024,6 +1096,10 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
             desktopColumns={serviceDesktopColumns}
             fontStyle={fontStyle}
             fontClassName="font-active"
+            isVisualEditAllowed={isVisualEditAllowed}
+            onTitleChange={setTitle}
+            onSubtitleChange={setSectionTitle}
+            onBadgeTextChange={setSubTitle}
           />
         </div>
       ) : (
@@ -1056,6 +1132,13 @@ export function ProductListCreateShared({ type, titleLabel }: ProductListCreateS
           cardRadius={cardRadius}
           desktopColumns={productDesktopColumns}
           lookbookDesktopColumns={productDesktopColumns}
+          showAddToCartButton={showAddToCartButton}
+          showBuyNowButton={showBuyNowButton}
+          cartButtonsLayout={cartButtonsLayout}
+          isVisualEditAllowed={isVisualEditAllowed}
+          onTitleChange={setTitle}
+          onSubtitleChange={setSectionTitle}
+          onBadgeTextChange={setSubTitle}
         />
       ))}
     </ComponentFormWrapper>

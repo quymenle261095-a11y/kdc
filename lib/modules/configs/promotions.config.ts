@@ -8,16 +8,24 @@ export const promotionsModule = defineModuleWithRuntime({
    icon: Ticket,
    color: 'rose',
  
+  capabilities: [
+    { key: 'coupon_v1', name: 'Mã giảm giá (Coupon v1)', status: 'ready', enabled: true, description: 'Cho phép tạo mã giảm giá công khai & riêng tư, áp dụng tại checkout.' },
+    { key: 'auto_promo', name: 'Ưu đãi tự động', status: 'roadmap', enabled: false, disabledToggle: true, description: 'Tự động giảm giá theo giỏ hàng mà không cần nhập mã (Roadmap/Khóa).' },
+    { key: 'flash_sale', name: 'Flash Sale Engine', status: 'roadmap', enabled: false, disabledToggle: true, description: 'Đợt giảm giá chớp nhoáng theo khung giờ (Roadmap/Khóa).' },
+    { key: 'bundle_promo', name: 'Combo / Mua kèm', status: 'roadmap', enabled: false, disabledToggle: true, description: 'Mua X tặng Y, giảm giá theo bậc (Roadmap/Khóa).' },
+    { key: 'loyalty', name: 'Loyalty & Membership', status: 'roadmap', enabled: false, disabledToggle: true, description: 'Quy đổi điểm thưởng, hạng thành viên (Roadmap/Khóa).' },
+  ],
+
   features: [
     { key: 'enableUsageLimit', label: 'Giới hạn lượt dùng', icon: Users, linkedField: 'usageLimit' },
     { key: 'enableMinOrder', label: 'Đơn tối thiểu', icon: ShoppingCart, linkedField: 'minOrderAmount' },
     { key: 'enableMaxDiscount', label: 'Giảm tối đa', icon: DollarSign, linkedField: 'maxDiscountAmount' },
     { key: 'enableSchedule', label: 'Hẹn giờ', icon: CalendarClock },
-    { key: 'enableApplicable', label: 'Áp dụng có chọn lọc', icon: CheckCircle, enabled: false },
-    { key: 'enableAdvancedDiscount', label: 'Loại giảm nâng cao', icon: Ticket },
+    { key: 'enableApplicable', label: 'Áp dụng có chọn lọc & Loại trừ', icon: CheckCircle, enabled: true },
+    { key: 'enableAdvancedDiscount', label: 'Loại giảm nâng cao (%, Tiền, FreeShip)', icon: Ticket },
     { key: 'enableCustomerConditions', label: 'Điều kiện khách hàng', icon: Users },
-    { key: 'enableBudgetLimit', label: 'Ngân sách khuyến mãi', icon: DollarSign, enabled: false },
-    { key: 'enableStacking', label: 'Cộng dồn & ưu tiên', icon: Layers },
+    { key: 'enableBudgetLimit', label: 'Ngân sách khuyến mãi', icon: DollarSign, enabled: true },
+    { key: 'enableStacking', label: 'Cộng dồn & ưu tiên', icon: Layers, enabled: false },
     { key: 'enableDisplay', label: 'Hiển thị ngoài site', icon: Eye },
   ],
  

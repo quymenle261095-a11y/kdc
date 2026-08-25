@@ -18,6 +18,7 @@ import { ContactInquiryForm } from '@/components/contact/ContactInquiryForm';
 import OpenStreetMapDisplay from '@/components/maps/OpenStreetMapDisplay';
 import { sanitizeGoogleMapIframe, type ContactMapData } from '@/lib/contact/getContactMapData';
 import { getSectionSpacingClassName } from '../../_shared/types/sectionSpacing';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
 import { renderContactIcon } from '../_lib/iconOptions';
 import { getContactCornerRadiusClassName } from '../_lib/constants';
 import type { PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
@@ -43,6 +44,9 @@ interface ContactSectionSharedProps {
   title?: string;
   mapData?: ContactMapData;
   sourcePath?: string;
+  isDark?: boolean;
+  onConfigChange?: (config: ContactConfigState) => void;
+  onTitleChange?: (value: string) => void;
 }
 
 const PinterestIcon = ({ size = 18 }: { size?: number }) => (
@@ -116,7 +120,7 @@ const getSectionInlinePadding = (context: ContactSectionContext, currentDevice: 
 };
 
 const getRootContainerClass = (context: ContactSectionContext, currentDevice: PreviewDevice) => {
-  if (context === 'site') {return 'max-w-6xl mx-auto';}
+  if (context === 'site') {return 'max-w-6xl tv:max-w-[1536px] mx-auto';}
   if (currentDevice === 'mobile') {return 'w-full';}
   if (currentDevice === 'tablet') {return 'max-w-3xl mx-auto';}
   return 'max-w-5xl mx-auto';
@@ -262,10 +266,71 @@ const getDisplayItems = (config: ContactConfigState, isPreview: boolean) => {
   });
 };
 
-const renderItemValue = (item: ContactConfigState['contactItems'][number], tokens: ContactColorTokens, isPreview: boolean, className = 'text-sm') => {
-  const displayValue = item.value?.trim() || item.href?.trim() || (isPreview ? 'Chưa có nội dung' : '');
-  if (!displayValue) {return null;}
+const VisualEditContext = React.createContext<{
+  isVisualEditActive: boolean;
+  config?: ContactConfigState;
+  onSaveConfig?: (config: ContactConfigState) => void;
+}>({
+  isVisualEditActive: false,
+});
+
+const EditableText = ({
+  text,
+  onSave,
+  className,
+  style,
+  tag: Tag = 'span',
+  placeholder = '',
+  isVisualEditActive = false,
+}: {
+  text: string;
+  onSave: (val: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  tag?: any;
+  placeholder?: string;
+  isVisualEditActive?: boolean;
+}) => {
+  const Component = Tag;
+  return (
+    <Component
+      contentEditable={isVisualEditActive}
+      suppressContentEditableWarning={isVisualEditActive}
+      onBlur={isVisualEditActive ? (e: any) => onSave(e.currentTarget.textContent ?? '') : undefined}
+      className={cn(className, isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+      style={style}
+    >
+      {text || (isVisualEditActive ? placeholder : '')}
+    </Component>
+  );
+};
+
+const renderItemValue = (
+  item: ContactConfigState['contactItems'][number],
+  tokens: ContactColorTokens,
+  isPreview: boolean,
+  className = 'text-sm',
+  isVisualEditActive = false,
+  onSaveValue?: (val: string) => void
+) => {
+  const displayValue = item.value?.trim() || item.href?.trim() || (isPreview ? (isVisualEditActive ? 'Chưa có nội dung' : '') : '');
+  if (!displayValue && !isVisualEditActive) {return null;}
   const textClassName = cn('min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]', className);
+
+  if (isVisualEditActive) {
+    return (
+      <EditableText
+        text={item.value || item.href || ''}
+        placeholder="Nhập nội dung..."
+        onSave={onSaveValue || (() => {})}
+        isVisualEditActive={isVisualEditActive}
+        tag="span"
+        className={textClassName}
+        style={{ color: tokens.valueText }}
+      />
+    );
+  }
+
   const content = <span className={textClassName} style={{ color: tokens.valueText }}>{displayValue}</span>;
 
   if (!item.href) {return content;}
@@ -296,12 +361,34 @@ const ContactItemRow = ({
   isPreview: boolean;
   valueClassName?: string;
 }) => {
+  const { isVisualEditActive, config, onSaveConfig } = React.useContext(VisualEditContext);
+
+  const handleUpdate = (field: 'label' | 'value', val: string) => {
+    if (onSaveConfig && config) {
+      const nextItems = (config.contactItems || []).map((cit) =>
+        cit.id === item.id ? { ...cit, [field]: val } : cit
+      );
+      onSaveConfig({
+        ...config,
+        contactItems: nextItems,
+      });
+    }
+  };
+
   return (
     <div className="flex items-start gap-3">
       <IconBadge icon={renderContactIcon(item.icon, iconSize)} tokens={tokens} className="mt-0.5" />
-      <div className="min-w-0">
-        <h4 className="font-semibold text-sm mb-0.5" style={{ color: tokens.labelText }}>{item.label}</h4>
-        {renderItemValue(item, tokens, isPreview, valueClassName ?? 'text-sm')}
+      <div className="min-w-0 flex-1">
+        <h4 className="font-semibold text-sm mb-0.5" style={{ color: tokens.labelText }}>
+          <EditableText
+            text={item.label || ''}
+            placeholder="Nhãn..."
+            onSave={(val) => handleUpdate('label', val)}
+            isVisualEditActive={isVisualEditActive}
+            tag="span"
+          />
+        </h4>
+        {renderItemValue(item, tokens, isPreview, valueClassName ?? 'text-sm', isVisualEditActive, (val) => handleUpdate('value', val))}
       </div>
     </div>
   );
@@ -320,11 +407,33 @@ const ContactItemCard = ({
   isPreview: boolean;
   radiusClassName?: string;
 }) => {
+  const { isVisualEditActive, config, onSaveConfig } = React.useContext(VisualEditContext);
+
+  const handleUpdate = (field: 'label' | 'value', val: string) => {
+    if (onSaveConfig && config) {
+      const nextItems = (config.contactItems || []).map((cit) =>
+        cit.id === item.id ? { ...cit, [field]: val } : cit
+      );
+      onSaveConfig({
+        ...config,
+        contactItems: nextItems,
+      });
+    }
+  };
+
   return (
     <div className={cn('flex min-w-0 flex-col items-center border p-5 text-center', radiusClassName)} style={{ borderColor: tokens.cardBorder, backgroundColor: tokens.cardBackground }}>
       <IconBadge icon={renderContactIcon(item.icon, iconSize)} tokens={tokens} className="mb-3" />
-      <h3 className="font-medium text-sm mb-1" style={{ color: tokens.labelText }}>{item.label}</h3>
-      {renderItemValue(item, tokens, isPreview, 'text-sm font-semibold')}
+      <h3 className="font-medium text-sm mb-1" style={{ color: tokens.labelText }}>
+        <EditableText
+          text={item.label || ''}
+          placeholder="Nhãn..."
+          onSave={(val) => handleUpdate('label', val)}
+          isVisualEditActive={isVisualEditActive}
+          tag="span"
+        />
+      </h3>
+      {renderItemValue(item, tokens, isPreview, 'text-sm font-semibold', isVisualEditActive, (val) => handleUpdate('value', val))}
     </div>
   );
 };
@@ -400,17 +509,22 @@ const ContactSectionHeader = ({
   title,
   config,
   tokens,
+  onConfigChange,
+  onTitleChange,
 }: {
   title?: string;
   config: ContactConfigState;
   tokens: ContactColorTokens;
+  onConfigChange?: (config: ContactConfigState) => void;
+  onTitleChange?: (value: string) => void;
 }) => {
+  const { isVisualEditActive } = React.useContext(VisualEditContext);
   const resolvedTitle = typeof title === 'string' ? title.trim() : '';
   const resolvedSubtitle = typeof config.subtitle === 'string' ? config.subtitle.trim() : '';
   const resolvedBadgeText = typeof config.badgeText === 'string' ? config.badgeText.trim() : '';
-  const hasTitle = config.showTitle !== false && resolvedTitle.length > 0;
-  const hasSubtitle = config.showSubtitle !== false && resolvedSubtitle.length > 0;
-  const hasBadge = config.showBadge !== false && resolvedBadgeText.length > 0;
+  const hasTitle = config.showTitle !== false && (resolvedTitle.length > 0 || isVisualEditActive);
+  const hasSubtitle = config.showSubtitle !== false && (resolvedSubtitle.length > 0 || isVisualEditActive);
+  const hasBadge = config.showBadge !== false && (resolvedBadgeText.length > 0 || isVisualEditActive);
 
   if (config.hideHeader || (!hasTitle && !hasSubtitle && !hasBadge)) {
     return null;
@@ -431,7 +545,12 @@ const ContactSectionHeader = ({
           color: tokens.sectionBadgeText,
         }}
       >
-        {resolvedBadgeText}
+        <EditableText
+          text={resolvedBadgeText}
+          placeholder="Badge..."
+          onSave={(value) => onConfigChange?.({ ...config, badgeText: value })}
+          isVisualEditActive={isVisualEditActive}
+        />
       </span>
     </div>
   );
@@ -444,7 +563,13 @@ const ContactSectionHeader = ({
       )}
       style={{ color: titleColor }}
     >
-      {resolvedTitle}
+      <EditableText
+        text={resolvedTitle}
+        placeholder="Tiêu đề..."
+        onSave={(value) => onTitleChange?.(value)}
+        isVisualEditActive={isVisualEditActive}
+        tag="span"
+      />
     </h2>
   );
 
@@ -456,7 +581,13 @@ const ContactSectionHeader = ({
       )}
       style={{ color: tokens.helperText }}
     >
-      {resolvedSubtitle}
+      <EditableText
+        text={resolvedSubtitle}
+        placeholder="Mô tả..."
+        onSave={(value) => onConfigChange?.({ ...config, subtitle: value })}
+        isVisualEditActive={isVisualEditActive}
+        tag="span"
+      />
     </p>
   );
 
@@ -487,6 +618,8 @@ const renderModern = ({
   mapData,
   sourcePath,
   isPreview,
+  isVisualEditActive,
+  onSaveConfig,
 }: {
   info: ReturnType<typeof getInfo>;
   config: ContactConfigState;
@@ -496,6 +629,8 @@ const renderModern = ({
   mapData?: ContactMapData;
   sourcePath?: string;
   isPreview: boolean;
+  isVisualEditActive: boolean;
+  onSaveConfig?: (config: ContactConfigState) => void;
 }) => {
   const hasForm = Boolean(config.showForm);
   const hasMap = Boolean(config.showMap);
@@ -521,7 +656,7 @@ const renderModern = ({
             contentWidthClass,
           )}
         >
-        <div className="max-w-md mx-auto w-full">
+        <div className="max-w-md tv:max-w-xl mx-auto w-full">
           <div
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border mb-4"
             style={{
@@ -530,10 +665,36 @@ const renderModern = ({
               borderColor: tokens.sectionBadgeBorder,
             }}
           >
-            {info.texts.badge}
+            <EditableText
+              text={config.texts?.badge ?? ''}
+              placeholder="Badge..."
+              onSave={(val) => {
+                if (onSaveConfig && config) {
+                  onSaveConfig({
+                    ...config,
+                    texts: { ...config.texts, badge: val },
+                  });
+                }
+              }}
+              isVisualEditActive={isVisualEditActive}
+              tag="span"
+            />
           </div>
           <h2 className={cn('font-bold tracking-tight mb-6', currentDevice === 'mobile' ? 'text-xl' : 'text-2xl')} style={{ color: tokens.heading }}>
-            {info.texts.heading}
+            <EditableText
+              text={config.texts?.heading ?? ''}
+              placeholder="Kết nối với chúng tôi..."
+              onSave={(val) => {
+                if (onSaveConfig && config) {
+                  onSaveConfig({
+                    ...config,
+                    texts: { ...config.texts, heading: val },
+                  });
+                }
+              }}
+              isVisualEditActive={isVisualEditActive}
+              tag="span"
+            />
           </h2>
 
           <div className="space-y-5">
@@ -554,8 +715,8 @@ const renderModern = ({
             <ContactInquiryForm
               brandColor={tokens.primary}
               secondaryColor={tokens.secondary}
-              title={info.heading}
-              description={info.description}
+              title={config.formTitle || info.heading}
+              description={config.formDescription || info.description}
               submitLabel={info.submitLabel}
               responseTimeText={info.responseText}
               fields={config.formFields}
@@ -563,6 +724,17 @@ const renderModern = ({
               sourcePath={sourcePath}
               subjectFallback={info.subjectFallback}
               isPreview={isPreview}
+              isVisualEditActive={isVisualEditActive}
+              onTitleChange={(val) => {
+                if (onSaveConfig && config) {
+                  onSaveConfig({ ...config, formTitle: val });
+                }
+              }}
+              onDescriptionChange={(val) => {
+                if (onSaveConfig && config) {
+                  onSaveConfig({ ...config, formDescription: val });
+                }
+              }}
             />
           </div>
         )}
@@ -1020,6 +1192,274 @@ const renderCentered = ({
   );
 };
 
+const KanbanContactItem = ({
+  item,
+  tokens,
+  kanbanTokens,
+  isPreview,
+}: {
+  item: ContactConfigState['contactItems'][number];
+  tokens: ContactColorTokens;
+  kanbanTokens: ContactColorTokens;
+  isPreview: boolean;
+}) => {
+  const { isVisualEditActive, config, onSaveConfig } = React.useContext(VisualEditContext);
+
+  const handleUpdate = (field: 'label' | 'value', val: string) => {
+    if (onSaveConfig && config) {
+      const nextItems = (config.contactItems || []).map((cit) =>
+        cit.id === item.id ? { ...cit, [field]: val } : cit
+      );
+      onSaveConfig({ ...config, contactItems: nextItems });
+    }
+  };
+
+  return (
+    <div
+      className="flex items-start gap-2.5 tv:gap-4 p-2.5 tv:p-4 border rounded-sm transition-all duration-200 group border-l-[3px]"
+      style={{
+        backgroundColor: tokens.cardBackground,
+        borderTopColor: tokens.cardBorder,
+        borderRightColor: tokens.cardBorder,
+        borderBottomColor: tokens.cardBorder,
+        borderLeftColor: tokens.primary,
+      }}
+    >
+      <div className="shrink-0 mt-0.5" style={{ color: kanbanTokens.primary }}>
+        {renderContactIcon(item.icon, 14)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h4 className="font-bold text-[10px] tv:text-xs uppercase tracking-wider mb-0.5" style={{ color: tokens.labelText }}>
+          <EditableText
+            text={item.label}
+            placeholder="Nhãn"
+            onSave={(val) => handleUpdate('label', val)}
+            isVisualEditActive={isVisualEditActive}
+          />
+        </h4>
+        {renderItemValue(
+          item,
+          kanbanTokens,
+          isPreview,
+          'text-xs tv:text-base font-semibold leading-relaxed',
+          isVisualEditActive,
+          (val) => handleUpdate('value', val)
+        )}
+      </div>
+    </div>
+  );
+};
+
+const renderKanban = ({
+  info,
+  config,
+  tokens,
+  currentDevice,
+  activeSocials,
+  mapData,
+  sourcePath,
+  isPreview,
+  isVisualEditActive,
+  onSaveConfig,
+}: {
+  info: ReturnType<typeof getInfo>;
+  config: ContactConfigState;
+  tokens: ContactColorTokens;
+  currentDevice: PreviewDevice;
+  activeSocials: ContactSocialLink[];
+  mapData?: ContactMapData;
+  sourcePath?: string;
+  isPreview: boolean;
+  isVisualEditActive: boolean;
+  onSaveConfig?: (config: ContactConfigState) => void;
+}) => {
+  const contactItems = getDisplayItems(config, isPreview);
+  const hasForm = Boolean(config.showForm);
+  const hasMap = Boolean(config.showMap);
+
+  const kanbanTokens = {
+    ...tokens,
+    formBackground: 'transparent',
+  };
+
+  let columnsCount = 1;
+  if (hasForm) {
+    columnsCount++;
+  }
+  if (hasMap) {
+    columnsCount++;
+  }
+
+  const gridClass = isPreview
+    ? currentDevice === 'mobile'
+      ? 'grid-cols-1'
+      : columnsCount === 3
+        ? 'grid-cols-3'
+        : columnsCount === 2
+          ? 'grid-cols-2'
+          : 'grid-cols-1'
+    : columnsCount === 3
+      ? 'grid-cols-1 lg:grid-cols-3'
+      : columnsCount === 2
+        ? 'grid-cols-1 lg:grid-cols-2'
+        : 'grid-cols-1';
+
+  return (
+    <div
+      className="w-full rounded-sm border p-4 tv:p-8 transition-colors duration-300"
+      style={{
+        backgroundColor: tokens.neutralBackground,
+        borderColor: tokens.neutralBorder,
+      }}
+    >
+      <div className={cn('grid gap-4 tv:gap-8 items-stretch', gridClass)}>
+        <div className="flex flex-col space-y-3 tv:space-y-6">
+          <div className="border-b pb-1.5" style={{ borderColor: tokens.neutralBorder }}>
+            <span className="text-[10px] tv:text-sm font-extrabold tracking-[0.15em] uppercase" style={{ color: tokens.labelText }}>
+              <EditableText
+                text={config.texts?.badge ?? ''}
+                placeholder="Thông tin liên hệ"
+                onSave={(val) => {
+                  if (onSaveConfig && config) {
+                    onSaveConfig({
+                      ...config,
+                      texts: { ...config.texts, badge: val }
+                    });
+                  }
+                }}
+                isVisualEditActive={isVisualEditActive}
+                tag="span"
+              />
+            </span>
+          </div>
+          <div className="space-y-2 tv:space-y-4 flex-1">
+            {contactItems.map((item) => (
+              <KanbanContactItem
+                key={item.id}
+                item={item}
+                tokens={tokens}
+                kanbanTokens={kanbanTokens}
+                isPreview={isPreview}
+              />
+            ))}
+          </div>
+
+          {activeSocials.length > 0 && (
+            <div className="pt-3 tv:pt-5 border-t" style={{ borderColor: tokens.neutralBorder }}>
+              <div className="flex items-center gap-1.5 tv:gap-3 flex-wrap">
+                {activeSocials.map((social, idx) => {
+                  const Icon = getSocialIconComponent(social.platform);
+                  const original = SOCIAL_ORIGINAL_COLORS[social.platform];
+                  const bg = original?.bg || tokens.socialBackground;
+                  const border = original?.bg || tokens.socialBorder;
+                  const color = original?.icon || tokens.socialIcon;
+
+                  return (
+                    <a
+                      key={`${social.id}-${social.platform}-${idx}`}
+                      href={resolveSocialHref(social)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-7 h-7 tv:w-10 tv:h-10 rounded-sm border flex items-center justify-center transition-colors duration-200"
+                      style={{
+                        backgroundColor: bg,
+                        borderColor: border,
+                        color: color,
+                      }}
+                      aria-label={social.platform || 'social'}
+                    >
+                      <Icon size={12} className="tv:w-5 tv:h-5" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {hasForm && (
+          <div className="flex flex-col space-y-3 tv:space-y-6">
+            <div className="border-b pb-1.5" style={{ borderColor: tokens.neutralBorder }}>
+              <span className="text-[10px] tv:text-sm font-extrabold tracking-[0.15em] uppercase" style={{ color: tokens.labelText }}>
+                <EditableText
+                  text={config.formTitle ?? ''}
+                  placeholder="Liên hệ với chúng tôi"
+                  onSave={(val) => {
+                    if (onSaveConfig && config) {
+                      onSaveConfig({ ...config, formTitle: val });
+                    }
+                  }}
+                  isVisualEditActive={isVisualEditActive}
+                  tag="span"
+                />
+              </span>
+            </div>
+            <div
+              className={cn(
+                "p-3 tv:p-6 border rounded-sm flex-1",
+                " [&_input]:rounded-none [&_textarea]:rounded-none [&_button]:rounded-none [&_input]:text-xs [&_textarea]:text-xs [&_button]:text-xs [&_input]:tv:text-[16px] [&_textarea]:tv:text-[16px] [&_button]:tv:text-[16px]",
+                " [&_input]:px-2.5 [&_textarea]:px-2.5 [&_input]:py-2 [&_textarea]:py-2 [&_button]:py-2.5 [&_input]:tv:py-4 [&_textarea]:tv:py-4 [&_button]:tv:py-5 [&_input]:tv:px-4 [&_textarea]:tv:px-4",
+                "hover:[&_button]:opacity-90 [&_svg]:hidden"
+              )}
+              style={{
+                backgroundColor: tokens.cardBackground,
+                borderColor: tokens.cardBorder,
+              }}
+            >
+              <ContactInquiryForm
+                brandColor={kanbanTokens.primary}
+                secondaryColor={kanbanTokens.secondary}
+                title={undefined}
+                description={undefined}
+                submitLabel={info.submitLabel}
+                responseTimeText={info.responseText}
+                fields={config.formFields}
+                tokens={kanbanTokens}
+                sourcePath={sourcePath}
+                subjectFallback={info.subjectFallback}
+                withContainer={false}
+                isPreview={isPreview}
+              />
+            </div>
+          </div>
+        )}
+
+        {hasMap && (
+          <div className="flex flex-col space-y-3 tv:space-y-6">
+            <div className="border-b pb-1.5" style={{ borderColor: tokens.neutralBorder }}>
+              <span className="text-[10px] tv:text-sm font-extrabold tracking-[0.15em] uppercase" style={{ color: tokens.labelText }}>
+                <EditableText
+                  text={config.texts?.mapTitle ?? ''}
+                  placeholder="Bản đồ vị trí"
+                  onSave={(val) => {
+                    if (onSaveConfig && config) {
+                      onSaveConfig({
+                        ...config,
+                        texts: { ...config.texts, mapTitle: val }
+                      });
+                    }
+                  }}
+                  isVisualEditActive={isVisualEditActive}
+                  tag="span"
+                />
+              </span>
+            </div>
+            <div
+              className="border rounded-sm flex-1 overflow-hidden relative min-h-[220px]"
+              style={{
+                borderColor: tokens.cardBorder,
+                backgroundColor: tokens.cardBackground,
+              }}
+            >
+              {renderMapOrPlaceholder({ mapData, fallbackEmbed: config.mapEmbed, tokens: kanbanTokens, className: 'absolute inset-0', isPreview })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export function ContactSectionShared({
   config,
   style,
@@ -1029,7 +1469,11 @@ export function ContactSectionShared({
   title,
   mapData,
   sourcePath,
+  isDark = false,
+  onConfigChange,
+  onTitleChange,
 }: ContactSectionSharedProps) {
+  const visualEdit = usePreviewVisualEdit();
   const currentDevice = getDisplayDevice(context, device);
   const isPreview = context === 'preview';
   const info = getInfo(config, title);
@@ -1037,8 +1481,13 @@ export function ContactSectionShared({
   const containerClass = getRootContainerClass(context, currentDevice);
 
   const content = (() => {
+    const isVisualEditActive = isPreview && visualEdit.active;
+    if (style === 'kanban') {
+      return renderKanban({ info, config, tokens, currentDevice, activeSocials, mapData, sourcePath, isPreview, isVisualEditActive, onSaveConfig: onConfigChange });
+    }
+
     if (style === 'modern') {
-      return renderModern({ info, config, tokens, currentDevice, activeSocials, mapData, sourcePath, isPreview });
+      return renderModern({ info, config, tokens, currentDevice, activeSocials, mapData, sourcePath, isPreview, isVisualEditActive, onSaveConfig: onConfigChange });
     }
 
     if (style === 'floating') {
@@ -1061,15 +1510,19 @@ export function ContactSectionShared({
   })();
 
   return (
-    <section className={cn(getSectionSpacingClassName(config.spacing), getSectionInlinePadding(context, currentDevice))}>
-      <div className={cn(containerClass, 'space-y-6')}>
-        <ContactSectionHeader
-          title={title}
-          config={config}
-          tokens={tokens}
-        />
-        {content}
-      </div>
-    </section>
+    <VisualEditContext.Provider value={{ isVisualEditActive: isPreview && visualEdit.active, config, onSaveConfig: onConfigChange }}>
+      <section className={cn(getSectionSpacingClassName(config.spacing), getSectionInlinePadding(context, currentDevice), isDark && 'dark')}>
+        <div className={cn(containerClass, 'space-y-6')}>
+          <ContactSectionHeader
+            title={title}
+            config={config}
+            tokens={tokens}
+            onConfigChange={onConfigChange}
+            onTitleChange={onTitleChange}
+          />
+          {content}
+        </div>
+      </section>
+    </VisualEditContext.Provider>
   );
 }

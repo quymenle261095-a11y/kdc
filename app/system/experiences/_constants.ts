@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
+  BookOpen,
   Briefcase,
   CreditCard,
   FileText,
@@ -13,6 +14,7 @@ import {
   ShoppingCart,
   Ticket,
   User,
+  Search,
 } from 'lucide-react';
 
 export type SystemExperience = {
@@ -52,6 +54,36 @@ export const systemExperiences: SystemExperience[] = [
     href: '/system/experiences/services-detail',
     icon: Briefcase,
     title: 'Chi tiết dịch vụ',
+  },
+  {
+    description: 'Layout, filters, search cho danh sách khóa học.',
+    href: '/system/experiences/courses-list',
+    icon: BookOpen,
+    title: 'Danh sách khóa học',
+  },
+  {
+    description: 'Banner đầu trang, lộ trình học, giảng viên và nút đăng ký chi tiết khóa học.',
+    href: '/system/experiences/courses-detail',
+    icon: BookOpen,
+    title: 'Chi tiết khóa học',
+  },
+  {
+    description: 'Layout, filters, search cho danh sách tài nguyên.',
+    href: '/system/experiences/resources-list',
+    icon: FileText,
+    title: 'Danh sách tài nguyên',
+  },
+  {
+    description: 'Gallery, quyền tải, tài nguyên liên quan và CTA chi tiết tài nguyên.',
+    href: '/system/experiences/resources-detail',
+    icon: FileText,
+    title: 'Chi tiết tài nguyên',
+  },
+  {
+    description: 'Video bài học, sidebar nội dung, điều hướng bài trước/sau và trạng thái khóa bài học.',
+    href: '/system/experiences/lesson-detail',
+    icon: BookOpen,
+    title: 'Chi tiết bài học',
   },
   {
     description: 'Layout, filters, search cho danh sách sản phẩm.',
@@ -124,5 +156,11 @@ export const systemExperiences: SystemExperience[] = [
     href: '/system/experiences/promotions-list',
     icon: Ticket,
     title: 'Khuyến mãi',
+  },
+  {
+    description: 'Cấu hình bố cục tìm kiếm, bộ lọc danh mục và hiển thị sản phẩm.',
+    href: '/system/experiences/search-filter',
+    icon: Search,
+    title: 'Tìm kiếm & Bộ lọc',
   },
 ];

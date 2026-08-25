@@ -8,6 +8,7 @@ import { AiCtaImport } from './AiCtaImport';
 import type { CTAConfig } from '../_types';
 import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import { QuickRouteInput } from '../../_shared/components/QuickRouteInput';
 
  
 export const CTAForm = ({
@@ -62,11 +63,11 @@ export const CTAForm = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Text nút chính</Label><Input value={config.buttonText} onChange={(e) =>{  onChange({ ...config, buttonText: e.target.value }); }} /></div>
-            <div className="space-y-2"><Label>Liên kết</Label><Input value={config.buttonLink} onChange={(e) =>{  onChange({ ...config, buttonLink: e.target.value }); }} /></div>
+            <div className="space-y-2"><Label>Liên kết</Label><QuickRouteInput value={config.buttonLink} onChangeValue={(v) => onChange({ ...config, buttonLink: v })} /></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Text nút phụ</Label><Input value={config.secondaryButtonText} onChange={(e) =>{  onChange({ ...config, secondaryButtonText: e.target.value }); }} /></div>
-            <div className="space-y-2"><Label>Liên kết nút phụ</Label><Input value={config.secondaryButtonLink} onChange={(e) =>{  onChange({ ...config, secondaryButtonLink: e.target.value }); }} /></div>
+            <div className="space-y-2"><Label>Liên kết nút phụ</Label><QuickRouteInput value={config.secondaryButtonLink} onChangeValue={(v) => onChange({ ...config, secondaryButtonLink: v })} /></div>
           </div>
         </SubSection>
       </div>

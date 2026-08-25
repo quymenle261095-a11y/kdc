@@ -1,10 +1,13 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
+
 import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { getSectionSpacingClassName, normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
@@ -20,6 +23,7 @@ import type {
   PricingPlan,
   PricingStyle,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 interface PricingPreviewProps {
   title?: string;
@@ -44,14 +48,19 @@ interface PricingPreviewProps {
     uppercaseText?: boolean;
     showBadge?: boolean;
     badgeText?: string;
-  spacing?: SectionSpacing;
+    spacing?: SectionSpacing;
   };
   gridCols?: 3 | 4;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (value: PricingPlan[]) => void;
 }
 
 export function PricingPreview({
   title = 'Bảng giá',
-  plans,
+  plans = [],
   config,
   brandColor,
   secondary,
@@ -62,14 +71,33 @@ export function PricingPreview({
   fontClassName,
   headerConfig,
   gridCols: gridColsProp = 3,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
 }: PricingPreviewProps) {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
   const [isYearly, setIsYearly] = React.useState(false);
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
   const previewStyle = selectedStyle;
   const setPreviewStyle = (nextStyle: string) => {
     if (!onStyleChange) {return;}
     onStyleChange(nextStyle as PricingStyle);
+  };
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
   };
 
   const subtitle = headerConfig?.subtitle ?? String(config?.subtitle ?? 'Chọn gói phù hợp với nhu cầu của bạn');
@@ -84,6 +112,7 @@ export function PricingPreview({
     secondary,
     mode,
   }), [brandColor, secondary, mode]);
+  const tokens = React.useMemo(() => adaptTokensForDarkMode(validation.tokens, isDark), [validation.tokens, isDark]);
 
   const modeLabel = mode === 'single' ? '1 màu (single)' : '2 màu (dual)';
 
@@ -100,50 +129,62 @@ export function PricingPreview({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame url="yoursite.com/pricing">
-          <div className={getSectionSpacingClassName(normalizeSectionSpacing(headerConfig?.spacing))}>
-            {/* Render SectionHeader matching site pattern */}
-            <div className="px-4">
-              <div className="mx-auto max-w-7xl">
-                <SectionHeader
-                  title={title}
-                  subtitle={subtitle}
-                  badgeText={headerConfig?.badgeText}
-                  hideHeader={headerConfig?.hideHeader}
-                  showTitle={headerConfig?.showTitle}
-                  showSubtitle={headerConfig?.showSubtitle}
-                  showBadge={headerConfig?.showBadge}
-                  headerAlign={headerConfig?.headerAlign}
-                  titleColorPrimary={headerConfig?.titleColorPrimary}
-                  subtitleAboveTitle={headerConfig?.subtitleAboveTitle}
-                  uppercaseText={headerConfig?.uppercaseText}
-                  brandColor={brandColor}
-                />
+        <div className="space-y-3">
+
+          <BrowserFrame url="yoursite.com/pricing">
+            <div className={getSectionSpacingClassName(normalizeSectionSpacing(headerConfig?.spacing))}>
+              {/* Render SectionHeader matching site pattern */}
+              <div className="px-4">
+                <div className="mx-auto max-w-7xl">
+                  <SectionHeader
+                    title={title}
+                    subtitle={subtitle}
+                    badgeText={headerConfig?.badgeText}
+                    hideHeader={headerConfig?.hideHeader}
+                    showTitle={headerConfig?.showTitle}
+                    showSubtitle={headerConfig?.showSubtitle}
+                    showBadge={headerConfig?.showBadge}
+                    headerAlign={headerConfig?.headerAlign}
+                    titleColorPrimary={headerConfig?.titleColorPrimary}
+                    subtitleAboveTitle={headerConfig?.subtitleAboveTitle}
+                    uppercaseText={headerConfig?.uppercaseText}
+                    brandColor={brandColor}
+                    visualEditEnabled={isVisualEditActive}
+                    onTitleChange={onTitleChange}
+                    onSubtitleChange={onSubtitleChange}
+                    onBadgeTextChange={onBadgeTextChange}
+                  />
+                </div>
               </div>
+              <PricingSectionShared
+                context="preview"
+                title={title}
+                subtitle={subtitle}
+                plans={plans}
+                style={previewStyle}
+                mode={mode}
+                tokens={tokens}
+                texts={texts}
+                isYearly={isYearly}
+                showBillingToggle={showBillingToggle}
+                monthlyLabel={monthlyLabel}
+                yearlyLabel={yearlyLabel}
+                yearlySavingText={yearlySavingText}
+                onBillingToggle={setIsYearly}
+                skipHeader={true}
+                previewDevice={device}
+                gridCols={gridColsProp}
+                cornerRadius={config?.cornerRadius}
+                visualEditActive={isVisualEditActive}
+                onItemsChange={onItemsChange}
+              />
             </div>
-            <PricingSectionShared
-              context="preview"
-              title={title}
-              subtitle={subtitle}
-              plans={plans}
-              style={previewStyle}
-              mode={mode}
-              tokens={validation.tokens}
-              texts={texts}
-              isYearly={isYearly}
-              showBillingToggle={showBillingToggle}
-              monthlyLabel={monthlyLabel}
-              yearlyLabel={yearlyLabel}
-              yearlySavingText={yearlySavingText}
-              onBillingToggle={setIsYearly}
-              skipHeader={true}
-              previewDevice={device}
-              gridCols={gridColsProp}
-              cornerRadius={config?.cornerRadius}
-            />
-          </div>
-        </BrowserFrame>
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' && (

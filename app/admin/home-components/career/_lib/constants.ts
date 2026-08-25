@@ -24,12 +24,12 @@ export const DEFAULT_CAREER_TEXTS: CareerTexts = {
 };
 
 export const CAREER_STYLES: Array<{ id: CareerStyle; label: string }> = [
-  { id: 'cards', label: 'Cards' },
-  { id: 'list', label: 'List' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'table', label: 'Table' },
-  { id: 'featured', label: 'Featured' },
-  { id: 'timeline', label: 'Timeline' },
+  { id: 'cards', label: '(1) Dạng thẻ' },
+  { id: 'list', label: '(2) Xếp dọc' },
+  { id: 'minimal', label: '(3) Tối giản' },
+  { id: 'table', label: '(4) Dạng bảng' },
+  { id: 'featured', label: '(5) Nổi bật' },
+  { id: 'timeline', label: '(6) Quy trình' },
 ];
 
 export const normalizeCareerHarmony = (value?: string): CareerHarmony => {

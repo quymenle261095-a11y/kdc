@@ -44,6 +44,13 @@ const serviceDoc = v.object({
   featured: v.optional(v.boolean()),
   metaDescription: v.optional(v.string()),
   metaTitle: v.optional(v.string()),
+  focusKeyword: v.optional(v.string()),
+  relatedQueries: v.optional(v.array(v.string())),
+  tags: v.optional(v.array(v.string())),
+  faqItems: v.optional(v.array(v.object({
+    question: v.string(),
+    answer: v.string(),
+  }))),
   order: v.number(),
   price: v.optional(v.number()),
   publishedAt: v.optional(v.number()),
@@ -129,8 +136,8 @@ export const listAdminWithOffset = query({
     } else {
       services = await ctx.db
         .query("services")
-        .order("desc")
-        .take(fetchLimit);
+        .take(500);
+      services.sort((a, b) => a.order - b.order);
     }
 
     if (args.search?.trim() && services.length > 0) {
@@ -402,6 +409,7 @@ export const listPublishedWithOffset = query({
       v.literal("oldest"),
       v.literal("popular"),
       v.literal("title"),
+      v.literal("title_desc"),
       v.literal("price_asc"),
       v.literal("price_desc")
     )),
@@ -469,6 +477,9 @@ export const listPublishedWithOffset = query({
         case "title":
           services.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
           break;
+        case "title_desc":
+          services.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
+          break;
         case "price_asc":
           services.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
           break;
@@ -495,6 +506,7 @@ export const searchPublished = query({
       v.literal("oldest"),
       v.literal("popular"),
       v.literal("title"),
+      v.literal("title_desc"),
       v.literal("price_asc"),
       v.literal("price_desc")
     )),
@@ -554,6 +566,10 @@ export const searchPublished = query({
           services.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
           break;
         }
+        case "title_desc": {
+          services.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
+          break;
+        }
         case "price_asc": {
           services.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
           break;
@@ -574,8 +590,30 @@ export const searchPublished = query({
 });
 
 export const countPublished = query({
-  args: { categoryId: v.optional(v.id("serviceCategories")) },
+  args: {
+    categoryId: v.optional(v.id("serviceCategories")),
+    search: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
+    if (args.search?.trim()) {
+      const searchLower = args.search.toLowerCase().trim();
+      const searchQuery = ctx.db
+        .query("services")
+        .withSearchIndex("search_title", (q) => {
+          const builder = q.search("title", searchLower).eq("status", "Published");
+          return args.categoryId ? builder.eq("categoryId", args.categoryId) : builder;
+        });
+      const services = await searchQuery.take(1000);
+      
+      const ranked = rankByFuzzyMatches(
+        services,
+        args.search,
+        (s) => [s.title ?? "", s.excerpt ?? ""],
+        42,
+      );
+      return ranked.length;
+    }
+
     if (await isServicesAggregateReady(ctx)) {
       return countPublishedServices(ctx, { categoryId: args.categoryId });
     }
@@ -623,6 +661,13 @@ export const create = mutation({
     featured: v.optional(v.boolean()),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
+    focusKeyword: v.optional(v.string()),
+    relatedQueries: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    faqItems: v.optional(v.array(v.object({
+      question: v.string(),
+      answer: v.string(),
+    }))),
     order: v.optional(v.number()),
     price: v.optional(v.number()),
     slug: v.string(),
@@ -674,6 +719,13 @@ export const update = mutation({
     id: v.id("services"),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
+    focusKeyword: v.optional(v.string()),
+    relatedQueries: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    faqItems: v.optional(v.array(v.object({
+      question: v.string(),
+      answer: v.string(),
+    }))),
     order: v.optional(v.number()),
     price: v.optional(v.number()),
     slug: v.optional(v.string()),
@@ -800,6 +852,95 @@ export const getDeleteInfo = query({
       preview: v.array(v.object({ id: v.string(), name: v.string() })),
     })),
   }),
+});
+
+export const reorder = mutation({
+  args: { items: v.array(v.object({ id: v.id("services"), order: v.number() })) },
+  handler: async (ctx, args) => {
+    await Promise.all(args.items.map(async (item) => ctx.db.patch(item.id, { order: item.order })));
+    return null;
+  },
+  returns: v.null(),
+});
+
+export const duplicate = mutation({
+  args: { id: v.id("services") },
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get(args.id);
+    if (!source) {
+      throw new Error("Service not found");
+    }
+
+    const buildCopiedName = (base: string, attempt: number) =>
+      attempt <= 1 ? `${base} (copy)` : `${base} (copy ${attempt})`;
+      
+    let copiedTitle = "";
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      const candidate = buildCopiedName(source.title, attempt);
+      const existing = await ctx.db
+        .query("services")
+        .filter((q) => q.eq(q.field("title"), candidate))
+        .first();
+      if (!existing) {
+        copiedTitle = candidate;
+        break;
+      }
+    }
+    if (!copiedTitle) {
+      copiedTitle = `${source.title} (copy ${Date.now()})`;
+    }
+
+    const additionalCategoryIds = await listServiceAdditionalCategoryIds(ctx, source._id, source.categoryId);
+
+    const newServiceId = await ServicesModel.create(ctx, {
+      categoryId: source.categoryId,
+      content: source.content,
+      renderType: source.renderType,
+      markdownRender: source.markdownRender,
+      htmlRender: source.htmlRender,
+      duration: source.duration,
+      bookingEnabled: source.bookingEnabled,
+      bookingDurationMin: source.bookingDurationMin,
+      bookingSlotIntervalMin: source.bookingSlotIntervalMin,
+      bookingCapacityPerSlot: source.bookingCapacityPerSlot,
+      bookingSlotTemplateDefault: source.bookingSlotTemplateDefault,
+      bookingSlotTemplateByWeekday: source.bookingSlotTemplateByWeekday,
+      excerpt: source.excerpt,
+      featured: source.featured,
+      metaDescription: source.metaDescription,
+      metaTitle: source.metaTitle,
+      focusKeyword: source.focusKeyword,
+      relatedQueries: source.relatedQueries,
+      tags: source.tags,
+      faqItems: source.faqItems,
+      order: await ServicesModel.getNextOrder(ctx),
+      price: source.price,
+      slug: source.slug,
+      status: source.status,
+      thumbnail: source.thumbnail,
+      thumbnailStorageId: source.thumbnailStorageId,
+      title: copiedTitle,
+    });
+
+    if (await isMultiCategoryEnabled(ctx, "services")) {
+      await syncServiceCategoryAssignments(ctx, newServiceId, source.categoryId, additionalCategoryIds);
+    }
+
+    if (source.thumbnailStorageId) {
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "thumbnail",
+        ownerId: newServiceId,
+        ownerTable: "services",
+        purpose: "service-thumbnail",
+      }, [source.thumbnailStorageId]);
+    }
+
+    const newService = await ctx.db.get(newServiceId);
+    if (!newService) {
+      throw new Error("Failed to duplicate service");
+    }
+    return newService;
+  },
 });
 
 async function backfillServiceAggregateBatch(

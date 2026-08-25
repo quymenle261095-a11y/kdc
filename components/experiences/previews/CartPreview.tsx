@@ -15,8 +15,8 @@ type CartPreviewProps = {
 };
 
 const mockCartItems = [
-  { id: 1, name: 'iPhone 15 Pro Max 256GB', price: 34990000, quantity: 1 },
-  { id: 2, name: 'AirPods Pro 2nd Gen', price: 6490000, quantity: 2 },
+  { id: 1, name: 'Giày Thể Thao Cao Cấp ThanShoes', price: 1250000, quantity: 1, variantTitle: 'Size: 42 • Màu: Đen' },
+  { id: 2, name: 'Vớ Thể Thao ThanShoes Cổ Ngắn', price: 45000, quantity: 2, variantTitle: undefined },
 ];
 
 const DEFAULT_EXPIRES_AT = Date.now() + 30 * 60 * 1000;
@@ -37,6 +37,9 @@ function CartItemRow({ item, tokens }: { item: CartItem; tokens: CartColors }) {
       </div>
       <div className="flex-1 min-w-0">
         <h4 className="font-medium text-sm line-clamp-1" style={{ color: tokens.bodyText }}>{item.name}</h4>
+        {item.variantTitle && (
+          <p className="text-xs mt-0.5" style={{ color: tokens.metaText }}>{item.variantTitle}</p>
+        )}
         <p className="text-sm font-semibold mt-0.5" style={{ color: tokens.priceText }}>{formatVND(item.price)}</p>
         <div className="flex items-center gap-2 mt-2">
           <button
@@ -260,7 +263,12 @@ export function CartPreview({
                             <div className="h-12 w-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: tokens.thumbBg }}>
                               <div className="h-6 w-6 rounded" style={{ backgroundColor: tokens.surfaceMuted }} />
                             </div>
-                            <span className="font-medium line-clamp-1" style={{ color: tokens.bodyText }}>{item.name}</span>
+                            <div className="min-w-0">
+                              <div className="font-medium line-clamp-1" style={{ color: tokens.bodyText }}>{item.name}</div>
+                              {item.variantTitle && (
+                                <div className="text-xs mt-1" style={{ color: tokens.metaText }}>{item.variantTitle}</div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-4 font-medium" style={{ color: tokens.priceText }}>{formatVND(item.price)}</td>

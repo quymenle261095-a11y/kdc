@@ -11,6 +11,7 @@ type CheckoutPreviewProps = {
   brandColor?: string;
   secondaryColor?: string;
   colorMode?: CheckoutColorMode;
+  isDark?: boolean;
 };
 
 const mockCartItems = [
@@ -361,10 +362,11 @@ export function CheckoutPreview({
   brandColor = DEFAULT_CHECKOUT_COLOR,
   secondaryColor = '',
   colorMode = 'single',
+  isDark,
 }: CheckoutPreviewProps) {
   const tokens = React.useMemo(
-    () => getCheckoutColors(brandColor, secondaryColor, colorMode),
-    [brandColor, secondaryColor, colorMode]
+    () => getCheckoutColors(brandColor, secondaryColor, colorMode, isDark),
+    [brandColor, secondaryColor, colorMode, isDark]
   );
   const isMobile = device === 'mobile';
   const isRightSidebar = orderSummaryPosition === 'right' && !isMobile;

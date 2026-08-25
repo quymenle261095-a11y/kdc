@@ -87,6 +87,8 @@ export default function TestimonialsEditPage({
   const router = useRouter();
   const { customState, effectiveColors, initialCustom, setCustomState, setInitialCustom, showCustomBlock } = useTypeColorOverrideState(COMPONENT_TYPE);
   const { customState: customFontState, effectiveFont, initialCustom: initialFontCustom, setCustomState: setCustomFontState, setInitialCustom: setInitialFontCustom, showCustomBlock: showFontCustomBlock } = useTypeFontOverrideState(COMPONENT_TYPE);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const brandMode: TestimonialsBrandMode = effectiveColors.mode === 'single' ? 'single' : 'dual';
   const setTypeFontOverride = useMutation(api.homeComponentSystemConfig.setTypeFontOverride);
   const setTypeColorOverride = useMutation(api.homeComponentSystemConfig.setTypeColorOverride);
@@ -542,6 +544,16 @@ export default function TestimonialsEditPage({
               desktopColumns={desktopColumns}
               splitBackgroundImage={splitBackgroundImage}
               splitBackgroundOverlayOpacity={splitBackgroundOverlayOpacity}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemsChange={(nextItems) => {
+                setItems(nextItems.map((item, idx) => ({
+                  ...item,
+                  id: items[idx]?.id ?? item.id,
+                })));
+              }}
             />
             {brandMode === 'dual' && (
               <ColorInfoPanel brandColor={effectiveColors.primary} secondary={resolvedSecondary} />

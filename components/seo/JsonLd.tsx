@@ -5,6 +5,7 @@
 
 export { buildArticleSchema as generateArticleSchema } from '@/lib/seo/schema-policy';
 export { buildBreadcrumbSchema as generateBreadcrumbSchema } from '@/lib/seo/schema-policy';
+export { buildFaqSchema as generateFaqSchema } from '@/lib/seo/schema-policy';
 export { buildItemListSchema as generateItemListSchema } from '@/lib/seo/schema-policy';
 export { buildLocalBusinessSchema as generateLocalBusinessSchema } from '@/lib/seo/schema-policy';
 export { buildOrganizationSchema as generateOrganizationSchema } from '@/lib/seo/schema-policy';

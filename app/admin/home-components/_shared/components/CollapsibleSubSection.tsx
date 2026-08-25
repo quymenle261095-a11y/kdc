@@ -38,8 +38,11 @@ export function CollapsibleSubSection({
   };
 
   return (
-    <div className={cn('overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700', className)}>
-      <div className="flex w-full items-center gap-2 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-200 dark:hover:bg-slate-800">
+    <div className={cn('rounded-lg border border-slate-200 dark:border-slate-700', className)}>
+      <div className={cn(
+        "flex w-full items-center gap-2 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:bg-slate-800/50 dark:text-slate-200 dark:hover:bg-slate-800",
+        open ? "rounded-t-lg" : "rounded-lg"
+      )}>
         <button
           type="button"
           onClick={toggleOpen}
@@ -67,7 +70,7 @@ export function CollapsibleSubSection({
         </button>
       </div>
       {open && (
-        <div className={cn('space-y-3 bg-white p-3 dark:bg-slate-900', contentClassName)}>
+        <div className={cn('space-y-3 bg-white p-3 dark:bg-slate-900 rounded-b-lg', contentClassName)}>
           {children}
         </div>
       )}

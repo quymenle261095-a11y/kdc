@@ -5,7 +5,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { toast } from 'sonner';
-import { AlertCircle, CheckCircle, Loader2, Lock, Mail, Save, Shield, User } from 'lucide-react';
+import { AlertCircle, CheckCircle, Headset, Loader2, Lock, Mail, Save, Shield, User } from 'lucide-react';
 
 type ManageMode = 'existing' | 'new';
 type UserId = Id<'users'>;
@@ -47,6 +47,12 @@ export default function AdminConfigPage() {
   const demoteSuperAdmin = useMutation(api.auth.demoteSuperAdmin);
   const cleanupExpiredTrials = useMutation(api.auth.cleanupExpiredSuperAdminTrials);
 
+  const supportHotlineSetting = useQuery(api.settings.getValue, { key: 'admin_support_hotline' });
+  const setSetting = useMutation(api.settings.set);
+
+  const [supportHotline, setSupportHotline] = useState('');
+  const [isSavingHotline, setIsSavingHotline] = useState(false);
+
   const [mode, setMode] = useState<ManageMode>('existing');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,6 +75,29 @@ export default function AdminConfigPage() {
   useEffect(() => {
     void cleanupExpiredTrials({});
   }, [cleanupExpiredTrials]);
+
+  useEffect(() => {
+    if (supportHotlineSetting !== undefined) {
+      setSupportHotline(typeof supportHotlineSetting === 'string' ? supportHotlineSetting : '');
+    }
+  }, [supportHotlineSetting]);
+
+  const handleSaveHotline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingHotline(true);
+    try {
+      await setSetting({
+        group: 'system',
+        key: 'admin_support_hotline',
+        value: supportHotline.trim(),
+      });
+      toast.success('Đã lưu hotline hỗ trợ đăng nhập Admin');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Lỗi khi lưu cấu hình');
+    } finally {
+      setIsSavingHotline(false);
+    }
+  };
 
   const handlePromote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,6 +454,47 @@ export default function AdminConfigPage() {
             </form>
           )}
         </div>
+      </div>
+
+      {/* Hotline Support Configuration */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-xs">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
+            <Headset className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Hotline hỗ trợ truy cập Admin</h2>
+            <p className="text-xs text-slate-500">Hiển thị tại màn hình đăng nhập quản trị (/admin/auth/login)</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveHotline} className="space-y-4 max-w-xl">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Số điện thoại Hotline
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={supportHotline}
+                onChange={(e) => setSupportHotline(e.target.value)}
+                placeholder="0948066514"
+                className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2 text-slate-800 dark:text-white placeholder:text-slate-400 focus:border-cyan-500 focus:outline-none transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={isSavingHotline}
+                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-400 text-white font-medium px-5 py-2 rounded-lg transition-colors flex items-center gap-2 shrink-0"
+              >
+                {isSavingHotline ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Lưu hotline
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Mặc định hệ thống sử dụng <span className="font-semibold text-slate-700 dark:text-slate-300">0948066514</span> nếu để trống hoặc chưa cấu hình.
+            </p>
+          </div>
+        </form>
       </div>
 
       <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 text-sm text-slate-600 dark:text-slate-400">

@@ -2,7 +2,9 @@ import { notFound } from 'next/navigation';
 import { TrustPageContent } from '@/app/(site)/_components/TrustPageContent';
 import { getIASettings } from '@/lib/ia/settings';
 import { findTrustPageSlot } from '@/lib/ia/trust-pages';
-import { getTrustPagePost, isTrustPostVisible } from '@/lib/ia/trust-pages-runtime';
+import { getPageByKey, isPageVisible } from '@/lib/ia/trust-pages-runtime';
+
+export const revalidate = 60; // trust pages: tái render sau 60 giây, không cache lâu như layout (1800s)
 
 export default async function FaqPage() {
   const iaSettings = await getIASettings();
@@ -11,24 +13,23 @@ export default async function FaqPage() {
   }
 
   const slot = findTrustPageSlot('faq');
-  const postId = iaSettings.trustPages.faq;
-  if (!slot || !postId) {
+  if (!slot) {
     notFound();
   }
 
-  const post = await getTrustPagePost(postId);
-  if (!post || !isTrustPostVisible(post)) {
+  const page = await getPageByKey('faq');
+  if (!page || !isPageVisible(page)) {
     notFound();
   }
 
   return (
     <TrustPageContent
-      title={post.title || slot.defaultTitle}
-      description={post.excerpt ?? post.metaDescription ?? null}
-      content={post.content}
-      renderType={post.renderType ?? 'content'}
-      markdownRender={post.markdownRender ?? null}
-      htmlRender={post.htmlRender ?? null}
+      title={page.title || slot.defaultTitle}
+      description={page.excerpt ?? page.metaDescription ?? null}
+      content={page.content}
+      renderType={page.renderType ?? 'content'}
+      markdownRender={page.markdownRender ?? null}
+      htmlRender={page.htmlRender ?? null}
     />
   );
 }

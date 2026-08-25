@@ -34,6 +34,9 @@ interface BenefitsSectionSharedProps {
   previewDevice?: PreviewDevice;
   maxVisible?: number;
   skipHeader?: boolean;
+  isVisualEditActive?: boolean;
+  onItemTextUpdate?: (idx: number, field: 'title' | 'description', nextText: string) => void;
+  onButtonTextChange?: (value: string) => void;
 }
 
 const BENEFITS_FALLBACKS = {
@@ -210,6 +213,9 @@ export function BenefitsSectionShared({
   previewDevice,
   maxVisible,
   skipHeader = false,
+  isVisualEditActive = false,
+  onItemTextUpdate,
+  onButtonTextChange,
 }: BenefitsSectionSharedProps) {
   const HeadingTag = context === 'site' ? 'h2' : 'h3';
 
@@ -350,11 +356,15 @@ export function BenefitsSectionShared({
                 <div className="relative z-10 flex h-full w-full flex-col items-center">
                   <div className="w-full px-1">
                     <h3
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
                       className={cn(
                         'break-words text-center font-bold leading-[1.3]',
                         isPreview
                           ? (resolvedPreviewDevice === 'mobile' ? 'mb-1.5 text-[13px]' : 'mb-2 text-[14px]')
                           : 'mb-1.5 text-[13px] sm:mb-2 sm:text-[14px]',
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                       )}
                       style={{ color: tokens.neutralText }}
                     >
@@ -362,17 +372,21 @@ export function BenefitsSectionShared({
                     </h3>
                   </div>
                   <div className="w-full px-0.5">
-                    {toDescription(item.description) ? (
+                    {(toDescription(item.description) || isVisualEditActive) ? (
                       <p
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
                         className={cn(
                           'relative z-10 break-words text-center font-medium leading-[1.4]',
                           isPreview
                             ? (resolvedPreviewDevice === 'mobile' ? 'pb-5 text-[11px]' : 'pb-7 text-[12px]')
                             : 'pb-5 text-[11px] sm:pb-7 sm:text-[12px]',
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: tokens.mutedText }}
                       >
-                        {toDescription(item.description)}
+                        {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                       </p>
                     ) : null}
                   </div>
@@ -425,12 +439,30 @@ export function BenefitsSectionShared({
                     <Icon size={22} />
                   </div>
                   <div className="mt-4 space-y-2">
-                    <h3 className="break-words text-base font-semibold md:text-lg" style={{ color: tokens.neutralText }}>
+                    <h3
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "break-words text-base font-semibold md:text-lg",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: tokens.neutralText }}
+                    >
                       {toText(item.title, 'Tiêu đề')}
                     </h3>
-                    {toDescription(item.description) ? (
-                      <p className="break-words text-sm leading-7" style={{ color: tokens.mutedText }}>
-                        {toDescription(item.description)}
+                    {(toDescription(item.description) || isVisualEditActive) ? (
+                      <p
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "break-words text-sm leading-7",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: tokens.mutedText }}
+                      >
+                        {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                       </p>
                     ) : null}
                   </div>
@@ -573,7 +605,13 @@ export function BenefitsSectionShared({
                   </div>
 
                   <h3
-                    className="mb-2 w-full text-balance text-center text-[15px] font-bold leading-[1.3] sm:mb-2.5 sm:text-[16px]"
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      "mb-2 w-full text-balance text-center text-[15px] font-bold leading-[1.3] sm:mb-2.5 sm:text-[16px]",
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
                     style={{ color: isActive ? '#ffffff' : tokens.neutralText }}
                   >
                     {toText(item.title, 'Tiêu đề')}
@@ -584,12 +622,18 @@ export function BenefitsSectionShared({
                     style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.5)' : tokens.primary }}
                   />
 
-                  {toDescription(item.description) ? (
+                  {(toDescription(item.description) || isVisualEditActive) ? (
                     <p
-                      className="text-center text-[12px] font-medium leading-[1.6] sm:text-[13px]"
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "text-center text-[12px] font-medium leading-[1.6] sm:text-[13px]",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
                       style={{ color: isActive ? 'rgba(255,255,255,0.90)' : tokens.mutedText }}
                     >
-                      {toDescription(item.description)}
+                      {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                     </p>
                   ) : null}
                 </article>
@@ -851,22 +895,36 @@ export function BenefitsSectionShared({
 
                   <div className="mb-3 h-[2.5px] w-6 rounded-full opacity-80" style={{ backgroundColor: tokens.primary }} />
 
-                  <h3 className={cn(
-                    'mb-2 text-center font-bold',
-                    isPreview
-                      ? (resolvedPreviewDevice === 'mobile' ? 'text-[14px]' : resolvedPreviewDevice === 'tablet' ? 'text-[15px]' : 'text-[16px]')
-                      : 'text-[16px]'
-                  )} style={{ color: tokens.neutralText }}>
+                  <h3
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      'mb-2 text-center font-bold',
+                      isPreview
+                        ? (resolvedPreviewDevice === 'mobile' ? 'text-[14px]' : resolvedPreviewDevice === 'tablet' ? 'text-[15px]' : 'text-[16px]')
+                        : 'text-[16px]',
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ color: tokens.neutralText }}
+                  >
                     {toText(item.title, 'Tiêu đề')}
                   </h3>
-                  {toDescription(item.description) ? (
-                    <p className={cn(
-                      'max-w-[280px] text-balance text-center leading-[1.5]',
-                      isPreview
-                        ? (resolvedPreviewDevice === 'mobile' ? 'text-[11px]' : resolvedPreviewDevice === 'tablet' ? 'text-[12px]' : 'text-[13px]')
-                        : 'text-[13px]'
-                    )} style={{ color: tokens.mutedText }}>
-                      {toDescription(item.description)}
+                  {(toDescription(item.description) || isVisualEditActive) ? (
+                    <p
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        'max-w-[280px] text-balance text-center leading-[1.5]',
+                        isPreview
+                          ? (resolvedPreviewDevice === 'mobile' ? 'text-[11px]' : resolvedPreviewDevice === 'tablet' ? 'text-[12px]' : 'text-[13px]')
+                          : 'text-[13px]',
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: tokens.mutedText }}
+                    >
+                      {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                     </p>
                   ) : null}
                 </div>
@@ -990,28 +1048,36 @@ export function BenefitsSectionShared({
 
                     <div className={cn('flex-1 space-y-2', isHighlighted ? 'sm:space-y-3' : '')}>
                       <h3
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
                         className={cn(
                           'font-bold leading-tight',
                           isPreview
                             ? (resolvedPreviewDevice === 'mobile' ? (isHighlighted ? 'text-base' : 'text-sm') : (isHighlighted ? 'text-xl' : 'text-base'))
                             : isHighlighted ? 'text-base sm:text-xl' : 'text-base',
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: isHighlighted ? '#ffffff' : tokens.neutralText }}
                       >
                         {toText(item.title, 'Tiêu đề')}
                       </h3>
                       
-                      {toDescription(item.description) ? (
+                      {(toDescription(item.description) || isVisualEditActive) ? (
                         <p
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
                           className={cn(
                             'leading-relaxed',
                             isPreview
                               ? (resolvedPreviewDevice === 'mobile' ? (isHighlighted ? 'text-[12px]' : 'text-[11px]') : (isHighlighted ? 'text-sm' : 'text-[13px]'))
                               : isHighlighted ? 'text-[13px] sm:text-sm' : 'text-[13px]',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                           )}
                           style={{ color: isHighlighted ? 'rgba(255,255,255,0.90)' : tokens.mutedText }}
                         >
-                          {toDescription(item.description)}
+                          {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                         </p>
                       ) : null}
                     </div>
@@ -1037,10 +1103,11 @@ export function BenefitsSectionShared({
             })}
           </div>
 
-          {buttonText ? (
+          {buttonText || isVisualEditActive ? (
             <div className="text-center pt-4">
               <a
-                href={buttonLink}
+                href={isVisualEditActive ? undefined : buttonLink}
+                onClick={isVisualEditActive ? (e) => e.preventDefault() : undefined}
                 className={cn(
                   'inline-flex items-center gap-2 rounded-full font-medium transition-all duration-300 hover:gap-3',
                   isPreview
@@ -1053,7 +1120,14 @@ export function BenefitsSectionShared({
                   boxShadow: `0 4px 14px color-mix(in srgb, ${tokens.primary} 30%, transparent)`,
                 }}
               >
-                {buttonText}
+                <span
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => onButtonTextChange?.(e.currentTarget.textContent ?? '')}
+                  className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                >
+                  {buttonText || (isVisualEditActive ? 'Nút bấm' : '')}
+                </span>
                 <ArrowRight className="h-4 w-4" />
               </a>
             </div>
@@ -1170,27 +1244,35 @@ export function BenefitsSectionShared({
                           
                           <div className="flex-1 min-w-0">
                             <h3
+                              contentEditable={isVisualEditActive}
+                              suppressContentEditableWarning={isVisualEditActive}
+                              onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
                               className={cn(
                                 'break-words font-bold leading-tight',
                                 isPreview
                                   ? (resolvedPreviewDevice === 'tablet' ? 'text-sm mb-1' : 'text-base mb-1.5')
                                   : 'text-sm md:text-base mb-1 md:mb-1.5',
+                                isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                               )}
                               style={{ color: isHighlighted ? '#ffffff' : tokens.neutralText }}
                             >
                               {toText(item.title, 'Tiêu đề')}
                             </h3>
-                            {toDescription(item.description) ? (
+                            {(toDescription(item.description) || isVisualEditActive) ? (
                               <p
+                                contentEditable={isVisualEditActive}
+                                suppressContentEditableWarning={isVisualEditActive}
+                                onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
                                 className={cn(
                                   'break-words leading-relaxed',
                                   isPreview
                                     ? (resolvedPreviewDevice === 'tablet' ? 'text-xs' : 'text-sm')
                                     : 'text-xs md:text-sm',
+                                  isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                                 )}
                                 style={{ color: isHighlighted ? 'rgba(255,255,255,0.9)' : tokens.mutedText }}
                               >
-                                {toDescription(item.description)}
+                                {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                               </p>
                             ) : null}
                           </div>
@@ -1284,28 +1366,36 @@ export function BenefitsSectionShared({
                   </div>
 
                   <h3
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(actualIdx, 'title', e.currentTarget.textContent ?? '')}
                     className={cn(
                       'font-bold leading-tight mb-2',
                       isPreview
                         ? (resolvedPreviewDevice === 'mobile' ? 'text-base' : 'text-lg')
                         : 'text-base md:text-lg',
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                     )}
                     style={{ color: isHighlighted ? '#ffffff' : tokens.neutralText }}
                   >
                     {toText(item.title, 'Tiêu đề')}
                   </h3>
 
-                  {toDescription(item.description) ? (
+                  {(toDescription(item.description) || isVisualEditActive) ? (
                     <p
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(actualIdx, 'description', e.currentTarget.textContent ?? '')}
                       className={cn(
                         'leading-relaxed',
                         isPreview
                           ? (resolvedPreviewDevice === 'mobile' ? 'text-sm' : 'text-base')
                           : 'text-sm md:text-base',
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                       )}
                       style={{ color: isHighlighted ? 'rgba(255,255,255,0.9)' : tokens.mutedText }}
                     >
-                      {toDescription(item.description)}
+                      {item.description || (isVisualEditActive ? 'Nhập mô tả...' : '')}
                     </p>
                   ) : null}
 
@@ -1320,10 +1410,11 @@ export function BenefitsSectionShared({
             })}
           </div>
 
-          {buttonText ? (
+          {buttonText || isVisualEditActive ? (
             <div className="mt-8 text-center">
               <a
-                href={buttonLink}
+                href={isVisualEditActive ? undefined : buttonLink}
+                onClick={isVisualEditActive ? (e) => e.preventDefault() : undefined}
                 className={cn(
                   'inline-flex items-center gap-2 rounded-full font-medium transition-all duration-300 hover:gap-3',
                   isPreview
@@ -1336,7 +1427,14 @@ export function BenefitsSectionShared({
                   boxShadow: `0 4px 14px color-mix(in srgb, ${tokens.primary} 30%, transparent)`,
                 }}
               >
-                {buttonText}
+                <span
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => onButtonTextChange?.(e.currentTarget.textContent ?? '')}
+                  className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                >
+                  {buttonText || (isVisualEditActive ? 'Nút bấm' : '')}
+                </span>
                 <ArrowRight className="h-4 w-4" />
               </a>
             </div>

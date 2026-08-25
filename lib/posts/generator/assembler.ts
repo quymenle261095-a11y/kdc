@@ -6,6 +6,7 @@ import { REQUIRED_SLOTS, OPTIONAL_SLOTS } from './slot-families';
 import { buildSlotVariant, estimateVariantCapacity } from './variant-synthesizer';
 import { resolveThumbnail } from './thumbnail';
 import { closingStatements, differentiatorPhrases, editorialCheckpoints, decisionBullets } from './phrase-banks';
+import { getGeneratorKeywordPhrase, getGeneratorKeywords } from './keywords';
 import type {
   GeneratedArticlePayload,
   GeneratedContentBlock,
@@ -455,6 +456,7 @@ const buildBulletList = (items: string[]) => `
 const buildHashtagHtml = (options: {
   categoryName?: string;
   keyword?: string;
+  keywords?: string[];
   useCase?: string;
   productNames?: string[];
 }) => {
@@ -473,6 +475,7 @@ const buildHashtagHtml = (options: {
     base.add(`#${normalized}`);
   };
   addFromText(options.categoryName);
+  options.keywords?.forEach((keyword) => addFromText(keyword));
   addFromText(options.keyword);
   addFromText(options.useCase);
   options.productNames?.forEach((name) => addFromText(name));
@@ -523,6 +526,9 @@ export const generateArticlePayload = ({
   const mediaPlan = buildMediaPlan({ products, slots, rng });
   const internalLinks = buildInternalLinks({ products, density: settings.internalLinkDensity, saleMode });
   const budgetRange = resolveBudgetLabel(request);
+  const requestKeywords = getGeneratorKeywords(request);
+  const keywordPhrase = getGeneratorKeywordPhrase(request);
+  const useCasePhrase = request.useCase?.trim() || keywordPhrase;
 
   const rawBlocks = slots.map((slotKey) => {
     const primaryProduct = products[0];
@@ -584,9 +590,9 @@ export const generateArticlePayload = ({
   });
   const blocks = rawBlocks.filter((block) => block !== null) as GeneratedContentBlock[];
 
-  const categoryLabel = products[0]?.categoryName ?? request.keyword ?? 'sản phẩm';
+  const categoryLabel = (products[0]?.categoryName ?? keywordPhrase) || 'sản phẩm';
   const differentiator = differentiatorPhrases[Math.floor(rng() * differentiatorPhrases.length)] ?? 'phù hợp nhu cầu';
-  const useCaseLabel = request.useCase ?? request.keyword ?? 'nhu cầu thực tế';
+  const useCaseLabel = useCasePhrase || 'nhu cầu thực tế';
   const budgetLabel = resolveBudgetLabel(request);
   const titleTemplate = template.titlePatterns[Math.floor(rng() * template.titlePatterns.length)];
   const title = titleTemplate
@@ -638,8 +644,9 @@ export const generateArticlePayload = ({
     title: 'Hashtag',
     body: buildHashtagHtml({
       categoryName: products[0]?.categoryName,
-      keyword: request.keyword,
-      useCase: request.useCase,
+      keywords: requestKeywords,
+      keyword: keywordPhrase,
+      useCase: useCasePhrase,
       productNames: products.slice(0, 4).map((product) => product.name).filter(Boolean),
     }),
     slotKey: 'cta',
@@ -650,7 +657,7 @@ export const generateArticlePayload = ({
 
   const contentHtml = [
     '<article class="space-y-5 generated-article">',
-    buildIntroHtml({ title, tone, useCase: request.useCase ?? request.keyword }),
+    buildIntroHtml({ title, tone, useCase: useCasePhrase }),
     tocHtml,
     sectionsHtml,
     conclusionHtml,

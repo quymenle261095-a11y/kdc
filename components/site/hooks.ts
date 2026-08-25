@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useQuery } from 'convex/react';
 import { formatHex, oklch } from 'culori';
 import { api } from '@/convex/_generated/api';
@@ -39,13 +40,10 @@ export function useBrandColors() {
   // Skip DB queries entirely when snapshot provides site settings
   const skipDb = Boolean(snapshotSite);
   const primarySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_primary' });
-  const legacySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_color' });
   const secondarySetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_secondary' });
   const modeSetting = useQuery(api.settings.getByKey, skipDb ? 'skip' : { key: 'site_brand_mode' });
   const primary = resolveColorSetting(snapshotSite?.site_brand_primary)
-    ?? resolveColorSetting(snapshotSite?.site_brand_color)
     ?? resolveColorSetting(primarySetting?.value)
-    ?? resolveColorSetting(legacySetting?.value)
     ?? initialBrandColors?.primary
     ?? resolveColorSetting(getCssVariableFromDoc('--site-brand-primary'))
     ?? DEFAULT_BRAND_COLOR;
@@ -74,23 +72,68 @@ export function useSiteSettings() {
   const snapshotDemo = useSnapshotDemoContext();
   const snapshotSite = snapshotDemo?.getSiteSettings();
   const settings = useQuery(api.settings.listByGroup, snapshotSite ? 'skip' : { group: 'site' });
-  
-  if (!snapshotSite && settings === undefined) {
-    return { isLoading: true, settings: {} as Record<string, string | boolean> };
-  }
+  const [isDark, setIsDark] = useState(false);
   
   const settingsMap: Record<string, string | boolean> = {};
   if (snapshotSite) {
     Object.entries(snapshotSite).forEach(([key, value]) => {
       settingsMap[key] = value;
     });
-  } else {
-    settings?.forEach(s => {
+  } else if (settings !== undefined) {
+    settings.forEach(s => {
       settingsMap[s.key] = typeof s.value === 'boolean' ? s.value : (s.value as string);
     });
   }
+
+  const isLoading = !snapshotSite && settings === undefined;
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const resolveCurrentDark = () => {
+      const mode = settingsMap.site_dark_mode;
+      if (snapshotSite) {
+        return mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      }
+      return document.documentElement.classList.contains('dark');
+    };
+
+    setIsDark(resolveCurrentDark());
+
+    const handleThemeChange = () => {
+      setIsDark(resolveCurrentDark());
+    };
+
+    window.addEventListener('site-theme-change', handleThemeChange);
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    if (settingsMap.site_dark_mode === 'system') {
+      mediaQuery.addEventListener('change', handleThemeChange);
+    }
+    return () => {
+      window.removeEventListener('site-theme-change', handleThemeChange);
+      if (settingsMap.site_dark_mode === 'system') {
+        mediaQuery.removeEventListener('change', handleThemeChange);
+      }
+    };
+  }, [isLoading, settingsMap.site_dark_mode, snapshotSite]);
   
-  const brandPrimary = (settingsMap.site_brand_primary as string) || (settingsMap.site_brand_color as string) || DEFAULT_BRAND_COLOR;
+  if (isLoading) {
+    return { 
+      isLoading: true, 
+      settings: {} as Record<string, string | boolean>,
+      brandColor: DEFAULT_BRAND_COLOR,
+      brandPrimary: DEFAULT_BRAND_COLOR,
+      brandSecondary: '',
+      favicon: '',
+      logo: '',
+      siteDescription: '',
+      siteName: 'Website',
+      siteDarkMode: 'light',
+      isDark: false
+    };
+  }
+  
+  const brandPrimary = (settingsMap.site_brand_primary as string) || DEFAULT_BRAND_COLOR;
   const brandMode = settingsMap.site_brand_mode === 'single' ? 'single' : 'dual';
   const brandSecondary = brandMode === 'single'
     ? ''
@@ -106,6 +149,8 @@ export function useSiteSettings() {
     settings: settingsMap,
     siteDescription: (settingsMap.site_description as string) || '',
     siteName: (settingsMap.site_name as string) || 'Website',
+    siteDarkMode: (settingsMap.site_dark_mode as string) || 'light',
+    isDark,
   };
 }
 
@@ -177,7 +222,7 @@ export function useSocialLinks() {
 
   const enabledKeys = new Set(
     skipSocial && skipContact
-      ? ['social_facebook', 'social_instagram', 'social_linkedin', 'social_tiktok', 'social_twitter', 'social_youtube', 'contact_zalo']
+      ? ['social_facebook', 'social_instagram', 'social_linkedin', 'social_tiktok', 'social_twitter', 'social_youtube', 'contact_zalo', 'social_pinterest']
       : (enabledFields?.map(f => f.fieldKey) ?? [])
   );
   
@@ -186,6 +231,7 @@ export function useSocialLinks() {
     instagram: enabledKeys.has('social_instagram') ? (settingsMap.social_instagram || '') : '',
     isLoading: false,
     linkedin: enabledKeys.has('social_linkedin') ? (settingsMap.social_linkedin || '') : '',
+    pinterest: enabledKeys.has('social_pinterest') ? (settingsMap.social_pinterest || '') : '',
     tiktok: enabledKeys.has('social_tiktok') ? (settingsMap.social_tiktok || '') : '',
     twitter: enabledKeys.has('social_twitter') ? (settingsMap.social_twitter || '') : '',
     youtube: enabledKeys.has('social_youtube') ? (settingsMap.social_youtube || '') : '',

@@ -12,16 +12,83 @@ import {
   Sparkles,
   X,
   PaintBucket,
+  Minimize2,
 } from 'lucide-react';
 import { Button, cn } from './ui';
 import { toast } from 'sonner';
 import { startRemoveBg, type RemoveBgHandle, type RemoveBgMode } from '@/lib/image/removeBgWorker';
 import { detectSmartLogoCropBox } from '@/lib/image/logoSmartCrop';
+import { getImageDimensionsFromUrl } from '@/lib/image/uploadPipeline';
 import {
   getProductImageAspectRatioLabel,
   getProductImageAspectRatioValue,
   type ImageAspectRatioInput,
 } from '@/lib/products/image-aspect-ratio';
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function getExtensionFromMime(mime: string): string {
+  if (!mime) return 'UNKNOWN';
+  const parts = mime.split('/');
+  if (parts.length > 1) {
+    const ext = parts[1].toLowerCase();
+    if (ext === 'jpeg') return 'JPG';
+    return ext.toUpperCase();
+  }
+  return mime.toUpperCase();
+}
+
+export async function compressImageToWebP(
+  imageBlobOrUrl: Blob | string,
+  quality = 1.0,
+): Promise<{ blob: Blob; url: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Không thể khởi tạo Canvas Context 2D'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Lỗi xuất ảnh WebP từ Canvas'));
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          resolve({ blob, url });
+        },
+        'image/webp',
+        quality,
+      );
+    };
+    img.onerror = (err) => {
+      reject(err);
+    };
+    if (typeof imageBlobOrUrl === 'string') {
+      img.src = imageBlobOrUrl;
+    } else {
+      img.src = URL.createObjectURL(imageBlobOrUrl);
+    }
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -38,11 +105,18 @@ type ImageEditorDialogProps = {
   enableSmartLogoCrop?: boolean;
 };
 
-type EditorTab = 'crop' | 'removebg' | 'addbg';
+type EditorTab = 'crop' | 'removebg' | 'addbg' | 'compress';
 
 type CropRatio = {
   label: string;
   value: number | undefined;
+};
+
+type ImageMeta = {
+  height: number;
+  size: number;
+  type: string;
+  width: number;
 };
 
 const CROP_RATIOS: CropRatio[] = [
@@ -170,7 +244,6 @@ export function ImageEditorDialog({
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [removeBgProgress, setRemoveBgProgress] = useState(0);
   const [removeBgStage, setRemoveBgStage] = useState('');
-  const [removeBgMode, setRemoveBgMode] = useState<RemoveBgMode>('fast');
   const [removedBgUrl, setRemovedBgUrl] = useState<string | null>(null);
   const [removedBgBlob, setRemovedBgBlob] = useState<Blob | null>(null);
   const removeBgHandleRef = useRef<RemoveBgHandle | null>(null);
@@ -188,6 +261,68 @@ export function ImageEditorDialog({
   // Shared
   const [isApplying, setIsApplying] = useState(false);
 
+  // Metadata of the image being displayed
+  const [imageMeta, setImageMeta] = useState<ImageMeta | null>(null);
+
+  // Fetch metadata of original image
+  useEffect(() => {
+    let isMounted = true;
+    let blobUrl: string | null = null;
+    setImageMeta(null);
+    if (!imageUrl) return () => {
+      isMounted = false;
+    };
+
+    fetchImageAsBlob(imageUrl)
+      .then((blob) => {
+        blobUrl = URL.createObjectURL(blob);
+        return getImageDimensionsFromUrl(blobUrl).then((dimensions) => {
+          if (!isMounted) return;
+          setImageMeta({
+            height: dimensions.height,
+            size: blob.size,
+            type: blob.type,
+            width: dimensions.width,
+          });
+        });
+      })
+      .catch((err) => {
+        console.error('[ImageEditor] Failed to fetch image metadata:', err);
+      })
+      .finally(() => {
+        if (blobUrl) {
+          URL.revokeObjectURL(blobUrl);
+          blobUrl = null;
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [imageUrl]);
+
+  const currentMeta = ((activeTab === 'removebg' || activeTab === 'compress') && removedBgBlob)
+    ? { height: imageMeta?.height ?? 0, size: removedBgBlob.size, type: removedBgBlob.type, width: imageMeta?.width ?? 0 }
+    : imageMeta;
+
+  const renderImageMetaInfo = () => {
+    if (!currentMeta) return null;
+    return (
+      <div className="mt-2 text-center">
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/60 dark:border-slate-700/60 inline-flex items-center gap-1.5 shadow-sm">
+          <span>Định dạng: <strong className="text-slate-700 dark:text-slate-200">{getExtensionFromMime(currentMeta.type)}</strong></span>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <span>Kích thước: <strong className="text-slate-700 dark:text-slate-200">{currentMeta.width > 0 && currentMeta.height > 0 ? `${currentMeta.width} × ${currentMeta.height} px` : '—'}</strong></span>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <span>Dung lượng: <strong className="text-slate-700 dark:text-slate-200">{formatBytes(currentMeta.size)}</strong></span>
+        </span>
+      </div>
+    );
+  };
+
   // Cleanup blob URL + cancel on unmount
   useEffect(() => {
     return () => {
@@ -195,6 +330,37 @@ export function ImageEditorDialog({
       removeBgHandleRef.current?.cancel();
     };
   }, [removedBgUrl]);
+
+  // Compress state & handler
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  const handleCompressToWebP = useCallback(async (quality: number) => {
+    if (isCompressing) return;
+    setIsCompressing(true);
+
+    const source = removedBgBlob || imageUrl;
+    const isLossless = quality === 1.0;
+
+    try {
+      const modeText = isLossless ? 'đẹp 100%' : 'giảm mạnh 90%';
+      toast.loading(`Đang nén ảnh sang WebP (${modeText})...`);
+      const result = await compressImageToWebP(source, quality);
+
+      setRemovedBgUrl((prev) => {
+        if (prev && prev !== imageUrl) URL.revokeObjectURL(prev);
+        return result.url;
+      });
+      setRemovedBgBlob(result.blob);
+      toast.dismiss();
+      toast.success(`Nén ảnh WebP (${modeText}) thành công!`);
+    } catch (err) {
+      console.error('[WebP Compress] Error:', err);
+      toast.dismiss();
+      toast.error('Không thể nén ảnh sang WebP. Vui lòng thử lại.');
+    } finally {
+      setIsCompressing(false);
+    }
+  }, [imageUrl, removedBgBlob, isCompressing]);
 
   /* ---- Crop handlers ---- */
 
@@ -253,7 +419,6 @@ export function ImageEditorDialog({
 
   const handleRemoveBg = useCallback(async (mode: RemoveBgMode) => {
     if (isRemovingBg) return;
-    setRemoveBgMode(mode);
     setIsRemovingBg(true);
     setRemoveBgProgress(0);
     setRemoveBgStage(mode === 'advanced' ? 'Đang tải ảnh cho chế độ nâng cao...' : 'Đang tải ảnh...');
@@ -308,14 +473,18 @@ export function ImageEditorDialog({
 
   const handleApplyRemovedBg = useCallback(() => {
     if (!removedBgBlob) {
-      toast.error('Chưa xóa nền');
+      toast.error('Chưa thực hiện chỉnh sửa');
       return;
     }
 
+    const isWebP = removedBgBlob.type === 'image/webp';
+    const ext = isWebP ? 'webp' : 'png';
+    const mime = isWebP ? 'image/webp' : 'image/png';
+
     const file = new File(
       [removedBgBlob],
-      `logo-nobg-${Date.now()}.png`,
-      { type: 'image/png' },
+      `logo-edited-${Date.now()}.${ext}`,
+      { type: mime },
     );
     onApply(file);
   }, [removedBgBlob, onApply]);
@@ -409,7 +578,7 @@ export function ImageEditorDialog({
       const imageBlob = await fetchImageAsBlob(imageUrl);
       const img = new window.Image();
       const url = URL.createObjectURL(imageBlob);
-      
+
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
@@ -489,6 +658,7 @@ export function ImageEditorDialog({
     { key: 'crop', label: 'Cắt ảnh', icon: <CropIcon size={15} /> },
     { key: 'removebg', label: 'Xóa nền', icon: <Eraser size={15} /> },
     { key: 'addbg', label: 'Thêm nền', icon: <PaintBucket size={15} /> },
+    { key: 'compress', label: 'Giảm dung lượng ảnh', icon: <Minimize2 size={15} /> },
   ];
 
   return (
@@ -612,7 +782,7 @@ export function ImageEditorDialog({
                   onChange={(c) => setCrop(c)}
                   onComplete={(c) => setCompletedCrop(c)}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img
                     ref={imgRef}
                     src={imageUrl}
@@ -623,25 +793,26 @@ export function ImageEditorDialog({
                   />
                 </ReactCrop>
               </div>
+              {renderImageMetaInfo()}
             </div>
           )}
 
           {activeTab === 'removebg' && (
             <div className="space-y-4">
               <p className="text-xs text-slate-500">
-                AI sẽ tự động nhận diện và xóa nền ảnh. Chế độ nâng cao dùng model chính xác hơn, phù hợp logo có gradient/bóng đổ nhưng có thể chậm hơn.
+                AI sẽ tự động nhận diện và tách vật thể/logo ra khỏi nền bằng mô hình học sâu chính xác cao.
               </p>
 
               <div className="flex justify-center bg-[repeating-conic-gradient(#e2e8f0_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(#334155_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] rounded-lg p-3 min-h-[200px] items-center">
                 {removedBgUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
+
                   <img
                     src={removedBgUrl}
                     alt="Ảnh đã xóa nền"
                     className="max-h-[50vh] rounded"
                   />
                 ) : (
-                  /* eslint-disable-next-line @next/next/no-img-element */
+
                   <img
                     src={imageUrl}
                     alt="Ảnh gốc"
@@ -650,6 +821,7 @@ export function ImageEditorDialog({
                   />
                 )}
               </div>
+              {renderImageMetaInfo()}
 
               {/* Progress bar khi đang xử lý */}
               {isRemovingBg && (
@@ -657,7 +829,7 @@ export function ImageEditorDialog({
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span className="flex items-center gap-1.5">
                       <Loader2 size={12} className="animate-spin" />
-                      {removeBgStage || (removeBgMode === 'advanced' ? 'Đang khởi tạo nâng cao...' : 'Đang khởi tạo...')}
+                      {removeBgStage || 'Đang tách nền...'}
                     </span>
                     <span className="font-mono">{removeBgProgress}%</span>
                   </div>
@@ -683,17 +855,7 @@ export function ImageEditorDialog({
               )}
 
               {!removedBgUrl && !isRemovingBg && (
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => handleRemoveBg('fast')}
-                    disabled={isRemovingBg}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <Eraser size={15} />
-                    Xóa nền nhanh
-                  </Button>
+                <div className="flex justify-center">
                   <Button
                     type="button"
                     onClick={() => handleRemoveBg('advanced')}
@@ -701,7 +863,7 @@ export function ImageEditorDialog({
                     className="gap-2"
                   >
                     <Eraser size={15} />
-                    Xóa nền nâng cao
+                    Xóa nền
                   </Button>
                 </div>
               )}
@@ -730,8 +892,8 @@ export function ImageEditorDialog({
               </p>
 
               <div className="flex justify-center bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3">
-                <div 
-                  className={cn("relative flex items-center justify-center transition-all overflow-hidden", 
+                <div
+                  className={cn("relative flex items-center justify-center transition-all overflow-hidden",
                     canvasAspect !== 'original' ? 'w-full max-w-[400px]' : '',
                     selectedBg === 'transparent' ? 'bg-[repeating-conic-gradient(#e2e8f0_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(#334155_0%_25%,transparent_0%_50%)] bg-[length:16px_16px]' : '',
                     selectedBg === 'white' ? 'bg-white border border-slate-200 dark:border-slate-700' : '',
@@ -743,7 +905,7 @@ export function ImageEditorDialog({
                     aspectRatio: canvasAspect !== 'original' ? canvasAspect.replace(':', '/') : undefined,
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img
                     src={imageUrl}
                     alt="Preview"
@@ -752,6 +914,7 @@ export function ImageEditorDialog({
                   />
                 </div>
               </div>
+              {renderImageMetaInfo()}
 
               <div className="space-y-4">
                 <div>
@@ -811,6 +974,78 @@ export function ImageEditorDialog({
               </div>
             </div>
           )}
+
+          {activeTab === 'compress' && (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500">
+                Giảm dung lượng ảnh nhưng giữ nguyên 100% độ nét ban đầu và nền trong suốt.
+              </p>
+
+              <div className="flex justify-center bg-[repeating-conic-gradient(#e2e8f0_0%_25%,transparent_0%_50%)] dark:bg-[repeating-conic-gradient(#334155_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] rounded-lg p-3 min-h-[200px] items-center">
+                {removedBgUrl ? (
+
+                  <img
+                    src={removedBgUrl}
+                    alt="Ảnh tối ưu"
+                    className="max-h-[50vh] rounded"
+                  />
+                ) : (
+
+                  <img
+                    src={imageUrl}
+                    alt="Ảnh gốc"
+                    className="max-h-[50vh] rounded"
+                    crossOrigin="anonymous"
+                  />
+                )}
+              </div>
+              {renderImageMetaInfo()}
+
+              <div className="flex justify-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => handleCompressToWebP(1.0)}
+                  disabled={isCompressing}
+                  className="gap-2"
+                >
+                  {isCompressing ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Minimize2 size={15} />
+                  )}
+                  Nén WebP (Đẹp 100%)
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => handleCompressToWebP(0.9)}
+                  disabled={isCompressing}
+                  variant="outline"
+                  className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                >
+                  {isCompressing ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Minimize2 size={15} />
+                  )}
+                  Nén WebP (Giảm mạnh 90%)
+                </Button>
+
+                {removedBgUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetRemoveBg}
+                    className="gap-1.5 text-slate-500"
+                  >
+                    <RotateCcw size={14} />
+                    Hoàn tác
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -860,6 +1095,18 @@ export function ImageEditorDialog({
                 <Check size={15} />
               )}
               Áp dụng thêm nền
+            </Button>
+          )}
+
+          {activeTab === 'compress' && (
+            <Button
+              type="button"
+              onClick={handleApplyRemovedBg}
+              disabled={!removedBgBlob}
+              className="gap-1.5"
+            >
+              <Check size={15} />
+              Áp dụng tối ưu
             </Button>
           )}
 

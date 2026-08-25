@@ -4,6 +4,7 @@ import { BrandColorProvider } from "@/components/providers/BrandColorProvider";
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
 import { InitialBrandColorsProvider } from "@/components/providers/InitialBrandColorsProvider";
 import { TelemetryGate } from "@/components/telemetry/TelemetryGate";
+import { InitialBrandSplash } from "@/components/site/loading/InitialBrandSplash";
 import { getSEOSettings, getSiteSettings } from "@/lib/get-settings";
 import {
   Be_Vietnam_Pro,
@@ -141,15 +142,18 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>): Promise<React.ReactElement> {
   const site = await getSiteSettings();
-  const brandPrimary = site.site_brand_primary || site.site_brand_color || '#3b82f6';
+  const brandPrimary = site.site_brand_primary || '#3b82f6';
   const brandMode = site.site_brand_mode === 'single' ? 'single' : 'dual';
   const brandSecondary = brandMode === 'single'
     ? ''
     : (site.site_brand_secondary || '');
+  const isDark = site.site_dark_mode === 'dark';
 
   return (
     <html
       lang="vi"
+      suppressHydrationWarning
+      className={isDark ? 'dark' : ''}
       style={{
         '--site-brand-primary': brandPrimary,
         '--site-brand-mode': brandMode,
@@ -160,6 +164,11 @@ export default async function RootLayout({
       <body
         className={`${vietnameseSans.variable} ${geistSans.variable} ${geistMono.variable} ${robotoSans.variable} ${notoSans.variable} ${nunitoSans.variable} ${sourceSans.variable} ${merriweather.variable} ${lora.variable} ${montserrat.variable} ${robotoSlab.variable} ${notoSerif.variable} antialiased`}
       >
+        <InitialBrandSplash
+          logo={site.site_logo}
+          siteName={site.site_name}
+          isDark={isDark}
+        />
         <ConvexClientProvider>
           <InitialBrandColorsProvider
             value={{

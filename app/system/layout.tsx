@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Toaster } from 'sonner';
+import { CustomToaster } from '@/components/shared/CustomToaster';
 import { I18nProvider, useI18n } from './i18n/context';
 import type { Locale } from './i18n/translations';
 import { SystemAuthProvider, useSystemAuth } from './auth/context';
@@ -167,6 +167,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
     if (pathname.includes('huong-dan')) {return t.pages.guides;}
     if (pathname.includes('modules')) {return t.pages.moduleManagement;}
     if (pathname.includes('home-components')) {return t.pages.homeComponents;}
+    if (pathname.includes('mini-apps')) {return t.pages.miniApps;}
     if (pathname.includes('data')) {return 'Data Manager';}
     if (pathname.includes('experiences')) {return t.pages.experiences;}
     if (pathname.includes('integrations')) {return t.pages.analyticsIntegrations;}
@@ -204,6 +205,7 @@ function SystemLayoutContent({ children }: { children: React.ReactNode }) {
           <SidebarItem href="/system/modules" icon={Blocks} label={t.sidebar.modules} collapsed={collapsed} />
           <SidebarItem href="/system/experiences" icon={LayoutTemplate} label={t.sidebar.experiences} collapsed={collapsed} />
           <SidebarItem href="/system/home-components" icon={LayoutGrid} label={t.sidebar.homeComponents} collapsed={collapsed} />
+          <SidebarItem href="/system/mini-apps" icon={LayoutGrid} label={t.sidebar.miniApps} collapsed={collapsed} />
           <SidebarItem href="/system/admin-config" icon={Shield} label="SuperAdmin" collapsed={collapsed} />
           <SidebarItem href="/system/data" icon={Database} label="Data Manager" collapsed={collapsed} />
           <SidebarItem href="/system/integrations" icon={BarChart3} label={t.sidebar.analytics} collapsed={collapsed} />
@@ -309,7 +311,7 @@ export default function SystemLayout({ children }: { children: React.ReactNode }
     <I18nProvider>
       <SystemAuthProvider>
         <SystemLayoutWrapper>{children}</SystemLayoutWrapper>
-        <Toaster position="top-right" richColors />
+        <CustomToaster position="top-right" richColors />
       </SystemAuthProvider>
     </I18nProvider>
   );

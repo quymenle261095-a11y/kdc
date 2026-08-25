@@ -133,6 +133,10 @@ export async function create(
     bookingSlotTemplateByWeekday?: Record<string, string[]>;
     metaTitle?: string;
     metaDescription?: string;
+    focusKeyword?: string;
+    relatedQueries?: string[];
+    tags?: string[];
+    faqItems?: Array<{ question: string; answer: string }>;
     status?: Doc<"services">["status"];
     order?: number;
     featured?: boolean;
@@ -163,6 +167,10 @@ export async function create(
     featured: args.featured,
     metaDescription: args.metaDescription,
     metaTitle: args.metaTitle,
+    focusKeyword: args.focusKeyword,
+    relatedQueries: args.relatedQueries,
+    tags: args.tags,
+    faqItems: args.faqItems,
     order,
     price: args.price,
     publishedAt: status === "Published" ? Date.now() : undefined,
@@ -204,6 +212,10 @@ export async function update(
     bookingSlotTemplateByWeekday?: Record<string, string[]>;
     metaTitle?: string;
     metaDescription?: string;
+    focusKeyword?: string;
+    relatedQueries?: string[];
+    tags?: string[];
+    faqItems?: Array<{ question: string; answer: string }>;
     status?: Doc<"services">["status"];
     order?: number;
     featured?: boolean;

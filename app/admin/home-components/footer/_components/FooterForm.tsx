@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Download, GripVertical, LayoutGrid, Loader2, Plus, Share2, Trash2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Download, GripVertical, LayoutGrid, Link2, Plus, Share2, Trash2 } from 'lucide-react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
@@ -10,10 +10,6 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
   Label,
   cn,
 } from '../../../components/ui';
@@ -27,7 +23,7 @@ import { getFooterLayoutColors } from '../_lib/colors';
 import { generateFooterConfigFromData } from '../_lib/auto-generate';
 import type { FooterBrandMode, FooterConfig, FooterColumn, FooterLogoBackgroundStyle, FooterSocialLink } from '../_types';
 import { AiDemoFooterImport } from '../../product-list/_components/AiDemoProductsImport';
-import { buildCategoryPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import { QuickRoutePickerModal, type QuickRouteOption } from '@/app/admin/components/QuickRoutePickerModal';
 
 interface FooterFormProps {
   value: FooterConfig;
@@ -39,18 +35,6 @@ interface FooterFormProps {
   defaultExpanded?: boolean;
 }
 
-type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục';
-
-type QuickRouteOption = {
-  group: QuickRouteGroup;
-  label: string;
-  source: string;
-  url: string;
-};
-
-type PickerType = 'core' | 'module' | 'category' | 'detail';
-type PickerModule = 'posts' | 'products' | 'services';
-
 type PickerTarget =
   | { type: 'column'; columnId: number | string }
   | { type: 'link'; columnId: number | string; linkIndex: number };
@@ -61,9 +45,41 @@ const SOCIAL_PLATFORMS = [
   { icon: 'youtube', key: 'youtube', label: 'Youtube' },
   { icon: 'tiktok', key: 'tiktok', label: 'TikTok' },
   { icon: 'zalo', key: 'zalo', label: 'Zalo' },
+  { icon: 'messenger', key: 'messenger', label: 'Messenger' },
   { icon: 'x', key: 'x', label: 'X (Twitter)' },
+  { icon: 'telegram', key: 'telegram', label: 'Telegram' },
+  { icon: 'shopee', key: 'shopee', label: 'Shopee' },
+  { icon: 'lazada', key: 'lazada', label: 'Lazada' },
+  { icon: 'tiki', key: 'tiki', label: 'Tiki' },
   { icon: 'pinterest', key: 'pinterest', label: 'Pinterest' },
+  { icon: 'linkedin', key: 'linkedin', label: 'LinkedIn' },
+  { icon: 'github', key: 'github', label: 'GitHub' },
+  { icon: 'phone', key: 'phone', label: 'Điện thoại' },
+  { icon: 'mail', key: 'mail', label: 'Email' },
+  { icon: 'map-pin', key: 'map-pin', label: 'Địa chỉ' },
 ];
+
+const normalizePhoneUrl = (value: string) => value.startsWith('tel:') ? value : `tel:${value.replace(/\s+/g, '')}`;
+const normalizeEmailUrl = (value: string) => value.startsWith('mailto:') ? value : `mailto:${value}`;
+const normalizeMapUrl = (value: string) =>
+  /^https?:\/\//.test(value) ? value : `https://maps.google.com/?q=${encodeURIComponent(value)}`;
+const normalizeZaloUrl = (value: string) => {
+  if (/^https?:\/\//.test(value)) return value;
+  return `https://zalo.me/${value.replace(/\s+/g, '')}`;
+};
+const getSocialPlaceholder = (platform: string) => {
+  switch (platform) {
+    case 'phone': return 'tel:0123456789';
+    case 'mail': return 'mailto:contact@example.com';
+    case 'zalo': return 'https://zalo.me/...';
+    case 'messenger': return 'https://m.me/...';
+    case 'map-pin': return 'https://maps.google.com/...';
+    case 'shopee': return 'https://shopee.vn/...';
+    case 'lazada': return 'https://lazada.vn/...';
+    case 'tiki': return 'https://tiki.vn/...';
+    default: return 'https://...';
+  }
+};
 
 const MAX_WIDTH_OPTIONS = [
   { value: '6xl', label: '6xl' },
@@ -102,6 +118,17 @@ const MODULE_SITE_ROUTE_CATALOG: Record<string, { label: string; url: string }[]
   services: [{ label: 'Danh sách dịch vụ', url: '/services' }],
   wishlist: [{ label: 'Wishlist', url: '/wishlist' }],
 };
+
+const STATIC_QUICK_ROUTE_OPTIONS: QuickRouteOption[] = [
+  ...CORE_ROUTE_OPTIONS,
+  ...Object.entries(MODULE_SITE_ROUTE_CATALOG).flatMap(([moduleKey, routes]) =>
+    routes.map((route) => ({
+      ...route,
+      source: moduleKey,
+      group: 'Module' as const,
+    }))
+  ),
+];
 
 const getNextId = (items: Array<{ id?: number | string }>) => {
   const max = items.reduce((acc, item) => {
@@ -158,17 +185,25 @@ const activeSections = ['settings', 'basicInfo', 'bct', 'columns', 'socials'];
 export function FooterForm({ value, onChange, primary, secondary, mode, defaultExpanded = true }: FooterFormProps) {
   const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(activeSections, defaultExpanded);
   const footerSettings = useQuery(api.settings.getMultiple, {
-    keys: [...IA_SETTINGS_KEYS, 'contact_zalo', 'site_logo', 'site_name', 'site_tagline', 'social_facebook', 'social_instagram', 'social_tiktok', 'social_youtube'],
+    keys: [
+      ...IA_SETTINGS_KEYS,
+      'contact_zalo',
+      'site_logo',
+      'site_name',
+      'site_tagline',
+      'social_facebook',
+      'social_instagram',
+      'social_tiktok',
+      'social_youtube',
+      'contact_phone',
+      'contact_email',
+      'contact_address',
+      'contact_messenger',
+    ],
   });
-  const enabledModules = useQuery(api.admin.modules.listEnabledModules);
   const trustPagesFeature = useQuery(api.admin.modules.getModuleFeature, { moduleKey: 'settings', featureKey: 'enableTrustPages' });
-  const productCategories = useQuery(api.productCategories.listActive);
-  const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
-  const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
-  const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
-  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
 
-  const columnsWithId = useMemo<FooterColumn[]>(() => value.columns.map((column, index) => ({
+  const columnsWithId = useMemo<FooterColumn[]>(() => (value.columns ?? []).map((column, index) => ({
     ...column,
     id: column.id ?? index + 1,
     links: column.links ?? [],
@@ -185,29 +220,6 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
   const [dragOverSocialId, setDragOverSocialId] = useState<number | string | null>(null);
   const [isQuickPickerOpen, setIsQuickPickerOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
-  const [quickRouteSearch, setQuickRouteSearch] = useState('');
-  const [pickerStep, setPickerStep] = useState<1 | 2 | 3>(1);
-  const [selectedType, setSelectedType] = useState<PickerType | null>(null);
-  const [selectedModule, setSelectedModule] = useState<PickerModule | null>(null);
-
-  const detailPosts = useQuery(
-    api.menus.listPostsForPicker,
-    selectedModule === 'posts' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailProducts = useQuery(
-    api.menus.listProductsForPicker,
-    selectedModule === 'products' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailServices = useQuery(
-    api.menus.listServicesForPicker,
-    selectedModule === 'services' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
 
   const colors = useMemo(() => getFooterLayoutColors(value.style ?? 'classic', primary, secondary, mode), [mode, primary, secondary, value.style]);
   const bctLogoType = value.bctLogoType ?? 'thong-bao';
@@ -217,98 +229,42 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
   const logoSizeLevel = value.logoSizeLevel ?? 1;
   const maxWidth = value.maxWidth ?? '7xl';
 
-  const quickRouteOptions = useMemo(() => {
-    const enabledKeys = new Set((enabledModules ?? []).map((moduleItem) => moduleItem.key));
-    const options: QuickRouteOption[] = [...CORE_ROUTE_OPTIONS];
-
-    Object.entries(MODULE_SITE_ROUTE_CATALOG).forEach(([moduleKey, routes]) => {
-      if (!enabledKeys.has(moduleKey)) {return;}
-      routes.forEach((route) => {
-        options.push({ ...route, source: moduleKey, group: 'Module' });
-      });
-    });
-
-    if (enabledKeys.has('products')) {
-      (productCategories ?? []).forEach((category) => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'products',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'products' }),
-        });
-      });
-    }
-
-    if (enabledKeys.has('posts')) {
-      (postCategories ?? []).forEach((category) => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'posts',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'posts' }),
-        });
-      });
-    }
-
-    if (enabledKeys.has('services')) {
-      (serviceCategories ?? []).forEach((category) => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'services',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: routeMode, moduleKey: 'services' }),
-        });
-      });
-    }
-
-    const deduped = new Map<string, QuickRouteOption>();
-    options.forEach((option) => {
-      if (!deduped.has(option.url)) {
-        deduped.set(option.url, option);
-      }
-    });
-
-    return Array.from(deduped.values());
-  }, [enabledModules, postCategories, productCategories, serviceCategories]);
-
-  const filteredQuickRoutes = useMemo(() => {
-    const keyword = quickRouteSearch.trim().toLowerCase();
-    if (!keyword) {return quickRouteOptions;}
-    return quickRouteOptions.filter((option) => (
-      option.label.toLowerCase().includes(keyword)
-      || option.url.toLowerCase().includes(keyword)
-      || option.source.toLowerCase().includes(keyword)
-    ));
-  }, [quickRouteOptions, quickRouteSearch]);
-
   const updateConfig = (patch: Partial<FooterConfig>) => {
     onChange({ ...value, ...patch });
   };
 
-  useEffect(() => {
-    if (isQuickPickerOpen) {return;}
-    if (!quickRouteSearch) {return;}
-    setQuickRouteSearch('');
-  }, [isQuickPickerOpen, quickRouteSearch]);
+
 
   const loadFromSettings = () => {
     const newSocialLinks: FooterSocialLink[] = [];
     let idCounter = 1;
 
     if (typeof footerSettings?.social_facebook === 'string' && footerSettings.social_facebook) {
-      newSocialLinks.push({ icon: 'facebook', id: idCounter++, platform: 'facebook', url: footerSettings.social_facebook });
+      newSocialLinks.push({ icon: 'facebook', id: idCounter++, platform: 'facebook', url: footerSettings.social_facebook.trim() });
     }
     if (typeof footerSettings?.social_instagram === 'string' && footerSettings.social_instagram) {
-      newSocialLinks.push({ icon: 'instagram', id: idCounter++, platform: 'instagram', url: footerSettings.social_instagram });
+      newSocialLinks.push({ icon: 'instagram', id: idCounter++, platform: 'instagram', url: footerSettings.social_instagram.trim() });
     }
     if (typeof footerSettings?.social_youtube === 'string' && footerSettings.social_youtube) {
-      newSocialLinks.push({ icon: 'youtube', id: idCounter++, platform: 'youtube', url: footerSettings.social_youtube });
+      newSocialLinks.push({ icon: 'youtube', id: idCounter++, platform: 'youtube', url: footerSettings.social_youtube.trim() });
     }
     if (typeof footerSettings?.social_tiktok === 'string' && footerSettings.social_tiktok) {
-      newSocialLinks.push({ icon: 'tiktok', id: idCounter++, platform: 'tiktok', url: footerSettings.social_tiktok });
+      newSocialLinks.push({ icon: 'tiktok', id: idCounter++, platform: 'tiktok', url: footerSettings.social_tiktok.trim() });
     }
     if (typeof footerSettings?.contact_zalo === 'string' && footerSettings.contact_zalo) {
-      newSocialLinks.push({ icon: 'zalo', id: idCounter++, platform: 'zalo', url: footerSettings.contact_zalo });
+      newSocialLinks.push({ icon: 'zalo', id: idCounter++, platform: 'zalo', url: normalizeZaloUrl(footerSettings.contact_zalo) });
+    }
+    if (typeof footerSettings?.contact_messenger === 'string' && footerSettings.contact_messenger) {
+      newSocialLinks.push({ icon: 'messenger', id: idCounter++, platform: 'messenger', url: footerSettings.contact_messenger.trim() });
+    }
+    if (typeof footerSettings?.contact_phone === 'string' && footerSettings.contact_phone) {
+      newSocialLinks.push({ icon: 'phone', id: idCounter++, platform: 'phone', url: normalizePhoneUrl(footerSettings.contact_phone) });
+    }
+    if (typeof footerSettings?.contact_email === 'string' && footerSettings.contact_email) {
+      newSocialLinks.push({ icon: 'mail', id: idCounter++, platform: 'mail', url: normalizeEmailUrl(footerSettings.contact_email) });
+    }
+    if (typeof footerSettings?.contact_address === 'string' && footerSettings.contact_address) {
+      newSocialLinks.push({ icon: 'map-pin', id: idCounter++, platform: 'map-pin', url: normalizeMapUrl(footerSettings.contact_address) });
     }
 
     updateConfig({
@@ -391,7 +347,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
   };
 
   const applySuggestedColumns = (columnCount: 2 | 4) => {
-    updateConfig({ columns: buildSuggestedColumns(quickRouteOptions, columnCount) });
+    updateConfig({ columns: buildSuggestedColumns(STATIC_QUICK_ROUTE_OPTIONS, columnCount) });
     toast.success(`Đã áp dụng gợi ý ${columnCount} cột`);
   };
 
@@ -444,10 +400,6 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
   const handleCloseQuickPicker = () => {
     setIsQuickPickerOpen(false);
     setPickerTarget(null);
-    setQuickRouteSearch('');
-    setPickerStep(1);
-    setSelectedType(null);
-    setSelectedModule(null);
   };
 
   const handleSelectQuickRoute = (option: QuickRouteOption) => {
@@ -513,57 +465,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
     });
   };
 
-  const quickRouteKeyword = quickRouteSearch.trim().toLowerCase();
 
-  const pickerTypeOptions = [
-    { type: 'core' as const, label: 'Trang cơ bản', description: 'Trang chủ, liên hệ...' },
-    { type: 'module' as const, label: 'Module', description: 'Posts, Products, Services...' },
-    { type: 'category' as const, label: 'Danh mục', description: 'Danh mục thật từ dữ liệu' },
-    { type: 'detail' as const, label: 'Chi tiết', description: 'Bài viết, sản phẩm, dịch vụ cụ thể' },
-  ];
-
-  const detailModuleOptions = [
-    {
-      key: 'posts' as const,
-      label: 'Bài viết chi tiết',
-      description: 'Chọn 1 bài viết cụ thể',
-      enabled: enabledModules?.some((moduleItem) => moduleItem.key === 'posts'),
-    },
-    {
-      key: 'products' as const,
-      label: 'Sản phẩm chi tiết',
-      description: 'Chọn 1 sản phẩm cụ thể',
-      enabled: enabledModules?.some((moduleItem) => moduleItem.key === 'products'),
-    },
-    {
-      key: 'services' as const,
-      label: 'Dịch vụ chi tiết',
-      description: 'Chọn 1 dịch vụ cụ thể',
-      enabled: enabledModules?.some((moduleItem) => moduleItem.key === 'services'),
-    },
-  ];
-
-  const availableDetailModules = detailModuleOptions.filter((option) => option.enabled);
-  const filteredDetailModules = quickRouteKeyword
-    ? availableDetailModules.filter((option) => (
-      option.label.toLowerCase().includes(quickRouteKeyword)
-      || option.description.toLowerCase().includes(quickRouteKeyword)
-    ))
-    : availableDetailModules;
-  const resolvedDetailModules = filteredDetailModules.length > 0 ? filteredDetailModules : availableDetailModules;
-
-  const filteredPickerRoutes = filteredQuickRoutes.filter((option) => {
-    if (selectedType === 'core') {return option.group === 'Trang cơ bản';}
-    if (selectedType === 'module') {return option.group === 'Module';}
-    if (selectedType === 'category') {return option.group === 'Danh mục';}
-    return false;
-  });
-
-  const isDetailLoading = pickerStep === 3 && (
-    (selectedModule === 'posts' && detailPosts === undefined)
-    || (selectedModule === 'products' && detailProducts === undefined)
-    || (selectedModule === 'services' && detailServices === undefined)
-  );
 
   return (
     <>
@@ -856,10 +758,12 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 text-slate-400 hover:text-blue-600 hover:border-blue-400 transition-colors"
                     onClick={() =>{  handleOpenQuickPicker({ type: 'column', columnId: column.id ?? 0 }); }}
+                    title="Thêm link gợi ý cho cột"
                   >
-                    Gợi ý link
+                    <Link2 size={14} />
                   </Button>
                   <Button
                     type="button"
@@ -882,32 +786,34 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
                         placeholder="Tên link"
                         className="flex-1"
                       />
-                      <InputWithClear
-                        value={link.url}
-                        onChange={(v) =>{  updateLink(column.id ?? 0, linkIdx, 'url', v); }}
-                        placeholder="/url"
-                        className="flex-1"
-                      />
-                      <div className="flex gap-2 sm:flex-shrink-0">
+                      <div className="flex flex-1 items-center gap-2 w-full">
+                        <InputWithClear
+                          value={link.url}
+                          onChange={(v) =>{  updateLink(column.id ?? 0, linkIdx, 'url', v); }}
+                          placeholder="/url"
+                          className="flex-1"
+                        />
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
+                          size="icon"
+                          className="h-10 w-10 shrink-0 text-slate-400 hover:text-blue-600 hover:border-blue-400 transition-colors"
                           onClick={() =>{  handleOpenQuickPicker({ type: 'link', columnId: column.id ?? 0, linkIndex: linkIdx }); }}
+                          title="Chọn link gợi ý"
                         >
-                          Gợi ý
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>{  removeLink(column.id ?? 0, linkIdx); }}
-                          className="text-red-500 hover:bg-red-50 hover:text-red-600"
-                          disabled={column.links.length <= 1}
-                        >
-                          <Trash2 size={12} />
+                          <Link2 size={14} />
                         </Button>
                       </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>{  removeLink(column.id ?? 0, linkIdx); }}
+                        className="text-red-500 hover:bg-red-50 hover:text-red-600 sm:flex-shrink-0"
+                        disabled={column.links.length <= 1}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
                     </div>
                   ))}
                   <Button
@@ -998,7 +904,7 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
                     <InputWithClear
                       value={social.url}
                       onChange={(v) =>{  updateSocialLink(social.id ?? 0, 'url', v); }}
-                      placeholder="https://facebook.com/yourpage"
+                      placeholder={getSocialPlaceholder(social.platform)}
                       className="flex-1"
                     />
                     <Button
@@ -1018,247 +924,12 @@ export function FooterForm({ value, onChange, primary, secondary, mode, defaultE
         </CardContent>
       </Card>
 
-      <Dialog
+      <QuickRoutePickerModal
         open={isQuickPickerOpen}
-        onOpenChange={(open) =>{ if (open) { setIsQuickPickerOpen(true); } else { handleCloseQuickPicker(); } }}
-      >
-        <DialogContent className="w-[90vw] max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {pickerTarget?.type === 'column' ? 'Thêm link gợi ý cho cột' : 'Chọn link gợi ý'} - Bước {pickerStep}/3
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <InputWithClear
-              value={quickRouteSearch}
-              onChange={(v) => setQuickRouteSearch(v)}
-              placeholder={
-                pickerStep === 1
-                  ? 'Tìm theo loại...'
-                  : pickerStep === 2
-                    ? (selectedType === 'detail' ? 'Tìm module...' : 'Tìm theo tên hoặc URL...')
-                    : 'Tìm theo tên...'
-              }
-              className="h-9 text-sm"
-            />
-
-            <div className="space-y-3">
-              {pickerStep === 1 && (
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {pickerTypeOptions.map((option) => (
-                    <Button
-                      key={option.type}
-                      type="button"
-                      variant="outline"
-                      className="h-20 flex-col items-start gap-1.5 text-left"
-                      onClick={() => {
-                        setSelectedType(option.type);
-                        setPickerStep(2);
-                      }}
-                    >
-                      <span className="font-semibold">{option.label}</span>
-                      <span className="text-xs text-slate-500">{option.description}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-
-              {pickerStep === 2 && selectedType === 'detail' && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(1);
-                      setSelectedType(null);
-                    }}
-                  >
-                    ← Quay lại
-                  </Button>
-
-                  {resolvedDetailModules.length === 0 ? (
-                    <div className="rounded-md border border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-800">
-                      Không có module phù hợp.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2">
-                      {resolvedDetailModules.map((option) => (
-                        <Button
-                          key={option.key}
-                          type="button"
-                          variant="outline"
-                          className="h-16 justify-start"
-                          onClick={() => {
-                            setSelectedModule(option.key);
-                            setPickerStep(3);
-                          }}
-                        >
-                          <div className="text-left">
-                            <div className="font-semibold">{option.label}</div>
-                            <div className="text-xs text-slate-500">{option.description}</div>
-                          </div>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {pickerStep === 2 && selectedType && selectedType !== 'detail' && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(1);
-                      setSelectedType(null);
-                    }}
-                  >
-                    ← Quay lại
-                  </Button>
-
-                  <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                    {filteredPickerRoutes.length === 0 ? (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không có gợi ý phù hợp.</div>
-                    ) : (
-                      <div className="space-y-1 p-2">
-                        {filteredPickerRoutes.map((option) => (
-                          <button
-                            key={`${option.url}-${option.source}`}
-                            type="button"
-                            onClick={() => handleSelectQuickRoute(option)}
-                            className="flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0">
-                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
-                                {option.label}
-                              </div>
-                              <div className="break-all font-mono text-xs text-slate-500">{option.url}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {pickerStep === 3 && selectedModule && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPickerStep(2);
-                      setSelectedModule(null);
-                    }}
-                  >
-                    ← Quay lại
-                  </Button>
-
-                  <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                    {isDetailLoading && (
-                      <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-500">
-                        <Loader2 size={14} className="animate-spin" /> Đang tải dữ liệu...
-                      </div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy bài viết.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy sản phẩm.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) === 0 && (
-                      <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy dịch vụ.</div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailPosts?.map((post) => (
-                          <button
-                            key={post._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: post.title,
-                                url: `/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`,
-                                source: 'posts',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{post.title}</div>
-                              <div className="break-all font-mono text-xs text-slate-500">{`/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailProducts?.map((product) => (
-                          <button
-                            key={product._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: product.name,
-                                url: `/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`,
-                                source: 'products',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{product.name}</div>
-                              <div className="break-all font-mono text-xs text-slate-500">{`/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) > 0 && (
-                      <div className="space-y-1 p-2">
-                        {detailServices?.map((service) => (
-                          <button
-                            key={service._id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectQuickRoute({
-                                label: service.title,
-                                url: `/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`,
-                                source: 'services',
-                                group: 'Module',
-                              });
-                            }}
-                            className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="break-words font-semibold text-slate-700 dark:text-slate-200">{service.title}</div>
-                              <div className="break-all font-mono text-xs text-slate-500">{`/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setIsQuickPickerOpen}
+        onSelect={handleSelectQuickRoute}
+        title={pickerTarget?.type === 'column' ? 'Thêm link gợi ý cho cột' : 'Chọn link gợi ý'}
+      />
     </>
   );
 }

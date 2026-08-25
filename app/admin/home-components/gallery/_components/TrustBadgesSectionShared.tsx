@@ -111,11 +111,19 @@ export function TrustBadgesSectionHeader({
   config,
   fallbackSubtitle = 'Được công nhận bởi các tổ chức uy tín',
   title,
+  visualEditEnabled,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: {
   brandColor: string;
   config?: TrustBadgesSharedConfig;
   title: string;
   fallbackSubtitle?: string;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (val: string) => void;
+  onSubtitleChange?: (val: string) => void;
+  onBadgeTextChange?: (val: string) => void;
 }) {
   return (
     <SectionHeader
@@ -131,6 +139,10 @@ export function TrustBadgesSectionHeader({
       subtitleAboveTitle={config?.subtitleAboveTitle}
       uppercaseText={config?.uppercaseText}
       brandColor={brandColor}
+      visualEditEnabled={visualEditEnabled}
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
     />
   );
 }

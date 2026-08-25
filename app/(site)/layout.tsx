@@ -1,5 +1,5 @@
 import { JsonLd, generateNavigationSchema } from '@/components/seo/JsonLd';
-import { SiteShell } from '@/components/site/SiteShell';
+import { SiteShell, type HomePageChromeConfig } from '@/components/site/SiteShell';
 import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
 import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings } from '@/lib/get-settings';
@@ -39,8 +39,9 @@ export const generateMetadata = (): Promise<Metadata> => {
         social,
       }),
       icons: {
-        icon: `/api/favicon?v=${encodeURIComponent(site.site_favicon || '')}`,
-        apple: `/api/favicon?v=${encodeURIComponent(site.site_favicon || '')}`,
+        apple: '/favicon.ico',
+        icon: '/favicon.ico',
+        shortcut: '/favicon.ico',
       },
       manifest: '/manifest.webmanifest',
     };
@@ -62,6 +63,7 @@ const SiteLayout = ({
     client.query(api.settings.getMultiple, {
       keys: ['header_style', 'header_config'],
     }),
+    client.query(api.homeComponentSystemConfig.getConfig),
   ]).then(async ([
     site,
     seo,
@@ -69,6 +71,7 @@ const SiteLayout = ({
     social,
     headerMenu,
     headerSettings,
+    homeComponentConfig,
   ]) => {
     const baseUrl = (site.site_url || process.env.NEXT_PUBLIC_SITE_URL) ?? '';
     const headerItems = headerMenu
@@ -102,8 +105,11 @@ const SiteLayout = ({
     });
 
     return (
-      <div data-theme="light" style={{ colorScheme: 'light' }}>
-        <SiteShell initialHeaderData={initialHeaderData}>
+      <div>
+        <SiteShell
+          initialHeaderData={initialHeaderData}
+          initialHomePageChrome={homeComponentConfig.homePageChrome as HomePageChromeConfig}
+        >
           {siteSchemas.map((schema, index) => (
             <JsonLd key={index} data={schema} />
           ))}

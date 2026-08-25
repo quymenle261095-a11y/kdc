@@ -8,11 +8,11 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Image as ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Input, cn } from './ui';
-import { prepareImageForUpload, validateImageFile } from '@/lib/image/uploadPipeline';
+import { getImageDimensions, getImageDimensionsFromUrl, prepareImageForUpload, validateImageFile } from '@/lib/image/uploadPipeline';
 import { resolveNamingContext, type ImageNamingContext } from '@/lib/image/uploadNaming';
 import { ImageEditorDialog } from './ImageEditorDialog';
 import { useFileDraftUploads } from './useFileDraftUploads';
-import { getProductImageAspectRatioLabel, type ImageAspectRatioInput } from '@/lib/products/image-aspect-ratio';
+import { getProductImageAspectRatioLabel, isAspectRatioMatch, type ImageAspectRatioInput } from '@/lib/products/image-aspect-ratio';
 import { ImageSourceActions } from './ImageSourceActions';
 
 type InputMode = 'upload' | 'url';
@@ -27,18 +27,21 @@ interface SettingsImageUploaderProps {
   label?: string;
   previewSize?: 'sm' | 'md' | 'lg';
   cropAspectRatio?: ImageAspectRatioInput;
+  targetDimension?: number;
   smartLogoCrop?: boolean;
 }
 
 export function SettingsImageUploader({
   value,
   onChange,
+  storageId: _storageId,
   folder = 'settings',
   naming,
   className,
   label,
   previewSize = 'md',
   cropAspectRatio,
+  targetDimension,
   smartLogoCrop = false,
 }: SettingsImageUploaderProps) {
   const [mode, setMode] = useState<InputMode>('upload');
@@ -47,7 +50,28 @@ export function SettingsImageUploader({
   const [urlInput, setUrlInput] = useState('');
   const [preview, setPreview] = useState<string | undefined>(value);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [pendingCropUrl, setPendingCropUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const clearPendingCrop = useCallback(() => {
+    setPendingCropUrl((currentUrl) => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+      return null;
+    });
+  }, []);
+
+  const openCropEditorForFile = useCallback((file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    setPendingCropUrl((currentUrl) => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+      return objectUrl;
+    });
+    setIsEditorOpen(true);
+  }, []);
 
   // Convex mutations
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
@@ -63,21 +87,33 @@ export function SettingsImageUploader({
     }
   }, [value]);
 
-  const handleFileUpload = useCallback(async (file: File) => {
+  const handleFileUpload = useCallback(async (file: File, skipAspectCrop = false) => {
     const validationError = validateImageFile(file, 5);
     if (validationError) {
       toast.error(validationError);
       return;
     }
 
-    setIsUploading(true);
-
     try {
+      if (!skipAspectCrop && cropAspectRatio) {
+        const dimensions = await getImageDimensions(file);
+        if (!isAspectRatioMatch(dimensions, cropAspectRatio)) {
+          openCropEditorForFile(file);
+          toast.info('Favicon cần được cắt về tỷ lệ vuông 1:1.');
+          return;
+        }
+      }
+
+      setIsUploading(true);
       const resolvedNaming = resolveNamingContext(naming, { entityName: folder, field: 'image', index: 1 });
       const prepared = await prepareImageForUpload(file, {
         naming: resolvedNaming,
         smartLogoCrop,
+        targetDimension,
       });
+      if (targetDimension && (prepared.width !== targetDimension || prepared.height !== targetDimension)) {
+        throw new Error(`Ảnh phải có kích thước đúng ${targetDimension}x${targetDimension}px`);
+      }
       const uploadUrl = await generateUploadUrl();
 
       const response = await fetch(uploadUrl, {
@@ -112,7 +148,7 @@ export function SettingsImageUploader({
     } finally {
       setIsUploading(false);
     }
-  }, [generateUploadUrl, saveImage, folder, onChange, naming, smartLogoCrop, trackDraftUpload]);
+  }, [cropAspectRatio, generateUploadUrl, saveImage, folder, naming, onChange, openCropEditorForFile, smartLogoCrop, targetDimension, trackDraftUpload]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -169,32 +205,52 @@ export function SettingsImageUploader({
     }
   }, [isUploading, handleFileUpload]);
 
-  const handleUrlSubmit = useCallback(() => {
-    if (!urlInput.trim()) {return;}
+  const handleUrlSubmit = useCallback(async () => {
+    const nextUrl = urlInput.trim();
+    if (!nextUrl) {return;}
 
     // Basic URL validation
     try {
-      new URL(urlInput);
+      new URL(nextUrl);
     } catch {
-      if (!urlInput.startsWith('/')) {
+      if (!nextUrl.startsWith('/')) {
         toast.error('URL không hợp lệ');
         return;
       }
     }
 
-    setPreview(urlInput);
-    onChange(urlInput, null);
+    if (cropAspectRatio) {
+      try {
+        const dimensions = await getImageDimensionsFromUrl(nextUrl);
+        if (!isAspectRatioMatch(dimensions, cropAspectRatio)) {
+          toast.error('URL favicon phải trỏ tới ảnh vuông tỷ lệ 1:1.');
+          return;
+        }
+        if (targetDimension && (dimensions.width !== targetDimension || dimensions.height !== targetDimension)) {
+          toast.error(`URL favicon phải trỏ tới ảnh đúng ${targetDimension}x${targetDimension}px.`);
+          return;
+        }
+      } catch {
+        toast.error('Không thể kiểm tra kích thước ảnh từ URL.');
+        return;
+      }
+    }
+
+    setPreview(nextUrl);
+    onChange(nextUrl, null);
     toast.success('Đã cập nhật URL');
-  }, [urlInput, onChange]);
+  }, [cropAspectRatio, onChange, targetDimension, urlInput]);
 
   const handleRemove = useCallback(() => {
     setPreview(undefined);
     setUrlInput('');
+    setIsEditorOpen(false);
+    clearPendingCrop();
     onChange(undefined, null);
     if (inputRef.current) {
       inputRef.current.value = '';
     }
-  }, [onChange]);
+  }, [clearPendingCrop, onChange]);
 
   const previewSizes = {
     lg: 'w-32 h-32',
@@ -247,7 +303,7 @@ export function SettingsImageUploader({
                   sizes="(max-width: 768px) 100vw, 240px"
                   className="object-cover"
                   onError={(e) => {
-                    e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23f1f5f9" width="100" height="100"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12">Error</text></svg>';
+                    e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23fef2f2" width="100" height="100"/><text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" fill="%23ef4444" font-size="10" font-weight="bold">Ảnh lỗi</text><text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" fill="%23991b1b" font-size="7">Hãy upload lại</text></svg>';
                   }}
                 />
                 {isUploading && (
@@ -322,14 +378,16 @@ export function SettingsImageUploader({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  handleUrlSubmit();
+                  void handleUrlSubmit();
                 }
               }}
             />
             <Button
               type="button"
               variant="outline"
-              onClick={handleUrlSubmit}
+              onClick={() => {
+                void handleUrlSubmit();
+              }}
               disabled={!urlInput.trim()}
             >
               Áp dụng
@@ -346,7 +404,7 @@ export function SettingsImageUploader({
                   sizes="(max-width: 768px) 100vw, 240px"
                   className="object-cover"
                   onError={(e) => {
-                    e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23f1f5f9" width="100" height="100"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%2394a3b8" font-size="12">Error</text></svg>';
+                    e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23fef2f2" width="100" height="100"/><text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" fill="%23ef4444" font-size="10" font-weight="bold">Ảnh lỗi</text><text x="50%" y="65%" dominant-baseline="middle" text-anchor="middle" fill="%23991b1b" font-size="7">Kiểm tra URL</text></svg>';
                   }}
                 />
               </div>
@@ -367,14 +425,18 @@ export function SettingsImageUploader({
         </div>
       )}
       {/* Image Editor Dialog */}
-      {isEditorOpen && preview && (
+      {isEditorOpen && (pendingCropUrl || preview) && (
         <ImageEditorDialog
-          imageUrl={preview}
+          imageUrl={pendingCropUrl || preview || ''}
           preferredCropAspectRatio={cropAspectRatio}
-          onClose={() => setIsEditorOpen(false)}
+          onClose={() => {
+            setIsEditorOpen(false);
+            clearPendingCrop();
+          }}
           onApply={(editedFile) => {
             setIsEditorOpen(false);
-            void handleFileUpload(editedFile);
+            clearPendingCrop();
+            void handleFileUpload(editedFile, true);
           }}
         />
       )}

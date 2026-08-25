@@ -2,10 +2,13 @@
 
 import React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { X } from 'lucide-react';
 import { DigitalCredentialsDisplay } from '@/components/orders/DigitalCredentialsDisplay';
 
 type OrderDetailItem = {
+  actionHref?: string;
+  actionLabel?: string;
   name: string;
   quantity: number;
   priceLabel: string;
@@ -89,6 +92,7 @@ type OrderDetailDrawerProps = {
   timelineLabels?: string[];
   showPaymentMethod?: boolean;
   paymentMethod?: string;
+  paymentDetails?: React.ReactNode;
   showShippingMethod?: boolean;
   shippingMethod?: string;
   showTracking?: boolean;
@@ -140,6 +144,7 @@ export function OrderDetailDrawer({
   timelineLabels,
   showPaymentMethod,
   paymentMethod,
+  paymentDetails,
   showShippingMethod,
   shippingMethod,
   showTracking,
@@ -167,7 +172,7 @@ export function OrderDetailDrawer({
       <button
         type="button"
         className="absolute inset-0"
-        style={{ backgroundColor: tokens?.overlayBg ?? 'rgba(0, 0, 0, 0.4)' }}
+        style={{ backgroundColor: tokens?.overlayBg ? hexToRgba(tokens.overlayBg, 0.6) : 'rgba(0, 0, 0, 0.4)' }}
         onClick={onClose}
         aria-label="Đóng chi tiết đơn hàng"
       />
@@ -240,7 +245,7 @@ export function OrderDetailDrawer({
 
           {showItems && items && items.length > 0 && (
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase" style={{ color: tokens?.sectionTitle ?? '#64748b' }}>Sản phẩm</div>
+              <div className="text-xs font-semibold uppercase" style={{ color: tokens?.sectionTitle ?? '#64748b' }}>Mục trong đơn</div>
               <div className="space-y-3">
                 {items.map((item) => (
                   <div key={`${item.name}-${item.quantity}`} className="flex items-start gap-3">
@@ -265,6 +270,15 @@ export function OrderDetailDrawer({
                       <div className="text-xs" style={{ color: tokens?.sectionTitle ?? '#64748b' }}>
                         Số lượng: {item.quantity}
                       </div>
+                      {item.actionHref && item.actionLabel && (
+                        <Link
+                          href={item.actionHref}
+                          className="mt-2 inline-flex rounded-md px-3 py-1.5 text-xs font-semibold"
+                          style={{ backgroundColor: tokens?.actionPrimaryBg ?? brandColor, color: tokens?.actionPrimaryText ?? '#ffffff' }}
+                        >
+                          {item.actionLabel}
+                        </Link>
+                      )}
                     </div>
                     <div className="text-sm font-semibold" style={{ color: tokens?.sectionText ?? '#0f172a' }}>{item.priceLabel}</div>
                   </div>
@@ -314,6 +328,8 @@ export function OrderDetailDrawer({
               )}
             </div>
           )}
+
+          {paymentDetails}
 
           {showShippingAddress && (
             <div>

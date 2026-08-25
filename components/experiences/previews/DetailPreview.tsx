@@ -344,7 +344,7 @@ function ClassicStylePreview({
         style={{ backgroundColor: brandColor, width: '45%' }}
       />
 
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
+      <main className="container mx-auto px-4 py-8 max-w-7xl tv:max-w-[1600px]">
         <nav aria-label="Breadcrumb" className="mb-6 flex items-center text-sm text-muted-foreground">
           <ol className="flex items-center space-x-2">
             <li>
@@ -517,7 +517,7 @@ function ModernStylePreview({ showRelated, showShare, showThumbnail = true, show
 
   return (
     <div className="min-h-screen bg-background pb-12 selection:bg-accent/30">
-      <main className="container mx-auto max-w-7xl px-4 py-6 md:py-10 space-y-8 md:space-y-12">
+      <main className="container mx-auto max-w-7xl tv:max-w-[1600px] px-4 py-6 md:py-10 space-y-8 md:space-y-12">
         <div className="flex flex-col gap-4">
           <nav className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <ol className="flex items-center gap-2">
@@ -547,7 +547,7 @@ function ModernStylePreview({ showRelated, showShare, showThumbnail = true, show
             )}
           </nav>
 
-          <section className="max-w-7xl mx-auto w-full space-y-4">
+          <section className="max-w-7xl tv:max-w-[1600px] mx-auto w-full space-y-4">
             <h1 className="text-[clamp(1.75rem,4vw,3rem)] font-semibold tracking-tight text-foreground leading-[1.2] text-balance" style={{ color: brandColor }}>
               {MOCK_POST.title}
             </h1>
@@ -596,7 +596,7 @@ function ModernStylePreview({ showRelated, showShare, showThumbnail = true, show
         </div>
 
         {showThumbnail && MOCK_POST.thumbnail && (
-          <section className="relative overflow-hidden rounded-2xl bg-muted aspect-[16/9] md:aspect-[21/9] max-w-7xl mx-auto">
+          <section className="relative overflow-hidden rounded-2xl bg-muted aspect-[16/9] md:aspect-[21/9] max-w-7xl tv:max-w-[1600px] mx-auto">
             <Image
               src={MOCK_POST.thumbnail}
               alt={MOCK_POST.title}
@@ -607,7 +607,7 @@ function ModernStylePreview({ showRelated, showShare, showThumbnail = true, show
           </section>
         )}
 
-        <article className="max-w-7xl mx-auto space-y-6">
+        <article className="max-w-7xl tv:max-w-[1600px] mx-auto space-y-6">
           {MOCK_POST.excerpt && (
             <p
               className="text-[clamp(1.125rem,2vw,1.5rem)] leading-relaxed text-foreground/90 font-medium border-l-4 pl-4"
@@ -626,7 +626,7 @@ function ModernStylePreview({ showRelated, showShare, showThumbnail = true, show
 
         {showRelated && MOCK_RELATED.length > 0 && (
           <section className="pt-6 pb-2">
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl md:text-2xl font-semibold tracking-tight">Bài viết cùng chủ đề</h2>
                 <div className="text-sm font-medium" style={{ color: accentColor }}>
@@ -702,7 +702,7 @@ function MinimalStylePreview({ showRelated, showShare, showThumbnail = true, sho
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent" />
               <div className="absolute inset-x-0 top-0 z-10">
-                <div className="container max-w-7xl mx-auto px-4 md:px-6">
+                <div className="container max-w-7xl tv:max-w-[1600px] mx-auto px-4 md:px-6">
                   <div className="flex items-center justify-between pt-4">
                     <div className="group inline-flex h-11 items-center gap-2 rounded-md border border-white/30 bg-white/15 px-3 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20">
                       <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" />
@@ -721,8 +721,8 @@ function MinimalStylePreview({ showRelated, showShare, showThumbnail = true, sho
                   </div>
                 </div>
               </div>
-              <div className="container max-w-7xl mx-auto h-full px-4 md:px-6 flex items-end pb-6 md:pb-8">
-                <div className="w-full max-w-7xl border-border/70 bg-background/90 shadow-sm backdrop-blur-sm rounded-lg">
+              <div className="container max-w-7xl tv:max-w-[1600px] mx-auto h-full px-4 md:px-6 flex items-end pb-6 md:pb-8">
+                <div className="w-full max-w-7xl tv:max-w-[1600px] border-border/70 bg-background/90 shadow-sm backdrop-blur-sm rounded-lg">
                   <div className="space-y-3 p-4 md:p-6">
                     <h1 className="text-[clamp(1.6rem,4vw,2.9rem)] font-semibold leading-[1.2] text-foreground" style={{ color: brandColor }}>
                       {MOCK_POST.title}
@@ -769,7 +769,7 @@ function MinimalStylePreview({ showRelated, showShare, showThumbnail = true, sho
             </div>
           </section>
         ) : (
-          <section className="container max-w-7xl mx-auto px-4 md:px-6 pt-6 md:pt-10">
+          <section className="container max-w-7xl tv:max-w-[1600px] mx-auto px-4 md:px-6 pt-6 md:pt-10">
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="group inline-flex h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted/60">
@@ -829,7 +829,7 @@ function MinimalStylePreview({ showRelated, showShare, showThumbnail = true, sho
           </section>
         )}
 
-        <section className="container max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-6">
+        <section className="container max-w-7xl tv:max-w-[1600px] mx-auto px-4 md:px-6 py-8 md:py-12 space-y-6">
           {MOCK_POST.excerpt && (
             <p className="text-[clamp(1rem,2vw,1.25rem)] text-muted-foreground leading-relaxed">
               {MOCK_POST.excerpt}
@@ -843,7 +843,7 @@ function MinimalStylePreview({ showRelated, showShare, showThumbnail = true, sho
         </section>
 
         {showRelated && MOCK_RELATED.length > 0 && (
-          <section className="container max-w-7xl mx-auto px-4 md:px-6 pb-12">
+          <section className="container max-w-7xl tv:max-w-[1600px] mx-auto px-4 md:px-6 pb-12">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg md:text-xl font-semibold text-foreground">Bài viết liên quan</h2>
               <div
@@ -1324,7 +1324,7 @@ function MinimalServicePreview({
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: tokens.pageBackground }}>
-      <article className={`max-w-7xl mx-auto px-4 ${isMobile ? 'py-12' : 'py-18'}`}>
+      <article className={`max-w-7xl tv:max-w-[1600px] mx-auto px-4 ${isMobile ? 'py-12' : 'py-18'}`}>
         <div className="inline-flex items-center gap-2 text-sm mb-10 transition-colors" style={{ color: tokens.metaText }}>
           <ArrowLeft size={16} />
           Tất cả dịch vụ

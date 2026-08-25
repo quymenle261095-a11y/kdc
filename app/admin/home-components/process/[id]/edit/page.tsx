@@ -93,6 +93,8 @@ export default function ProcessEditPage({
   const [processStyle, setProcessStyle] = useState<ProcessStyle>('horizontal');
   const [desktopColumns, setDesktopColumns] = useState<3 | 4>(4);
   const [cornerRadius, setCornerRadius] = useState<ProcessCornerRadius>(DEFAULT_PROCESS_CORNER_RADIUS);
+  const [circularCtaText, setCircularCtaText] = useState('');
+  const [circularCtaLink, setCircularCtaLink] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Header config states
@@ -127,6 +129,8 @@ export default function ProcessEditPage({
       setProcessStyle(normalizedConfig.style);
       setDesktopColumns(normalizedConfig.desktopColumns ?? 4);
       setCornerRadius(normalizedConfig.cornerRadius);
+      setCircularCtaText(normalizedConfig.circularCtaText ?? '');
+      setCircularCtaLink(normalizedConfig.circularCtaLink ?? '');
 
       // Load header config via shared extractor
       const config = component.config ?? {};
@@ -165,6 +169,8 @@ export default function ProcessEditPage({
     badgeText: string;
     spacing: SectionSpacing;
     noVerticalMargin: boolean;
+    circularCtaText: string;
+    circularCtaLink: string;
   }) => JSON.stringify(payload);
 
   useEffect(() => {
@@ -195,6 +201,8 @@ export default function ProcessEditPage({
       badgeText: hc.badgeText ?? '',
       spacing: normalizedConfig.spacing,
       noVerticalMargin: normalizedConfig.spacing === 'none',
+      circularCtaText: normalizedConfig.circularCtaText ?? '',
+      circularCtaLink: normalizedConfig.circularCtaLink ?? '',
     }));
   }, [component]);
 
@@ -218,6 +226,8 @@ export default function ProcessEditPage({
     badgeText,
     spacing,
     noVerticalMargin: spacing === 'none',
+    circularCtaText,
+    circularCtaLink,
   });
 
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
@@ -263,6 +273,8 @@ export default function ProcessEditPage({
         uppercaseText,
         showBadge,
         badgeText,
+        circularCtaText,
+        circularCtaLink,
       };
 
       if (onSnapshotSave) {
@@ -330,6 +342,18 @@ export default function ProcessEditPage({
   }
 
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
+
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
+
+  const handleStepsChange = (newSteps: ProcessFormStep[]) => {
+    setSteps(
+      newSteps.map((item, idx) => ({
+        ...item,
+        id: steps[idx]?.id ?? item.id,
+      }))
+    );
+  };
 
   const normalizedPreviewSteps = normalizeProcessRenderSteps(serializeProcessFormSteps(steps));
 
@@ -407,7 +431,17 @@ export default function ProcessEditPage({
           </HomeComponentDisplaySettingsSection>
         </div>
 
-        <ProcessForm steps={steps} onChange={setSteps} secondary={effectiveColors.secondary} defaultExpanded={false} />
+        <ProcessForm
+          steps={steps}
+          onChange={setSteps}
+          secondary={effectiveColors.secondary}
+          defaultExpanded={false}
+          style={processStyle}
+          circularCtaText={circularCtaText}
+          circularCtaLink={circularCtaLink}
+          onChangeCircularCtaText={setCircularCtaText}
+          onChangeCircularCtaLink={setCircularCtaLink}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,420px] gap-6">
           <div></div>
@@ -475,6 +509,13 @@ export default function ProcessEditPage({
               desktopColumns={desktopColumns}
               spacing={spacing}
               cornerRadius={cornerRadius}
+              circularCtaText={circularCtaText}
+              circularCtaLink={circularCtaLink}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemsChange={handleStepsChange}
             />
           </div>
         </div>

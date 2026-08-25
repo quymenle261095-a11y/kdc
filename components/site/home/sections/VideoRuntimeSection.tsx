@@ -7,16 +7,18 @@ import { normalizeVideoConfig, normalizeVideoStyle } from '@/app/admin/home-comp
 import type { VideoBrandMode } from '@/app/admin/home-components/video/_types';
 import type { HomeComponentSectionProps } from '../types';
 
-export function VideoRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function VideoRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const videoConfig = normalizeVideoConfig(config);
   const style = normalizeVideoStyle(videoConfig.style);
 
-  const tokens = getVideoColorTokens({
+  const tokens = adaptTokensForDarkMode(getVideoColorTokens({
     primary: brandColor,
     secondary,
     mode: mode as VideoBrandMode,
     style,
-  });
+  }), isDark ?? false);
 
   return (
     <VideoSectionShared

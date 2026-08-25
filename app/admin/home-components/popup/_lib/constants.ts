@@ -2,14 +2,14 @@ import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/
 import type { PopupConfig, PopupCornerRadius, PopupFrequency, PopupStyle, PopupTrigger, PopupBackgroundMode } from '../_types';
 
 export const POPUP_STYLES: Array<{ id: PopupStyle; label: string }> = [
-  { id: 'center-card', label: 'Premium Modal' },
-  { id: 'split-visual', label: 'Visual Offer' },
-  { id: 'bottom-sheet', label: 'Bottom Sheet' },
-  { id: 'side-panel', label: 'Side Panel' },
-  { id: 'minimal-alert', label: 'Smart Alert' },
-  { id: 'full-screen', label: 'Campaign Hero' },
-  { id: 'image-only', label: 'Image Only' },
-  { id: 'centered-advertisement', label: 'Premium Advertisement' },
+  { id: 'center-card', label: '(1) Căn giữa' },
+  { id: 'split-visual', label: '(2) Chia đôi' },
+  { id: 'bottom-sheet', label: '(3) Trượt dưới' },
+  { id: 'side-panel', label: '(4) Trượt góc' },
+  { id: 'minimal-alert', label: '(5) Cảnh báo' },
+  { id: 'full-screen', label: '(6) Tràn màn' },
+  { id: 'image-only', label: '(7) Chỉ ảnh' },
+  { id: 'centered-advertisement', label: '(8) Khung lớn' },
 ];
 
 export const DEFAULT_POPUP_CONFIG: PopupConfig = {

@@ -8,7 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { ChevronDown, Heart, Package, Search, Trash2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
 
@@ -38,21 +38,7 @@ function WishlistContent() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState<Id<"customers"> | ''>('');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_wishlist_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : [];
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_wishlist_visible_columns');
   const [manualSelectedIds, setManualSelectedIds] = useState<Id<"wishlist">[]>([]);
   const [selectionMode, setSelectionMode] = useState<'manual' | 'all'>('manual');
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,11 +52,7 @@ function WishlistContent() {
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    if (visibleColumns.length > 0) {
-      window.localStorage.setItem('admin_wishlist_visible_columns', JSON.stringify(visibleColumns));
-    }
-  }, [visibleColumns]);
+
 
   const itemsPerPage = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'itemsPerPage');
@@ -118,7 +100,7 @@ function WishlistContent() {
 
   const columns = useMemo(() => {
     const cols = [
-      { key: 'select', label: 'Chọn' },
+      { key: 'select', label: 'Chọn', required: true },
       { key: 'customer', label: 'Khách hàng', required: true },
       { key: 'product', label: 'Sản phẩm', required: true },
       { key: 'price', label: 'Giá' },
@@ -166,7 +148,7 @@ function WishlistContent() {
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
     applyManualSelection([]);
   };
@@ -260,14 +242,11 @@ function WishlistContent() {
   }, [wishlistItems]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Sản phẩm yêu thích</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý wishlist của khách hàng</p>
-        </div>
-        <div className="flex gap-2" />
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Danh sách yêu thích"
+        description="Quản lý wishlist và sản phẩm yêu thích của khách hàng"
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -333,191 +312,162 @@ function WishlistContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex flex-wrap gap-3 flex-1">
-            <div className="relative max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Tìm khách hàng, sản phẩm..." className="pl-9 w-48" value={searchTerm} onChange={(e) =>{  handleSearchChange(e.target.value); }} />
-            </div>
-            <select className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" value={filterCustomer} onChange={(e) =>{  handleCustomerChange(e.target.value); }}>
-              <option value="">Tất cả khách hàng</option>
-              {customersData?.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
-          <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={(key) =>{
-            setVisibleColumns(prev => {
-              const base = prev.length > 0 ? prev : columns.map(c => c.key);
-              return base.includes(key) ? base.filter(col => col !== key) : [...base, key];
-            });
-          }} />
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              {resolvedVisibleColumns.includes('select') && <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>}
-              {resolvedVisibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="customerName" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('product') && <SortableHeader label="Sản phẩm" sortKey="productName" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('price') && <SortableHeader label="Giá" sortKey="productPrice" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('note') && enabledFields.has('note') && <TableHead>Ghi chú</TableHead>}
-              {resolvedVisibleColumns.includes('createdAt') && <SortableHeader label="Ngày thêm" sortKey="_creationTime" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedItemsPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell colSpan={tableColumnCount}>
-                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedData.map(item => (
-                  <TableRow key={item._id} className={selectedIds.includes(item._id) ? 'bg-pink-500/5' : ''}>
-                {resolvedVisibleColumns.includes('select') && <TableCell><SelectCheckbox checked={selectedIds.includes(item._id)} onChange={() =>{  toggleSelectItem(item._id); }} /></TableCell>}
-                {resolvedVisibleColumns.includes('customer') && (
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{item.customerName}</p>
-                      <p className="text-xs text-slate-500">{item.customerEmail}</p>
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('product') && (
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {item.productImage ? (
-                        <Image src={item.productImage} width={40} height={40} className="w-10 h-10 object-cover rounded bg-slate-100" alt={item.productName} />
-                      ) : (
-                        <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center">
-                          <Package size={16} className="text-slate-400" />
-                        </div>
-                      )}
-                      <span className="font-medium max-w-[200px] truncate">{item.productName}</span>
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('price') && (
-                  <TableCell>
-                    {item.productSalePrice ? (
-                      <div>
-                        <span className="text-red-500 font-medium">{formatPrice(item.productSalePrice)}</span>
-                        <span className="text-slate-400 line-through text-xs ml-1">{formatPrice(item.productPrice)}</span>
-                      </div>
-                    ) : (
-                      formatPrice(item.productPrice)
-                    )}
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('note') && enabledFields.has('note') && (
-                  <TableCell className="text-slate-500 text-sm max-w-[150px] truncate">{item.note ?? '-'}</TableCell>
-                )}
-                {resolvedVisibleColumns.includes('createdAt') && <TableCell className="text-slate-500 text-sm">{formatDate(item._creationTime)}</TableCell>}
-                {resolvedVisibleColumns.includes('actions') && (
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(item._id)}><Trash2 size={16}/></Button>
-                  </TableCell>
-                )}
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedData.length === 0 && (
+        <TableToolbar
+          activeFilterCount={[Boolean(filterCustomer)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={handleSearchChange}
+              placeholder="Tìm khách hàng, sản phẩm..."
+            />
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Khách hàng"
+                value={filterCustomer}
+                onChange={(val) => handleCustomerChange(val)}
+                placeholder="Tất cả khách hàng"
+                options={(customersData ?? []).map(c => ({ value: c._id, label: c.name }))}
+              />
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterCustomer)} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={(key) => toggleColumn(key, columns.map(c => c.key))} />
+            </>
+          }
+        />
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
               <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterCustomer ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có sản phẩm yêu thích nào.'}
-                </TableCell>
+                {resolvedVisibleColumns.includes('select') && <TableHeadSelect checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} />}
+                {resolvedVisibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="customerName" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('product') && <SortableHeader label="Sản phẩm" sortKey="productName" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('price') && <SortableHeader label="Giá" sortKey="productPrice" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('note') && enabledFields.has('note') && <TableHead>Ghi chú</TableHead>}
+                {resolvedVisibleColumns.includes('createdAt') && <SortableHeader label="Ngày thêm" sortKey="_creationTime" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedItemsPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số wishlist mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>mục/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedItemsPerPage) + 1 : 0}–{Math.min(currentPage * resolvedItemsPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">wishlist</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedItemsPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedData.map(item => (
+                    <TableRow key={item._id} className={selectedIds.includes(item._id) ? 'bg-pink-500/5' : ''}>
+                  {resolvedVisibleColumns.includes('select') && <TableCellSelect checked={selectedIds.includes(item._id)} onChange={() => { toggleSelectItem(item._id); }} />}
+                  {resolvedVisibleColumns.includes('customer') && (
+                    <TableCell className="whitespace-nowrap">
+                      <div>
+                        <p className="font-medium">{item.customerName}</p>
+                        <p className="text-xs text-slate-500">{item.customerEmail}</p>
                       </div>
-                    );
-                  }
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('product') && (
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {item.productImage ? (
+                          <Image src={item.productImage} width={40} height={40} className="w-10 h-10 object-cover rounded bg-slate-100" alt={item.productName} />
+                        ) : (
+                          <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded flex items-center justify-center">
+                            <Package size={16} className="text-slate-400" />
+                          </div>
+                        )}
+                        <span className="font-medium max-w-[200px] truncate">{item.productName}</span>
+                      </div>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('price') && (
+                    <TableCell className="whitespace-nowrap">
+                      {item.productSalePrice ? (
+                        <div>
+                          <span className="text-red-500 font-medium">{formatPrice(item.productSalePrice)}</span>
+                          <span className="text-slate-400 line-through text-xs ml-1">{formatPrice(item.productPrice)}</span>
+                        </div>
+                      ) : (
+                        formatPrice(item.productPrice)
+                      )}
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('note') && enabledFields.has('note') && (
+                    <TableCell className="text-slate-500 text-sm max-w-[150px] truncate">{item.note ?? '-'}</TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('createdAt') && <TableCell className="text-slate-500 text-sm whitespace-nowrap">{formatDate(item._creationTime)}</TableCell>}
+                  {resolvedVisibleColumns.includes('actions') && (
+                    <TableCell className="text-right whitespace-nowrap">
+                      <RowActions>
+                        <DeleteActionButton onClick={async () => handleDelete(item._id)} />
+                      </RowActions>
+                    </TableCell>
+                  )}
+                    </TableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedData.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterCustomer ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có sản phẩm yêu thích nào.'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-pink-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterCustomer ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có sản phẩm yêu thích nào.'}
             </div>
-          </div>
-        )}
+          ) : (
+            paginatedData.map(item => (
+              <MobileRowCard
+                key={item._id}
+                selected={selectedIds.includes(item._id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(item._id)} onChange={() => toggleSelectItem(item._id)} />}
+                title={item.productName}
+                subtitle={<span className="text-xs text-slate-500">{item.customerName}</span>}
+                badge={
+                  <span className="text-xs font-semibold text-pink-600 dark:text-pink-400">
+                    {item.productSalePrice ? formatPrice(item.productSalePrice) : formatPrice(item.productPrice)}
+                  </span>
+                }
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Khách hàng:</span> {item.customerName} ({item.customerEmail})</div>
+                    <div><span className="text-slate-400">Ngày thêm:</span> {formatDate(item._creationTime)}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    <DeleteActionButton onClick={async () => handleDelete(item._id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedItemsPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="wishlist"
+        />
       </Card>
-    </div>
+    </AdminPageLayout>
   );
 }
 

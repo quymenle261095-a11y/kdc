@@ -25,6 +25,7 @@ export const ProductCategoriesForm = ({
   productCategoriesItems, setProductCategoriesItems,
   productCategoriesShowCount, setProductCategoriesShowCount,
   onAutoGenerate, autoGenerateReady, autoGenerateLoading,
+  onAutoGenerateAllActive,
   productCategoriesData, brandColor,
   selectionMode = 'real', onSelectionModeChange,
   demoCategories = [], setDemoCategories,
@@ -44,6 +45,7 @@ export const ProductCategoriesForm = ({
   onAutoGenerate?: () => void;
   autoGenerateReady?: boolean;
   autoGenerateLoading?: boolean;
+  onAutoGenerateAllActive?: () => void;
   productCategoriesData: { _id: string; name: string; image?: string }[];
   brandColor: string;
   selectionMode?: ProductCategoriesSelectionMode;
@@ -162,8 +164,9 @@ export const ProductCategoriesForm = ({
         <>
             {selectionMode === 'real' && (
               <>
-                <Button type="button" variant="outline" size="sm" onClick={() => onAutoGenerate?.()} disabled={!autoGenerateReady || autoGenerateLoading} className="gap-2">Sinh nhanh</Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => { const newId = Math.max(0, ...productCategoriesItems.map(c => c.id)) + 1; setProductCategoriesItems([...productCategoriesItems, { categoryId: '', customImage: '', id: newId }]); }} disabled={productCategoriesItems.length >= 12 || !productCategoriesData?.length} className="gap-2"><Plus size={14} /> Thêm</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => onAutoGenerateAllActive?.()} disabled={!productCategoriesData?.length} className="gap-1 border-blue-200 bg-blue-50/50 hover:bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-400">Sinh tất cả</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => onAutoGenerate?.()} disabled={!autoGenerateReady || autoGenerateLoading} className="gap-1">Sinh có SP &gt; 0</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => { const newId = Math.max(0, ...productCategoriesItems.map(c => c.id)) + 1; setProductCategoriesItems([...productCategoriesItems, { categoryId: '', customImage: '', id: newId }]); }} disabled={productCategoriesItems.length >= 12 || !productCategoriesData?.length} className="gap-1"><Plus size={12} /> Thêm</Button>
               </>
             )}
             {selectionMode === 'demo' && (

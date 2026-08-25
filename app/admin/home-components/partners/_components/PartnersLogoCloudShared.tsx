@@ -93,7 +93,7 @@ export const PartnersLogoCloudShared = ({
             const content = (
               <>
                 {item.url
-                  ? renderImage?.(item, cn(logoClassName, 'w-auto max-w-full object-contain transition-transform duration-300 hover:scale-105')) ?? null
+                  ? renderImage?.(item, cn(logoClassName, 'w-auto h-auto max-w-full object-contain transition-transform duration-300 hover:scale-105')) ?? null
                   : <ImageIcon size={fallbackIconSize} className="text-slate-300" />}
               </>
             );

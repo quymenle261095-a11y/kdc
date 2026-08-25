@@ -2,9 +2,11 @@
 
 import React from 'react';
 import dynamic from 'next/dynamic';
+import { cn } from '@/app/admin/components/ui';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useBrandColors } from '@/components/site/hooks';
+import { useSiteSettings } from '@/components/site/hooks';
 import { useSnapshotDemoContext } from '@/components/modules/homepage/SnapshotDemoProvider';
 import { resolveTypeOverrideColors, type ColorOverrideState } from '@/app/admin/home-components/_shared/lib/typeColorOverride';
 import { resolveTypeOverrideFont, type FontOverrideState } from '@/app/admin/home-components/_shared/lib/typeFontOverride';
@@ -18,20 +20,41 @@ const LegacyComponentRenderer = dynamic(
   { ssr: false, loading: () => null }
 );
 
+/** Shared system data có thể được lift lên parent để tránh N×3 subscriptions */
+export interface SharedSystemData {
+  systemConfig: {
+    typeColorOverrides: Record<string, ColorOverrideState & { systemEnabled?: boolean }> | null;
+    typeFontOverrides: Record<string, FontOverrideState & { systemEnabled?: boolean }> | null;
+    globalFontOverride: { enabled: boolean; fontKey: string } | null;
+    homePageBackground?: unknown;
+  } | null | undefined;
+  systemColors: { primary: string; secondary: string; mode: 'single' | 'dual' };
+  isDark: boolean;
+}
+
 interface HomeComponentRendererProps {
   component: HomeComponentRecord;
   snapshotComponentKey?: string;
+  /** Nếu được truyền vào, sẽ skip useQuery trong renderer — giảm N×3 subscriptions */
+  sharedData?: SharedSystemData;
 }
 
-export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeComponentRendererProps) {
-  const systemColors = useBrandColors();
+export function HomeComponentRenderer({ component, snapshotComponentKey, sharedData }: HomeComponentRendererProps) {
   const snapshotCtx = useSnapshotDemoContext();
   const isSnapshotMode = Boolean(snapshotCtx);
 
+  // Chỉ subscribe khi KHÔNG được cung cấp sharedData từ bên ngoài (và không ở snapshot mode)
+  const shouldSkipQuery = sharedData !== undefined || isSnapshotMode;
+
+  // useBrandColors và useSiteSettings chỉ gọi khi cần thiết
+  const liveBrandColors = useBrandColors();
+  const { isDark: liveDark } = useSiteSettings();
+
   // In snapshot mode, use systemStyle from snapshot bundle instead of querying DB
-  const liveSystemConfig = useQuery(api.homeComponentSystemConfig.getConfig, isSnapshotMode ? 'skip' : undefined);
+  const liveSystemConfig = useQuery(api.homeComponentSystemConfig.getConfig, shouldSkipQuery ? 'skip' : undefined);
   const snapshotSystemStyle = snapshotCtx?.getSystemStyle?.() ?? null;
 
+  // Resolve systemConfig: priority → sharedData > snapshot > live query
   const systemConfig = isSnapshotMode
     ? (snapshotSystemStyle
       ? {
@@ -40,7 +63,17 @@ export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeC
           globalFontOverride: (snapshotSystemStyle.globalFontOverride ?? null) as { enabled: boolean; fontKey: string } | null,
         }
       : null)
-    : liveSystemConfig;
+    : (sharedData !== undefined ? sharedData.systemConfig : liveSystemConfig);
+
+  // Resolve systemColors: priority → sharedData > snapshot fallback > live
+  const systemColors = isSnapshotMode
+    ? liveBrandColors
+    : (sharedData !== undefined ? sharedData.systemColors : liveBrandColors);
+
+  // Resolve isDark: priority → sharedData > live
+  const isDark = isSnapshotMode
+    ? liveDark
+    : (sharedData !== undefined ? sharedData.isDark : liveDark);
 
   const sectionType = component.type;
 
@@ -82,6 +115,8 @@ export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeC
         mode={resolvedColors.mode}
         title={component.title}
         snapshotComponentKey={snapshotComponentKey}
+        isDark={isDark}
+        fontKey={resolvedFont.fontKey}
         tokens={getHomepageCategoryHeroColors(
           resolvedColors.primary,
           resolvedColors.secondary,
@@ -97,6 +132,8 @@ export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeC
         mode={resolvedColors.mode}
         title={component.title}
         snapshotComponentKey={snapshotComponentKey}
+        isDark={isDark}
+        fontKey={resolvedFont.fontKey}
       />
     );
 
@@ -107,8 +144,10 @@ export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeC
     || sectionType === 'CaseStudy'
     || sectionType === 'CategoryProducts'
     || sectionType === 'Career'
+    || sectionType === 'CustomHome'
     || sectionType === 'HomepageCategoryHero'
     || sectionType === 'Partners'
+    || sectionType === 'PokemonChampions'
     || sectionType === 'Pricing'
     || sectionType === 'ProductCategories'
     || sectionType === 'ProductGrid'
@@ -121,7 +160,7 @@ export function HomeComponentRenderer({ component, snapshotComponentKey }: HomeC
     : '';
 
   return (
-    <div className={`font-active ${spacingClassName}`} style={{ '--font-active': `var(${resolvedFont.fontVariable})`, ...(useContainment ? { contain: 'layout' } : {}) } as React.CSSProperties}>
+    <div className={cn("font-active", spacingClassName, isDark ? "dark" : "")} style={{ '--font-active': `var(${resolvedFont.fontVariable})`, ...(useContainment ? { contain: 'layout' } : {}) } as React.CSSProperties}>
       {sectionNode}
     </div>
   );

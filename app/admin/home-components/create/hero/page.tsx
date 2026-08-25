@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { Button } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -22,11 +24,14 @@ const DEMO_HERO_SLIDES: HeroSlide[] = [
 ];
 
 export default function HeroCreatePage() {
-  const { title, setTitle, active, setActive, handleSubmit, isSubmitting, router } = useComponentForm('Hero Banner', 'Hero');
+  const COMPONENT_TYPE = 'Hero';
+  const { title, setTitle, active, setActive, handleSubmit, isSubmitting, router } = useComponentForm('Hero Banner', COMPONENT_TYPE);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const draftOwnerKeyRef = useRef(`home-component:hero:create:${Date.now()}:${Math.random().toString(36).slice(2)}`);
   const { commitUploads, trackUpload } = useDraftFileCleanup(draftOwnerKeyRef.current);
-  const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState('Hero', { seedCustomFromSettingsWhenTypeEmpty: true });
-  const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState('Hero', { seedCustomFromSettingsWhenTypeEmpty: true });
+  const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
+  const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
 
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([
     { id: 'slide-1', link: '', url: '' }
@@ -117,6 +122,8 @@ export default function HeroCreatePage() {
         spacing={spacing}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        isVisualEditAllowed={isVisualEditAllowed}
+        onContentChange={setHeroContent}
       />
     </ComponentFormWrapper>
   );

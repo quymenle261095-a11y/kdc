@@ -23,6 +23,7 @@ import {
   normalizeHomepageCategoryHeroStyle,
 } from '@/app/admin/home-components/homepage-category-hero/_lib/constants';
 import { getHomepageCategoryHeroColors, type HomepageCategoryHeroTokens } from '@/app/admin/home-components/homepage-category-hero/_lib/colors';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import { getHomepageCategoryHeroIcon } from '@/app/admin/home-components/homepage-category-hero/_lib/icon-options';
 import { autoGenerateHomepageCategoryHeroMenu, buildCategoryAggregateMap } from '@/app/admin/home-components/homepage-category-hero/_lib/auto-generate';
 import { ChevronDown, ChevronLeft, ChevronRight, Package } from 'lucide-react';
@@ -103,6 +104,7 @@ function HeroImageWithFallback({
   return (
     <Image
       {...props}
+      alt={typeof props.alt === 'string' ? props.alt : placeholderLabel}
       src={currentSrc}
       onError={() => {
         setCurrentSrc(currentSrc !== normalizedFallback ? normalizedFallback : null);
@@ -313,6 +315,7 @@ export function HomepageCategoryHeroSection({
   mode = 'single',
   previewDevice,
   tokens,
+  isDark,
 }: {
   config: HomepageCategoryHeroConfig;
   brandColor: string;
@@ -320,10 +323,14 @@ export function HomepageCategoryHeroSection({
   mode?: 'single' | 'dual';
   previewDevice?: 'desktop' | 'tablet' | 'mobile';
   tokens?: HomepageCategoryHeroTokens;
+  isDark?: boolean;
 }) {
   const resolvedTokens = useMemo(
-    () => tokens ?? getHomepageCategoryHeroColors(brandColor, secondary ?? '', mode),
-    [tokens, brandColor, secondary, mode]
+    () => adaptTokensForDarkMode(
+      tokens ?? getHomepageCategoryHeroColors(brandColor, secondary ?? '', mode),
+      isDark ?? false
+    ),
+    [tokens, brandColor, secondary, mode, isDark]
   );
   const resolvedConfig = useMemo(() => ({
     ...DEFAULT_HOMEPAGE_CATEGORY_HERO_CONFIG,
@@ -342,12 +349,6 @@ export function HomepageCategoryHeroSection({
     : '';
   const isDemo = resolvedConfig.selectionMode === 'demo';
   const needsHeroPayload = !isDemo && (resolvedConfig.selectionMode === 'auto' || resolvedConfig.hideEmptyCategories);
-  const legacyPayload = useQuery(
-    api.productCategories.listActiveWithStats,
-    needsHeroPayload
-      ? { productLimit: resolvedConfig.autoGenerateConfig.productScanLimit }
-      : 'skip'
-  );
   const [heroPayload, setHeroPayload] = useState<HeroPayload | null>(null);
   const hierarchyFeature = useQuery(
     api.admin.modules.getModuleFeature,
@@ -419,11 +420,8 @@ export function HomepageCategoryHeroSection({
   const resolvedHeroPayload = useMemo(() => {
     if (!needsHeroPayload) {return null;}
     if (heroPayload) {return heroPayload;}
-    if (legacyPayload) {
-      return { ...legacyPayload, productsByCategory: [] } as HeroPayload;
-    }
     return null;
-  }, [heroPayload, legacyPayload, needsHeroPayload]);
+  }, [heroPayload, needsHeroPayload]);
 
   const productMap = useMemo(() => {
     const map = new Map<string, HeroProductSummary>();

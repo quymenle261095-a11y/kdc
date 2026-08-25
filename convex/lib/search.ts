@@ -57,9 +57,71 @@ const levenshteinDistance = (a: string, b: string, maxDistance = 2) => {
   return prev[bLen];
 };
 
+const scoreNormalizedOverlap = (candidate: string, query: string) => {
+  const queryTokens = query.split(" ").filter(Boolean);
+  const candidateTokens = candidate.split(" ").filter(Boolean);
+  if (queryTokens.length === 0 || candidateTokens.length === 0) {
+    return 0;
+  }
+
+  // Danh sách từ dừng (stop words) tiếng Việt phổ biến để lọc bỏ trong câu hỏi chatbot
+  const stopWords = new Set([
+    "toi", "muon", "mua", "can", "cho", "tim", "ban", "co", "khong", 
+    "la", "gi", "o", "tai", "cua", "ben", "va", "ve", "nhe", "nha", 
+    "chao", "alo", "ad", "admin", "de", "xin", "cam", "on", "lien", "he", "tu", "van"
+  ]);
+
+  const importantQueryTokens = queryTokens.filter(t => !stopWords.has(t) && t.length > 1);
+  
+  // Nếu sau khi lọc không còn từ quan trọng nào, ta dùng lại danh sách từ gốc có độ dài > 1
+  if (importantQueryTokens.length === 0) {
+    importantQueryTokens.push(...queryTokens.filter(t => t.length > 1));
+  }
+
+  // Nếu vẫn rỗng (toàn các từ 1 chữ cái hoặc quá ngắn), dùng toàn bộ queryTokens ban đầu
+  if (importantQueryTokens.length === 0) {
+    importantQueryTokens.push(...queryTokens);
+  }
+
+  let matches = 0;
+  for (const qToken of importantQueryTokens) {
+    let tokenMatched = false;
+    for (const cToken of candidateTokens) {
+      if (qToken === cToken) {
+        tokenMatched = true;
+        break;
+      }
+      // Cho phép sai lệch fuzzy 1 ký tự đối với các từ có độ dài từ 3 trở lên
+      if (qToken.length >= 3 && cToken.length >= 3) {
+        const dist = levenshteinDistance(qToken, cToken, 1);
+        if (dist <= 1) {
+          tokenMatched = true;
+          break;
+        }
+      }
+    }
+    if (tokenMatched) {
+      matches += 1;
+    }
+  }
+
+  if (matches === 0) {
+    return 0;
+  }
+
+  // Trả về tỷ lệ % số từ khớp trên tổng số từ quan trọng
+  return Math.round((matches / importantQueryTokens.length) * 100);
+};
+
 const scoreNormalizedText = (candidate: string, query: string) => {
   if (!candidate || !query) {
     return 0;
+  }
+
+  // Nếu query có nhiều từ (chứa khoảng trắng), dùng thuật toán Token Overlap
+  const queryTokens = query.split(" ").filter(Boolean);
+  if (queryTokens.length > 1) {
+    return scoreNormalizedOverlap(candidate, query);
   }
 
   if (candidate === query) {

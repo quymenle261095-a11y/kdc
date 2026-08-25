@@ -1,27 +1,36 @@
 'use client';
 
 import React, { use, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Card, CardContent, Input, Label } from '../../../components/ui';
+import { Checkbox, Input, Label } from '../../../components/ui';
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormCard,
+  AdminFormPageWrapper,
+  AdminSelect,
+  AdminStickyFooter,
+  AdminTitleInput,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'notifications';
+
+type NotificationType = 'info' | 'success' | 'warning' | 'error';
 
 export default function NotificationEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const notificationData = useQuery(api.notifications.getById, { id: id as Id<"notifications"> });
+  useSetAdminBreadcrumb(notificationData?.title);
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: MODULE_KEY });
   const updateNotification = useMutation(api.notifications.update);
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [type, setType] = useState<'info' | 'success' | 'warning' | 'error'>('info');
+  const [type, setType] = useState<NotificationType>('info');
   const [targetType, setTargetType] = useState<'all' | 'customers' | 'users' | 'specific'>('all');
   const [sendEmail, setSendEmail] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -49,21 +58,40 @@ export default function NotificationEditPage({ params }: { params: Promise<{ id:
     }
   }, [notificationData]);
 
+  const isReadOnly = notificationData?.status === 'Sent';
+
+  const hasChanges = useMemo(() => {
+    if (!notificationData || isReadOnly) return false;
+    return (
+      title !== notificationData.title ||
+      content !== notificationData.content ||
+      type !== notificationData.type ||
+      targetType !== notificationData.targetType ||
+      sendEmail !== (notificationData.sendEmail ?? false)
+    );
+  }, [notificationData, title, content, type, targetType, sendEmail, isReadOnly]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
+    if (!title.trim() || !content.trim()) {
+      toast.error('Vui lòng điền tiêu đề và nội dung');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await updateNotification({
-        content,
         id: id as Id<"notifications">,
+        content,
         scheduledAt: enabledFields.has('scheduledAt') && scheduledAt ? new Date(scheduledAt).getTime() : undefined,
         sendEmail: enabledFields.has('sendEmail') ? sendEmail : undefined,
         status: scheduledAt ? 'Scheduled' : 'Draft',
-        targetType: enabledFields.has('targetType') ? targetType : undefined,
+        targetType: enabledFields.has('targetType') ? targetType : 'all',
         title,
         type,
       });
       toast.success('Đã cập nhật thông báo');
+      router.push('/admin/notifications');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     } finally {
@@ -71,90 +99,89 @@ export default function NotificationEditPage({ params }: { params: Promise<{ id:
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (!notificationData) {
-    return <div className="text-center py-8 text-slate-500">Không tìm thấy thông báo</div>;
-  }
-
-  if (notificationData.status === 'Sent') {
-    return (
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="text-center py-8">
-          <p className="text-slate-500 mb-4">Không thể chỉnh sửa thông báo đã gửi</p>
-          <Link href="/admin/notifications">
-            <Button variant="outline">Quay lại danh sách</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-20">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa thông báo</h1>
-        <Link href="/admin/notifications" className="text-sm text-pink-600 hover:underline">Quay lại danh sách</Link>
-      </div>
+    <AdminFormPageWrapper
+      title={isReadOnly ? 'Chi tiết thông báo' : 'Chỉnh sửa thông báo'}
+      backHref="/admin/notifications"
+      isLoading={isLoading}
+      notFound={!notificationData}
+      notFoundMessage="Không tìm thấy thông báo"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      isDirty={hasChanges}
+      stickyFooter={
+        !isReadOnly ? (
+          <AdminStickyFooter
+            isSubmitting={isSubmitting}
+            hasChanges={hasChanges}
+            submitLabel="Lưu thay đổi"
+            onCancel={() => router.push('/admin/notifications')}
+            onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          />
+        ) : undefined
+      }
+    >
+      <div className="max-w-2xl space-y-4">
+        {isReadOnly && (
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 p-4 rounded-md text-sm">
+            Thông báo này đã được gửi đi. Bạn đang xem chi tiết ở chế độ chỉ đọc.
+          </div>
+        )}
 
-      <Card>
         <form onSubmit={handleSubmit}>
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Tiêu đề <span className="text-red-500">*</span></Label>
-              <Input 
-                required 
-                placeholder="Nhập tiêu đề thông báo..." 
-                value={title}
-                onChange={(e) =>{  setTitle(e.target.value); }}
-              />
-            </div>
+          <AdminFormCard title="Nội dung thông báo">
+            <AdminTitleInput
+              label="Tiêu đề"
+              required
+              placeholder="Nhập tiêu đề thông báo..."
+              value={title}
+              copyLabel="tiêu đề"
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isReadOnly}
+            />
 
             <div className="space-y-2">
               <Label>Nội dung <span className="text-red-500">*</span></Label>
-              <textarea 
+              <textarea
                 required
-                className="w-full min-h-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                className="w-full min-h-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-75 disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-500"
                 placeholder="Nhập nội dung thông báo..."
                 value={content}
-                onChange={(e) =>{  setContent(e.target.value); }}
+                onChange={(e) => setContent(e.target.value)}
+                disabled={isReadOnly}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Loại thông báo <span className="text-red-500">*</span></Label>
-                <select 
-                  className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                <AdminSelect
                   value={type}
-                  onChange={(e) =>{  setType(e.target.value as typeof type); }}
-                >
-                  <option value="info">Thông tin</option>
-                  <option value="success">Thành công</option>
-                  <option value="warning">Cảnh báo</option>
-                  <option value="error">Lỗi</option>
-                </select>
+                  onChange={(val) => setType(val as NotificationType)}
+                  disabled={isReadOnly}
+                  options={[
+                    { value: 'info', label: 'Thông tin' },
+                    { value: 'success', label: 'Thành công' },
+                    { value: 'warning', label: 'Cảnh báo' },
+                    { value: 'error', label: 'Lỗi' },
+                  ]}
+                />
               </div>
 
               {enabledFields.has('targetType') && (
                 <div className="space-y-2">
                   <Label>Đối tượng nhận</Label>
-                  <select 
-                    className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                  <AdminSelect
                     value={targetType}
-                    onChange={(e) =>{  setTargetType(e.target.value as typeof targetType); }}
-                  >
-                    <option value="all">Tất cả</option>
-                    <option value="customers">Khách hàng</option>
-                    <option value="users">Admin</option>
-                    <option value="specific">Cụ thể</option>
-                  </select>
+                    onChange={(val) => setTargetType(val as typeof targetType)}
+                    disabled={isReadOnly}
+                    options={[
+                      { value: 'all', label: 'Tất cả' },
+                      { value: 'customers', label: 'Khách hàng' },
+                      { value: 'users', label: 'Admin' },
+                      { value: 'specific', label: 'Cụ thể' },
+                    ]}
+                  />
                 </div>
               )}
             </div>
@@ -162,37 +189,29 @@ export default function NotificationEditPage({ params }: { params: Promise<{ id:
             {enabledFields.has('scheduledAt') && (
               <div className="space-y-2">
                 <Label>Hẹn giờ gửi (để trống nếu lưu nháp)</Label>
-                <Input 
+                <Input
                   type="datetime-local"
                   value={scheduledAt}
-                  onChange={(e) =>{  setScheduledAt(e.target.value); }}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  disabled={isReadOnly}
                 />
               </div>
             )}
 
             {enabledFields.has('sendEmail') && (
-              <div className="flex items-center gap-2">
-                <input 
-                  type="checkbox" 
+              <div className="flex items-center gap-2 pt-2">
+                <Checkbox
                   id="sendEmail"
                   checked={sendEmail}
-                  onChange={(e) =>{  setSendEmail(e.target.checked); }}
-                  className="w-4 h-4 rounded border-slate-300"
+                  onCheckedChange={(checked) => setSendEmail(Boolean(checked))}
+                  disabled={isReadOnly}
                 />
-                <Label htmlFor="sendEmail" className="cursor-pointer">Gửi email kèm theo</Label>
+                <Label htmlFor="sendEmail" className="cursor-pointer text-sm font-medium">Gửi email kèm theo</Label>
               </div>
             )}
-          </CardContent>
-          
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 rounded-b-lg flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/notifications'); }}>Hủy bỏ</Button>
-            <Button type="submit" className="bg-pink-600 hover:bg-pink-500" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-              Lưu thay đổi
-            </Button>
-          </div>
+          </AdminFormCard>
         </form>
-      </Card>
-    </div>
+      </div>
+    </AdminFormPageWrapper>
   );
 }

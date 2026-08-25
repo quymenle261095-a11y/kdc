@@ -91,11 +91,7 @@ const buildTrustLinks = (settings: SettingMap) => {
 
   TRUST_PAGE_SLOTS.forEach((slot) => {
     const enabled = resolveBoolean(settings[slot.iaKey], true);
-    const mappedPostId = resolveString(settings[slot.mappingKey]);
     if (!enabled) {return;}
-    if (!mappedPostId) {
-      missingTrustKeys.push(slot.key);
-    }
     pushUniqueLink(trustLinks, { label: slot.label, url: slot.slug }, seen);
   });
 

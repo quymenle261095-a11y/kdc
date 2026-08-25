@@ -47,7 +47,7 @@ const getAPCALc = (text: string, background: string) => {
   return Number.isFinite(lc) ? lc : 0;
 };
 
-const getAPCATextColor = (background: string, _fontSize = 16, _fontWeight = 500) => {
+export const getAPCATextColor = (background: string, _fontSize = 16, _fontWeight = 500) => {
   const bgRgb = toRgbTuple(background, '#0f172a');
   if (!bgRgb) {
     return '#111111';
@@ -180,16 +180,17 @@ export type MenuLayerColorTokens = {
 export const getMenuColors = (
   primary: string,
   secondary: string | undefined,
-  mode: MenuColorMode = 'single'
+  mode: MenuColorMode = 'single',
+  isDark = false
 ): MenuColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSurfaceAlt = '#f8fafc';
-  const neutralSurfaceMuted = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderStrong = '#cbd5e1';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSubtle = '#94a3b8';
+  const neutralSurface = isDark ? '#0f172a' : '#ffffff';
+  const neutralSurfaceAlt = isDark ? '#1e293b' : '#f8fafc';
+  const neutralSurfaceMuted = isDark ? '#334155' : '#f1f5f9';
+  const neutralBorder = isDark ? '#1e293b' : '#e2e8f0';
+  const neutralBorderStrong = isDark ? '#475569' : '#cbd5e1';
+  const neutralText = isDark ? '#f8fafc' : '#0f172a';
+  const neutralMuted = isDark ? '#cbd5e1' : '#475569';
+  const neutralSubtle = isDark ? '#94a3b8' : '#94a3b8';
 
   const resolvedSecondary = resolveSecondaryForMode(primary, secondary, mode);
   const accent = mode === 'dual' ? resolvedSecondary : primary;

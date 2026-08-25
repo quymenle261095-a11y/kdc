@@ -36,7 +36,7 @@ import {
 import {
   getAboutValidationResult,
 } from '../../_lib/colors';
-import type { AboutCornerRadius, AboutEditorState, AboutStyle } from '../../_types';
+import type { AboutCornerRadius, AboutEditorState, AboutStyle, AboutConfig } from '../../_types';
 
 const COMPONENT_TYPE = 'About';
 
@@ -246,6 +246,44 @@ export default function AboutEditPage({
     badgeText,
     spacing,
   });
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
+
+  const handleConfigChange = (nextConfig: AboutConfig) => {
+    setState((prev) => {
+      const nextFeatures = prev.features.map((f, idx) => {
+        const incoming = nextConfig.features?.[idx];
+        if (!incoming) {return f;}
+        return {
+          ...f,
+          title: incoming.title ?? f.title,
+        };
+      });
+
+      const nextStats = prev.stats.map((s, idx) => {
+        const incoming = nextConfig.stats?.[idx];
+        if (!incoming) {return s;}
+        return {
+          ...s,
+          value: incoming.value ?? s.value,
+          label: incoming.label ?? s.label,
+        };
+      });
+
+      return {
+        ...prev,
+        subHeading: nextConfig.subHeading !== undefined ? nextConfig.subHeading : prev.subHeading,
+        heading: nextConfig.heading !== undefined ? nextConfig.heading : prev.heading,
+        highlightText: nextConfig.highlightText !== undefined ? nextConfig.highlightText : prev.highlightText,
+        description: nextConfig.description !== undefined ? nextConfig.description : prev.description,
+        phone: nextConfig.phone !== undefined ? nextConfig.phone : prev.phone,
+        buttonText: nextConfig.buttonText !== undefined ? nextConfig.buttonText : prev.buttonText,
+        features: nextFeatures,
+        stats: nextStats,
+      };
+    });
+  };
+
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
   const customChanged = enableTypeOverrides && showCustomBlock
     ? customState.enabled !== initialCustom.enabled
@@ -526,6 +564,11 @@ export default function AboutEditPage({
             badgeText={badgeText}
             spacing={spacing}
             cornerRadius={state.cornerRadius ?? 'lg'}
+            isVisualEditAllowed={isVisualEditAllowed}
+            onConfigChange={handleConfigChange}
+            onTitleChange={setTitle}
+            onSubtitleChange={setSubtitle}
+            onBadgeTextChange={setBadgeText}
           />
         </div>
 

@@ -13,6 +13,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { LayoutTemplate, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, Label } from '../../../../components/ui';
+import { CopyTextButton } from '../../../../components/CopyTextButton';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
@@ -491,7 +492,12 @@ export default function HomepageCategoryHeroEditPage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <ClearableInput value={title} onChange={setTitle} required />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <ClearableInput value={title} onChange={setTitle} required />
+                </div>
+                <CopyTextButton value={title} label="tiêu đề hiển thị" className="shrink-0" />
+              </div>
             </div>
 </CardContent>
         </Card>

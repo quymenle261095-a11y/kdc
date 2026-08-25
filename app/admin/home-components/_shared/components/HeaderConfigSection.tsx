@@ -3,6 +3,7 @@
 import React from 'react';
 import { AlertCircle, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Label, cn } from '@/app/admin/components/ui';
+import { CopyTextButton } from '@/app/admin/components/CopyTextButton';
 import { ToggleSwitch } from '@/components/modules/shared';
 import { InputWithClear } from '../../stats/_components/InputWithClear';
 
@@ -124,12 +125,17 @@ export function HeaderConfigSection({
             <Label>
               {titleLabel} {titleRequired && <span className="text-red-500">*</span>}
             </Label>
-            <InputWithClear
-              value={title}
-              onChange={onTitleChange}
-              required={titleRequired}
-              placeholder={titlePlaceholder}
-            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <InputWithClear
+                  value={title}
+                  onChange={onTitleChange}
+                  required={titleRequired}
+                  placeholder={titlePlaceholder}
+                />
+              </div>
+              <CopyTextButton value={title} label="tiêu đề hiển thị" className="shrink-0" />
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">

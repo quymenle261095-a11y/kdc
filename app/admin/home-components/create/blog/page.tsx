@@ -18,6 +18,8 @@ import type { BlogCardRadius, BlogSelectionMode, BlogStyle, DemoBlogItem } from 
 const COMPONENT_TYPE = 'Blog';
 
 export default function BlogCreatePage() {
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Tin tức / Blog', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -279,6 +281,10 @@ export default function BlogCreatePage() {
         desktopColumns={desktopColumns}
         spacing={spacing}
         cornerRadius={cornerRadius}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={setHeaderSubtitle}
+        onBadgeTextChange={setBadgeText}
       />
     </ComponentFormWrapper>
   );

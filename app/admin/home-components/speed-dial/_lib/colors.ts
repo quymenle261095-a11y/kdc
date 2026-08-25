@@ -11,6 +11,7 @@ import type {
 const DEFAULT_BRAND_COLOR = '#3b82f6';
 
 const clampLightness = (value: number) => Math.min(Math.max(value, 0.08), 0.98);
+const clampChroma = (value: number) => Math.min(Math.max(value, 0.02), 0.35);
 
 const safeParseOklch = (value: string, fallback: string) => (
   oklch(value) ?? oklch(fallback) ?? oklch(DEFAULT_BRAND_COLOR)
@@ -82,6 +83,18 @@ const ensureAPCATextColor = (
 const getSolidTint = (hex: string, lightnessIncrease = 0.42) => {
   const color = safeParseOklch(hex, DEFAULT_BRAND_COLOR);
   return formatHex(oklch({ ...color, l: clampLightness((color.l ?? 0.6) + lightnessIncrease) }));
+};
+
+const getDarkModeAccent = (hex: string, fallback = DEFAULT_BRAND_COLOR) => {
+  const color = safeParseOklch(hex, fallback);
+  const lightness = color.l ?? 0.62;
+  const chroma = color.c ?? 0.14;
+
+  return formatHex(oklch({
+    ...color,
+    l: lightness < 0.62 ? 0.68 : Math.min(lightness, 0.82),
+    c: color.h == null ? Math.min(chroma, 0.02) : clampChroma(Math.max(chroma * 0.9, Math.min(chroma + 0.02, 0.14))),
+  }));
 };
 
 export const getHarmonyColor = (primary: string) => {
@@ -364,6 +377,113 @@ export const getSpeedDialColorTokens = ({
     plusTileIcon: mutedText,
   };
 };
+
+export const getSpeedDialDarkColorTokens = ({
+  primary,
+  secondary,
+  mode,
+}: {
+  primary: string;
+  secondary: string;
+  mode: SpeedDialBrandMode;
+}): SpeedDialColorTokens => {
+  const primaryResolved = normalizeHex(primary, DEFAULT_BRAND_COLOR);
+  const secondaryResolved = resolveSecondaryForMode(primaryResolved, secondary, mode);
+  const primaryAccent = getDarkModeAccent(primaryResolved, DEFAULT_BRAND_COLOR);
+  const secondaryAccent = mode === 'single'
+    ? primaryAccent
+    : getDarkModeAccent(secondaryResolved, primaryResolved);
+
+  const neutralBackground = '#020617';
+  const neutralSurface = '#0f172a';
+  const elevatedSurface = '#111827';
+  const neutralBorder = '#334155';
+  const bodyText = '#f8fafc';
+  const mutedText = '#cbd5e1';
+  const tooltipBg = elevatedSurface;
+  const tooltipText = bodyText;
+  const actionBgDefault = secondaryAccent;
+  const actionText = getAPCATextColor(actionBgDefault, 14, 600);
+  const mainButtonBg = primaryAccent;
+  const mainButtonText = getAPCATextColor(mainButtonBg, 16, 700);
+  const minimalActionText = ensureAPCATextColor(secondaryAccent, elevatedSurface, 14, 600);
+
+  return {
+    primary: primaryAccent,
+    secondary: secondaryAccent,
+    neutralBackground,
+    neutralSurface,
+    neutralBorder,
+    bodyText,
+    mutedText,
+    tooltipBg,
+    tooltipText,
+    separatorColor: neutralBorder,
+    overlayScrim: 'rgba(2,6,23,0.72)',
+    dockBackdrop: neutralSurface,
+    mainButtonBg,
+    mainButtonText,
+    mainButtonRing: elevatedSurface,
+    actionBgDefault,
+    actionText,
+    actionHoverBg: elevatedSurface,
+    actionStyleBg: {
+      fab: secondaryAccent,
+      sidebar: secondaryAccent,
+      pills: secondaryAccent,
+      stack: secondaryAccent,
+      dock: secondaryAccent,
+      minimal: elevatedSurface,
+      'builder-bar': mainButtonBg,
+    },
+    actionStyleText: {
+      fab: getAPCATextColor(secondaryAccent, 14, 600),
+      sidebar: getAPCATextColor(secondaryAccent, 14, 600),
+      pills: getAPCATextColor(secondaryAccent, 14, 600),
+      stack: getAPCATextColor(secondaryAccent, 14, 600),
+      dock: getAPCATextColor(secondaryAccent, 14, 600),
+      minimal: minimalActionText,
+      'builder-bar': mainButtonText,
+    },
+    actionStyleBorder: {
+      fab: neutralBorder,
+      sidebar: neutralBorder,
+      pills: neutralBorder,
+      stack: neutralBorder,
+      dock: neutralBorder,
+      minimal: neutralBorder,
+      'builder-bar': neutralBorder,
+    },
+    labelPillBg: tooltipBg,
+    labelPillText: tooltipText,
+    minimalBarBg: neutralSurface,
+    minimalIconColor: minimalActionText,
+    minimalHoverBg: elevatedSurface,
+    glassSurface: neutralSurface,
+    glassBorder: neutralBorder,
+    pageMockTitle: bodyText,
+    pageMockLine: neutralBorder,
+    pageMockCard: neutralSurface,
+    plusTileBg: elevatedSurface,
+    plusTileIcon: mutedText,
+  };
+};
+
+export const getSpeedDialThemeTokens = ({
+  primary,
+  secondary,
+  mode,
+  isDark = false,
+}: {
+  primary: string;
+  secondary: string;
+  mode: SpeedDialBrandMode;
+  isDark?: boolean;
+}) => (
+  isDark
+    ? getSpeedDialDarkColorTokens({ primary, secondary, mode })
+    : getSpeedDialColorTokens({ primary, secondary, mode })
+);
 
 export const resolveActionBgColor = (
   actionColor: string,

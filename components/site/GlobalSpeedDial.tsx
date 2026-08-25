@@ -3,7 +3,7 @@
 import React from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { useBrandColors } from './hooks';
+import { useBrandColors, useSiteSettings } from './hooks';
 import { resolveTypeOverrideColors } from '@/app/admin/home-components/_shared/lib/typeColorOverride';
 import { SpeedDialSection } from './SpeedDialSection';
 
@@ -13,7 +13,9 @@ const normalizeBoolean = (value: unknown, fallback: boolean) => (
 
 export function GlobalSpeedDial() {
   const components = useQuery(api.homeComponents.listActive);
+  const chatbotConfig = useQuery(api.systemIntegrations.getPublicAiConfig);
   const systemColors = useBrandColors();
+  const { isDark } = useSiteSettings();
   const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
 
   const resolvedColors = resolveTypeOverrideColors({
@@ -35,17 +37,41 @@ export function GlobalSpeedDial() {
     }) ?? null;
   }, [components]);
 
-  if (!speedDialComponent) {
+  const chatbotEnabled = chatbotConfig?.enabled === true;
+
+  const speedDialConfig = React.useMemo(() => {
+    if (!speedDialComponent) {return null;}
+    const config = speedDialComponent.config as Record<string, unknown>;
+    const actions = Array.isArray(config.actions) ? config.actions : [];
+
+    // Nếu chatbot bị tắt ở integrations, lọc bỏ các hành động chatbot (có url là '#ai-chatbot')
+    const filteredActions = chatbotEnabled
+      ? actions
+      : actions.filter((action) => {
+          if (typeof action === 'object' && action !== null) {
+            return (action as Record<string, unknown>).url !== '#ai-chatbot';
+          }
+          return true;
+        });
+
+    return {
+      ...config,
+      actions: filteredActions,
+    };
+  }, [speedDialComponent, chatbotEnabled]);
+
+  if (!speedDialComponent || !speedDialConfig) {
     return null;
   }
 
   return (
     <SpeedDialSection
-      config={speedDialComponent.config as Record<string, unknown>}
+      config={speedDialConfig}
       brandColor={resolvedColors.primary}
       secondary={resolvedColors.secondary}
       mode={resolvedColors.mode}
-      title={speedDialComponent.title}
+      title={speedDialComponent.title ?? chatbotConfig?.widgetTitle ?? 'Trợ lý AI'}
+      isDark={isDark}
     />
   );
 }

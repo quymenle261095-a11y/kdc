@@ -4,7 +4,7 @@ import { useUndoRedo } from '../../../_shared/hooks/useUndoRedo';
 
 import { useUnsavedGuard } from '../../../_shared/hooks/useUnsavedGuard';
 
-import React, { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
@@ -12,7 +12,8 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Package, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Label } from '../../../../components/ui';
+import { CopyableInput } from '../../../../components/CopyTextButton';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing, type SectionSpacing } from '../../../_shared/types/sectionSpacing';
@@ -80,9 +81,9 @@ export default function CategoryProductsEditPage({
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
   const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
-  const categoriesData = useQuery(api.productCategories.listActive);
-  const productsData = useQuery(api.products.listPublicResolved, { limit: 100 });
   const aspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
@@ -105,8 +106,30 @@ export default function CategoryProductsEditPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Cart buttons settings
+  const [showAddToCartButton, setShowAddToCartButton] = useState(true);
+  const [showBuyNowButton, setShowBuyNowButton] = useState(true);
+  const [cartButtonsLayout, setCartButtonsLayout] = useState<'stack' | 'grid-2'>('stack');
   const columnsMobile = getCategoryProductsResponsiveColumns(columnsDesktop).mobile;
   const productImageCropAspectRatio = style === 'wine-grid' ? 'square' : resolveProductImageAspectRatio(aspectRatioSetting?.value);
+
+  const categoriesData = useQuery(api.productCategories.listActiveCategoriesWithProductCounts);
+
+  const categoryIdsForQuery = useMemo(() => {
+    if (!categoriesData) {
+      return [];
+    }
+    const validIds = new Set<string>(categoriesData.map(c => c._id));
+    return sections
+      .map(s => s.categoryId)
+      .filter((id): id is Id<"productCategories"> => !!id && validIds.has(id));
+  }, [sections, categoriesData]);
+
+  const productsData = useQuery(
+    api.products.listProductsForCategories,
+    categoryIdsForQuery.length > 0 ? { categoryIds: categoryIdsForQuery } : 'skip'
+  );
 
   useEffect(() => {
     if (component) {
@@ -132,6 +155,9 @@ export default function CategoryProductsEditPage({
       const loadedDemoSections = (config.demoSections as DemoCategoryProductsSection[] | undefined) ?? DEFAULT_DEMO_CATEGORY_PRODUCTS_SECTIONS;
       const loadedSpacing = normalizeSectionSpacing(config.spacing);
       const loadedCornerRadius = normalizeCategoryProductsCornerRadius(config.cornerRadius);
+      const loadedShowAddToCartButton = config.showAddToCartButton !== false;
+      const loadedShowBuyNowButton = config.showBuyNowButton !== false;
+      const loadedCartButtonsLayout = config.cartButtonsLayout ?? 'stack';
 
       resetsections(loadedSections);
       setSelectionMode(loadedSelectionMode);
@@ -141,6 +167,9 @@ export default function CategoryProductsEditPage({
       setColumnsDesktop(loadedColumnsDesktop);
       setSpacing(loadedSpacing);
       setCornerRadius(loadedCornerRadius);
+      setShowAddToCartButton(loadedShowAddToCartButton);
+      setShowBuyNowButton(loadedShowBuyNowButton);
+      setCartButtonsLayout(loadedCartButtonsLayout);
 
       setInitialSnapshot(JSON.stringify({
         title: component.title,
@@ -155,6 +184,9 @@ export default function CategoryProductsEditPage({
         spacing: loadedSpacing,
         cornerRadius: loadedCornerRadius,
         type: component.type,
+        showAddToCartButton: loadedShowAddToCartButton,
+        showBuyNowButton: loadedShowBuyNowButton,
+        cartButtonsLayout: loadedCartButtonsLayout,
       }));
       setHasChanges(false);
     }
@@ -176,6 +208,9 @@ export default function CategoryProductsEditPage({
       spacing,
       cornerRadius,
       type: component.type,
+      showAddToCartButton,
+      showBuyNowButton,
+      cartButtonsLayout,
     });
     const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
     const customChanged = enableTypeOverrides && showCustomBlock
@@ -209,6 +244,9 @@ export default function CategoryProductsEditPage({
     customFontState,
     initialFontCustom,
     showFontCustomBlock,
+    showAddToCartButton,
+    showBuyNowButton,
+    cartButtonsLayout,
   ]);
 
   useEffect(() => {
@@ -247,6 +285,9 @@ export default function CategoryProductsEditPage({
         selectionMode,
         showViewAll,
         style,
+        showAddToCartButton,
+        showBuyNowButton,
+        cartButtonsLayout,
       };
       if (onSnapshotSave) {
         await onSnapshotSave({ active, config: nextConfig, title });
@@ -299,6 +340,9 @@ export default function CategoryProductsEditPage({
         spacing,
         cornerRadius,
         type: component?.type,
+        showAddToCartButton,
+        showBuyNowButton,
+        cartButtonsLayout,
       }));
       setHasChanges(false);
     } catch (error) {
@@ -342,9 +386,10 @@ export default function CategoryProductsEditPage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
+              <CopyableInput
                 value={title}
                 onChange={(e) =>{  setTitle(e.target.value); }}
+                copyLabel="tiêu đề hiển thị"
                 required
                 placeholder="Nhập tiêu đề component..."
               />
@@ -370,6 +415,12 @@ export default function CategoryProductsEditPage({
           setCornerRadius={setCornerRadius}
           productImageCropAspectRatio={productImageCropAspectRatio}
           defaultExpanded={false}
+          showAddToCartButton={showAddToCartButton}
+          setShowAddToCartButton={setShowAddToCartButton}
+          showBuyNowButton={showBuyNowButton}
+          setShowBuyNowButton={setShowBuyNowButton}
+          cartButtonsLayout={cartButtonsLayout}
+          setCartButtonsLayout={setCartButtonsLayout}
           className="mb-3"
         />
 
@@ -420,16 +471,22 @@ export default function CategoryProductsEditPage({
               />
             )}
             <CategoryProductsPreview
+              title={title}
+              onTitleChange={setTitle}
+              isVisualEditAllowed={isVisualEditAllowed}
               config={{
-              columnsDesktop,
-              columnsMobile,
-              demoSections,
-              sections,
-              selectionMode,
-              showViewAll,
-              spacing,
-              style,
-              cornerRadius,
+                columnsDesktop,
+                columnsMobile,
+                demoSections,
+                sections,
+                selectionMode,
+                showViewAll,
+                spacing,
+                style,
+                cornerRadius,
+                showAddToCartButton,
+                showBuyNowButton,
+                cartButtonsLayout,
               }}
               brandColor={effectiveColors.primary}
               secondary={effectiveColors.secondary}

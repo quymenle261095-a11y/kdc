@@ -1,5 +1,6 @@
 'use client';
 
+
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
@@ -9,6 +10,8 @@ import { HomepageCategoryHeroSection } from '@/components/site/HomepageCategoryH
 import { HOMEPAGE_CATEGORY_HERO_STYLES } from '../_lib/constants';
 import { getHomepageCategoryHeroColors } from '../_lib/colors';
 import type { HomepageCategoryHeroBrandMode, HomepageCategoryHeroConfig } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+import { usePreviewDark } from '../../_shared/components/PreviewWrapper';
 
 export function HomepageCategoryHeroPreview({
   config,
@@ -30,12 +33,13 @@ export function HomepageCategoryHeroPreview({
   fontClassName?: string;
 }) {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
   const previewStyle = selectedStyle ?? 'sidebar';
   const setPreviewStyle = (style: string) => onStyleChange?.(style as HomepageCategoryHeroConfig['style']);
   const info = `${config.selectionMode === 'auto' ? 'Auto categories' : 'Manual categories'} • ${mode === 'dual' ? '2 màu' : '1 màu'}`;
   const tokens = React.useMemo(
-    () => getHomepageCategoryHeroColors(brandColor, secondary, mode),
-    [brandColor, secondary, mode]
+    () => adaptTokensForDarkMode(getHomepageCategoryHeroColors(brandColor, secondary, mode), isDark),
+    [brandColor, secondary, mode, isDark]
   );
 
   return (
@@ -60,6 +64,7 @@ export function HomepageCategoryHeroPreview({
             mode={mode}
             previewDevice={device}
             tokens={tokens}
+            isDark={isDark}
           />
         </BrowserFrame>
       </PreviewWrapper>

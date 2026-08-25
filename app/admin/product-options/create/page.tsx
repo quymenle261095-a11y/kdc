@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -9,6 +8,9 @@ import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
 import { ModuleGuard } from '../../components/ModuleGuard';
 import { OptionForm, type ProductOptionFormValues } from '../components/OptionForm';
+import {
+  AdminFormPageWrapper,
+} from '@/app/admin/components/FormUtilities';
 
 type DisplayType = 'dropdown' | 'buttons' | 'radio' | 'color_swatch' | 'image_swatch' | 'color_picker' | 'number_input' | 'text_input';
 type InputType = 'text' | 'number' | 'color';
@@ -50,20 +52,19 @@ function ProductOptionCreateContent() {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/admin/product-options" className="text-sm text-orange-600 hover:underline">
-          Quay lại danh sách
-        </Link>
-      </div>
+    <AdminFormPageWrapper
+      title="Thêm loại tùy chọn"
+      subtitle="Định nghĩa các thuộc tính biến thể chung cho sản phẩm (Màu sắc, Dung lượng, Kích thước...)"
+      backHref="/admin/product-options"
+      isSubmitting={isSubmitting}
+    >
       <OptionForm
-        title="Thêm loại tùy chọn"
         submitLabel="Tạo option"
         isSubmitting={isSubmitting}
-        onCancel={() =>{  router.push('/admin/product-options'); }}
+        onCancel={() => { router.push('/admin/product-options'); }}
         onSubmit={handleSubmit}
         autoSlug
       />
-    </div>
+    </AdminFormPageWrapper>
   );
 }

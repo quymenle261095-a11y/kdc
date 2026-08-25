@@ -8,8 +8,8 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { ChevronDown, Edit, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { Badge, Button, Card, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
@@ -37,21 +37,7 @@ function CustomersContent() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'' | 'Active' | 'Inactive'>('');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_customers_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : [];
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_customers_visible_columns');
   const [manualSelectedIds, setManualSelectedIds] = useState<Id<"customers">[]>([]);
   const [selectionMode, setSelectionMode] = useState<'manual' | 'all'>('manual');
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,11 +54,7 @@ function CustomersContent() {
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    if (visibleColumns.length > 0) {
-      window.localStorage.setItem('admin_customers_visible_columns', JSON.stringify(visibleColumns));
-    }
-  }, [visibleColumns]);
+
 
   const customersPerPage = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'customersPerPage');
@@ -128,7 +110,7 @@ function CustomersContent() {
   const showAvatar = enabledFeatures.enableAvatar ?? true;
 
   const columns = [
-    { key: 'select', label: 'Chọn' },
+    { key: 'select', label: 'Chọn', required: true },
     { key: 'customer', label: 'Khách hàng', required: true },
     { key: 'contact', label: 'Liên hệ' },
     { key: 'city', label: 'Thành phố' },
@@ -169,7 +151,7 @@ function CustomersContent() {
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
     applyManualSelection([]);
   };
@@ -186,12 +168,6 @@ function CustomersContent() {
     applyManualSelection([]);
   };
 
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => {
-      const base = prev.length > 0 ? prev : columns.map(c => c.key);
-      return base.includes(key) ? base.filter(k => k !== key) : [...base, key];
-    });
-  };
 
   const selectedOnPage = paginatedData.filter(customer => selectedIds.includes(customer._id));
   const isPageSelected = paginatedData.length > 0 && selectedOnPage.length === paginatedData.length;
@@ -266,18 +242,12 @@ function CustomersContent() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Khách hàng</h1>
-          <p className="text-sm text-slate-500">Quản lý thông tin khách hàng và lịch sử mua hàng</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/customers/create">
-            <Button className="gap-2"><Plus size={16} /> Thêm mới</Button>
-          </Link>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý khách hàng"
+        description="Quản lý thông tin khách hàng và lịch sử mua hàng"
+        addHref="/admin/customers/create"
+      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}
@@ -293,225 +263,181 @@ function CustomersContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex flex-wrap gap-3 flex-1">
-            <div className="relative max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input
-                placeholder="Tìm tên, email, SĐT..."
-                className="pl-9 w-56"
-                value={searchTerm}
-                onChange={(e) =>{  handleSearchChange(e.target.value); }}
+        <TableToolbar
+          activeFilterCount={[Boolean(filterStatus)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => handleSearchChange(val)}
+              placeholder="Tìm tên, email, SĐT..."
+            />
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Trạng thái"
+                value={filterStatus}
+                onChange={(val) => handleFilterChange(val)}
+                placeholder="Tất cả trạng thái"
+                options={[
+                  { value: 'Active', label: 'Hoạt động' },
+                  { value: 'Inactive', label: 'Đã khóa' },
+                ]}
               />
-            </div>
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={filterStatus}
-              onChange={(e) =>{  handleFilterChange(e.target.value); }}
-            >
-              <option value="">Tất cả trạng thái</option>
-              <option value="Active">Hoạt động</option>
-              <option value="Inactive">Đã khóa</option>
-            </select>
-          <Button variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
-          </div>
-          <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={toggleColumn} />
-        </div>
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterStatus)} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={toggleColumn} />
+            </>
+          }
+        />
 
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              {resolvedVisibleColumns.includes('select') && (
-                <TableHead className="w-[40px]">
-                  <SelectCheckbox
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
+              <TableRow>
+                {resolvedVisibleColumns.includes('select') && (
+                  <TableHeadSelect
                     checked={isPageSelected}
                     onChange={toggleSelectAll}
                     indeterminate={isPageIndeterminate}
                   />
-                </TableHead>
-              )}
-              {resolvedVisibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('contact') && <TableHead>Liên hệ</TableHead>}
-              {resolvedVisibleColumns.includes('city') && <SortableHeader label="Thành phố" sortKey="city" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('orders') && <SortableHeader label="Đơn hàng" sortKey="ordersCount" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
-              {resolvedVisibleColumns.includes('totalSpent') && <SortableHeader label="Tổng chi tiêu" sortKey="totalSpent" sortConfig={sortConfig} onSort={handleSort} className="text-right" />}
-              {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
-              {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedCustomersPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell colSpan={tableColumnCount}>
-                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedData.map(customer => (
-                  <TableRow key={customer._id} className={selectedIds.includes(customer._id) ? 'bg-blue-500/5' : ''}>
-                {resolvedVisibleColumns.includes('select') && (
-                  <TableCell>
-                    <SelectCheckbox checked={selectedIds.includes(customer._id)} onChange={() =>{  toggleSelectItem(customer._id); }} />
-                  </TableCell>
                 )}
-                {resolvedVisibleColumns.includes('customer') && (
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {showAvatar && (
-                        customer.avatar ? (
-                          <Image src={customer.avatar} width={36} height={36} className="w-9 h-9 rounded-full object-cover" alt="" />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 font-medium text-sm">
-                            {customer.name.charAt(0).toUpperCase()}
-                          </div>
-                        )
-                      )}
-                      <div className="font-medium">{customer.name}</div>
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('contact') && (
-                  <TableCell>
-                    <div className="text-sm">{customer.email}</div>
-                    <div className="text-xs text-slate-500">{customer.phone}</div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('city') && (
-                  <TableCell className="text-slate-500">{customer.city ?? '-'}</TableCell>
-                )}
-                {resolvedVisibleColumns.includes('orders') && (
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">{customer.ordersCount}</Badge>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('totalSpent') && (
-                  <TableCell className="text-right font-medium">
-                    {new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(customer.totalSpent)}
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('status') && (
-                  <TableCell className="text-center">
-                    <Badge variant={customer.status === 'Active' ? 'success' : 'secondary'}>
-                      {customer.status === 'Active' ? 'Hoạt động' : 'Đã khóa'}
-                    </Badge>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('actions') && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/admin/customers/${customer._id}/edit`}>
-                        <Button variant="ghost" size="icon"><Edit size={16} /></Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-500 hover:text-red-600"
-                        onClick={ async () => handleDelete(customer._id)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                )}
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedData.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có khách hàng nào'}
-                </TableCell>
+                {resolvedVisibleColumns.includes('customer') && <SortableHeader label="Khách hàng" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('contact') && <TableHead>Liên hệ</TableHead>}
+                {resolvedVisibleColumns.includes('city') && <SortableHeader label="Thành phố" sortKey="city" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('orders') && <SortableHeader label="Đơn hàng" sortKey="ordersCount" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
+                {resolvedVisibleColumns.includes('totalSpent') && <SortableHeader label="Tổng chi tiêu" sortKey="totalSpent" sortConfig={sortConfig} onSort={handleSort} className="text-right" />}
+                {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
+                {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedCustomersPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số khách hàng mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>khách/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedCustomersPerPage) + 1 : 0}–{Math.min(currentPage * resolvedCustomersPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">khách hàng</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedCustomersPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedData.map(customer => (
+                    <TableRow key={customer._id} className={selectedIds.includes(customer._id) ? 'bg-blue-500/5' : ''}>
+                  {resolvedVisibleColumns.includes('select') && (
+                    <TableCellSelect checked={selectedIds.includes(customer._id)} onChange={() => { toggleSelectItem(customer._id); }} />
+                  )}
+                  {resolvedVisibleColumns.includes('customer') && (
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {showAvatar && (
+                          customer.avatar ? (
+                            <Image src={customer.avatar} width={36} height={36} className="w-9 h-9 rounded-full object-cover" alt="" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 font-medium text-sm">
+                              {customer.name.charAt(0).toUpperCase()}
+                            </div>
+                          )
+                        )}
+                        <div className="font-medium">{customer.name}</div>
                       </div>
-                    );
-                  }
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('contact') && (
+                    <TableCell className="whitespace-nowrap">
+                      <div className="text-sm">{customer.email}</div>
+                      <div className="text-xs text-slate-500">{customer.phone}</div>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('city') && (
+                    <TableCell className="text-slate-500 whitespace-nowrap">{customer.city ?? '-'}</TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('orders') && (
+                    <TableCell className="text-center whitespace-nowrap">
+                      <Badge variant="secondary">{customer.ordersCount}</Badge>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('totalSpent') && (
+                    <TableCell className="text-right font-medium whitespace-nowrap">
+                      {new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(customer.totalSpent)}
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('status') && (
+                    <TableCell className="text-center whitespace-nowrap">
+                      <Badge variant={customer.status === 'Active' ? 'success' : 'secondary'}>
+                        {customer.status === 'Active' ? 'Hoạt động' : 'Đã khóa'}
+                      </Badge>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('actions') && (
+                    <TableCell className="text-right whitespace-nowrap">
+                      <RowActions>
+                        <EditActionButton href={`/admin/customers/${customer._id}/edit`} />
+                        <DeleteActionButton onClick={async () => handleDelete(customer._id)} />
+                      </RowActions>
+                    </TableCell>
+                  )}
+                    </TableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedData.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có khách hàng nào'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-purple-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có khách hàng nào'}
             </div>
-          </div>
-        )}
+          ) : (
+            paginatedData.map(customer => (
+              <MobileRowCard
+                key={customer._id}
+                selected={selectedIds.includes(customer._id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(customer._id)} onChange={() => toggleSelectItem(customer._id)} />}
+                title={customer.name}
+                subtitle={<span className="text-xs text-slate-500">{customer.email}</span>}
+                badge={
+                  <Badge variant={customer.status === 'Active' ? 'success' : 'secondary'}>
+                    {customer.status === 'Active' ? 'Hoạt động' : 'Đã khóa'}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    {customer.phone && <div><span className="text-slate-400">SĐT:</span> {customer.phone}</div>}
+                    <div><span className="text-slate-400">Đơn hàng:</span> {customer.ordersCount} đơn</div>
+                    <div><span className="text-slate-400">Tổng chi tiêu:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(customer.totalSpent)}</span></div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    <EditActionButton href={`/admin/customers/${customer._id}/edit`} />
+                    <DeleteActionButton onClick={async () => handleDelete(customer._id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedCustomersPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="khách hàng"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -525,7 +451,7 @@ function CustomersContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }
 

@@ -3,21 +3,21 @@
 import type { GalleryItem, GalleryConfig } from '../_types';
 
 export const GALLERY_STYLES = [
-  { id: 'spotlight' as const, label: 'Tiêu điểm' },
-  { id: 'explore' as const, label: 'Khám phá' },
-  { id: 'stories' as const, label: 'Câu chuyện' },
-  { id: 'grid' as const, label: 'Grid' },
-  { id: 'marquee' as const, label: 'Marquee' },
-  { id: 'masonry' as const, label: 'Masonry' },
+  { id: 'spotlight' as const, label: '(1) Tiêu điểm' },
+  { id: 'explore' as const, label: '(2) Nghiêng góc' },
+  { id: 'stories' as const, label: '(3) Dạng tin' },
+  { id: 'grid' as const, label: '(4) Dạng lưới' },
+  { id: 'marquee' as const, label: '(5) Chạy ngang' },
+  { id: 'masonry' as const, label: '(6) So le' },
 ];
 
 export const TRUST_BADGES_STYLES = [
-  { id: 'grid' as const, label: 'Grid' },
-  { id: 'cards' as const, label: 'Cards' },
-  { id: 'stack' as const, label: 'Stack' },
-  { id: 'wall' as const, label: 'Wall' },
-  { id: 'carousel' as const, label: 'Carousel' },
-  { id: 'seal' as const, label: 'Seal' },
+  { id: 'grid' as const, label: '(1) Dạng lưới' },
+  { id: 'cards' as const, label: '(2) Dạng thẻ' },
+  { id: 'stack' as const, label: '(3) Xếp chồng' },
+  { id: 'wall' as const, label: '(4) Mảng tường' },
+  { id: 'carousel' as const, label: '(5) Trượt ngang' },
+  { id: 'seal' as const, label: '(6) Con dấu' },
 ];
 
 export const DEFAULT_GALLERY_ITEMS: GalleryItem[] = [

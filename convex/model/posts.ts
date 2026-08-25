@@ -13,6 +13,33 @@ import {
 
 const MAX_ITEMS_LIMIT = 100;
 
+const normalizeStringList = (items?: string[], limit = 20) => {
+  if (!items) {return undefined;}
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const item of items) {
+    const value = item.trim();
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) {continue;}
+    seen.add(key);
+    normalized.push(value);
+    if (normalized.length >= limit) {break;}
+  }
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const normalizeFaqItems = (items?: { question: string; answer: string }[]) => {
+  if (!items) {return undefined;}
+  const normalized = items
+    .map((item) => ({
+      answer: item.answer.trim(),
+      question: item.question.trim(),
+    }))
+    .filter((item) => item.question && item.answer)
+    .slice(0, 10);
+  return normalized.length > 0 ? normalized : undefined;
+};
+
 /**
  * Get post by ID with null check
  */
@@ -142,8 +169,9 @@ export async function countByCategory(
  * Get next order value
  */
 export async function getNextOrder(ctx: QueryCtx): Promise<number> {
-  const lastPost = await ctx.db.query("posts").order("desc").first();
-  return lastPost ? lastPost.order + 1 : 0;
+  const posts = await ctx.db.query("posts").take(1000);
+  const lastOrder = posts.reduce((max, post) => Math.max(max, post.order), -1);
+  return lastOrder + 1;
 }
 
 /**
@@ -165,6 +193,10 @@ export async function create(
     authorName?: string;
     metaTitle?: string;
     metaDescription?: string;
+    focusKeyword?: string;
+    relatedQueries?: string[];
+    tags?: string[];
+    faqItems?: { question: string; answer: string }[];
     status?: Doc<"posts">["status"];
     order?: number;
     publishImmediately?: boolean;
@@ -197,12 +229,16 @@ export async function create(
     markdownRender: args.markdownRender,
     htmlRender: args.htmlRender,
     excerpt: args.excerpt,
+    faqItems: normalizeFaqItems(args.faqItems),
+    focusKeyword: args.focusKeyword?.trim() || undefined,
     metaDescription: args.metaDescription,
     metaTitle: args.metaTitle,
     order,
     publishedAt: resolvedPublishedAt,
+    relatedQueries: normalizeStringList(args.relatedQueries),
     slug: resolvedSlug.slug,
     status,
+    tags: normalizeStringList(args.tags),
     thumbnail: args.thumbnail,
     thumbnailStorageId: args.thumbnailStorageId ?? null,
     title: args.title,
@@ -235,6 +271,10 @@ export async function update(
     categoryId?: Id<"postCategories">;
     metaTitle?: string;
     metaDescription?: string;
+    focusKeyword?: string;
+    relatedQueries?: string[];
+    tags?: string[];
+    faqItems?: { question: string; answer: string }[];
     status?: Doc<"posts">["status"];
     order?: number;
     publishImmediately?: boolean;
@@ -256,6 +296,18 @@ export async function update(
 
   const { id, publishImmediately, ...updates } = args;
   const patchData: Record<string, unknown> = { ...updates };
+  if (Object.prototype.hasOwnProperty.call(args, "faqItems")) {
+    patchData.faqItems = normalizeFaqItems(args.faqItems);
+  }
+  if (Object.prototype.hasOwnProperty.call(args, "focusKeyword")) {
+    patchData.focusKeyword = args.focusKeyword?.trim() || undefined;
+  }
+  if (Object.prototype.hasOwnProperty.call(args, "relatedQueries")) {
+    patchData.relatedQueries = normalizeStringList(args.relatedQueries);
+  }
+  if (Object.prototype.hasOwnProperty.call(args, "tags")) {
+    patchData.tags = normalizeStringList(args.tags);
+  }
 
   const hasPublishedAt = Object.prototype.hasOwnProperty.call(args, "publishedAt");
   const nextStatus = args.status ?? post.status;

@@ -1,8 +1,120 @@
 'use client';
 
 import React from 'react';
-import * as LucideIcons from 'lucide-react';
-import { Sparkles } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  Anchor,
+  Archive,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Award,
+  BarChart,
+  Battery,
+  Bell,
+  Book,
+  Bookmark,
+  Box,
+  Briefcase,
+  Calendar,
+  Camera,
+  Cast,
+  Check,
+  CheckCircle,
+  ChevronRight,
+  Circle,
+  Clipboard,
+  Clock,
+  Cloud,
+  Code,
+  Coffee,
+  Compass,
+  Copy,
+  CreditCard,
+  Database,
+  DollarSign,
+  Download,
+  Droplet,
+  Edit,
+  Eye,
+  Facebook,
+  File,
+  Filter,
+  Flag,
+  Folder,
+  Gift,
+  GitBranch,
+  Globe,
+  Grid,
+  Hash,
+  Headphones,
+  Heart,
+  Home,
+  Image,
+  Inbox,
+  Info,
+  Instagram,
+  Key,
+  Layers,
+  Layout,
+  Link,
+  Linkedin,
+  List,
+  Loader,
+  Lock,
+  Mail,
+  Map,
+  MapPin,
+  Maximize,
+  Menu,
+  MessageCircle,
+  Mic,
+  Monitor,
+  Moon,
+  Music,
+  Navigation,
+  Package,
+  Paperclip,
+  Phone,
+  PieChart,
+  Play,
+  Plus,
+  Printer,
+  Radio,
+  RefreshCw,
+  Repeat,
+  Rocket,
+  Save,
+  Search,
+  Send,
+  Server,
+  Settings,
+  Share,
+  Shield,
+  ShoppingCart,
+  Smartphone,
+  Sparkles,
+  Star,
+  Sun,
+  Tag,
+  Target,
+  Terminal,
+  ThumbsUp,
+  Trash,
+  TrendingDown,
+  TrendingUp,
+  Truck,
+  Twitter,
+  Umbrella,
+  Upload,
+  User,
+  Users,
+  Video,
+  Wifi,
+  Youtube,
+  Zap,
+} from 'lucide-react';
 import { cn } from '@/app/admin/components/ui';
 import { SectionHeader } from '@/app/admin/home-components/_shared/components/SectionHeader';
 import { extractSectionHeaderConfig } from '@/app/admin/home-components/_shared/hooks/useSectionHeaderState';
@@ -20,10 +132,124 @@ import {
 } from '@/app/admin/home-components/stats/_types';
 import type { HomeComponentSectionProps } from '../types';
 
+const STATS_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
+  Activity,
+  AlertCircle,
+  Anchor,
+  Archive,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Award,
+  BarChart,
+  Battery,
+  Bell,
+  Book,
+  Bookmark,
+  Box,
+  Briefcase,
+  Calendar,
+  Camera,
+  Cast,
+  Check,
+  CheckCircle,
+  ChevronRight,
+  Circle,
+  Clipboard,
+  Clock,
+  Cloud,
+  Code,
+  Coffee,
+  Compass,
+  Copy,
+  CreditCard,
+  Database,
+  DollarSign,
+  Download,
+  Droplet,
+  Edit,
+  Eye,
+  Facebook,
+  File,
+  Filter,
+  Flag,
+  Folder,
+  Gift,
+  GitBranch,
+  Globe,
+  Grid,
+  Hash,
+  Headphones,
+  Heart,
+  Home,
+  Image,
+  Inbox,
+  Info,
+  Instagram,
+  Key,
+  Layers,
+  Layout,
+  Link,
+  Linkedin,
+  List,
+  Loader,
+  Lock,
+  Mail,
+  Map,
+  MapPin,
+  Maximize,
+  Menu,
+  MessageCircle,
+  Mic,
+  Monitor,
+  Moon,
+  Music,
+  Navigation,
+  Package,
+  Paperclip,
+  Phone,
+  PieChart,
+  Play,
+  Plus,
+  Printer,
+  Radio,
+  RefreshCw,
+  Repeat,
+  Rocket,
+  Save,
+  Search,
+  Send,
+  Server,
+  Settings,
+  Share,
+  Shield,
+  ShoppingCart,
+  Smartphone,
+  Sparkles,
+  Star,
+  Sun,
+  Tag,
+  Target,
+  Terminal,
+  ThumbsUp,
+  Trash,
+  TrendingDown,
+  TrendingUp,
+  Truck,
+  Twitter,
+  Umbrella,
+  Upload,
+  User,
+  Users,
+  Video,
+  Wifi,
+  Youtube,
+  Zap,
+};
+
 const resolveIconComponent = (iconName?: string) => {
   if (!iconName) { return Sparkles; }
-  const iconMap = LucideIcons as unknown as Record<string, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>>;
-  return iconMap[iconName] ?? Sparkles;
+  return STATS_ICON_MAP[iconName] ?? Sparkles;
 };
 
 const getItemAlignClass = (align?: 'left' | 'center' | 'right') => {
@@ -52,7 +278,9 @@ const getItemContainerClass = (mediaPlacement?: 'top' | 'left', mediaAlign?: 'le
   return `flex flex-col ${getItemAlignClass(mediaAlign)}`;
 };
 
-export function StatsRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function StatsRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const items = (config.items as StatsItem[]) || [];
   const style = (config.style as StatsStyle) || 'horizontal';
   const headerConfig = extractSectionHeaderConfig(config);
@@ -86,7 +314,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
     />
   );
 
-  const containerClass = fullWidth ? 'w-full' : 'max-w-7xl mx-auto';
+  const containerClass = fullWidth ? 'w-full' : 'max-w-7xl tv:max-w-[1600px] mx-auto';
 
   const gc = (cols: 3 | 4) => ({
     grid: cols === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4',
@@ -95,7 +323,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   });
 
   if (style === 'horizontal') {
-    const colors = getHorizontalColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getHorizontalColors(brandColor, secondary, mode), isDark ?? false);
     const { grid, tablet, mobile } = gc(desktopColumns);
     return (
       <section className={cn(sectionSpacingClassName, 'px-3')}>
@@ -113,14 +341,21 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                     ? <img src={item.iconUrl} alt="" className="w-[18px] h-[18px] sm:w-5 sm:h-5 md:w-[26px] md:h-[26px] object-contain" />
                     : null;
                 return (
-                  <div key={idx} className="flex items-center gap-3 justify-center">
+                  <div key={idx} className={cn(getItemContainerClass(mediaPlacement, mediaAlign), "justify-center")}>
                     {iconEl && (
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 md:w-[60px] md:h-[60px] rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: colors.iconBg }}>
+                      <div 
+                        className={cn(
+                          "w-11 h-11 sm:w-12 sm:h-12 md:w-[60px] md:h-[60px] rounded-full flex items-center justify-center shrink-0",
+                          mediaPlacement === 'left' ? 'mb-0' : 'mb-2',
+                          getMediaWrapperClass(mediaPlacement, mediaAlign)
+                        )} 
+                        style={{ backgroundColor: colors.iconBg }}
+                      >
                         {iconEl}
                       </div>
                     )}
-                    <div className="flex flex-col">
-                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[18px] sm:text-[19px] md:text-[26px] font-bold tracking-tight tabular-nums leading-none mb-0.5" style={{ color: colors.valueColor }} />
+                    <div className={cn("flex flex-col", mediaPlacement === 'left' ? '' : getItemAlignClass(mediaAlign))}>
+                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[18px] sm:text-[19px] md:text-[26px] tv:text-[40px] font-bold tracking-tight tabular-nums leading-none mb-0.5" style={{ color: colors.valueColor }} />
                       <h3 className="text-[10px] md:text-[13px] font-medium leading-tight" style={{ color: colors.labelColor }}>{item.label}</h3>
                     </div>
                   </div>
@@ -134,13 +369,13 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'cards') {
-    const colors = getCardsColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getCardsColors(brandColor, secondary, mode), isDark ?? false);
     const { grid, tablet, mobile } = gc(desktopColumns);
     return (
       <section className={cn(sectionSpacingClassName, 'px-3')}>
         <div className={containerClass}>
           {sharedHeader}
-          <div className={cn('w-full overflow-hidden border bg-white', cardRadiusClassName)} style={{ borderColor: colors.border }}>
+          <div className={cn('w-full overflow-hidden border', cardRadiusClassName)} style={{ borderColor: colors.border, backgroundColor: colors.sectionBg }}>
             <div className={`grid ${mobile} ${tablet} ${grid} divide-x divide-y divide-gray-200 md:divide-y-0`}>
               {items.slice(0, desktopColumns).map((item, idx) => {
                 const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveIconComponent(item.iconName) : null;
@@ -152,10 +387,14 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                     ? <img src={item.iconUrl} alt="" className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 object-contain" />
                     : null;
                 return (
-                  <div key={idx} className="flex items-center gap-3 justify-center py-4 px-4">
-                    {iconEl && <div className="shrink-0">{iconEl}</div>}
-                    <div className="flex flex-col">
-                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[18px] sm:text-[19px] md:text-[26px] font-bold tracking-tight tabular-nums leading-none mb-0.5" style={{ color: colors.valueColor }} />
+                  <div key={idx} className={cn(getItemContainerClass(mediaPlacement, mediaAlign), "justify-center py-4 px-4")}>
+                    {iconEl && (
+                      <div className={cn("shrink-0", mediaPlacement === 'left' ? 'mb-0' : 'mb-2', getMediaWrapperClass(mediaPlacement, mediaAlign))}>
+                        {iconEl}
+                      </div>
+                    )}
+                    <div className={cn("flex flex-col", mediaPlacement === 'left' ? '' : getItemAlignClass(mediaAlign))}>
+                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[18px] sm:text-[19px] md:text-[26px] tv:text-[40px] font-bold tracking-tight tabular-nums leading-none mb-0.5" style={{ color: colors.valueColor }} />
                       <h3 className="text-[10px] md:text-[13px] font-medium leading-tight" style={{ color: colors.labelColor }}>{item.label}</h3>
                     </div>
                   </div>
@@ -169,7 +408,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'icons') {
-    const colors = getIconsColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getIconsColors(brandColor, secondary, mode), isDark ?? false);
     const { grid, tablet, mobile } = gc(desktopColumns);
     return (
       <section className={cn(sectionSpacingClassName, 'px-3')}>
@@ -187,7 +426,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                       ? <img src={item.iconUrl} alt="" className="h-9 w-9 object-contain sm:h-11 sm:w-11 md:h-14 md:w-14" />
                     : item.iconType === 'url' && item.iconUrl
                       ? <img src={item.iconUrl} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-7 md:w-7" />
-                      : <AnimatedValue value={item.value} enabled={enableAnimation} className="z-10 text-base font-bold tracking-tight tabular-nums sm:text-lg md:text-xl" style={{ color: colors.textOnCircle }} />
+                      : <AnimatedValue value={item.value} enabled={enableAnimation} className="z-10 text-base font-bold tracking-tight tabular-nums sm:text-lg md:text-xl tv:text-3xl" style={{ color: colors.textOnCircle }} />
                   }
                 </div>
               );
@@ -200,7 +439,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                   {circleEl}
                   <div className={mediaPlacement === 'left' ? 'flex w-[76px] min-w-0 shrink-0 flex-col justify-center' : 'flex min-w-0 flex-col items-center justify-center'}>
                     <h3 className="text-xs font-semibold leading-snug sm:text-sm" style={{ color: colors.label }}>{item.label}</h3>
-                    {hasIcon && <AnimatedValue value={item.value} enabled={enableAnimation} className="mt-0.5 text-base font-bold tabular-nums sm:mt-1 sm:text-lg" style={{ color: brandColor }} />}
+                    {hasIcon && <AnimatedValue value={item.value} enabled={enableAnimation} className="mt-0.5 text-base font-bold tabular-nums sm:mt-1 sm:text-lg tv:text-2xl" style={{ color: brandColor }} />}
                   </div>
                 </div>
               );
@@ -212,7 +451,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'gradient') {
-    const colors = getGradientColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getGradientColors(brandColor, secondary, mode), isDark ?? false);
     const { grid, tablet, mobile } = gc(desktopColumns);
     return (
       <section className={cn(sectionSpacingClassName, 'px-3')}>
@@ -235,7 +474,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                       <div className={cn(mediaPlacement === 'left' ? 'mb-0 mr-2' : 'mb-1', getMediaWrapperClass(mediaPlacement, mediaAlign))}>{iconEl}</div>
                     )}
                     <div className={mediaPlacement === 'left' ? 'flex flex-col justify-center' : 'flex flex-col items-center justify-center'}>
-                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-3xl font-extrabold tracking-tight tabular-nums leading-none mb-1.5" style={{ color: colors.text }} />
+                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-3xl tv:text-5xl font-extrabold tracking-tight tabular-nums leading-none mb-1.5" style={{ color: colors.text }} />
                       <h3 className="text-xs font-medium opacity-90" style={{ color: colors.label }}>{item.label}</h3>
                     </div>
                   </div>
@@ -249,13 +488,13 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'minimal') {
-    const colors = getMinimalColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getMinimalColors(brandColor, secondary, mode), isDark ?? false);
     const { grid, tablet, mobile } = gc(desktopColumns);
     return (
       <section className={cn(sectionSpacingClassName, 'px-3')}>
         <div className={containerClass}>
           {sharedHeader}
-          <div className={cn('bg-slate-50 py-8 px-5', cardRadiusClassName)}>
+          <div className={cn('py-8 px-5', cardRadiusClassName)} style={{ backgroundColor: colors.sectionBg }}>
             <div className={`grid gap-5 ${mobile} ${tablet} ${grid}`}>
               {items.slice(0, desktopColumns).map((item, idx) => {
                 const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveIconComponent(item.iconName) : null;
@@ -273,8 +512,8 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                     )}
                     <div className={mediaPlacement === 'left' ? 'flex flex-col justify-center' : 'flex flex-col items-center justify-center'}>
                       {mediaPlacement !== 'left' && <div className="w-10 h-0.5 rounded-full mb-2.5" style={{ backgroundColor: colors.accent }} />}
-                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[22px] sm:text-[27px] md:text-[33px] font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }} />
-                      <h3 className="text-[11px] md:text-[15px] font-medium text-slate-500 mt-1">{item.label}</h3>
+                      <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[22px] sm:text-[27px] md:text-[33px] tv:text-[50px] font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }} />
+                      <h3 className="text-[11px] md:text-[15px] font-medium mt-1" style={{ color: colors.label }}>{item.label}</h3>
                     </div>
                   </div>
                 );
@@ -287,7 +526,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'solar-hero') {
-    const colors = getSolarHeroColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getSolarHeroColors(brandColor, secondary, mode), isDark ?? false);
     const gridClass = desktopColumns === 3 ? 'grid-cols-1 sm:grid-cols-3 md:grid-cols-3' : 'grid-cols-2 sm:grid-cols-2 md:grid-cols-4';
     return (
       <section
@@ -309,7 +548,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                 <article key={idx} className="flex min-w-0 flex-col">
                   <div className={cn('flex items-center justify-between gap-2.5 border px-3 py-3', cardTopRadiusClassName)} style={{ backgroundColor: colors.cardSurface, borderColor: colors.border }}>
                     <div className="min-w-0">
-                      <AnimatedValue value={item.value} enabled={enableAnimation} className="mb-2 text-[28px] font-bold leading-none tracking-tight tabular-nums md:text-[38px]" style={{ color: colors.value }} />
+                      <AnimatedValue value={item.value} enabled={enableAnimation} className="mb-2 text-[28px] font-bold leading-none tracking-tight tabular-nums md:text-[38px] tv:text-[60px]" style={{ color: colors.value }} />
                       <h3 className="text-sm font-medium leading-snug" style={{ color: colors.label }}>{item.label}</h3>
                     </div>
                     <div className="shrink-0">{iconEl}</div>
@@ -327,7 +566,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   if (style === 'builder-overlay') {
-    const colors = getBuilderOverlayColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getBuilderOverlayColors(brandColor, secondary, mode), isDark ?? false);
     const itemWidthClass = desktopColumns === 3
       ? 'basis-full max-w-full sm:basis-1/3 sm:max-w-[33.333333%]'
       : 'basis-1/2 max-w-[50%] sm:basis-1/2 sm:max-w-[50%] md:basis-1/4 md:max-w-[25%]';
@@ -368,7 +607,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                         )}
                       </div>
                       <div className="ml-2 flex min-w-0 flex-col sm:ml-3 md:ml-5">
-                        <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[24px] font-bold leading-[28px] tracking-normal tabular-nums sm:text-[30px] sm:leading-[36px] md:text-[36px] md:leading-[43.2px]" style={{ color: colors.accent }} />
+                        <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[24px] font-bold leading-[28px] tracking-normal tabular-nums sm:text-[30px] sm:leading-[36px] md:text-[36px] md:leading-[43.2px] tv:text-[54px] tv:leading-[60px]" style={{ color: colors.accent }} />
                         <span className="max-w-[86px] text-[13px] leading-[15px] capitalize sm:max-w-none sm:text-sm sm:leading-[17px] md:text-base md:leading-[19.2px]" style={{ color: colors.label }}>{item.label}</span>
                       </div>
                     </div>
@@ -383,7 +622,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
   }
 
   // counter (default fallback)
-  const colors = getCounterColors(brandColor, secondary, mode);
+  const colors = adaptTokensForDarkMode(getCounterColors(brandColor, secondary, mode), isDark ?? false);
   const { grid, tablet, mobile } = gc(desktopColumns);
   return (
     <section className={cn(sectionSpacingClassName, 'px-3')}>
@@ -407,7 +646,7 @@ export function StatsRuntimeSection({ config, brandColor, secondary, mode, title
                   )}
                   <div className={mediaPlacement === 'left' ? 'flex flex-col justify-center' : 'flex flex-col items-center justify-center'}>
                     {mediaPlacement !== 'left' && <div className="w-10 h-0.5 rounded-full mb-2.5" style={{ backgroundColor: colors.accent }} />}
-                    <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[22px] sm:text-[27px] md:text-[33px] font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }} />
+                    <AnimatedValue value={item.value} enabled={enableAnimation} className="text-[22px] sm:text-[27px] md:text-[33px] tv:text-[50px] font-bold tracking-tight tabular-nums leading-none" style={{ color: colors.value }} />
                     <h3 className="text-[11px] md:text-[15px] font-medium mt-1" style={{ color: colors.label }}>{item.label}</h3>
                   </div>
                 </div>

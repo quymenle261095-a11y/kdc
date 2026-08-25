@@ -26,8 +26,27 @@ export default function HomeComponentCreatePage() {
     }, {});
   }, [components]);
 
+  const miniApps = useQuery(api.miniApps.listAll);
   const hiddenTypeSet = useMemo(() => new Set(systemConfig?.hiddenTypes ?? []), [systemConfig?.hiddenTypes]);
-  const visibleTypes = useMemo(() => COMPONENT_TYPES.filter((type) => !hiddenTypeSet.has(type.value)), [hiddenTypeSet]);
+  const visibleTypes = useMemo(() => {
+    return COMPONENT_TYPES.filter((type) => {
+      if (hiddenTypeSet.has(type.value)) {
+        return false;
+      }
+      if (type.value === 'PokemonChampions') {
+        const app = miniApps?.find((a) => a.key === 'pokemon-champions');
+        if (!app || !app.enabled) {
+          return false;
+        }
+        const config = app.config && typeof app.config === 'object' && !Array.isArray(app.config) ? app.config as Record<string, any> : {};
+        const homeComponent = config.homeComponent && typeof config.homeComponent === 'object' ? config.homeComponent : {};
+        if (!homeComponent.enabled) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [hiddenTypeSet, miniApps]);
 
   const recommendedTypes = visibleTypes.filter((type) => type.recommended);
   const otherTypes = visibleTypes.filter((type) => !type.recommended);

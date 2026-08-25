@@ -107,10 +107,15 @@ export type AccountOrdersStatusBadgeTokens = {
 
 export const getAccountOrdersStatusBadgeTokens = (
   statusColor: string,
-  fallback: string
+  fallback: string,
+  isDark?: boolean
 ): AccountOrdersStatusBadgeTokens => {
-  const bg = getSolidTint(statusColor, fallback, 0.42);
-  const border = getSolidTint(statusColor, fallback, 0.32);
+  const bg = isDark
+    ? formatHex(oklch({ ...safeParseOklch(statusColor, fallback), l: 0.15, c: 0.04 }))
+    : getSolidTint(statusColor, fallback, 0.42);
+  const border = isDark
+    ? statusColor
+    : getSolidTint(statusColor, fallback, 0.32);
   const text = ensureAPCATextColor(statusColor, bg, 12, 600);
 
   return { bg, border, text };
@@ -226,17 +231,18 @@ export type AccountOrdersColors = {
 export const getAccountOrdersColors = (
   primary: string,
   secondary: string | undefined,
-  mode: AccountOrdersColorMode = 'single'
+  mode: AccountOrdersColorMode = 'single',
+  isDark?: boolean
 ): AccountOrdersColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSurfaceMuted = '#f8fafc';
-  const neutralSurfaceSoft = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderStrong = '#cbd5e1';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSoft = '#94a3b8';
-  const overlayBase = '#0f172a';
+  const neutralSurface = isDark ? '#161617' : '#ffffff';
+  const neutralSurfaceMuted = isDark ? '#1c1c1e' : '#f8fafc';
+  const neutralSurfaceSoft = isDark ? '#27272a' : '#f1f5f9';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralBorderStrong = isDark ? '#3f3f46' : '#cbd5e1';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
+  const overlayBase = isDark ? '#000000' : '#0f172a';
 
   const secondaryResolved = resolveSecondaryForMode(primary, secondary, mode);
   const primaryTint = getSolidTint(primary, primary, 0.42);

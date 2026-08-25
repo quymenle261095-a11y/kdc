@@ -88,6 +88,8 @@ export interface GeneratorRequest {
   budgetMin?: number;
   budgetMax?: number;
   keyword?: string;
+  secondaryKeyword?: string;
+  keywords?: string[];
   compareSlugs?: string[];
   selectedProductSlugs?: string[];
   categoryId?: string;

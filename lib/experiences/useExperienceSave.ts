@@ -16,7 +16,7 @@ type ExperienceSaveTransform = (config: unknown) => unknown;
  * @param experienceKey - Key của experience (vd: 'product_detail_ui')
  * @param config - Current config object
  * @param successMessage - Success toast message
- * @param additionalSettings - Additional legacy settings to save (optional)
+ * @param additionalSettings - Additional settings to save (optional)
  */
 export function useExperienceSave(
   experienceKey: string,

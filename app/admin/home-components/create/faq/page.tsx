@@ -224,6 +224,14 @@ export default function FaqCreatePage() {
         showBadge={headerState.showBadge}
         badgeText={headerState.badgeText}
         spacing={faqConfig.spacing}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
+        onItemTextChange={(id, field, value) => {
+          setFaqItems((current) => current.map((item) => (
+            item.id === id ? { ...item, [field]: value } : item
+          )));
+        }}
       />
     </ComponentFormWrapper>
   );

@@ -7,9 +7,14 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ArrowLeft, Check, Copy, ExternalLink, FileText, FileVideo, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, FileText, FileVideo, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { CopyableInput } from '../../../components/CopyTextButton';
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormPageWrapper,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'media';
 
@@ -65,6 +70,7 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
   const router = useRouter();
 
   const mediaData = useQuery(api.media.getByIdWithUrl, { id: id as Id<"images"> });
+  useSetAdminBreadcrumb(mediaData?.filename);
   const foldersData = useQuery(api.media.getFolders);
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: MODULE_KEY });
   const updateMedia = useMutation(api.media.update);
@@ -96,8 +102,8 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
     }
   }, [mediaData]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault?.();
     if (!filename.trim()) {
       toast.error('Tên file không được để trống');
       return;
@@ -144,54 +150,32 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
     }
   };
 
-  if (mediaData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-cyan-500" />
-      </div>
-    );
-  }
-
-  if (mediaData === null) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-slate-500 mb-4">Không tìm thấy file</p>
-        <Link href="/admin/media">
-          <Button variant="outline">Quay lại thư viện</Button>
-        </Link>
-      </div>
-    );
-  }
-
-  const FileIcon = getFileIcon(mediaData.mimeType);
-  const isImage = mediaData.mimeType.startsWith('image/');
-  const isVideo = mediaData.mimeType.startsWith('video/');
+  const FileIcon = mediaData ? getFileIcon(mediaData.mimeType) : FileText;
+  const isImage = mediaData ? mediaData.mimeType.startsWith('image/') : false;
+  const isVideo = mediaData ? mediaData.mimeType.startsWith('video/') : false;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/admin/media">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft size={20} />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa Media</h1>
-            <p className="text-sm text-slate-500">Cập nhật thông tin file</p>
-          </div>
-        </div>
+    <AdminFormPageWrapper
+      title="Chỉnh sửa Media"
+      subtitle="Cập nhật thông tin file"
+      backHref="/admin/media"
+      isLoading={mediaData === undefined}
+      notFound={mediaData === null}
+      notFoundMessage="Không tìm thấy file"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      extraHeaderAction={
         <Button 
           variant="destructive" 
+          size="sm"
           className="gap-2"
           onClick={handleDelete}
         >
-          <Trash2 size={16} /> Xóa
+          <Trash2 size={14} /> Xóa
         </Button>
-      </div>
-
-      <form onSubmit={handleSubmit}>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Preview */}
           <div className="lg:col-span-1">
@@ -202,9 +186,9 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
               <CardContent className="space-y-4">
                 {/* File preview */}
                 <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                  {isImage && mediaData.url ? (
+                  {isImage && mediaData?.url ? (
                     <Image src={mediaData.url} alt={alt || filename} fill sizes="100%" className="object-contain" />
-                  ) : (isVideo && mediaData.url ? (
+                  ) : (isVideo && mediaData?.url ? (
                     <video src={mediaData.url} controls className="w-full h-full object-contain" />
                   ) : (
                     <FileIcon size={64} className="text-slate-400" />
@@ -215,13 +199,13 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Loại file:</span>
-                    <Badge variant="secondary">{mediaData.mimeType}</Badge>
+                    <Badge variant="secondary">{mediaData?.mimeType}</Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Kích thước:</span>
-                    <span className="font-medium">{formatBytes(mediaData.size)}</span>
+                    <span className="font-medium">{formatBytes(mediaData?.size ?? 0)}</span>
                   </div>
-                  {mediaData.width && mediaData.height && (
+                  {mediaData?.width && mediaData?.height && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Độ phân giải:</span>
                       <span className="font-medium">{mediaData.width} x {mediaData.height}</span>
@@ -230,13 +214,13 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
                   <div className="flex justify-between">
                     <span className="text-slate-500">Ngày tải lên:</span>
                     <span className="font-medium">
-                      {new Date(mediaData._creationTime).toLocaleDateString('vi-VN')}
+                      {mediaData?._creationTime ? new Date(mediaData._creationTime).toLocaleDateString('vi-VN') : ''}
                     </span>
                   </div>
                 </div>
 
                 {/* URL */}
-                {mediaData.url && (
+                {mediaData?.url && (
                   <div className="space-y-2">
                     <Label className="text-xs text-slate-500">URL</Label>
                     <div className="flex gap-2">
@@ -265,7 +249,7 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
             </Card>
 
             {/* Usages Card */}
-            {mediaData.usages && mediaData.usages.length > 0 && (
+            {mediaData?.usages && mediaData.usages.length > 0 && (
               <Card className="mt-6 border-cyan-100 dark:border-cyan-900 bg-cyan-50/30 dark:bg-cyan-900/10">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2 text-cyan-700 dark:text-cyan-400">
@@ -312,9 +296,10 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
                 {/* Filename */}
                 <div className="space-y-2">
                   <Label>Tên file <span className="text-red-500">*</span></Label>
-                  <Input 
+                  <CopyableInput
                     value={filename} 
                     onChange={(e) =>{  setFilename(e.target.value); }} 
+                    copyLabel="tên file"
                     required
                     placeholder="image.jpg"
                   />
@@ -391,6 +376,6 @@ export default function MediaEditPage({ params }: { params: Promise<{ id: string
           </div>
         </div>
       </form>
-    </div>
+    </AdminFormPageWrapper>
   );
 }

@@ -222,7 +222,7 @@ export const listByTargetTypePaginated = query({
   args: { paginationOpts: paginationOptsValidator, targetType: targetType },
   handler: async (ctx, args) => ctx.db
       .query("comments")
-      .filter((q) => q.eq(q.field("targetType"), args.targetType))
+      .withIndex("by_target_status", (q) => q.eq("targetType", args.targetType))
       .paginate(args.paginationOpts),
   returns: v.object({
     continueCursor: v.string(),

@@ -181,6 +181,8 @@ export default function ContactCreatePage() {
         mode={mode}
         selectedStyle={style}
         onStyleChange={(newStyle) => setConfig({ ...config, style: newStyle })}
+        onConfigChange={(nextConfig) => setConfig(normalizeContactConfig(nextConfig))}
+        onTitleChange={setTitle}
         title={title}
         mapData={mapData}
         fontStyle={fontStyle}

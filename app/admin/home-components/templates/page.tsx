@@ -78,7 +78,7 @@ function extractSiteInfo(payload: unknown) {
     brandName: site.site_name || '',
     tagline: site.site_tagline || '',
     logo,
-    brandPrimary: site.site_brand_primary || site.site_brand_color || '#3b82f6',
+    brandPrimary: site.site_brand_primary || '#3b82f6',
     brandSecondary: site.site_brand_secondary || '',
     brandMode: site.site_brand_mode || 'dual',
     phone: contact.contact_phone || '',

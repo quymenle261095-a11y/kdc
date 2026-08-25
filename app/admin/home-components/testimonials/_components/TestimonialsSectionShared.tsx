@@ -1,7 +1,12 @@
 'use client';
 
 import React from 'react';
-import { AdminImage as Image } from '@/app/admin/components/AdminImage';
+import { PublicImage as Image } from '@/components/shared/PublicImage';
+
+const getOptimizedBgUrl = (src?: string) => {
+  if (!src) {return '';}
+  return `/_next/image?url=${encodeURIComponent(src)}&w=1280&q=75`;
+};
 import { Quote, Star, ChevronRight } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
@@ -50,7 +55,48 @@ interface TestimonialsSectionSharedProps {
   splitBackgroundOverlayOpacity?: number;
   spacing?: SectionSpacing;
   cornerRadius?: TestimonialsCornerRadius;
+  visualEditActive?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (value: any[]) => void;
 }
+
+const EditableText = ({
+  active,
+  value,
+  onChange,
+  className,
+  style,
+  element: Element = 'span',
+}: {
+  active: boolean;
+  value: string;
+  onChange: (val: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  element?: React.ElementType;
+}) => {
+  if (!active) {
+    return <Element className={className} style={style}>{value}</Element>;
+  }
+  return (
+    <Element
+      contentEditable={active}
+      suppressContentEditableWarning={active}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => {
+        onChange(e.currentTarget.textContent ?? '');
+      }}
+      className={cn(
+        className,
+        'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+      )}
+      style={style}
+    >
+      {value}
+    </Element>
+  );
+};
 
 interface NormalizedTestimonial {
   id: string;
@@ -320,7 +366,26 @@ export function TestimonialsSectionShared({
   splitBackgroundOverlayOpacity = 62,
   spacing = 'normal',
   cornerRadius = 'lg',
+  visualEditActive = false,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
 }: TestimonialsSectionSharedProps) {
+  const handleItemTextUpdate = (id: string, field: string, nextText: string) => {
+    if (!onItemsChange) return;
+    const nextItems = items.map((item, idx) => {
+      const itemId = (item as any).id || `testimonial-${idx + 1}`;
+      if (itemId === id) {
+        return {
+          ...item,
+          [field]: nextText,
+        };
+      }
+      return item;
+    });
+    onItemsChange(nextItems);
+  };
   const isPreview = context === 'preview';
   const normalizedItems = React.useMemo(() => normalizeItems(items), [items]);
   const visibleItems = React.useMemo(
@@ -417,7 +482,7 @@ export function TestimonialsSectionShared({
     <div className={cn('w-full border border-gray-200/80 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col overflow-hidden', getCornerRadiusClassName(cornerRadius, 'section'))}>
       {!hideHeader && (heading || sectionSubtitle) && (
         <div className="px-4 py-4 md:px-8 md:py-5 border-b border-gray-100/80 flex flex-col items-center justify-center text-center gap-1.5 bg-gray-50/30">
-          <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} className="mb-0" titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} />
+          <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} className="mb-0" titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} />
         </div>
       )}
       <div className="px-4 py-4 md:px-8 md:py-5 flex flex-col gap-0">
@@ -427,17 +492,13 @@ export function TestimonialsSectionShared({
               <div className="flex items-center gap-2 md:gap-3 min-w-[160px] flex-1">
                 <AvatarDisplay item={item} context={context} className="h-10 w-10 md:h-12 md:w-12 rounded-full shadow-sm ring-2 ring-[var(--token-primary)]/10" />
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="font-bold text-gray-900 text-sm md:text-base break-words leading-tight">{item.name}</span>
+                  <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="font-bold text-gray-900 text-sm md:text-base break-words leading-tight" element="span" />
                   <div className="flex flex-wrap gap-1 items-center mt-0.5">
-                    {item.role ? (
-                      <span className="text-[var(--token-primary)] text-xs md:text-sm font-semibold break-words">
-                        {item.role}
-                      </span>
+                    {item.role || visualEditActive ? (
+                      <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] text-xs md:text-sm font-semibold break-words" element="span" />
                     ) : null}
-                    {item.company ? (
-                      <span className="text-gray-500 font-medium text-[10px] md:text-xs truncate max-w-[100px] sm:max-w-[160px]">
-                        {item.company}
-                      </span>
+                    {item.company || visualEditActive ? (
+                      <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} className="text-gray-500 font-medium text-[10px] md:text-xs truncate max-w-[100px] sm:max-w-[160px]" element="span" />
                     ) : null}
                   </div>
                 </div>
@@ -448,7 +509,9 @@ export function TestimonialsSectionShared({
             </div>
             <div className="relative">
               <p className="text-gray-700 text-sm md:text-[1rem] leading-[1.6] break-words text-pretty">
-                "{item.content}"
+                "
+                <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />
+                "
               </p>
             </div>
           </div>
@@ -472,7 +535,7 @@ export function TestimonialsSectionShared({
 
     return (
       <div className="w-full">
-        {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} />}
+        {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} />}
         <div className={cn('grid', getCardsGridClassName(context, device, desktopColumns))}>
           {visibleItems.map((item) => (
             <div
@@ -492,7 +555,9 @@ export function TestimonialsSectionShared({
                 'flex-grow break-words text-pretty text-sm leading-[1.6] text-gray-700',
                 isFourColumn ? 'my-3 line-clamp-4' : 'mb-4 mt-3 md:mb-5 md:mt-4 md:text-[15px]',
               )}>
-                "{item.content}"
+                "
+                <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />
+                "
               </p>
               <div className={cn(
                 'mt-auto flex min-w-0 border-t border-gray-50 pt-3',
@@ -500,11 +565,14 @@ export function TestimonialsSectionShared({
               )}>
                 <AvatarDisplay item={item} context={context} className={cn('rounded-full shadow-inner', isFourColumn ? 'h-8 w-8 md:h-9 md:w-9' : 'h-9 w-9 md:h-10 md:w-10')} />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <h4 className={cn('break-words font-bold leading-tight text-gray-900', isFourColumn ? 'text-xs' : 'text-xs md:text-sm')}>{item.name}</h4>
-                  <p className={cn('mt-0.5 font-medium text-gray-500', isFourColumn ? 'line-clamp-2 text-[10px] leading-snug' : 'truncate text-[10px] md:text-xs')}>
-                    {item.role ? <span className={cn('text-[var(--token-primary)] align-bottom', isFourColumn ? 'break-words' : 'inline-block max-w-[80px] truncate')}>{item.role}</span> : null}
-                    {item.role && item.company ? <span className="mx-1 opacity-40">•</span> : null}
-                    {item.company ? <span className={cn('align-bottom', isFourColumn ? 'break-words' : 'inline-block max-w-[80px] truncate')}>{item.company}</span> : null}
+                  <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className={cn('break-words font-bold leading-tight text-gray-900', isFourColumn ? 'text-xs' : 'text-xs md:text-sm')} element="h4" />
+                  <p className={cn('mt-0.5 font-medium text-gray-500 flex flex-wrap gap-1', isFourColumn ? 'line-clamp-2 text-[10px] leading-snug' : 'truncate text-[10px] md:text-xs')}>
+                    {item.role || visualEditActive ? (
+                      <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className={cn('text-[var(--token-primary)] align-bottom font-semibold', isFourColumn ? 'break-words' : 'inline-block max-w-[80px] truncate')} element="span" />
+                    ) : null}
+                    {item.company || visualEditActive ? (
+                      <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} className={cn('align-bottom', isFourColumn ? 'break-words' : 'inline-block max-w-[80px] truncate')} element="span" />
+                    ) : null}
                   </p>
                 </div>
               </div>
@@ -517,7 +585,7 @@ export function TestimonialsSectionShared({
 
   const renderSlider = () => (
     <div className="w-full relative @container">
-      {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign === 'center' ? 'center' : 'left'} className="mb-4 md:mb-7 w-full px-1 md:px-2" titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} />}
+      {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign === 'center' ? 'center' : 'left'} className="mb-4 md:mb-7 w-full px-1 md:px-2" titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} />}
 
       <div className="overflow-hidden w-full pb-3 px-1 md:px-2" ref={emblaRef}>
         <div className="flex backface-hidden -ml-3 md:-ml-5 touch-pan-y items-stretch">
@@ -529,19 +597,18 @@ export function TestimonialsSectionShared({
                   <Quote className="h-5 w-5 md:h-6 md:w-6 text-[var(--token-primary)] opacity-20 shrink-0" />
                 </div>
                 <p className="text-gray-700 text-sm md:text-[15px] leading-[1.6] mb-5 flex-grow break-words text-pretty">
-                  &ldquo;{item.content}&rdquo;
+                  &ldquo;<EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />&rdquo;
                 </p>
                 <div className="flex items-center gap-2.5 pt-3 md:pt-4 border-t border-gray-50 mt-auto min-w-0">
                   <AvatarDisplay item={item} context={context} className="h-9 w-9 md:h-10 md:w-10 rounded-full shadow-inner" />
                   <div className="flex flex-col min-w-0 flex-1">
-                    <h4 className="font-bold text-gray-900 text-xs md:text-sm break-words leading-tight">{item.name}</h4>
-                    <p className="text-[10px] md:text-xs text-gray-500 font-medium mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
-                      {item.role ? <span className="text-[var(--token-primary)]">{item.role}</span> : null}
-                      {item.company ? (
-                        <>
-                          {item.role ? <span className="opacity-40 mx-1">•</span> : null}
-                          <span>{item.company}</span>
-                        </>
+                    <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="font-bold text-gray-900 text-xs md:text-sm break-words leading-tight" element="h4" />
+                    <p className="text-[10px] md:text-xs text-gray-500 font-medium mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex flex-wrap gap-1">
+                      {item.role || visualEditActive ? (
+                        <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] font-semibold" element="span" />
+                      ) : null}
+                      {item.company || visualEditActive ? (
+                        <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
                       ) : null}
                     </p>
                   </div>
@@ -565,7 +632,7 @@ export function TestimonialsSectionShared({
     <div
       className="relative w-full overflow-hidden bg-slate-900 @container"
       style={splitBackgroundImage ? {
-        backgroundImage: `linear-gradient(90deg, rgba(15, 23, 42, ${splitOverlayAlpha}), rgba(15, 23, 42, ${Math.max(0.35, splitOverlayAlpha - 0.12)})), url("${splitBackgroundImage}")`,
+        backgroundImage: `linear-gradient(90deg, rgba(15, 23, 42, ${splitOverlayAlpha}), rgba(15, 23, 42, ${Math.max(0.35, splitOverlayAlpha - 0.12)})), url("${getOptimizedBgUrl(splitBackgroundImage)}")`,
         backgroundPosition: 'center',
         backgroundSize: 'cover',
       } : {
@@ -579,7 +646,7 @@ export function TestimonialsSectionShared({
             {showBadge !== false && badgeText ? (
               <div className="mb-4">
                 <span className="inline-flex rounded-full bg-[var(--token-primary)] px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-black/10">
-                  {badgeText}
+                  <EditableText active={visualEditActive} value={badgeText} onChange={onBadgeTextChange ?? (() => {})} />
                 </span>
               </div>
             ) : null}
@@ -588,12 +655,12 @@ export function TestimonialsSectionShared({
                 'text-3xl font-extrabold leading-tight tracking-tight text-white @3xl:text-4xl @4xl:text-5xl',
                 uppercaseText && 'uppercase',
               )}>
-                {heading}
+                <EditableText active={visualEditActive} value={heading} onChange={onTitleChange ?? (() => {})} />
               </h2>
             ) : null}
             {sectionSubtitle ? (
               <p className="mt-4 max-w-xl text-sm font-medium leading-6 text-white/90 @3xl:text-base @3xl:leading-7">
-                {sectionSubtitle}
+                <EditableText active={visualEditActive} value={sectionSubtitle} onChange={onSubtitleChange ?? (() => {})} />
               </p>
             ) : null}
           </div>
@@ -608,10 +675,15 @@ export function TestimonialsSectionShared({
                     <div className="flex items-start gap-3 @3xl:gap-4">
                       <AvatarDisplay item={item} context={context} className="h-16 w-16 rounded-full shadow-sm ring-4 ring-[var(--token-primary)]/20 @3xl:h-20 @3xl:w-20" />
                       <div className="min-w-0 flex-1">
-                        <h4 className="break-words text-base font-bold leading-tight text-gray-950 @3xl:text-lg">{item.name}</h4>
-                        {item.role || item.company ? (
-                          <p className="mt-1 text-xs font-medium text-gray-500 @3xl:text-sm">
-                            {item.role || item.company}
+                        <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="break-words text-base font-bold leading-tight text-gray-950 @3xl:text-lg" element="h4" />
+                        {item.role || item.company || visualEditActive ? (
+                          <p className="mt-1 text-xs font-medium text-gray-500 @3xl:text-sm flex flex-wrap gap-1">
+                            {item.role || visualEditActive ? (
+                              <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] font-semibold" element="span" />
+                            ) : null}
+                            {item.company || visualEditActive ? (
+                              <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+                            ) : null}
                           </p>
                         ) : null}
                         <div className="mt-2">
@@ -624,7 +696,7 @@ export function TestimonialsSectionShared({
                     </div>
 
                     <p className="mt-5 text-sm leading-7 text-gray-700 text-pretty @3xl:text-base @3xl:leading-8">
-                      {item.content}
+                      <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} />
                     </p>
                   </div>
                 </div>
@@ -664,6 +736,10 @@ export function TestimonialsSectionShared({
             showBadge={showBadge}
             badgeText={badgeText}
             subtitleAboveTitle={subtitleAboveTitle}
+            visualEditEnabled={visualEditActive}
+            onTitleChange={onTitleChange}
+            onSubtitleChange={onSubtitleChange}
+            onBadgeTextChange={onBadgeTextChange}
           />
         </div>
       ) : null}
@@ -687,17 +763,20 @@ export function TestimonialsSectionShared({
                 />
                 <div className="flex h-full min-h-[220px] flex-col bg-white px-5 pb-5 pt-[46px] shadow-[0_1px_2px_rgba(60,64,67,0.1),0_2px_6px_2px_rgba(60,64,67,0.15)]">
                   <div className="min-w-0">
-                    <b className="block break-words text-lg font-bold leading-normal text-gray-950">
-                      {item.name}
-                    </b>
-                    {item.role || item.company ? (
-                      <span className="mt-1 block break-words text-sm font-normal leading-relaxed text-[#757575]">
-                        {item.role || item.company}
+                    <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="block break-words text-lg font-bold leading-normal text-gray-950" element="b" />
+                    {item.role || item.company || visualEditActive ? (
+                      <span className="mt-1 block break-words text-sm font-normal leading-relaxed text-[#757575] flex flex-wrap gap-1">
+                        {item.role || visualEditActive ? (
+                          <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] font-semibold" element="span" />
+                        ) : null}
+                        {item.company || visualEditActive ? (
+                          <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+                        ) : null}
                       </span>
                     ) : null}
                     <div className="mt-2 min-h-[100px]">
                       <p className="whitespace-pre-line break-words text-sm leading-[1.7] text-gray-700 @3xl:text-base">
-                        &ldquo;{item.content}&rdquo;
+                        &ldquo;<EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />&rdquo;
                       </p>
                     </div>
                   </div>
@@ -730,6 +809,10 @@ export function TestimonialsSectionShared({
             showBadge={showBadge}
             badgeText={badgeText}
             subtitleAboveTitle={subtitleAboveTitle}
+            visualEditEnabled={visualEditActive}
+            onTitleChange={onTitleChange}
+            onSubtitleChange={onSubtitleChange}
+            onBadgeTextChange={onBadgeTextChange}
           />
         </div>
       ) : null}
@@ -761,17 +844,20 @@ export function TestimonialsSectionShared({
               innerClassName="object-cover"
             />
             <p className="min-h-[84px] flex-1 text-[13px] font-medium leading-[1.65] text-slate-700 text-pretty line-clamp-5 @3xl:text-sm">
-              {item.content}
+              <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} />
             </p>
             <div className="mt-3 flex justify-center">
               <RatingStars rating={item.rating} compact />
             </div>
-            <strong className="mt-2 block text-base font-bold leading-[1.35] @3xl:text-lg" style={{ color: 'var(--token-primary)' }}>
-              {item.name}
-            </strong>
-            {item.role || item.company ? (
-              <span className="mt-0.5 block text-xs font-bold text-slate-900 @3xl:text-sm">
-                {item.role || item.company}
+            <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="mt-2 block text-base font-bold leading-[1.35] @3xl:text-lg" style={{ color: 'var(--token-primary)' }} element="strong" />
+            {item.role || item.company || visualEditActive ? (
+              <span className="mt-0.5 block text-xs font-bold text-slate-900 @3xl:text-sm flex flex-wrap justify-center gap-1">
+                {item.role || visualEditActive ? (
+                  <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] font-semibold" element="span" />
+                ) : null}
+                {item.company || visualEditActive ? (
+                  <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+                ) : null}
               </span>
             ) : null}
           </article>
@@ -808,6 +894,10 @@ export function TestimonialsSectionShared({
                 badgeText={badgeText}
                 subtitleAboveTitle={subtitleAboveTitle}
                 className="mb-0"
+                visualEditEnabled={visualEditActive}
+                onTitleChange={onTitleChange}
+                onSubtitleChange={onSubtitleChange}
+                onBadgeTextChange={onBadgeTextChange}
               />
             </div>
           ) : null}
@@ -827,7 +917,7 @@ export function TestimonialsSectionShared({
                     'whitespace-pre-line break-words text-[#9a9a9a] text-pretty',
                     isFourColumnBuilderCarousel ? 'mb-2.5 min-h-[58px] text-[11px] leading-[16px] @3xl:text-xs @3xl:leading-[18px]' : 'mb-[12px] min-h-[58px] text-[13px] leading-[19.5px]',
                   )}>
-                    {item.content}
+                    <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} />
                   </p>
 
                   <div className={cn('relative flex min-w-0 items-center', isFourColumnBuilderCarousel ? 'gap-1.5 @3xl:gap-2' : 'pr-10')}>
@@ -841,13 +931,16 @@ export function TestimonialsSectionShared({
                       innerClassName="object-cover"
                     />
                     <div className="min-w-0 flex-1">
-                      <strong className={cn('block font-bold leading-tight break-words', isFourColumnBuilderCarousel ? 'text-[11px] @3xl:text-xs' : 'text-sm')} style={{ color: 'var(--token-primary)' }}>
-                        {item.name}
-                      </strong>
-                      {item.role || item.company ? (
-                        <span className={cn('mt-0.5 block leading-tight text-slate-700 break-words', isFourColumnBuilderCarousel ? 'text-[11px] @3xl:text-xs' : 'text-sm')}>
-                          {item.role || item.company}
-                        </span>
+                      <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className={cn('block font-bold leading-tight break-words', isFourColumnBuilderCarousel ? 'text-[11px] @3xl:text-xs' : 'text-sm')} style={{ color: 'var(--token-primary)' }} element="strong" />
+                      {item.role || item.company || visualEditActive ? (
+                        <p className={cn('mt-0.5 block leading-tight text-slate-700 break-words flex flex-wrap gap-1', isFourColumnBuilderCarousel ? 'text-[11px] @3xl:text-xs' : 'text-sm')}>
+                          {item.role || visualEditActive ? (
+                            <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="font-semibold text-[var(--token-primary)]" element="span" />
+                          ) : null}
+                          {item.company || visualEditActive ? (
+                            <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+                          ) : null}
+                        </p>
                       ) : null}
                     </div>
                     <Quote
@@ -872,17 +965,26 @@ export function TestimonialsSectionShared({
     );
   };
 
-  const renderMarqueeCard = (item: NormalizedTestimonial, key: string, companyMode: 'company' | 'role') => (
+  const renderMarqueeCard = (item: NormalizedTestimonial, key: string, _companyMode: 'company' | 'role') => (
     <div key={key} className={cn('w-[260px] md:w-[320px] bg-white border border-gray-100 p-4 md:p-5 shadow-sm flex flex-col gap-3', getCornerRadiusClassName(cornerRadius, 'card'))}>
       <div className="flex items-center gap-3">
         <AvatarDisplay item={item} context={context} className="w-10 h-10 rounded-full ring-2 ring-gray-50" />
-        <div className="min-w-0">
-          <h4 className="font-bold text-gray-900 truncate text-sm">{item.name}</h4>
-          <p className="text-xs text-gray-500 truncate">{companyMode === 'company' ? (item.company || item.role) : (item.role || item.company)}</p>
+        <div className="min-w-0 flex-1">
+          <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="font-bold text-gray-900 truncate text-sm block" element="h4" />
+          <p className="text-xs text-gray-500 truncate flex flex-wrap gap-1 mt-0.5">
+            {item.role || visualEditActive ? (
+              <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="text-[var(--token-primary)] font-semibold" element="span" />
+            ) : null}
+            {item.company || visualEditActive ? (
+              <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+            ) : null}
+          </p>
         </div>
       </div>
       <RatingStars rating={item.rating} />
-      <p className="text-gray-700 text-xs md:text-sm line-clamp-3 leading-relaxed">"{item.content}"</p>
+      <p className="text-gray-700 text-xs md:text-sm line-clamp-3 leading-relaxed">"
+        <EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />
+      "</p>
     </div>
   );
 
@@ -893,12 +995,12 @@ export function TestimonialsSectionShared({
 
     return (
       <div className="w-full relative overflow-hidden flex flex-col gap-5 pb-6 pt-2">
-        {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} />}
+        {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} />}
         <style dangerouslySetInnerHTML={{ __html: `
           @keyframes testimonials-marquee-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
           @keyframes testimonials-marquee-right { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
-          .animate-testimonials-marquee-left { animation: testimonials-marquee-left 40s linear infinite; }
-          .animate-testimonials-marquee-right { animation: testimonials-marquee-right 40s linear infinite; }
+          .animate-testimonials-marquee-left { animation: ${visualEditActive ? 'none' : 'testimonials-marquee-left 40s linear infinite'}; }
+          .animate-testimonials-marquee-right { animation: ${visualEditActive ? 'none' : 'testimonials-marquee-right 40s linear infinite'}; }
           .testimonials-marquee-pause:hover .animate-testimonials-marquee-left, .testimonials-marquee-pause:hover .animate-testimonials-marquee-right { animation-play-state: paused; }
           .testimonials-mask-edges { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
         ` }} />
@@ -919,7 +1021,7 @@ export function TestimonialsSectionShared({
 
   const renderShowcase = () => (
     <div className="w-full flex flex-col items-center max-w-[1120px] mx-auto @container">
-      {!hideHeader && <div className="px-1 md:px-2 w-full"><SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} /></div>}
+      {!hideHeader && <div className="px-1 md:px-2 w-full"><SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} /></div>}
       <div className="w-full mb-4 @3xl:mb-8 flex flex-wrap justify-center gap-1.5 @3xl:gap-2 px-1 md:px-2">
         {visibleItems.map((item, i) => {
           const isActive = i === activeIdx;
@@ -938,9 +1040,7 @@ export function TestimonialsSectionShared({
               <div className="w-6 h-6 @3xl:w-8 @3xl:h-8 rounded-full overflow-hidden bg-white shrink-0 shadow-sm border border-black/5">
                 <AvatarDisplay item={item} context={context} className="w-full h-full text-[9px] @3xl:text-xs text-gray-900" innerClassName={!isActive ? 'opacity-80' : ''} />
               </div>
-              <span className={cn('text-[12px] @3xl:text-sm font-semibold whitespace-nowrap transition-colors', isActive ? 'text-white' : 'text-gray-700')}>
-                {item.name}
-              </span>
+              <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className={cn('text-[12px] @3xl:text-sm font-semibold whitespace-nowrap transition-colors', isActive ? 'text-white' : 'text-gray-700')} element="span" />
             </button>
           );
         })}
@@ -960,7 +1060,7 @@ export function TestimonialsSectionShared({
 
             <div className="w-full @4xl:w-[65%] flex flex-col text-center @4xl:text-left relative z-10">
               <p className="font-medium text-base @3xl:text-xl @5xl:text-2xl leading-[1.65] text-gray-800 text-pretty mb-3 @3xl:mb-5 break-words">
-                "{activeItem.content}"
+                &ldquo;<EditableText active={visualEditActive} value={activeItem.content} onChange={(val) => handleItemTextUpdate(activeItem.id, 'content', val)} className="inline" />&rdquo;
               </p>
               <div className="flex justify-center @4xl:justify-start">
                 <RatingStars rating={activeItem.rating} />
@@ -971,9 +1071,13 @@ export function TestimonialsSectionShared({
               <div className="w-16 h-16 @3xl:w-24 @3xl:h-24 mb-3 @3xl:mb-4 rounded-[0.875rem] @3xl:rounded-[1.5rem] overflow-hidden shadow-md border-2 border-white ring-1 ring-gray-100 rotate-3 transition-transform duration-500 hover:rotate-0 hover:scale-105">
                 <AvatarDisplay item={activeItem} context={context} className="w-full h-full text-2xl @3xl:text-4xl" />
               </div>
-              <h4 className="font-bold text-gray-900 text-base @3xl:text-lg text-center @4xl:text-left w-full mb-0.5">{activeItem.name}</h4>
-              {activeItem.role ? <p className="text-[var(--token-primary)] font-semibold text-sm @3xl:text-base mb-1 text-center @4xl:text-left">{activeItem.role}</p> : null}
-              {activeItem.company ? <p className="text-gray-400 text-xs @3xl:text-sm text-center @4xl:text-left break-words max-w-full">{activeItem.company}</p> : null}
+              <EditableText active={visualEditActive} value={activeItem.name} onChange={(val) => handleItemTextUpdate(activeItem.id, 'name', val)} className="font-bold text-gray-900 text-base @3xl:text-lg text-center @4xl:text-left w-full mb-0.5" element="h4" />
+              {activeItem.role || visualEditActive ? (
+                <EditableText active={visualEditActive} value={activeItem.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(activeItem.id, 'role', val)} className="text-[var(--token-primary)] font-semibold text-sm @3xl:text-base mb-1 text-center @4xl:text-left block" element="p" />
+              ) : null}
+              {activeItem.company || visualEditActive ? (
+                <EditableText active={visualEditActive} value={activeItem.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(activeItem.id, 'company', val)} className="text-gray-400 text-xs @3xl:text-sm text-center @4xl:text-left break-words max-w-full block" element="p" />
+              ) : null}
             </div>
           </motion.div>
         </AnimatePresence>
@@ -983,7 +1087,7 @@ export function TestimonialsSectionShared({
 
   const renderQuote = () => (
     <div className="w-full @container px-1 md:px-2">
-      {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} />}
+      {!hideHeader && <SectionHeader title={heading} subtitle={sectionSubtitle} headerAlign={headerAlign ?? 'center'} titleColorPrimary={titleColorPrimary} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText} subtitleAboveTitle={subtitleAboveTitle} visualEditEnabled={visualEditActive} onTitleChange={onTitleChange} onSubtitleChange={onSubtitleChange} onBadgeTextChange={onBadgeTextChange} />}
       <div className={cn('w-full bg-[var(--token-primary)] text-white p-4 @3xl:p-8 @5xl:p-12 relative overflow-hidden transition-colors duration-500 shadow-xl', getCornerRadiusClassName(cornerRadius, 'section'))}>
         <div className="absolute top-0 right-0 -m-32 w-80 h-80 @3xl:w-96 @3xl:h-96 bg-[var(--token-secondary)] rounded-full blur-3xl opacity-20 pointer-events-none" />
 
@@ -996,13 +1100,22 @@ export function TestimonialsSectionShared({
                   <div key={item.id} className="min-w-0 flex-[0_0_100%]">
                     <div className="flex h-full flex-col">
                       <p className="text-base @3xl:text-xl @4xl:text-2xl @5xl:text-3xl leading-relaxed @3xl:leading-snug font-medium mb-4 @4xl:mb-6 text-pretty px-1 @4xl:px-0">
-                        &ldquo;{item.content}&rdquo;
+                        &ldquo;<EditableText active={visualEditActive} value={item.content} onChange={(val) => handleItemTextUpdate(item.id, 'content', val)} className="inline" />&rdquo;
                       </p>
                       <div className="flex items-center gap-3 @3xl:gap-5 justify-center @4xl:justify-start mt-auto">
                         <AvatarDisplay item={item} context={context} className="h-10 w-10 @3xl:h-14 @3xl:w-14 @5xl:h-16 @5xl:w-16 rounded-full border border-white/20 backdrop-blur-sm shadow-sm" innerClassName="bg-white/10" />
                         <div className="text-left min-w-0">
-                          <p className="font-bold text-sm @3xl:text-base @5xl:text-xl truncate">{item.name}</p>
-                          {buildMetaLine(item) ? <p className="text-[var(--token-secondary)] opacity-90 text-[11px] @3xl:text-sm @5xl:text-base mt-0.5 truncate">{buildMetaLine(item)}</p> : null}
+                          <EditableText active={visualEditActive} value={item.name} onChange={(val) => handleItemTextUpdate(item.id, 'name', val)} className="font-bold text-sm @3xl:text-base @5xl:text-xl truncate" element="p" />
+                          {buildMetaLine(item) || visualEditActive ? (
+                            <p className="text-[var(--token-secondary)] opacity-90 text-[11px] @3xl:text-sm @5xl:text-base mt-0.5 truncate flex flex-wrap gap-1">
+                              {item.role || visualEditActive ? (
+                                <EditableText active={visualEditActive} value={item.role || (visualEditActive ? 'Chức vụ' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'role', val)} className="font-semibold text-white/90" element="span" />
+                              ) : null}
+                              {item.company || visualEditActive ? (
+                                <EditableText active={visualEditActive} value={item.company || (visualEditActive ? 'Công ty' : '')} onChange={(val) => handleItemTextUpdate(item.id, 'company', val)} element="span" />
+                              ) : null}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1020,7 +1133,7 @@ export function TestimonialsSectionShared({
                 onClick={() => { quoteEmblaApi?.scrollTo(i); }}
                 aria-label={`Select testimonial ${i + 1}`}
                 className={cn(
-                  'w-10 h-1.5 @3xl:w-12 @3xl:h-2 @4xl:w-2 @4xl:h-12 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+                  'pointer-events-auto w-10 h-1.5 @3xl:w-12 @3xl:h-2 @4xl:w-2 @4xl:h-12 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
                   i === quoteIdx ? 'bg-white scale-110' : 'bg-white/20 hover:bg-white/40',
                 )}
               />

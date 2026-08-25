@@ -6,6 +6,8 @@ import Link from 'next/link';
 import type { AdminModule, ModuleLabels } from '../_types';
 import { categoryColors, getModuleConfigRoute, iconMap } from '../_constants';
 
+import { hasModuleRuntimeDefinition } from '@/lib/modules/runtime-config';
+
 interface ModuleCardProps {
   module: AdminModule;
   onToggle: (key: string, enabled: boolean) => void;
@@ -14,6 +16,9 @@ interface ModuleCardProps {
   isToggling?: boolean;
   isAnyToggling?: boolean;
   labels: ModuleLabels;
+  selected?: boolean;
+  onSelectChange?: (selected: boolean) => void;
+  showCheckbox?: boolean;
 }
 
 export const ModuleCard: React.FC<ModuleCardProps> = ({
@@ -24,6 +29,9 @@ export const ModuleCard: React.FC<ModuleCardProps> = ({
   isToggling,
   isAnyToggling,
   labels,
+  selected = false,
+  onSelectChange,
+  showCheckbox = false,
 }) => {
   const Icon = iconMap[module.icon] || Package;
   const categoryColor = categoryColors[module.category];
@@ -32,13 +40,26 @@ export const ModuleCard: React.FC<ModuleCardProps> = ({
   const isCoreLocked = module.isCore && module.key !== 'roles';
   const isDisabled = isCoreLocked || !canToggle || (isToggling ?? isAnyToggling);
   const hasDependents = allModules.some((mod) => mod.dependencies?.includes(module.key) && mod.enabled);
+  const isSyncable = module.enabled && hasModuleRuntimeDefinition(module.key);
 
   return (
-    <div className={`bg-white dark:bg-slate-900 border rounded-lg p-4 transition-all ${
-      module.enabled
-        ? 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-        : 'border-slate-200 dark:border-slate-800 opacity-60'
+    <div className={`relative bg-white dark:bg-slate-900 border rounded-lg p-4 transition-all ${
+      selected
+        ? 'border-cyan-500 dark:border-cyan-500/50 ring-1 ring-cyan-500/30'
+        : (module.enabled
+          ? 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+          : 'border-slate-200 dark:border-slate-800 opacity-60')
     }`}>
+      {showCheckbox && isSyncable && (
+        <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelectChange?.(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-cyan-600 focus:ring-cyan-500 cursor-pointer dark:bg-slate-800"
+          />
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
           module.enabled

@@ -10,11 +10,12 @@
   color-scheme: light;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --breakpoint-tv: 100rem;
 }
 
 .dark {
@@ -52,10 +53,10 @@ body {
   --scrollbar-color: #3b82f6;
 }
 
-/* Base scrollbar - 2px, 60% opacity brand color */
+/* Base scrollbar - Mỏng 50% (5px), thumb bo tròn mượt mà */
 ::-webkit-scrollbar {
-  width: 2px;
-  height: 2px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -63,29 +64,81 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--scrollbar-color) 60%, transparent);
-  border-radius: 1px;
+  background: color-mix(in srgb, var(--scrollbar-color) 45%, transparent);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-color);
+  background: color-mix(in srgb, var(--scrollbar-color) 85%, transparent);
 }
 
 /* Firefox */
 @supports (scrollbar-color: auto) {
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--scrollbar-color) 60%, transparent) transparent;
+    scrollbar-color: color-mix(in srgb, var(--scrollbar-color) 45%, transparent) transparent;
+  }
+}
+
+/* --------------------------------------------
+   Admin Scrollbar (Neutral Slate - Independent of Brand Settings)
+   - Light mode: slate-300 (#cbd5e1), hover: slate-400 (#94a3b8)
+   - Dark mode: slate-700 (#334155), hover: slate-600 (#475569)
+   -------------------------------------------- */
+.admin-shell::-webkit-scrollbar-thumb,
+.admin-shell *::-webkit-scrollbar-thumb,
+html:has(.admin-shell)::-webkit-scrollbar-thumb,
+body:has(.admin-shell)::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.admin-shell::-webkit-scrollbar-thumb:hover,
+.admin-shell *::-webkit-scrollbar-thumb:hover,
+html:has(.admin-shell)::-webkit-scrollbar-thumb:hover,
+body:has(.admin-shell)::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark .admin-shell::-webkit-scrollbar-thumb,
+.dark .admin-shell *::-webkit-scrollbar-thumb,
+.dark.admin-shell::-webkit-scrollbar-thumb,
+html.dark:has(.admin-shell)::-webkit-scrollbar-thumb,
+body.dark:has(.admin-shell)::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark .admin-shell::-webkit-scrollbar-thumb:hover,
+.dark .admin-shell *::-webkit-scrollbar-thumb:hover,
+.dark.admin-shell::-webkit-scrollbar-thumb:hover,
+html.dark:has(.admin-shell)::-webkit-scrollbar-thumb:hover,
+body.dark:has(.admin-shell)::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+@supports (scrollbar-color: auto) {
+  .admin-shell,
+  .admin-shell *,
+  html:has(.admin-shell),
+  body:has(.admin-shell) {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .dark .admin-shell,
+  .dark .admin-shell *,
+  html.dark:has(.admin-shell),
+  body.dark:has(.admin-shell) {
+    scrollbar-color: #334155 transparent;
   }
 }
 
 /* Utility class */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--scrollbar-color);
-  border-radius: 3px;
+  border-radius: 9999px;
 }
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
@@ -427,3 +480,22 @@ body {
   background-clip: text;
   color: transparent;
 }
+
+/* ==========================================================================
+   Darkglass header transparent on home page (using :has selector for clean 
+   HTML & CSS state to prevent black header flash on SSG/hydration)
+   ========================================================================== */
+body:has(.home-page-marker) .darkglass-header {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+}
+
+body:has(.home-page-marker) .darkglass-header-inner {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+

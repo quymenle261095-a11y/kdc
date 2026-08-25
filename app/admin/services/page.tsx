@@ -1,34 +1,20 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { AdminEntityImage } from '../components/AdminEntityImage';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Briefcase, ChevronDown, Edit, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
+import { Briefcase, ChevronDown, Copy, Edit, ExternalLink, Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { Badge, Button, Card, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
+import { AdminDragHandle, AdminPageHeader, AdminPageLayout, AdminPagination, buildOrderUpdates, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, getReorderedItems, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, SortableTableRow, TableCellControls, TableCellThumbnail, TableEmptyState, TableHeadControls, TableHeadThumbnail, TableSkeleton, TableToolbar, useAdminDndSensors, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
-
-function generatePaginationItems(currentPage: number, totalPages: number): (number | 'ellipsis')[] {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-
-  if (currentPage <= 3) {
-    return [1, 2, 3, 4, 'ellipsis', totalPages];
-  }
-
-  if (currentPage >= totalPages - 2) {
-    return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-  }
-
-  return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages];
-}
+import type { DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 export default function ServicesListPage() {
   return (
@@ -43,33 +29,23 @@ function ServicesContent() {
   const fieldsData = useQuery(api.admin.modules.listEnabledModuleFields, { moduleKey: 'services' });
   const settingsData = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'services' });
   const deleteService = useMutation(api.services.remove);
+  const duplicateService = useMutation(api.services.duplicate);
   const bulkClearBrokenMedia = useMutation(api.services.bulkClearBrokenMedia);
+  const reorderServices = useMutation(api.services.reorder);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'' | 'Published' | 'Draft' | 'Archived'>('');
+  const [filterStatus, setFilterStatus] = useState<'' | 'Published' | 'Draft'>('');
   const [manualSelectedIds, setManualSelectedIds] = useState<Id<"services">[]>([]);
   const [selectionMode, setSelectionMode] = useState<'manual' | 'all'>('manual');
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"services"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [cloningServiceId, setCloningServiceId] = useState<Id<"services"> | null>(null);
   const [isClearingBrokenMedia, setIsClearingBrokenMedia] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return ['category', 'price', 'status'];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_services_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : ['category', 'price', 'status'];
-      }
-    } catch {
-      return ['category', 'price', 'status'];
-    }
-    return ['category', 'price', 'status'];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_services_visible_columns');
+  const dndSensors = useAdminDndSensors();
   const isSelectAllActive = selectionMode === 'all';
 
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
@@ -81,9 +57,7 @@ function ServicesContent() {
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    window.localStorage.setItem('admin_services_visible_columns', JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
+
 
   const servicesPerPage = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'servicesPerPage');
@@ -161,11 +135,12 @@ function ServicesContent() {
   })) ?? [], [servicesData, categoryMap]);
 
   const sortedServices = useSortableData(services, sortConfig);
+  const isReorderEnabled = !debouncedSearchTerm.trim() && !filterStatus && (sortConfig.key === null || sortConfig.key === 'order');
 
   const totalCount = totalCountData?.count ?? 0;
   const totalPages = totalCount ? Math.ceil(totalCount / resolvedServicesPerPage) : 1;
   const paginatedServices = sortedServices;
-  const tableColumnCount = 3 + resolvedVisibleColumns.length;
+  const tableColumnCount = 4 + resolvedVisibleColumns.length;
   const selectedIds = isSelectAllActive && selectAllData ? selectAllData.ids : manualSelectedIds;
   const isSelectingAll = isSelectAllActive && selectAllData === undefined;
 
@@ -184,12 +159,12 @@ function ServicesContent() {
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
   };
 
   const handleFilterChange = (value: string) => {
-    setFilterStatus(value as '' | 'Published' | 'Draft' | 'Archived');
+    setFilterStatus(value as '' | 'Published' | 'Draft');
     setCurrentPage(1);
     applyManualSelection([]);
   };
@@ -213,6 +188,18 @@ function ServicesContent() {
       ? selectedIds.filter(i => i !== id)
       : [...selectedIds, id];
     applyManualSelection(next);
+  };
+
+  const handleDuplicateService = async (id: Id<"services">) => {
+    setCloningServiceId(id);
+    try {
+      const result = await duplicateService({ id });
+      toast.success(`Đã tạo bản sao: ${result.title}`);
+    } catch {
+      toast.error('Không thể copy dịch vụ');
+    } finally {
+      setCloningServiceId(null);
+    }
   };
 
   const handleDelete = async (id: Id<"services">) => {
@@ -266,6 +253,27 @@ function ServicesContent() {
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!isReorderEnabled) {return;}
+    const reordered = getReorderedItems(paginatedServices, event.active.id, event.over?.id, service => service._id);
+    if (!reordered) {return;}
+
+    try {
+      await reorderServices({
+        items: buildOrderUpdates(
+          reordered,
+          paginatedServices.map(service => service.order),
+          service => service._id,
+          (_service, index) => offset + index
+        ),
+      });
+      setSortConfig({ direction: 'asc', key: null });
+      toast.success('Đã cập nhật thứ tự dịch vụ');
+    } catch {
+      toast.error('Không thể cập nhật thứ tự dịch vụ');
+    }
+  };
+
   const formatPrice = (price?: number) => {
     if (!price) {return '-';}
     return new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
@@ -277,18 +285,11 @@ function ServicesContent() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-teal-500/10 rounded-lg">
-            <Briefcase className="w-6 h-6 text-teal-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Quản lý dịch vụ</h1>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/services/create"><Button className="gap-2 bg-teal-600 hover:bg-teal-500"><Plus size={16}/> Thêm mới</Button></Link>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý dịch vụ"
+        addHref="/admin/services/create"
+      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}
@@ -306,206 +307,184 @@ function ServicesContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input placeholder="Tìm kiếm dịch vụ..." className="pl-9" value={searchTerm} onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" value={filterStatus} onChange={(e) =>{  handleFilterChange(e.target.value); }}>
-              <option value="">Tất cả trạng thái</option>
-              <option value="Published">Đã xuất bản</option>
-              <option value="Draft">Bản nháp</option>
-              <option value="Archived">Lưu trữ</option>
-            </select>
-            <Button variant="outline" size="sm" onClick={handleResetFilters}>
-              Xóa lọc
-            </Button>
-            <ColumnToggle
-              columns={columns}
-              visibleColumns={resolvedVisibleColumns}
-              onToggle={(key) => {
-                setVisibleColumns(prev => prev.includes(key) ? prev.filter(col => col !== key) : [...prev, key]);
-              }}
+        <TableToolbar
+          activeFilterCount={[Boolean(filterStatus)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+              placeholder="Tìm kiếm dịch vụ..."
             />
-          </div>
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>
-              {resolvedVisibleColumns.includes('thumbnail') && <TableHead className="w-[80px]">Ảnh</TableHead>}
-              <SortableHeader label="Tiêu đề" sortKey="title" sortConfig={sortConfig} onSort={handleSort} />
-              {resolvedVisibleColumns.includes('category') && <SortableHeader label="Danh mục" sortKey="category" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('price') && <SortableHeader label="Giá" sortKey="price" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
-              <TableHead className="text-right">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedServicesPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell>
-                    <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  {resolvedVisibleColumns.includes('thumbnail') && (
-                    <TableCell>
-                      <div className="h-8 w-12 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <div className="h-4 w-2/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  {resolvedVisibleColumns.includes('category') && (
-                    <TableCell>
-                      <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('price') && (
-                    <TableCell>
-                      <div className="h-4 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('status') && (
-                    <TableCell>
-                      <div className="h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right">
-                    <div className="ml-auto h-8 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedServices.map(service => (
-                  <TableRow key={service._id} className={selectedIds.includes(service._id) ? 'bg-teal-500/5' : ''}>
-                    <TableCell><SelectCheckbox checked={selectedIds.includes(service._id)} onChange={() =>{  toggleSelectItem(service._id); }} /></TableCell>
-                    {resolvedVisibleColumns.includes('thumbnail') && (
-                      <TableCell>
-                        <AdminEntityImage
-                          src={service.thumbnail}
-                          alt={service.title}
-                          variant="service"
-                          width={48}
-                          height={32}
-                          className="h-8 w-12"
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell className="font-medium max-w-[300px] truncate">{service.title}</TableCell>
-                    {resolvedVisibleColumns.includes('category') && <TableCell>{service.category}</TableCell>}
-                    {resolvedVisibleColumns.includes('price') && <TableCell className="text-slate-500">{formatPrice(service.price)}</TableCell>}
-                    {resolvedVisibleColumns.includes('status') && (
-                      <TableCell>
-                        <Badge variant={service.status === 'Published' ? 'success' : (service.status === 'Draft' ? 'secondary' : 'warning')}>
-                          {service.status === 'Published' ? 'Đã xuất bản' : (service.status === 'Draft' ? 'Bản nháp' : 'Lưu trữ')}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" className="text-teal-600 hover:text-teal-700" title="Xem dịch vụ" onClick={() =>{  openFrontend(service.slug, service.categoryId); }}><ExternalLink size={16}/></Button>
-                        <Link href={`/admin/services/${service._id}/edit`}><Button variant="ghost" size="icon"><Edit size={16}/></Button></Link>
-                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(service._id)}><Trash2 size={16}/></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedServices.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có dịch vụ nào'}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedServicesPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số dịch vụ mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>dịch vụ/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedServicesPerPage) + 1 : 0}–{Math.min(currentPage * resolvedServicesPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">dịch vụ</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
-                      </div>
-                    );
-                  }
-
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
-            </div>
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Trạng thái"
+                value={filterStatus}
+                onChange={(val) => handleFilterChange(val)}
+                placeholder="Tất cả trạng thái"
+                options={[
+                  { value: 'Published', label: 'Hiện' },
+                  { value: 'Draft', label: 'Ẩn' },
+                ]}
+              />
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterStatus)} onReset={handleResetFilters} />
+              <ColumnToggle
+                columns={columns}
+                visibleColumns={resolvedVisibleColumns}
+                onToggle={(key) => toggleColumn(key, columns.map(c => c.key))}
+              />
+            </>
+          }
+        />
+        {!isReorderEnabled && (
+          <div className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800">
+            Tắt tìm kiếm/lọc và quay về thứ tự mặc định để kéo thả đổi vị trí.
           </div>
         )}
+        <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
+              <TableRow>
+                <TableHeadControls checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} />
+                {resolvedVisibleColumns.includes('thumbnail') && <TableHeadThumbnail label="Ảnh" />}
+                <SortableHeader label="Tiêu đề" sortKey="title" sortConfig={sortConfig} onSort={handleSort} />
+                {resolvedVisibleColumns.includes('category') && <SortableHeader label="Danh mục" sortKey="category" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('price') && <SortableHeader label="Giá" sortKey="price" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
+                <TableHead className="text-right">Hành động</TableHead>
+              </TableRow>
+            </TableHeader>
+            <SortableContext items={paginatedServices.map(service => service._id)} strategy={verticalListSortingStrategy}>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedServicesPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedServices.map(service => (
+                    <SortableTableRow key={service._id} id={service._id} disabled={!isReorderEnabled} selected={selectedIds.includes(service._id)} selectedClassName="bg-teal-500/5">
+                      {({ attributes, disabled, listeners }) => (
+                        <>
+                      <TableCellControls
+                        checked={selectedIds.includes(service._id)}
+                        onChange={() => { toggleSelectItem(service._id); }}
+                        attributes={attributes}
+                        dragDisabled={disabled}
+                        listeners={listeners}
+                      />
+                      {resolvedVisibleColumns.includes('thumbnail') && (
+                        <TableCellThumbnail src={service.thumbnail} alt={service.title} />
+                      )}
+                      <TableCell className="font-medium max-w-[300px] truncate">{service.title}</TableCell>
+                      {resolvedVisibleColumns.includes('category') && <TableCell className="whitespace-nowrap">{service.category}</TableCell>}
+                      {resolvedVisibleColumns.includes('price') && <TableCell className="text-slate-500 whitespace-nowrap">{formatPrice(service.price)}</TableCell>}
+                      {resolvedVisibleColumns.includes('status') && (
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant={service.status === 'Published' ? 'success' : (service.status === 'Draft' ? 'secondary' : 'warning')}>
+                            {service.status === 'Published' ? 'Hiện' : (service.status === 'Draft' ? 'Ẩn' : 'Lưu trữ')}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      <TableCell className="text-right whitespace-nowrap">
+                        <RowActions>
+                          <RowActionButton
+                            title="Xem dịch vụ"
+                            icon={<ExternalLink size={16} />}
+                            onClick={() => openFrontend(service.slug, service.categoryId)}
+                            className="text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                          />
+                          <RowActionButton
+                            title="Copy dịch vụ"
+                            icon={cloningServiceId === service._id ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                            onClick={() => void handleDuplicateService(service._id)}
+                            disabled={cloningServiceId === service._id}
+                          />
+                          <EditActionButton href={`/admin/services/${service._id}/edit`} />
+                          <DeleteActionButton onClick={async () => handleDelete(service._id)} />
+                        </RowActions>
+                      </TableCell>
+                        </>
+                      )}
+                    </SortableTableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedServices.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có dịch vụ nào'}
+                />
+              )}
+            </TableBody>
+            </SortableContext>
+          </Table>
+        </div>
+
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedServices.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có dịch vụ nào'}
+            </div>
+          ) : (
+            paginatedServices.map(service => (
+              <MobileRowCard
+                key={service._id}
+                selected={selectedIds.includes(service._id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(service._id)} onChange={() => toggleSelectItem(service._id)} />}
+                title={service.title}
+                badge={
+                  <Badge variant={service.status === 'Published' ? 'success' : (service.status === 'Draft' ? 'secondary' : 'warning')}>
+                    {service.status === 'Published' ? 'Hiện' : (service.status === 'Draft' ? 'Ẩn' : 'Lưu trữ')}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Danh mục:</span> {service.category}</div>
+                    <div><span className="text-slate-400">Giá:</span> {formatPrice(service.price)}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    <RowActionButton
+                      title="Xem dịch vụ"
+                      icon={<ExternalLink size={16} />}
+                      onClick={() => openFrontend(service.slug, service.categoryId)}
+                      className="text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/30"
+                    />
+                    <RowActionButton
+                      title="Copy dịch vụ"
+                      icon={cloningServiceId === service._id ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                      onClick={() => void handleDuplicateService(service._id)}
+                      disabled={cloningServiceId === service._id}
+                    />
+                    <EditActionButton href={`/admin/services/${service._id}/edit`} />
+                    <DeleteActionButton onClick={async () => handleDelete(service._id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        </DndContext>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedServicesPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="dịch vụ"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -519,6 +498,6 @@ function ServicesContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

@@ -52,6 +52,10 @@ interface BlogSectionRuntimeProps {
   desktopColumns?: 3 | 4;
   spacing?: SectionSpacing;
   cornerRadius?: BlogCardRadius;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }
 
 const FALLBACK_TITLE = 'Tin tức mới nhất';
@@ -316,6 +320,10 @@ export function BlogSectionRuntime({
   desktopColumns = 4,
   spacing = 'normal',
   cornerRadius = 'lg',
+  visualEditEnabled = false,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: BlogSectionRuntimeProps) {
   const breakpoint = getBlogBreakpoint(context, device);
   const layout5PageSize = desktopColumns === 3 ? 6 : 8;
@@ -429,6 +437,10 @@ export function BlogSectionRuntime({
         uppercaseText={uppercaseText}
         brandColor={tokens.primary.solid}
         className={className}
+        visualEditEnabled={visualEditEnabled}
+        onTitleChange={onTitleChange}
+        onSubtitleChange={onSubtitleChange}
+        onBadgeTextChange={onBadgeTextChange}
       />
     );
   };

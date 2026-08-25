@@ -13,7 +13,7 @@ export interface ProcessStep {
   iconStorageId?: string | null;
 }
 
-export type ProcessStyle = 'horizontal' | 'stepper' | 'cards' | 'accordion' | 'minimal' | 'compactMinimal' | 'grid' | 'alternating';
+export type ProcessStyle = 'horizontal' | 'stepper' | 'cards' | 'accordion' | 'minimal' | 'compactMinimal' | 'grid' | 'alternating' | 'circular';
 
 export type ProcessBrandMode = 'single' | 'dual';
 export type ProcessSpacing = SectionSpacing;
@@ -27,6 +27,8 @@ export interface ProcessConfig extends SectionHeaderConfig {
   cornerRadius: ProcessCornerRadius;
   noBorderRadius?: boolean;
   noVerticalMargin?: boolean;
+  circularCtaText?: string;
+  circularCtaLink?: string;
 }
 
 export const DEFAULT_PROCESS_SPACING: ProcessSpacing = DEFAULT_SECTION_SPACING;

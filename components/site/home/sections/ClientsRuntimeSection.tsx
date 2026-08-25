@@ -11,20 +11,22 @@ import type { ClientsConfig } from '@/app/admin/home-components/clients/_types';
 import { normalizeClientsCornerRadius } from '@/app/admin/home-components/clients/_types';
 import type { HomeComponentSectionProps } from '../types';
 
-export function ClientsRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function ClientsRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const clientsConfig = config as Partial<ClientsConfig>;
   const items = normalizeClientItems(clientsConfig.items);
   if (items.length === 0) {return null;}
 
   const style = normalizeClientsStyleSafe(clientsConfig.style);
-  const tokens = getClientsColorTokens({ primary: brandColor, secondary, mode });
+  const tokens = adaptTokensForDarkMode(getClientsColorTokens({ primary: brandColor, secondary, mode }), isDark ?? false);
   const headerConfig = extractSectionHeaderConfig(config);
   const spacing = clientsConfig.noVerticalMargin === true ? 'none' : normalizeSectionSpacing(clientsConfig.spacing);
   const cornerRadius = normalizeClientsCornerRadius(clientsConfig.cornerRadius, clientsConfig.noBorderRadius);
 
   return (
     <section className={`${getSectionSpacingClassName(spacing)} px-3`} style={{ backgroundColor: tokens.neutralBackground }}>
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl tv:max-w-[1600px]">
         <SectionHeader
           title={title}
           subtitle={headerConfig.subtitle}

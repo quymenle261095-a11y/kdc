@@ -147,8 +147,8 @@ export default function GalleryCreatePage() {
         >
           <div className="space-y-2">
             <Label>Số cột desktop</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {[3, 4].map((option) => {
+            <div className="grid grid-cols-3 gap-2">
+              {[3, 4, 6].map((option) => {
                 const selected = desktopColumns === option;
                 return (
                   <button
@@ -224,6 +224,9 @@ export default function GalleryCreatePage() {
         fullWidthDesktop={fullWidthDesktop}
         desktopColumns={desktopColumns}
         cornerRadius={cornerRadius}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
       />
 
       <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">

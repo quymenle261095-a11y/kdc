@@ -26,8 +26,8 @@ const DEFAULT_ROLES: RoleData[] = [
     name: 'Admin',
     permissions: {
       customers: ['view', 'create', 'edit'],
-      kanban: ['view', 'create', 'edit', 'delete'],
       media: ['view', 'create', 'delete'],
+      miniApps: ['view', 'create', 'edit', 'delete'],
       orders: ['view', 'create', 'edit'],
       posts: ['view', 'create', 'edit', 'delete'],
       products: ['view', 'create', 'edit', 'delete'],

@@ -64,9 +64,8 @@ export class ServiceSeeder extends BaseSeeder<ServiceData> {
     const price = hasPrice ? this.randomInt(500_000, 20_000_000) : undefined;
     
     const status = this.faker.helpers.weightedArrayElement([
-      { value: 'Published' as const, weight: 7 },
+      { value: 'Published' as const, weight: 8 },
       { value: 'Draft' as const, weight: 2 },
-      { value: 'Archived' as const, weight: 1 },
     ]);
     
     return {

@@ -57,6 +57,46 @@ const notificationDoc = v.object({
   type: notificationType,
 });
 
+function extractOrderNumberFromNotification(content: string) {
+  const hashMatch = content.match(/#([A-Z0-9-]+)/i);
+  if (hashMatch?.[1]) {
+    return hashMatch[1];
+  }
+  const queryMatch = content.match(/orderNumber=([A-Z0-9-]+)/i);
+  return queryMatch?.[1] ?? "";
+}
+
+function sanitizeNotificationForAdmin(notification: Doc<"notifications">) {
+  const raw = `${notification.title}\n${notification.content}`;
+  const exposesInternalMailSetup =
+    raw.includes("/system/") ||
+    /\bSMTP\b/i.test(raw) ||
+    /\bResend\b/i.test(raw) ||
+    raw.includes("Admin mở") ||
+    raw.includes("Email hệ thống");
+
+  if (!exposesInternalMailSetup) {
+    return notification;
+  }
+
+  if (raw.toLowerCase().includes("quota") || raw.includes("giới hạn gửi")) {
+    return {
+      ...notification,
+      title: "Cần kiểm tra kênh gửi email",
+      content: "Một số email chưa được gửi tự động. Vui lòng liên hệ dev để kiểm tra.",
+    };
+  }
+
+  const orderNumber = extractOrderNumberFromNotification(notification.content);
+  return {
+    ...notification,
+    title: "Cần gửi thông báo thủ công",
+    content: orderNumber
+      ? `Đơn #${orderNumber} đã được ghi nhận. Email thông báo chưa được gửi tự động. Vui lòng xử lý đơn và gửi mã đơn cho khách nếu cần tra cứu.`
+      : "Email thông báo chưa được gửi tự động. Vui lòng xử lý thủ công nếu cần.",
+  };
+}
+
 // Queries
 // CRIT-003 FIX: Dùng counter table thay vì fetch ALL
 export const count = query({
@@ -87,7 +127,10 @@ export const countByStatus = query({
 // CRIT-003 FIX: Thêm limit
 export const listAll = query({
   args: {},
-  handler: async (ctx) => ctx.db.query("notifications").take(500),
+  handler: async (ctx) => {
+    const notifications = await ctx.db.query("notifications").take(500);
+    return notifications.map(sanitizeNotificationForAdmin);
+  },
   returns: v.array(notificationDoc),
 });
 
@@ -133,7 +176,7 @@ export const listAdminWithOffset = query({
       );
     }
 
-    return notifications.slice(offset, offset + limit);
+    return notifications.slice(offset, offset + limit).map(sanitizeNotificationForAdmin);
   },
   returns: v.array(notificationDoc),
 });
@@ -226,37 +269,49 @@ export const listAdminIds = query({
 
 export const getById = query({
   args: { id: v.id("notifications") },
-  handler: async (ctx, args) => ctx.db.get(args.id),
+  handler: async (ctx, args) => {
+    const notification = await ctx.db.get(args.id);
+    return notification ? sanitizeNotificationForAdmin(notification) : null;
+  },
   returns: v.union(notificationDoc, v.null()),
 });
 
 // CRIT-003 FIX: Thêm limit
 export const listByStatus = query({
   args: { status: notificationStatus },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const notifications = await ctx.db
       .query("notifications")
       .withIndex("by_status", (q) => q.eq("status", args.status))
-      .take(200),
+      .take(200);
+    return notifications.map(sanitizeNotificationForAdmin);
+  },
   returns: v.array(notificationDoc),
 });
 
 // CRIT-003 FIX: Thêm limit
 export const listByType = query({
   args: { type: notificationType },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const notifications = await ctx.db
       .query("notifications")
       .withIndex("by_type", (q) => q.eq("type", args.type))
-      .take(200),
+      .take(200);
+    return notifications.map(sanitizeNotificationForAdmin);
+  },
   returns: v.array(notificationDoc),
 });
 
 // CRIT-003 FIX: Thêm limit
 export const listScheduled = query({
   args: {},
-  handler: async (ctx) => ctx.db
+  handler: async (ctx) => {
+    const notifications = await ctx.db
       .query("notifications")
       .withIndex("by_status", (q) => q.eq("status", "Scheduled"))
-      .take(100),
+      .take(100);
+    return notifications.map(sanitizeNotificationForAdmin);
+  },
   returns: v.array(notificationDoc),
 });
 
@@ -391,11 +446,6 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const notif = await ctx.db.get(args.id);
     if (!notif) {throw new Error("Notification not found");}
-    
-    // MED-002: Không cho xóa thông báo đã gửi (để giữ audit trail)
-    if (notif.status === "Sent") {
-      throw new Error("Không thể xóa thông báo đã gửi");
-    }
     
     await ctx.db.delete(args.id);
     

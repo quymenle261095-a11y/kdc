@@ -7,14 +7,14 @@ import type {
 import { DEFAULT_CLIENTS_CORNER_RADIUS } from '../_types';
 
 export const CLIENTS_STYLES: Array<{ id: ClientsStyle; label: string }> = [
-  { id: 'layout01', label: 'Layout 01 — 1 lớn + 3 phụ' },
-  { id: 'layout02', label: 'Layout 02 — Banner full-width' },
-  { id: 'layout03', label: 'Layout 03 — 1 trên + 2 dưới' },
-  { id: 'layout04', label: 'Layout 04 — 2 banner ngang' },
-  { id: 'layout05', label: 'Layout 05 — 3 banner landscape' },
-  { id: 'layout06', label: 'Layout 06 — 4 banner dọc' },
-  { id: 'layout07', label: 'Layout 07 — Grid 2×2 ngang' },
-  { id: 'layout08', label: 'Layout 08 — Vuốt carousel' },
+  { id: 'layout01', label: '(1) Một lớn' },
+  { id: 'layout02', label: '(2) Tràn viền' },
+  { id: 'layout03', label: '(3) Xếp tầng' },
+  { id: 'layout04', label: '(4) Hai banner' },
+  { id: 'layout05', label: '(5) Ba banner' },
+  { id: 'layout06', label: '(6) Bốn banner' },
+  { id: 'layout07', label: '(7) Lưới ô' },
+  { id: 'layout08', label: '(8) Trượt ngang' },
 ];
 
 export const CLIENTS_HEADER_ALIGN_OPTIONS: Array<{ value: ClientsHeaderAlign; label: string }> = [

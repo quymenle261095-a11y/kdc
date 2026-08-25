@@ -96,15 +96,13 @@ export const buildSeoContext = (site: SiteSettings, seo: SEOSettings): SeoContex
   const baseUrl = resolveBaseUrl(site.site_url);
   const siteName = site.site_name || 'Website';
   const title = seo.seo_title || siteName;
-  const description = seo.seo_description || site.site_tagline || '';
-  const keywords = seo.seo_keywords
-    ? seo.seo_keywords.split(',').map((keyword) => keyword.trim()).filter(Boolean)
-    : [];
+  const description = seo.seo_brand_summary || seo.seo_description || site.site_tagline || '';
+  const keywords = resolveSeoKeywords({ seo, site });
 
   return {
     baseUrl,
     description,
-    image: seo.seo_og_image || site.site_logo || '',
+    image: seo.seo_og_image || '',
     keywords,
     locale: resolveLocale(site.site_language || 'vi'),
     siteName,
@@ -139,7 +137,6 @@ export const buildMetadata = (params: {
   twitterCreator?: string;
 }): Metadata => {
   const resolvedImage = params.image || params.context.image;
-  const resolvedKeywords = params.keywords ?? params.context.keywords;
   const openGraphTitle = params.useTitleTemplate || params.title === params.context.siteName
     ? params.title
     : `${params.title} | ${params.context.siteName}`;
@@ -156,7 +153,6 @@ export const buildMetadata = (params: {
       indexable: params.indexable,
     }),
     description: params.description,
-    keywords: resolvedKeywords.length > 0 ? resolvedKeywords : undefined,
     metadataBase: buildMetadataBase(params.context.baseUrl),
     openGraph: {
       description: params.description,
@@ -243,11 +239,6 @@ export const buildSeoMetadata = (params: {
     site: params.site,
   });
 
-  const keywords = resolveSeoKeywords({
-    entity: params.entity,
-    seo: params.seo,
-  });
-
   const openGraphTitle = params.useTitleTemplate || title === siteName ? title : `${title} | ${siteName}`;
   const twitterSite = resolveTwitterHandle(params.social?.social_twitter);
   const twitterCreator = resolveTwitterHandle(params.social?.social_twitter);
@@ -262,7 +253,6 @@ export const buildSeoMetadata = (params: {
       indexable,
     }),
     description,
-    keywords: keywords.length > 0 ? keywords : undefined,
     metadataBase: buildMetadataBase(baseUrl),
     openGraph: {
       description,

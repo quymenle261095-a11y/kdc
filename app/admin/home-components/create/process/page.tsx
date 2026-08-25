@@ -24,6 +24,9 @@ import {
 } from '../../process/_types';
 import { Label, cn } from '@/app/admin/components/ui';
 
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+
 const DEFAULT_CREATE_STEPS: ProcessFormStep[] = [
   createProcessFormStep({
     description: 'Lắng nghe và tìm hiểu nhu cầu của khách hàng một cách chi tiết.',
@@ -49,6 +52,9 @@ const DEFAULT_CREATE_STEPS: ProcessFormStep[] = [
 
 export default function ProcessCreatePage() {
   const COMPONENT_TYPE = 'Process';
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
+
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Quy trình làm việc', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -74,6 +80,17 @@ export default function ProcessCreatePage() {
   const [style, setStyle] = React.useState<ProcessStyle>('horizontal');
   const [desktopColumns, setDesktopColumns] = React.useState<3 | 4>(4);
   const [cornerRadius, setCornerRadius] = React.useState<ProcessCornerRadius>(DEFAULT_PROCESS_CORNER_RADIUS);
+  const [circularCtaText, setCircularCtaText] = React.useState('');
+  const [circularCtaLink, setCircularCtaLink] = React.useState('');
+
+  const handleStepsChange = (newSteps: ProcessFormStep[]) => {
+    setSteps(
+      newSteps.map((item, idx) => ({
+        ...item,
+        id: steps[idx]?.id ?? item.id,
+      }))
+    );
+  };
 
   const normalizedPreviewSteps = React.useMemo(
     () => normalizeProcessRenderSteps(serializeProcessFormSteps(steps)),
@@ -99,6 +116,8 @@ export default function ProcessCreatePage() {
       badgeText: headerState.badgeText,
       spacing: headerState.spacing,
       noVerticalMargin: headerState.spacing === 'none',
+      circularCtaText,
+      circularCtaLink,
     });
   };
 
@@ -185,7 +204,16 @@ export default function ProcessCreatePage() {
         </HomeComponentDisplaySettingsSection>
       </div>
 
-      <ProcessForm steps={steps} onChange={setSteps} secondary={secondary} />
+      <ProcessForm
+        steps={steps}
+        onChange={setSteps}
+        secondary={secondary}
+        style={style}
+        circularCtaText={circularCtaText}
+        circularCtaLink={circularCtaLink}
+        onChangeCircularCtaText={setCircularCtaText}
+        onChangeCircularCtaLink={setCircularCtaLink}
+      />
 
       <ProcessPreview
         steps={normalizedPreviewSteps}
@@ -210,6 +238,13 @@ export default function ProcessCreatePage() {
         desktopColumns={desktopColumns}
         spacing={headerState.spacing}
         cornerRadius={cornerRadius}
+        circularCtaText={circularCtaText}
+        circularCtaLink={circularCtaLink}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
+        onItemsChange={handleStepsChange}
       />
     </ComponentFormWrapper>
   );

@@ -38,7 +38,7 @@ export async function saveSnapshotComponent({
     componentKey: component.componentKey,
     config,
     fallbackUsed: component.fallbackUsed,
-    mediaRefs: mediaRefs ?? component.mediaRefs,
+    mediaRefs: mediaRefs !== undefined ? mediaRefs : component.mediaRefs,
     order: Number.isFinite(numericOrder) ? numericOrder : 0,
     title: title.trim() || component.type,
     type: component.type,

@@ -82,9 +82,10 @@ function resolvePostContentLength(post: {
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  initialPost?: any;
 }
 
-export default function PostDetailPage({ params }: PageProps) {
+export default function PostDetailPage({ params, initialPost }: PageProps) {
   const { slug } = use(params);
   const brandColors = useBrandColors();
   const brandColor = brandColors.primary;
@@ -95,9 +96,10 @@ export default function PostDetailPage({ params }: PageProps) {
   const commentsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'comments' });
   const commentsLikesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableLikes', moduleKey: 'comments' });
   const commentsRepliesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableReplies', moduleKey: 'comments' });
-  const tagsFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableTags', moduleKey: 'posts' });
+  const _tagsFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableTags', moduleKey: 'posts' });
   const commentsSettings = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'comments' });
-  const post = useQuery(api.posts.getBySlug, { slug });
+  const postQuery = useQuery(api.posts.getBySlug, { slug });
+  const post = postQuery ?? (initialPost as Exclude<typeof postQuery, undefined>);
   const category = useQuery(
     api.postCategories.getById, 
     post?.categoryId ? { id: post.categoryId } : 'skip'
@@ -122,8 +124,7 @@ export default function PostDetailPage({ params }: PageProps) {
     if (!Array.isArray(tags)) {return [];}
     return tags.filter(Boolean);
   }, [post]);
-  const tagsFieldEnabled = enabledFields.has('tags');
-  const shouldShowTags = tagsFieldEnabled && (tagsFeature?.enabled ?? false) && postDetailConfig.showTags && postTags.length > 0;
+  const shouldShowTags = false;
   const commentsPerPageSetting = useMemo(() => {
     const perPage = commentsSettings?.find(setting => setting.settingKey === 'commentsPerPage')?.value as number | undefined;
     return perPage ?? 20;
@@ -192,9 +193,9 @@ export default function PostDetailPage({ params }: PageProps) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <FileText size={64} className="mx-auto mb-4 text-slate-300" />
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Không tìm thấy bài viết</h1>
-          <p className="text-slate-500 mb-6">Bài viết này không tồn tại hoặc đã bị xóa.</p>
+          <FileText size={64} className="mx-auto mb-4 text-slate-300 dark:text-zinc-600" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-[#f5f5f7] mb-2">Không tìm thấy bài viết</h1>
+          <p className="text-slate-500 dark:text-[#86868b] mb-6">Bài viết này không tồn tại hoặc đã bị xóa.</p>
           <Link
             href="/posts"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium"
@@ -407,6 +408,7 @@ interface PostData {
   excerpt?: string;
   thumbnail?: string;
   tags?: string[];
+  faqItems?: { question: string; answer: string }[];
   categoryId: Id<"postCategories">;
   categoryName: string;
   views: number;
@@ -614,6 +616,7 @@ function ClassicStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
                   <button
                     type="button"
                     onClick={handleShare}
+                    aria-label={isCopied ? 'Đã copy liên kết bài viết' : 'Chia sẻ bài viết'}
                     className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-10 px-4 py-2 w-full sm:w-auto min-w-[140px]"
                     style={{ backgroundColor: isCopied ? `${brandColor}15` : brandColor, color: isCopied ? brandColor : '#fff' }}
                   >
@@ -738,7 +741,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
                 type="button"
                 onClick={handleCopyLink}
                 className="inline-flex h-11 items-center gap-2 rounded-md border border-input bg-background px-4 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                aria-label="Copy link"
+                aria-label={isCopied ? 'Đã copy liên kết bài viết' : 'Copy liên kết bài viết'}
               >
                 {isCopied ? <Check className="h-4 w-4" /> : <LinkIcon className="h-4 w-4" />}
                 {isCopied ? 'Đã copy' : 'Copy link'}
@@ -801,6 +804,7 @@ function ModernStyle({ post, brandColor, secondaryColor, relatedPosts, enabledFi
               src={post.thumbnail}
               alt={post.title}
               fill
+              priority
               sizes="(max-width: 1024px) 100vw, 1024px"
               className="object-cover transition-transform duration-300 hover:scale-105"
               ref={(img) => {
@@ -926,6 +930,7 @@ function MinimalStyle({ post, brandColor, secondaryColor, relatedPosts, showAuth
                 src={post.thumbnail as string}
                 alt={post.title}
                 fill
+                priority
                 sizes="100vw"
                 className="object-cover"
                 ref={(img) => {
@@ -1274,6 +1279,7 @@ function CommentsSection({
         <button
           type="button"
           onClick={() => setShowForm(!showForm)}
+          aria-expanded={showForm}
           className="text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
           style={{ backgroundColor: `${brandColor}15`, color: brandColor }}
         >
@@ -1334,6 +1340,7 @@ function CommentsSection({
                       <button
                         type="button"
                         onClick={() => toggleShowReplies(comment._id)}
+                        aria-expanded={showRepliesIds.has(comment._id)}
                         className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <MessageSquare className="h-3 w-3" />
@@ -1344,6 +1351,7 @@ function CommentsSection({
                       <button
                         type="button"
                         onClick={() => toggleReplyForm(comment._id)}
+                        aria-expanded={openReplyIds.has(comment._id)}
                         className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <Reply className="h-3 w-3" />
@@ -1421,26 +1429,26 @@ function PostDetailSkeleton() {
     <div className="py-8 px-4 animate-pulse">
       <div className="max-w-3xl mx-auto">
         {/* Back link skeleton */}
-        <div className="h-4 w-32 bg-slate-200 rounded mb-8" />
+        <div className="h-4 w-32 bg-slate-200 dark:bg-zinc-800 rounded mb-8" />
         
         {/* Header skeleton */}
         <div className="mb-10 text-center">
-          <div className="h-3 w-20 bg-slate-200 rounded mx-auto mb-4" />
-          <div className="h-10 w-3/4 bg-slate-200 rounded mx-auto mb-4" />
-          <div className="h-4 w-48 bg-slate-200 rounded mx-auto" />
+          <div className="h-3 w-20 bg-slate-200 dark:bg-zinc-800 rounded mx-auto mb-4" />
+          <div className="h-10 w-3/4 bg-slate-200 dark:bg-zinc-800 rounded mx-auto mb-4" />
+          <div className="h-4 w-48 bg-slate-200 dark:bg-zinc-800 rounded mx-auto" />
         </div>
 
         {/* Featured Image skeleton */}
-        <div className="aspect-[2/1] rounded-lg bg-slate-200 mb-10" />
+        <div className="aspect-[2/1] rounded-lg bg-slate-200 dark:bg-zinc-800 mb-10" />
 
         {/* Content skeleton */}
         <div className="space-y-4">
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-5/6" />
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-4/6" />
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-3/4" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-5/6" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-4/6" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-zinc-800 rounded w-3/4" />
         </div>
       </div>
     </div>

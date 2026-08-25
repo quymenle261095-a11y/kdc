@@ -1,14 +1,14 @@
 import type { FunctionReturnType } from 'convex/server';
-import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
+import type { TrustPageKey } from './trust-pages';
 
-export type TrustPagePost = Exclude<FunctionReturnType<typeof api.posts.getById>, null>;
+export type TrustPageDoc = Exclude<FunctionReturnType<typeof api.pages.getByKeyPublic>, null>;
 
-export const getTrustPagePost = async (postId: Id<'posts'>) => {
+export const getPageByKey = async (key: TrustPageKey) => {
   const client = getConvexClient();
-  return client.query(api.posts.getById, { id: postId });
+  return client.query(api.pages.getByKeyPublic, { key });
 };
 
-export const isTrustPostVisible = (post: TrustPagePost) =>
-  post.status === 'Published' && (!post.publishedAt || post.publishedAt <= Date.now());
+export const isPageVisible = (page: TrustPageDoc | null): page is TrustPageDoc =>
+  Boolean(page && page.status === 'Published' && (!page.publishedAt || page.publishedAt <= Date.now()));

@@ -2,6 +2,8 @@
 
 import * as ExcelJS from "exceljs";
 import { buildExcelColumns, ProductModuleConfig, ExcelOptionDef } from "@/lib/excel/product-schema-builder";
+import { findAdapter } from "@/lib/excel/adapters/registry";
+import type { CompatibilityIssue } from "@/lib/excel/adapters/excel-adapter.interface";
 
 // ==========================================
 // Color palette — Professional navy/teal theme
@@ -270,6 +272,7 @@ export interface ParsedProductRecord {
   sku: string;
   name?: string;
   categoryId?: string;
+  categoryName?: string;
   productType?: "physical" | "digital";
   price?: number;
   salePrice?: number;
@@ -278,9 +281,13 @@ export interface ParsedProductRecord {
   digitalData?: string;
   imageUrl?: string;
   images?: string[];
+  detectedOptionNames?: string[];
   variants: {
+    sku?: string;
     variantOption1?: string;
+    variantOption1Name?: string;
     variantOption2?: string;
+    variantOption2Name?: string;
     price?: number;
     salePrice?: number;
     stock?: number;
@@ -291,12 +298,30 @@ export interface ParsedProductRecord {
 export async function parseProductExcelBase64(
   base64String: string,
   config: ProductModuleConfig,
-  options?: ExcelOptionDef[]
-): Promise<{ success: boolean; data?: ParsedProductRecord[]; error?: string }> {
+  options?: ExcelOptionDef[],
+  categories?: { id: string; name: string }[]
+): Promise<{ success: boolean; data?: ParsedProductRecord[]; optionNames?: string[]; error?: string }> {
   try {
     const buffer = Buffer.from(base64String, "base64");
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer as any);
+
+    // 1. Kiểm tra xem có Adapter tùy chỉnh nào đăng ký xử lý file này không
+    const customAdapter = findAdapter(wb);
+    if (customAdapter) {
+      // Kiểm tra tính tương thích cấu hình hệ thống
+      const issues = customAdapter.checkCompatibility(config);
+      if (issues.length > 0) {
+        const issuesText = issues.map(i => i.label).join(", ");
+        return { 
+          success: false, 
+          error: `Cấu hình hệ thống chưa tương thích với file Excel ${customAdapter.name} (Lỗi: ${issuesText}). Vui lòng báo Dev hỗ trợ.` 
+        };
+      }
+      console.log(`[Excel Import] Sử dụng bộ chuyển đổi: ${customAdapter.name}`);
+      const data = await customAdapter.parse(wb, config, options, categories);
+      return { success: true, data, optionNames: data[0]?.detectedOptionNames };
+    }
 
     const mainSheet = wb.getWorksheet("SanPham");
     if (!mainSheet) {
@@ -396,6 +421,31 @@ export async function parseProductExcelBase64(
 
   } catch (error: any) {
     return { success: false, error: `Lỗi parse Excel: ${error.message}` };
+  }
+}
+
+export async function checkFileAdapterAndCompatibility(
+  base64String: string,
+  config: ProductModuleConfig
+): Promise<{ adapterId: string | null; adapterName: string | null; issues: CompatibilityIssue[] }> {
+  try {
+    const buffer = Buffer.from(base64String, "base64");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as any);
+
+    const adapter = findAdapter(wb);
+    if (adapter) {
+      const issues = adapter.checkCompatibility(config);
+      return {
+        adapterId: adapter.id,
+        adapterName: adapter.name,
+        issues
+      };
+    }
+    return { adapterId: null, adapterName: null, issues: [] };
+  } catch (error) {
+    console.error("[Excel Detect] Lỗi kiểm tra file:", error);
+    return { adapterId: null, adapterName: null, issues: [] };
   }
 }
 

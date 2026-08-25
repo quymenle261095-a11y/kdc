@@ -539,6 +539,14 @@ export default function FaqEditPage({
               showBadge={showBadge}
               badgeText={badgeText}
               spacing={spacing}
+              onTitleChange={setTitle}
+              onSubtitleChange={setSubtitle}
+              onBadgeTextChange={setBadgeText}
+              onItemTextChange={(itemId, field, value) => {
+                setFaqItems((current) => current.map((item) => (
+                  item.id === itemId ? { ...item, [field]: value } : item
+                )));
+              }}
             />
           </div>
         </div>

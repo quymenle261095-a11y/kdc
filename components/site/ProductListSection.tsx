@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { PublicImage as Image } from '@/components/shared/PublicImage';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -21,6 +22,13 @@ import { getProductListCardRadiusClassName, getProductListImageRadiusClassName, 
 import { PRODUCT_LIST_LOOKBOOK_BANNERS } from '@/app/admin/home-components/product-list/_lib/constants';
 import useEmblaCarousel from 'embla-carousel-react';
 
+import { notifyAddToCart, useCart } from '@/lib/cart';
+import { useCartConfig } from '@/lib/experiences';
+import { getProductsListColors, type ProductsListColors } from '@/components/site/products/colors';
+import { ProductCardActions } from '@/components/site/shared/ProductCardActions';
+import { QuickAddVariantModal } from '@/components/products/QuickAddVariantModal';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
 // 6 Styles theo mẫu previews.tsx
 // 'minimal' = Luxury Minimal, 'commerce' = Commerce Card, 'bento' = Bento Grid
 // 'carousel' = Horizontal Scroll, 'compact' = Dense Grid, 'showcase' = Featured + Grid
@@ -33,6 +41,7 @@ interface ProductListSectionProps {
   mode?: 'single' | 'dual';
   title: string;
   snapshotComponentKey?: string;
+  isDark?: boolean;
 }
 
 type ProductListSiteProduct = {
@@ -57,6 +66,13 @@ function WineCarouselSiteSection({
   formatComparePrice,
   cardRadiusClassName,
   sectionSpacingClassName,
+  tokens,
+  showStock,
+  showAddToCartButton,
+  showBuyNowButton,
+  cartButtonsLayout,
+  onAddToCart,
+  onBuyNow,
 }: {
   products: ProductListSiteProduct[];
   itemCount: number;
@@ -68,6 +84,13 @@ function WineCarouselSiteSection({
   formatComparePrice: (price?: number) => string;
   cardRadiusClassName: string;
   sectionSpacingClassName: string;
+  tokens: ProductsListColors;
+  showStock: boolean;
+  showAddToCartButton: boolean;
+  showBuyNowButton: boolean;
+  cartButtonsLayout: 'stack' | 'grid-2';
+  onAddToCart: (product: any) => void;
+  onBuyNow: (product: any) => void;
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'start',
@@ -167,7 +190,7 @@ function WineCarouselSiteSection({
                         </h3>
                       </Link>
                       <div className="mb-1.5 flex flex-col gap-0.5 sm:mb-2 sm:gap-1" />
-                      <div className="mt-auto flex items-end justify-between gap-2 border-t border-stone-100 pt-1.5 sm:pt-2">
+                      <div className="mt-auto flex flex-col gap-1 border-t border-stone-100 pt-1.5 sm:pt-2">
                         <div className="flex min-w-0 flex-col">
                           {priceDisplay.comparePrice ? (
                             <span className="text-[10px] font-medium text-stone-400 line-through decoration-stone-400 decoration-1 sm:text-xs">
@@ -176,9 +199,23 @@ function WineCarouselSiteSection({
                           ) : null}
                           <span className="text-base font-bold sm:text-lg" style={{ color: brandColor }}>{priceDisplay.label}</span>
                         </div>
-                        <Link className="shrink-0 rounded px-2 py-1 text-[10px] font-medium text-white transition-colors hover:opacity-90 sm:px-3 sm:py-1.5 sm:text-xs" href={href} style={{ backgroundColor: brandColor }}>
-                          Xem
-                        </Link>
+                        {showAddToCartButton || showBuyNowButton ? (
+                          <ProductCardActions
+                            product={product as any}
+                            tokens={tokens}
+                            showStock={showStock}
+                            showAddToCartButton={showAddToCartButton}
+                            showBuyNowButton={showBuyNowButton}
+                            buyNowLabel="Mua ngay"
+                            onAddToCart={onAddToCart}
+                            onBuyNow={onBuyNow}
+                            cartButtonsLayout={cartButtonsLayout}
+                          />
+                        ) : (
+                          <Link className="mt-2 text-center shrink-0 rounded px-2 py-1 text-[10px] font-medium text-white transition-colors hover:opacity-90 sm:px-3 sm:py-1.5 sm:text-xs" href={href} style={{ backgroundColor: brandColor }}>
+                            Xem
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -192,7 +229,7 @@ function WineCarouselSiteSection({
   );
 }
 
-export function ProductListSection({ config, brandColor, secondary, title, snapshotComponentKey }: ProductListSectionProps) {
+export function ProductListSection({ config, brandColor, secondary, mode, title, snapshotComponentKey, isDark }: ProductListSectionProps) {
   const snapshotDemo = useSnapshotDemoContext();
   const style = (config.style as ProductListStyle) || 'commerce';
   const itemCount = (config.itemCount as number) || 8;
@@ -208,15 +245,11 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
   const selectionMode = (config.selectionMode as 'auto' | 'manual' | 'demo') || 'auto';
   const selectedProductIds = React.useMemo(() => (config.selectedProductIds as string[]) || [], [config.selectedProductIds]);
   const demoProducts = React.useMemo(() => (config.demoProducts as Array<{ id: string; name: string; image?: string; price?: string; originalPrice?: string; description?: string; category?: string; tag?: string }>) || [], [config.demoProducts]);
-  const _subTitle = (config.subTitle as string) || 'Bộ sưu tập';
-  const _sectionTitle = (config.sectionTitle as string) || title;
 
-  // Header config — use shared extractor with legacy field mapping
   const headerConfig = extractSectionHeaderConfig({
     ...config,
-    // Map legacy fields to shared schema if not explicitly set
-    badgeText: config.badgeText ?? config.subTitle ?? 'Bộ sưu tập',
-    subtitle: config.subtitle ?? config.sectionTitle ?? title,
+    badgeText: config.badgeText ?? 'Bộ sưu tập',
+    subtitle: config.subtitle ?? title,
   });
   // SectionHeader title = component title from props
   const displayTitle = title;
@@ -270,11 +303,166 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
   }, [categorySlugMap, routeMode]);
   const { frameConfig, watermarkConfig } = useProductImageOverlayConfigs(imageAspectRatio);
   
-  // Query products based on selection mode (skip for demo mode)
+  // Query products based on selection mode (skip for demo mode and manual mode)
   const productsData = useQuery(
     api.products.listPublicResolved,
-    selectionMode === 'demo' ? 'skip' : (selectionMode === 'auto' ? { limit: Math.min(itemCount, 20) } : { limit: 100 })
+    selectionMode === 'demo' || selectionMode === 'manual' ? 'skip' : { limit: Math.min(itemCount, 20) }
   );
+
+  const manualProductsData = useQuery(
+    api.products.listByIds,
+    selectionMode === 'manual' && selectedProductIds.length > 0 ? { ids: selectedProductIds as Id<'products'>[] } : 'skip'
+  );
+
+  const showAddToCartButton = saleMode === 'cart' && config.showAddToCartButton !== false;
+  const showBuyNowButton = saleMode === 'cart' && config.showBuyNowButton !== false;
+  const cartButtonsLayout = (config.cartButtonsLayout as 'stack' | 'grid-2') || 'stack';
+  const showStock = config.showStock !== false;
+
+  const router = useRouter();
+  const { addItem, openDrawer } = useCart();
+  const cartConfig = useCartConfig();
+  const [quickAddTarget, setQuickAddTarget] = React.useState<{ product: any; action: 'addToCart' | 'buyNow' } | null>(null);
+
+  const tokens = React.useMemo(
+    () => {
+      const rawTokens = getProductsListColors(brandColor, secondary, mode || 'single');
+      return adaptTokensForDarkMode(rawTokens, isDark ?? false);
+    },
+    [brandColor, secondary, mode, isDark]
+  );
+
+  const handleAddToCart = async (product: any) => {
+    if (showStock && !product.hasVariants && (product.stock ?? 0) <= 0) {
+      return;
+    }
+
+    if (product.hasVariants) {
+      setQuickAddTarget({ product, action: 'addToCart' });
+      return;
+    }
+
+    await addItem(product._id, 1);
+    notifyAddToCart();
+    if (cartConfig.layoutStyle === 'drawer') {
+      openDrawer();
+    } else {
+      router.push('/cart');
+    }
+  };
+
+  const handleBuyNow = (product: any) => {
+    if (showStock && !product.hasVariants && (product.stock ?? 0) <= 0) {
+      return;
+    }
+
+    if (product.hasVariants) {
+      setQuickAddTarget({ product, action: 'buyNow' });
+      return;
+    }
+
+    router.push(`/checkout?productId=${product._id}&quantity=1`);
+  };
+
+  const handleQuickAddConfirm = async (variantId: Id<'productVariants'>, quantity: number) => {
+    if (!quickAddTarget) return;
+    const { product, action } = quickAddTarget;
+
+    if (action === 'addToCart') {
+      await addItem(product._id, quantity, variantId);
+      notifyAddToCart();
+      if (cartConfig.layoutStyle === 'drawer') {
+        openDrawer();
+      } else {
+        router.push('/cart');
+      }
+    } else {
+      router.push(`/checkout?productId=${product._id}&quantity=${quantity}&variantId=${variantId}`);
+    }
+    setQuickAddTarget(null);
+  };
+
+  const renderQuickAddModal = () => (
+    <QuickAddVariantModal
+      isOpen={quickAddTarget !== null}
+      product={quickAddTarget?.product ?? null}
+      brandColor={brandColor}
+      actionLabel={quickAddTarget?.action === 'addToCart' ? 'Thêm vào giỏ' : 'Mua ngay'}
+      onClose={() => setQuickAddTarget(null)}
+      onConfirm={handleQuickAddConfirm}
+    />
+  );
+
+  const renderSingleProductCard = (product: any, size: 'sm' | 'md' | 'lg' = 'md') => {
+    const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
+    const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
+    const href = getProductDetailHref(product);
+
+    return (
+      <div key={product._id} className={cn("group bg-white border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col cursor-pointer", cardRadiusClassName)}>
+        <Link href={href} className="block relative bg-slate-100 overflow-hidden" style={imageAspectRatioStyle}>
+          <ProductImageWithOverlay className="w-full h-full" frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
+            {product.image ? (
+              <Image
+                mode="thumb"
+                src={product.image}
+                alt={product.name}
+                fill
+                sizes="(max-width: 768px) 50vw, 25vw"
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center">
+                <Package size={size === 'sm' ? 24 : 32} className="text-slate-300" />
+              </div>
+            )}
+          </ProductImageWithOverlay>
+          {discount && (
+            <div className="absolute top-2 right-2 z-30">
+              <SaleBadge text={discount} className="text-[10px] px-2 py-0.5" />
+            </div>
+          )}
+        </Link>
+
+        <div className={cn("p-3 flex flex-col flex-1", size === 'sm' ? 'p-2' : 'p-3 md:p-4')}>
+          <Link href={href} className="block flex-1">
+            <h3 className={cn("font-bold text-slate-900 line-clamp-2 mb-1 group-hover:opacity-80 transition-colors", size === 'sm' ? 'text-xs' : 'text-sm')}>
+              {product.name}
+            </h3>
+
+            <div className="flex items-baseline gap-2 mb-3 mt-auto pt-1">
+              <span className={cn("font-bold", size === 'sm' ? 'text-xs' : 'text-sm')} style={{ color: brandColor }}>{priceDisplay.label}</span>
+              {priceDisplay.comparePrice && (
+                <span className="text-[10px] text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
+              )}
+            </div>
+          </Link>
+
+          {showAddToCartButton || showBuyNowButton ? (
+            <ProductCardActions
+              product={product}
+              tokens={tokens}
+              showStock={showStock}
+              showAddToCartButton={showAddToCartButton}
+              showBuyNowButton={showBuyNowButton}
+              buyNowLabel="Mua ngay"
+              onAddToCart={handleAddToCart}
+              onBuyNow={handleBuyNow}
+              cartButtonsLayout={cartButtonsLayout}
+            />
+          ) : (
+            <Link
+              href={href}
+              className="w-full gap-1 border-2 py-1.5 px-2 rounded-lg font-medium flex items-center justify-center transition-colors whitespace-nowrap text-xs hover:bg-opacity-10"
+              style={{ borderColor: `${brandColor}20`, color: brandColor }}
+            >
+              Xem chi tiết <ArrowRight className="w-3 h-3 flex-shrink-0" />
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  };
   
   // Get products to display based on selection mode
   const products = React.useMemo(() => {
@@ -316,22 +504,28 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
         status: 'Active' as const,
       }));
     }
-    if (!productsData) {return [];}
-    
-    if (selectionMode === 'manual' && selectedProductIds.length > 0) {
-      const productMap = new Map(productsData.map(p => [p._id, p]));
+    if (selectionMode === 'manual') {
+      if (!manualProductsData) {return [];}
+      const productMap = new Map(manualProductsData.map(p => [p._id, p]));
       return selectedProductIds
         .map(id => productMap.get(id as Id<"products">))
         .filter((p): p is NonNullable<typeof p> => p !== undefined && p.status === 'Active');
     }
+
+    if (!productsData) {return [];}
     
     return productsData.filter(p => p.status === 'Active').slice(0, itemCount);
-  }, [productsData, selectionMode, selectedProductIds, itemCount, snapshotData, demoProducts]);
+  }, [productsData, manualProductsData, selectionMode, selectedProductIds, itemCount, snapshotData, demoProducts]);
 
   const showViewAll = products.length >= 3;
 
   // Loading state (skip for demo mode)
-  if (selectionMode !== 'demo' && !snapshotData && productsData === undefined) {
+  const isLoading = selectionMode !== 'demo' && !snapshotData && (
+    (selectionMode === 'manual' && manualProductsData === undefined) ||
+    (selectionMode === 'auto' && productsData === undefined)
+  );
+
+  if (isLoading) {
     return (
       <section className={cn(sectionSpacingClassName, 'px-4')}>
         <div className="max-w-6xl mx-auto flex items-center justify-center min-h-[200px]">
@@ -386,76 +580,31 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
   // Style 1: E-commerce Clean — flat cards, circular discount badge, cart icon, "Xem thêm" CTA
   if (style === 'minimal') {
     return (
-      <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
-        <div className="max-w-7xl mx-auto">
-          {renderSiteHeader()}
-          
-          {/* Grid */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5 lg:gap-5">
-            {products.slice(0, 10).map((product) => {
-              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-              const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-              return (
-                <Link key={product._id} href={getProductDetailHref(product)} className={cn("group bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col cursor-pointer", cardRadiusClassName)}>
-                  <ProductImageWithOverlay className="relative bg-slate-100 overflow-hidden" style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                    {product.image ? (
-                      <Image
-                        mode="thumb"
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 50vw, 20vw"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <Package size={32} className="text-slate-300" />
-                      </div>
-                    )}
-                    {discount && (
-                      <div className="absolute top-2 right-2 z-30">
-                        <SaleBadge text={discount} className="text-[10px] px-2 py-0.5" />
-                      </div>
-                    )}
-                  </ProductImageWithOverlay>
-
-                  <div className="p-3 flex flex-col flex-1">
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 mb-1 group-hover:opacity-80 transition-colors">
-                      {product.name}
-                    </h3>
-
-                    <div className="flex items-baseline gap-2 mb-3 mt-auto pt-1">
-                      <span className="text-sm font-bold" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                      {priceDisplay.comparePrice && (
-                        <span className="text-[10px] text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                      )}
-                    </div>
-
-                    <span
-                      className="w-full gap-1 border-2 py-1.5 px-2 rounded-lg font-medium flex items-center justify-center transition-colors whitespace-nowrap text-xs hover:bg-opacity-10"
-                      style={{ borderColor: `${brandColor}20`, color: brandColor }}
-                    >
-                      Xem chi tiết <ArrowRight className="w-3 h-3 flex-shrink-0" />
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* "Xem thêm" button */}
-          {showViewAll && (
-            <div className="flex justify-center mt-8">
-              <Link
-                href="/products"
-                className="px-8 py-2.5 rounded-full text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
-              >
-                Xem thêm
-              </Link>
+      <>
+        <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
+          <div className="max-w-7xl mx-auto">
+            {renderSiteHeader()}
+            
+            {/* Grid */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5 lg:gap-5">
+              {products.slice(0, 10).map((product) => renderSingleProductCard(product))}
             </div>
-          )}
-        </div>
-      </section>
+
+            {/* "Xem thêm" button */}
+            {showViewAll && (
+              <div className="flex justify-center mt-8">
+                <Link
+                  href="/products"
+                  className="px-8 py-2.5 rounded-full text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors"
+                >
+                  Xem thêm
+                </Link>
+              </div>
+            )}
+          </div>
+        </section>
+        {renderQuickAddModal()}
+      </>
     );
   }
 
@@ -463,73 +612,19 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
   // Style 2: Commerce Card - Cards với button Xem chi tiết và hover effects
   if (style === 'commerce') {
     return (
-      <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
-        <div className="max-w-7xl mx-auto">
-          {renderSiteHeader()}
-          
-          {/* Grid */}
-          <div className={productGridClassName}>
-            {products.slice(0, 4).map((product) => {
-              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-              const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-              return (
-                <Link 
-                  key={product._id} 
-                  href={getProductDetailHref(product)}
-                  className={cn("group bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-300 flex flex-col", cardRadiusClassName)}
-                >
-                  {/* Image */}
-                  <ProductImageWithOverlay className="relative bg-slate-100 overflow-hidden" style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                    {product.image ? (
-                      <Image
-                        mode="thumb"
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <Package size={40} className="text-slate-300" />
-                      </div>
-                    )}
-                    {discount && (
-                      <div className="absolute top-2 right-2 z-30">
-                        <SaleBadge text={discount} className="text-[10px] px-2 py-1" />
-                      </div>
-                    )}
-                  </ProductImageWithOverlay>
-
-                  {/* Content */}
-                  <div className="p-4 flex flex-col flex-1">
-                    <h3 className="font-bold text-slate-900 line-clamp-2 mb-1 group-hover:opacity-80 transition-colors">
-                      {product.name}
-                    </h3>
-                    
-                    <div className="flex items-baseline gap-2 mb-4 mt-auto pt-2">
-                      <span className="text-base font-bold text-slate-900 group-hover:opacity-80 transition-colors" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                      {priceDisplay.comparePrice && (
-                        <span className="text-xs text-slate-400 line-through">
-                          {formatComparePrice(priceDisplay.comparePrice)}
-                        </span>
-                      )}
-                    </div>
-
-                    <span 
-                      className="w-full gap-1.5 md:gap-2 border-2 py-1.5 md:py-2 px-2 md:px-4 rounded-lg font-medium flex items-center justify-center transition-colors hover:bg-opacity-10 whitespace-nowrap text-xs md:text-sm"
-                      style={{ borderColor: `${brandColor}30`, color: brandColor }}
-                    >
-                      Xem chi tiết
-                      <ArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
+      <>
+        <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
+          <div className="max-w-7xl mx-auto">
+            {renderSiteHeader()}
+            
+            {/* Grid */}
+            <div className={productGridClassName}>
+              {products.slice(0, 4).map((product) => renderSingleProductCard(product))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+        {renderQuickAddModal()}
+      </>
     );
   }
 
@@ -543,6 +638,7 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
     const showArrowsMobile = displayedProducts.length > 2;
 
     return (
+      <>
       <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
         <div className="max-w-7xl mx-auto">
           {/* Section Header + navigation arrows below */}
@@ -625,46 +721,61 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
               {displayedProducts.map((product) => {
                 const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
                 const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
+                const href = getProductDetailHref(product);
                 return (
-                  <Link
+                  <div
                     key={product._id}
-                    href={getProductDetailHref(product)}
-                    className="flex-shrink-0 snap-start w-[160px] md:w-[220px] lg:w-[260px] group cursor-pointer"
-                    draggable={false}
+                    className="flex-shrink-0 snap-start w-[160px] md:w-[220px] lg:w-[260px] group cursor-pointer flex flex-col"
                   >
-                    <ProductImageWithOverlay
-                      className={cn("relative overflow-hidden rounded-xl bg-slate-100 mb-3 border border-transparent hover:border-slate-200 transition-all", cardRadiusClassName)}
-                      style={imageAspectRatioStyle}
-                      frameConfig={frameConfig}
-                      watermarkConfig={watermarkConfig}
-                    >
-                      {product.image ? (
-                        <Image
-                          mode="thumb"
-                          src={product.image}
-                          alt={product.name}
-                          fill
-                          sizes="(max-width: 768px) 100vw, 260px"
-                          className="object-cover transition-transform duration-500 group-hover:scale-105"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center"><Package size={40} className="text-slate-300" /></div>
-                      )}
-                      {discount && (
-                        <div className="absolute top-2 left-2 z-30">
-                          <SaleBadge text={discount} className="text-[10px] px-2 py-1" />
-                        </div>
-                      )}
-                    </ProductImageWithOverlay>
-                    <h3 className="font-medium text-slate-900 text-sm line-clamp-2 group-hover:opacity-80 transition-colors">{product.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                    <span className="font-bold text-sm" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                    {priceDisplay.comparePrice && (
-                      <span className="text-xs text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                      )}
-                    </div>
-                  </Link>
+                    <Link href={href} className="block flex-1" draggable={false}>
+                      <ProductImageWithOverlay
+                        className={cn("relative overflow-hidden rounded-xl bg-slate-100 mb-3 border border-transparent hover:border-slate-200 transition-all", cardRadiusClassName)}
+                        style={imageAspectRatioStyle}
+                        frameConfig={frameConfig}
+                        watermarkConfig={watermarkConfig}
+                      >
+                        {product.image ? (
+                          <Image
+                            mode="thumb"
+                            src={product.image}
+                            alt={product.name}
+                            fill
+                            sizes="(max-width: 768px) 100vw, 260px"
+                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center"><Package size={40} className="text-slate-300" /></div>
+                        )}
+                        {discount && (
+                          <div className="absolute top-2 left-2 z-30">
+                            <SaleBadge text={discount} className="text-[10px] px-2 py-1" />
+                          </div>
+                        )}
+                      </ProductImageWithOverlay>
+                      <h3 className="font-medium text-slate-900 text-sm line-clamp-2 group-hover:opacity-80 transition-colors">{product.name}</h3>
+                      <div className="flex items-center gap-2 mt-1 mb-2">
+                        <span className="font-bold text-sm" style={{ color: brandColor }}>{priceDisplay.label}</span>
+                        {priceDisplay.comparePrice && (
+                          <span className="text-xs text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
+                        )}
+                      </div>
+                    </Link>
+
+                    {showAddToCartButton || showBuyNowButton ? (
+                      <ProductCardActions
+                        product={product}
+                        tokens={tokens}
+                        showStock={showStock}
+                        showAddToCartButton={showAddToCartButton}
+                        showBuyNowButton={showBuyNowButton}
+                        buyNowLabel="Mua ngay"
+                        onAddToCart={handleAddToCart}
+                        onBuyNow={handleBuyNow}
+                        cartButtonsLayout={cartButtonsLayout}
+                      />
+                    ) : null}
+                  </div>
                 );
               })}
               {/* End spacer */}
@@ -680,68 +791,55 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
           `}</style>
         </div>
       </section>
+      {renderQuickAddModal()}
+      </>
     );
   }
 
   // Style: Wine Carousel - horizontal cards matching premium wine catalog references
   if (style === 'wine-carousel') {
     return (
-      <WineCarouselSiteSection
-        products={products}
-        itemCount={itemCount}
-        brandColor={brandColor}
-        header={renderSiteHeader({ className: 'mb-1 md:mb-2' })}
-        getProductDetailHref={getProductDetailHref}
-        getPriceDisplay={getPriceDisplay}
-        getDiscount={getDiscount}
-        formatComparePrice={formatComparePrice}
-        cardRadiusClassName={cardRadiusClassName}
-        sectionSpacingClassName={sectionSpacingClassName}
-      />
+      <>
+        <WineCarouselSiteSection
+          products={products}
+          itemCount={itemCount}
+          brandColor={brandColor}
+          header={renderSiteHeader({ className: 'mb-1 md:mb-2' })}
+          getProductDetailHref={getProductDetailHref}
+          getPriceDisplay={getPriceDisplay}
+          getDiscount={getDiscount}
+          formatComparePrice={formatComparePrice}
+          cardRadiusClassName={cardRadiusClassName}
+          sectionSpacingClassName={sectionSpacingClassName}
+          tokens={tokens}
+          showStock={showStock}
+          showAddToCartButton={showAddToCartButton}
+          showBuyNowButton={showBuyNowButton}
+          cartButtonsLayout={cartButtonsLayout}
+          onAddToCart={handleAddToCart}
+          onBuyNow={handleBuyNow}
+        />
+        {renderQuickAddModal()}
+      </>
     );
   }
 
   // Style 5: Compact - Dense grid với smaller cards, nhiều sản phẩm hơn
   if (style === 'compact') {
     return (
-      <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
-        <div className="max-w-7xl mx-auto">
-          {renderSiteHeader()}
-          
-          {/* Compact Grid - More items, smaller cards */}
-          <div className={cn(productGridClassName, 'gap-3 md:gap-3')}>
-            {products.slice(0, 8).map((product) => {
-              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-              const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-              return (
-                <Link key={product._id} href={getProductDetailHref(product)} className={cn("group cursor-pointer bg-white border border-slate-100 p-2 hover:shadow-md hover:border-slate-200 transition-all", cardRadiusClassName)}>
-                  <ProductImageWithOverlay className={cn("relative overflow-hidden bg-slate-50 mb-2", imageRadiusClassName)} style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                    {product.image ? (
-                      <Image
-                        mode="thumb"
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 50vw, 160px"
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center"><Package size={24} className="text-slate-300" /></div>
-                    )}
-                    {discount && (
-                      <div className="absolute top-1 left-1 z-30">
-                        <SaleBadge text={discount} className="text-[9px] px-1.5 py-0.5" />
-                      </div>
-                    )}
-                  </ProductImageWithOverlay>
-                  <h3 className="font-medium text-xs text-slate-900 line-clamp-2 group-hover:opacity-80 transition-colors">{product.name}</h3>
-                  <span className="font-bold text-xs mt-0.5 block" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                </Link>
-              );
-            })}
+      <>
+        <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
+          <div className="max-w-7xl mx-auto">
+            {renderSiteHeader()}
+            
+            {/* Compact Grid - More items, smaller cards */}
+            <div className={cn(productGridClassName, 'gap-3 md:gap-3')}>
+              {products.slice(0, 8).map((product) => renderSingleProductCard(product, 'sm'))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+        {renderQuickAddModal()}
+      </>
     );
   }
 
@@ -755,107 +853,88 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
     const showcaseDiscount = getDiscount(showcaseFeatured?.price, showcasePriceDisplay?.comparePrice, showcasePriceDisplay?.isContactPrice);
 
     return (
-      <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
-        <div className="max-w-7xl mx-auto">
-          {renderSiteHeader()}
-          
-          {/* Showcase Layout - Mobile */}
-          <div className="grid md:hidden grid-cols-2 gap-3">
-            {products.slice(0, 4).map((product) => {
-              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-              const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-              return (
-                <Link key={product._id} href={getProductDetailHref(product)} className={cn("group bg-white border border-slate-200 p-2 flex flex-col cursor-pointer hover:shadow-md transition-all", cardRadiusClassName)}>
-                  <ProductImageWithOverlay className={cn("relative w-full bg-slate-100 overflow-hidden mb-2", imageRadiusClassName)} style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                    {product.image ? (
-                      <Image mode="thumb" src={product.image} alt={product.name} fill sizes="(max-width: 768px) 50vw, 160px" className="object-cover" />
+      <>
+        <section className={cn(sectionSpacingClassName, 'px-4 md:px-6')}>
+          <div className="max-w-7xl mx-auto">
+            {renderSiteHeader()}
+            
+            {/* Showcase Layout - Mobile */}
+            <div className="grid md:hidden grid-cols-2 gap-3">
+              {products.slice(0, 4).map((product) => renderSingleProductCard(product, 'sm'))}
+            </div>
+
+            {/* Showcase Layout - Desktop */}
+            <div className="hidden md:grid grid-cols-3 gap-4">
+              {/* Featured Large Item */}
+              <div
+                className={cn("relative group overflow-hidden cursor-pointer min-h-[450px] border border-slate-200 hover:border-slate-300 transition-colors flex flex-col justify-end", cardRadiusClassName)}
+                style={{ backgroundColor: `${secondary}05` }}
+              >
+                <Link href={getProductDetailHref(showcaseFeatured)} className="absolute inset-0 z-10">
+                  <ProductImageWithOverlay className="absolute inset-0" frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
+                    {showcaseFeatured?.image ? (
+                      <Image
+                        mode="thumb"
+                        src={showcaseFeatured.image}
+                        alt={showcaseFeatured.name}
+                        fill
+                        sizes="(max-width: 1024px) 100vw, 66vw"
+                        className="object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center"><Package size={24} className="text-slate-300" /></div>
-                    )}
-                    {discount && (
-                      <div className="absolute top-2 left-2 z-30">
-                        <SaleBadge text={discount} className="text-[10px] px-1.5 py-0.5" />
-                      </div>
+                      <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-slate-100"><Package size={64} className="text-slate-300" /></div>
                     )}
                   </ProductImageWithOverlay>
-                  <h4 className="font-medium text-sm text-slate-900 line-clamp-2">{product.name}</h4>
-                  <span className="text-sm font-bold mt-1" style={{ color: brandColor }}>{priceDisplay.label}</span>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent z-20" />
                 </Link>
-              );
-            })}
-          </div>
-
-          {/* Showcase Layout - Desktop */}
-          <div className="hidden md:grid grid-cols-3 gap-4">
-            {/* Featured Large Item */}
-            <Link
-              href={getProductDetailHref(showcaseFeatured)}
-              className={cn("relative group overflow-hidden cursor-pointer min-h-[400px] border border-slate-200 hover:border-slate-300 transition-colors", cardRadiusClassName)}
-              style={{ backgroundColor: `${secondary}05` }}
-            >
-              <ProductImageWithOverlay className="absolute inset-0" frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                {showcaseFeatured?.image ? (
-                  <Image
-                    mode="thumb"
-                    src={showcaseFeatured.image}
-                    alt={showcaseFeatured.name}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 66vw"
-                    className="object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-slate-100"><Package size={64} className="text-slate-300" /></div>
+                {showcaseDiscount && (
+                  <div className="absolute top-4 left-4 z-30">
+                    <SaleBadge text={showcaseDiscount} className="text-sm px-3 py-1" />
+                  </div>
                 )}
-              </ProductImageWithOverlay>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-30" />
-              {showcaseDiscount && (
-                <div className="absolute top-4 left-4 z-40">
-                  <SaleBadge text={showcaseDiscount} className="text-sm px-3 py-1" />
-                </div>
-              )}
-              <div className="absolute bottom-0 left-0 p-6 w-full z-40">
-                <BrandBadge text="Nổi bật" variant="solid" brandColor={brandColor} secondary={secondary} className="mb-2" />
-                <h3 className="text-xl md:text-2xl font-bold text-white mb-2 line-clamp-2">{showcaseFeatured?.name}</h3>
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-bold text-white line-clamp-1">{showcasePriceDisplay?.label ?? ''}</span>
-                  <span className="h-9 px-4 rounded-lg text-white text-sm font-medium shrink-0 inline-flex items-center" style={{ backgroundColor: brandColor }}>Xem chi tiết</span>
+                <div className="relative p-6 w-full z-30">
+                  <BrandBadge text="Nổi bật" variant="solid" brandColor={brandColor} secondary={secondary} className="mb-2" />
+                  <Link href={getProductDetailHref(showcaseFeatured)}>
+                    <h3 className="text-xl md:text-2xl font-bold text-white mb-2 line-clamp-2 hover:opacity-85 transition-colors">{showcaseFeatured?.name}</h3>
+                  </Link>
+                  <div className="flex flex-col gap-3">
+                    <span className="text-xl font-bold text-white line-clamp-1">{showcasePriceDisplay?.label ?? ''}</span>
+                    {showAddToCartButton || showBuyNowButton ? (
+                      <ProductCardActions
+                        product={showcaseFeatured as any}
+                        tokens={adaptTokensForDarkMode({
+                          ...tokens,
+                          primaryActionBg: brandColor,
+                          primaryActionText: '#ffffff',
+                          secondaryActionBorder: 'rgba(255,255,255,0.4)',
+                          secondaryActionText: '#ffffff',
+                          secondaryActionHoverBg: 'rgba(255,255,255,0.1)',
+                        }, isDark ?? false)}
+                        showStock={showStock}
+                        showAddToCartButton={showAddToCartButton}
+                        showBuyNowButton={showBuyNowButton}
+                        buyNowLabel="Mua ngay"
+                        onAddToCart={handleAddToCart}
+                        onBuyNow={handleBuyNow}
+                        cartButtonsLayout={cartButtonsLayout}
+                      />
+                    ) : (
+                      <Link href={getProductDetailHref(showcaseFeatured)} className="h-9 px-4 rounded-lg text-white text-sm font-medium shrink-0 inline-flex items-center justify-center" style={{ backgroundColor: brandColor }}>
+                        Xem chi tiết
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
-            </Link>
 
-            {/* Right Grid - 2x2 */}
-            <div className="col-span-2 grid grid-cols-2 gap-3">
-              {showcaseOthers.map((product) => {
-                const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-                const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-                return (
-                  <Link key={product._id} href={getProductDetailHref(product)} className={cn("group bg-white border border-slate-200 p-3 flex flex-col cursor-pointer hover:shadow-md hover:border-slate-300 transition-all", cardRadiusClassName)}>
-                    <ProductImageWithOverlay className={cn("relative w-full bg-slate-50 overflow-hidden mb-3", imageRadiusClassName)} style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                      {product.image ? (
-                        <Image mode="thumb" src={product.image} alt={product.name} fill sizes="(max-width: 1024px) 50vw, 200px" className="object-cover group-hover:scale-105 transition-transform duration-300" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center"><Package size={32} className="text-slate-300" /></div>
-                      )}
-                      {discount && (
-                        <div className="absolute top-2 left-2 z-30">
-                          <SaleBadge text={discount} className="text-[10px] px-1.5 py-0.5" />
-                        </div>
-                      )}
-                    </ProductImageWithOverlay>
-                    <h4 className="font-medium text-sm text-slate-900 line-clamp-2 group-hover:opacity-80 transition-colors">{product.name}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm font-bold" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                    {priceDisplay.comparePrice && (
-                      <span className="text-[10px] text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
+              <div className="col-span-2 grid grid-cols-2 gap-3">
+                {showcaseOthers.map((product) => renderSingleProductCard(product))}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+        {renderQuickAddModal()}
+      </>
     );
   }
 
@@ -882,121 +961,62 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
       : ['Tất cả'];
 
     return (
-      <section
-        className={cn(sectionSpacingClassName, 'px-4 md:px-6 rounded-xl')}
-        style={{ backgroundColor: brandColor }}
-      >
-        <div className="max-w-7xl mx-auto">
-          {renderSiteHeader()}
-          {/* Category tabs */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {displayTabs.map((tab, idx) => (
-              <button
-                key={tab}
-                type="button"
-                className={`px-4 py-2 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${
-                  idx === 0
-                    ? 'text-slate-900'
-                    : 'border text-white hover:bg-white/10'
-                }`}
-                style={
-                  idx === 0
-                    ? { backgroundColor: secondary }
-                    : { borderColor: 'rgba(255,255,255,0.3)' }
-                }
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* Product grid */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-            {products.slice(0, 10).map((product) => {
-              const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-              const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-              return (
-                <Link
-                  key={product._id}
-                  href={getProductDetailHref(product)}
-                  className={cn("group bg-white overflow-hidden flex flex-col cursor-pointer hover:shadow-lg transition-all border border-slate-100", cardRadiusClassName)}
+      <>
+        <section
+          className={cn(sectionSpacingClassName, 'px-4 md:px-6 rounded-xl')}
+          style={{ backgroundColor: brandColor }}
+        >
+          <div className="max-w-7xl mx-auto">
+            {renderSiteHeader()}
+            {/* Category tabs */}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {displayTabs.map((tab, idx) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`px-4 py-2 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${
+                    idx === 0
+                      ? 'text-slate-900'
+                      : 'border text-white hover:bg-white/10'
+                  }`}
+                  style={
+                    idx === 0
+                      ? { backgroundColor: secondary }
+                      : { borderColor: 'rgba(255,255,255,0.3)' }
+                  }
                 >
-                  {/* Image + discount */}
-                  <ProductImageWithOverlay className={cn("relative bg-slate-50 overflow-hidden", imageRadiusClassName)} style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                    {product.image ? (
-                      <Image
-                        mode="thumb"
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 50vw, 20vw"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <Package size={28} className="text-slate-300" />
-                      </div>
-                    )}
-                    {discount && (
-                      <div className="absolute top-2 right-2 z-30">
-                        <SaleBadge text={discount} className="inline-flex items-center justify-center w-10 h-10 rounded-full text-[11px] font-bold" />
-                      </div>
-                    )}
-                  </ProductImageWithOverlay>
-
-                  {/* Info */}
-                  <div className="p-3 flex flex-col flex-1">
-                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2 mb-1 group-hover:opacity-80 transition-colors">
-                      {product.name}
-                    </h3>
-
-                    {/* Price */}
-                    <div className="flex items-baseline gap-1.5 mb-1">
-                      <span className="text-sm font-bold" style={{ color: brandColor }}>
-                        {priceDisplay.label}
-                      </span>
-                      {priceDisplay.comparePrice && (
-                        <span className="text-[10px] text-slate-400 line-through">
-                          {formatComparePrice(priceDisplay.comparePrice)}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Action row */}
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-100">
-                      <span
-                        className="flex items-center gap-1 text-xs font-medium"
-                        style={{ color: brandColor }}
-                      >
-                        🛒 Thêm vào giỏ
-                      </span>
-                      <span className="text-slate-300">♡</span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* View all */}
-          {showViewAll && (
-            <div className="flex justify-center mt-8">
-              <Link
-                href="/products"
-                className="px-10 py-3 rounded-full text-sm font-bold bg-white text-slate-900 hover:bg-slate-50 transition-colors shadow-md"
-              >
-                Xem tất cả
-              </Link>
+                  {tab}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-      </section>
+
+            {/* Product grid */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+              {products.slice(0, 10).map((product) => renderSingleProductCard(product))}
+            </div>
+
+            {/* View all */}
+            {showViewAll && (
+              <div className="flex justify-center mt-8">
+                <Link
+                  href="/products"
+                  className="px-10 py-3 rounded-full text-sm font-bold bg-white text-slate-900 hover:bg-slate-50 transition-colors shadow-md"
+                >
+                  Xem tất cả
+                </Link>
+              </div>
+            )}
+          </div>
+        </section>
+        {renderQuickAddModal()}
+      </>
     );
   }
 
   // Style 8: Lookbook / Banner Collection — 3 Columns Portrait Cards
   if (style === 'lookbook') {
     return (
+      <>
       <section
         className={cn("bg-transparent", sectionSpacingClassName)}
         style={{ fontFamily: 'Inter, sans-serif' }}
@@ -1022,7 +1042,7 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
                   <Link
                     href={getProductDetailHref(product)}
                     title={imageAlt}
-                    className={cn("group block h-full bg-white", cardRadiusClassName)}
+                    className={cn("group block bg-white", cardRadiusClassName)}
                     style={{ borderColor: `${secondary}26` }}
                     onClick={(event) => {
                       if (typeof window === 'undefined' || !window.matchMedia('(hover: none)').matches || isActive) {
@@ -1057,7 +1077,7 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
                             </div>
                           )}
                         </ProductImageWithOverlay>
-                        <div className={cn("absolute inset-0 z-30 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent opacity-70 transition duration-500 group-hover:opacity-0", isActive && "opacity-0")} />
+                        <div className={cn("absolute inset-0 z-10 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent opacity-70 transition duration-500 group-hover:opacity-0", isActive && "opacity-0")} />
                         <div className={cn("absolute inset-0 z-10 bg-white opacity-0 transition duration-500 group-hover:opacity-100", isActive && "opacity-100")} />
                         {discount && (
                           <div className="absolute right-3 top-3 z-20">
@@ -1083,9 +1103,12 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
                               </span>
                             )}
                           </div>
-                          <div className="inline-flex items-center justify-center rounded-full px-5 py-2 text-xs font-bold text-white shadow-lg transition duration-300 group-hover:scale-105" style={{ backgroundColor: secondary }}>
-                            Xem chi tiết <ArrowRight size={14} className="ml-1.5" />
-                          </div>
+                          {/* Chỉ show nút Xem chi tiết khi không có cart mode */}
+                          {(!showAddToCartButton && !showBuyNowButton) && (
+                            <div className="inline-flex items-center justify-center rounded-full px-5 py-2 text-xs font-bold text-white shadow-lg transition duration-300 group-hover:scale-105" style={{ backgroundColor: secondary }}>
+                              Xem chi tiết <ArrowRight size={14} className="ml-1.5" />
+                            </div>
+                          )}
                         </div>
                       </div>
                       {hoverImage && (
@@ -1104,12 +1127,31 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
                       )}
                     </div>
                   </Link>
+
+                  {/* Cart buttons bên ngoài Link/card 3D — gọn, dễ nhìn */}
+                  {(showAddToCartButton || showBuyNowButton) && (
+                    <div className="mt-0.5 px-1">
+                      <ProductCardActions
+                        product={product as any}
+                        tokens={tokens}
+                        showStock={showStock}
+                        showAddToCartButton={showAddToCartButton}
+                        showBuyNowButton={showBuyNowButton}
+                        buyNowLabel="Mua ngay"
+                        onAddToCart={handleAddToCart}
+                        onBuyNow={handleBuyNow}
+                        cartButtonsLayout={cartButtonsLayout}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
       </section>
+      {renderQuickAddModal()}
+      </>
     );
   }
 
@@ -1129,11 +1171,11 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
         {/* Bento Grid - Desktop */}
         <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-4 h-auto">
           {/* Hero Item (Span 2x2) */}
-          <Link 
-            href={getProductDetailHref(featured)}
+          <div
             className={cn("col-span-2 row-span-2 relative group overflow-hidden cursor-pointer min-h-[400px] border border-transparent hover:border-slate-300 transition-colors", cardRadiusClassName)}
             style={{ ...imageAspectRatioStyle, backgroundColor: `${secondary}10` }}
           >
+            <Link href={getProductDetailHref(featured)} className="absolute inset-0 z-10" tabIndex={-1} aria-hidden />
             <ProductImageWithOverlay className="absolute inset-0" frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
               {featured?.image ? (
                 <Image
@@ -1151,113 +1193,66 @@ export function ProductListSection({ config, brandColor, secondary, title, snaps
               )}
             </ProductImageWithOverlay>
             {/* Overlay gradient */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent z-30" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent z-20" />
             
             {/* Discount Badge */}
             {featuredDiscount && (
-              <div className="absolute top-4 right-4">
+              <div className="absolute top-4 right-4 z-30">
                 <SaleBadge text={featuredDiscount} className="text-sm px-3 py-1" />
               </div>
             )}
 
-            <div className="absolute bottom-0 left-0 p-6 md:p-8 w-full">
-              <h3 className="text-2xl md:text-4xl font-bold mb-3 leading-tight text-white">{featured?.name}</h3>
+            <div className="absolute bottom-0 left-0 p-6 md:p-8 w-full z-30">
+              <Link href={getProductDetailHref(featured)}>
+                <h3 className="text-2xl md:text-4xl font-bold mb-2 leading-tight text-white hover:opacity-85 transition-colors">{featured?.name}</h3>
+              </Link>
+              <span className="text-2xl font-bold text-white block mb-3">{featuredPriceDisplay?.label ?? ''}</span>
               
-              <div className="flex flex-row items-center justify-between gap-4 mt-2">
-                <span className="text-2xl font-bold text-white">{featuredPriceDisplay?.label ?? ''}</span>
-                
-                <span className="rounded-full px-6 py-2 text-white border-0 shadow-lg" style={{ backgroundColor: brandColor, boxShadow: `0 4px 6px ${brandColor}20` }}>
+              {showAddToCartButton || showBuyNowButton ? (
+                <div className="flex gap-2">
+                  {showAddToCartButton && (
+                    <button
+                      type="button"
+                      className="flex-1 rounded-full py-2 px-3 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 whitespace-nowrap"
+                      style={{ backgroundColor: brandColor }}
+                      onClick={(e) => { e.stopPropagation(); void handleAddToCart(featured); }}
+                    >
+                      Thêm giỏ
+                    </button>
+                  )}
+                  {showBuyNowButton && (
+                    <button
+                      type="button"
+                      className="flex-1 rounded-full py-2 px-3 text-sm font-bold text-slate-900 bg-white/90 hover:bg-white shadow-lg transition-all whitespace-nowrap"
+                      onClick={(e) => { e.stopPropagation(); handleBuyNow(featured); }}
+                    >
+                      Mua ngay
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href={getProductDetailHref(featured)}
+                  className="inline-block rounded-full px-6 py-2 text-white border-0 shadow-lg hover:opacity-90 transition-colors"
+                  style={{ backgroundColor: brandColor, boxShadow: `0 4px 6px ${brandColor}20` }}
+                >
                   Xem chi tiết
-                </span>
-              </div>
+                </Link>
+              )}
             </div>
-          </Link>
+          </div>
 
           {/* Small Grid Items */}
-          {others.slice(0, 4).map((product) => {
-            const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-            const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-            return (
-              <Link 
-                key={product._id}
-                href={getProductDetailHref(product)}
-                className={cn("col-span-1 row-span-1 bg-white border border-slate-200 p-3 flex flex-col group hover:shadow-lg hover:border-slate-300 transition-all cursor-pointer relative overflow-hidden", cardRadiusClassName)}
-              >
-                {/* Image Area */}
-                <ProductImageWithOverlay className={cn("relative w-full overflow-hidden mb-3", imageRadiusClassName)} style={{ ...imageAspectRatioStyle, backgroundColor: `${secondary}08` }} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                  {product.image ? (
-                    <Image
-                      mode="thumb"
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      sizes="(max-width: 1024px) 50vw, 200px"
-                      className="object-contain p-2 transition-transform duration-300 group-hover:scale-110"
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                      <Package size={32} className="text-slate-300" />
-                    </div>
-                  )}
-
-                  {/* Discount Badge */}
-                  {discount && (
-                    <div className="absolute top-2 left-2 z-30">
-                      <SaleBadge text={discount} className="text-[10px] px-1.5 py-0.5" />
-                    </div>
-                  )}
-
-                  {/* Hover Action Button */}
-                  <div className="absolute bottom-2 right-2 translate-y-10 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-30">
-                    <div className="text-white p-2 rounded-full shadow-lg" style={{ backgroundColor: brandColor }}>
-                      <ArrowRight size={16} />
-                    </div>
-                  </div>
-                </ProductImageWithOverlay>
-
-                {/* Info Area */}
-                <div className="mt-auto px-1">
-                  <h4 className="font-medium text-sm text-slate-900 line-clamp-2 group-hover:opacity-80 transition-colors">
-                    {product.name}
-                  </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm font-bold" style={{ color: brandColor }}>{priceDisplay.label}</span>
-                    {priceDisplay.comparePrice && (
-                      <span className="text-[10px] text-slate-400 line-through">{formatComparePrice(priceDisplay.comparePrice)}</span>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {others.slice(0, 4).map((product) => renderSingleProductCard(product))}
         </div>
 
         {/* Mobile: 2x2 simple grid */}
         <div className="grid md:hidden grid-cols-2 gap-3">
-        {products.slice(0, 4).map((product) => {
-          const priceDisplay = getPriceDisplay(product.price, product.salePrice, product.hasVariants);
-          const discount = getDiscount(product.price, priceDisplay.comparePrice, priceDisplay.isContactPrice);
-            return (
-              <Link key={product._id} href={getProductDetailHref(product)} className={cn("group bg-white border border-slate-200 p-2 flex flex-col cursor-pointer hover:shadow-md transition-all", cardRadiusClassName)}>
-                <ProductImageWithOverlay className={cn("relative w-full bg-slate-100 overflow-hidden mb-2", imageRadiusClassName)} style={imageAspectRatioStyle} frameConfig={frameConfig} watermarkConfig={watermarkConfig}>
-                  {product.image ? (
-                    <Image mode="thumb" src={product.image} alt={product.name} fill sizes="(max-width: 768px) 50vw, 160px" className="object-cover group-hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center"><Package size={24} className="text-slate-300" /></div>
-                  )}
-                  {discount && (
-                    <div className="absolute top-2 left-2 z-30">
-                      <SaleBadge text={discount} className="text-[10px] px-1.5 py-0.5" />
-                    </div>
-                  )}
-                </ProductImageWithOverlay>
-                <h4 className="font-medium text-sm text-slate-900 line-clamp-2 group-hover:opacity-80 transition-colors">{product.name}</h4>
-                <span className="text-sm font-bold mt-1" style={{ color: brandColor }}>{priceDisplay.label}</span>
-              </Link>
-            );
-          })}
+          {products.slice(0, 4).map((product) => renderSingleProductCard(product, 'sm'))}
         </div>
       </div>
+
+      {renderQuickAddModal()}
     </section>
   );
 }

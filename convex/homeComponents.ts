@@ -3,7 +3,9 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
-import { removeOwnerFileReferences, resolveStorageIdsFromLegacyUrls, syncOwnerFilesAndCleanup } from "./lib/fileService";
+import { removeOwnerFileReferences, syncOwnerFilesAndCleanup } from "./lib/fileService";
+
+const STORAGE_URL_PREFIX = "/api/storage/";
 
 const homeComponentDoc = v.object({
   _creationTime: v.number(),
@@ -42,30 +44,19 @@ function collectConfigStorageIds(value: unknown, acc = new Set<string>()): strin
   }
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    if (typeof record.storageId === "string" && record.storageId.trim()) {
-      acc.add(record.storageId);
-    }
-    Object.values(record).forEach(item => collectConfigStorageIds(item, acc));
-  }
-  return Array.from(acc);
-}
-
-function collectConfigUrls(value: unknown, acc = new Set<string>()): string[] {
-  if (!value) {
-    return Array.from(acc);
-  }
-  if (typeof value === "string") {
-    if (/^https?:\/\//.test(value)) {
-      acc.add(value);
-    }
-    return Array.from(acc);
-  }
-  if (Array.isArray(value)) {
-    value.forEach(item => collectConfigUrls(item, acc));
-    return Array.from(acc);
-  }
-  if (typeof value === "object") {
-    Object.values(value as Record<string, unknown>).forEach(item => collectConfigUrls(item, acc));
+    Object.entries(record).forEach(([key, item]) => {
+      if ((key === "storageId" || key.endsWith("StorageId")) && typeof item === "string" && item.trim()) {
+        acc.add(item);
+      }
+      if (key.endsWith("StorageIds") && Array.isArray(item)) {
+        item.forEach(storageId => {
+          if (typeof storageId === "string" && storageId.trim()) {
+            acc.add(storageId);
+          }
+        });
+      }
+      collectConfigStorageIds(item, acc);
+    });
   }
   return Array.from(acc);
 }
@@ -74,12 +65,8 @@ function resolveConfigStorageIds(config: unknown) {
   return collectConfigStorageIds(config);
 }
 
-async function resolveConfigFileStorageIds(ctx: MutationCtx, config: unknown) {
-  const urls = collectConfigUrls(config);
-  return [
-    ...resolveConfigStorageIds(config),
-    ...await resolveStorageIdsFromLegacyUrls(ctx, urls, { limit: 1000 }),
-  ];
+async function resolveConfigFileStorageIds(_ctx: MutationCtx, config: unknown) {
+  return resolveConfigStorageIds(config);
 }
 
 async function syncHomeComponentFileReferences(
@@ -102,6 +89,126 @@ async function syncHomeComponentFileReferences(
     previousStorageIds,
   });
 }
+
+function toConfigRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+async function buildStorageUrlMap(ctx: MutationCtx) {
+  const images = await ctx.db.query("images").take(1000);
+  const storageByUrl = new Map<string, Id<"_storage">>();
+  for (const image of images) {
+    const url = await ctx.storage.getUrl(image.storageId);
+    if (url) {
+      storageByUrl.set(url, image.storageId);
+    }
+  }
+  return storageByUrl;
+}
+
+function migrateManagedStorageUrls(value: unknown, storageByUrl: Map<string, Id<"_storage">>): { changed: boolean; value: unknown } {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const result = migrateManagedStorageUrls(item, storageByUrl);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { changed, value: changed ? next : value };
+  }
+
+  const record = toConfigRecord(value);
+  if (!record) {
+    return { changed: false, value };
+  }
+
+  let changed = false;
+  const next: Record<string, unknown> = { ...record };
+
+  for (const [key, item] of Object.entries(record)) {
+    const nested = migrateManagedStorageUrls(item, storageByUrl);
+    if (nested.changed) {
+      next[key] = nested.value;
+      changed = true;
+    }
+
+    if (typeof item === "string" && item.includes(STORAGE_URL_PREFIX)) {
+      const storageId = storageByUrl.get(item);
+      const storageKey = `${key}StorageId`;
+      if (storageId && typeof next[storageKey] !== "string") {
+        next[storageKey] = storageId;
+        changed = true;
+      }
+    }
+  }
+
+  return { changed, value: changed ? next : value };
+}
+
+function migrateComponentConfig(type: string, config: unknown, storageByUrl: Map<string, Id<"_storage">>) {
+  const managedMediaResult = migrateManagedStorageUrls(config, storageByUrl);
+  const record = toConfigRecord(managedMediaResult.value);
+  if (!record) {
+    return managedMediaResult;
+  }
+
+  let changed = managedMediaResult.changed;
+  const next: Record<string, unknown> = { ...record };
+
+  if (type === "ProductList" || type === "ProductGrid") {
+    if (typeof next.subTitle === "string" && next.subTitle.trim() && typeof next.badgeText !== "string") {
+      next.badgeText = next.subTitle;
+      changed = true;
+    }
+    if (typeof next.sectionTitle === "string" && next.sectionTitle.trim() && typeof next.subtitle !== "string") {
+      next.subtitle = next.sectionTitle;
+      changed = true;
+    }
+    if ("subTitle" in next) {
+      delete next.subTitle;
+      changed = true;
+    }
+    if ("sectionTitle" in next) {
+      delete next.sectionTitle;
+      changed = true;
+    }
+  }
+
+  if (type === "Contact") {
+    for (const field of ["address", "email", "phone", "workingHours"]) {
+      if (field in next) {
+        delete next[field];
+        changed = true;
+      }
+    }
+  }
+
+  return { changed, value: changed ? next : config };
+}
+
+export const migrateDataContracts = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const storageByUrl = await buildStorageUrlMap(ctx);
+    const components = await ctx.db.query("homeComponents").take(1000);
+    let updated = 0;
+
+    for (const component of components) {
+      const result = migrateComponentConfig(component.type, component.config, storageByUrl);
+      if (!result.changed) {
+        continue;
+      }
+      await ctx.db.patch(component._id, { config: result.value });
+      await syncHomeComponentFileReferences(ctx, component._id, result.value, component.config);
+      updated += 1;
+    }
+
+    return { scanned: components.length, updated };
+  },
+  returns: v.object({ scanned: v.number(), updated: v.number() }),
+});
 
 // CRIT-002 FIX: Thêm limit
 export const listAll = query({
@@ -282,11 +389,9 @@ export const cleanupUnreferencedConfigMedia = mutation({
   handler: async (ctx, args) => {
     const maxBatch = Math.min(args.batchSize ?? 100, 200);
     const homeComponents = await ctx.db.query("homeComponents").take(1000);
-    const referencedUrls = new Set<string>();
     const referencedStorageIds = new Set<string>();
 
     for (const component of homeComponents) {
-      collectConfigUrls(component.config).forEach(url => referencedUrls.add(url));
       collectConfigStorageIds(component.config).forEach(storageId => referencedStorageIds.add(storageId));
     }
 
@@ -296,11 +401,6 @@ export const cleanupUnreferencedConfigMedia = mutation({
 
     for (const image of images) {
       if (referencedStorageIds.has(image.storageId)) {
-        skipped += 1;
-        continue;
-      }
-      const url = await ctx.storage.getUrl(image.storageId);
-      if (url && referencedUrls.has(url)) {
         skipped += 1;
         continue;
       }

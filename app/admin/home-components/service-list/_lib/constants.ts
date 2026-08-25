@@ -9,12 +9,13 @@ import {
 } from '../_types';
 
 export const SERVICE_LIST_STYLES: { id: ServiceListStyle; label: string }[] = [
-  { id: 'grid', label: 'Grid' },
-  { id: 'bento', label: 'Bento' },
-  { id: 'list', label: 'List' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'showcase', label: 'Showcase' }
+  { id: 'grid', label: '(1) Dạng lưới' },
+  { id: 'bento', label: '(2) Ô ghép' },
+  { id: 'list', label: '(3) Xếp dọc' },
+  { id: 'carousel', label: '(4) Trượt ngang' },
+  { id: 'minimal', label: '(5) Tối giản' },
+  { id: 'showcase', label: '(6) Trưng bày' },
+  { id: 'kanban', label: '(7) Lưới thẻ' }
 ];
 
 export const DEFAULT_SERVICE_LIST_CONFIG: ServiceListConfig = {

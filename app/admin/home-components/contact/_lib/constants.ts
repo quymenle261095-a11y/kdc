@@ -9,12 +9,13 @@ import type {
 import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const CONTACT_STYLES: Array<{ id: ContactStyle; label: string }> = [
-  { id: 'modern', label: 'Modern Split' },
-  { id: 'floating', label: 'Executive Panel' },
-  { id: 'grid', label: 'Grid Cards' },
-  { id: 'elegant', label: 'Elegant Clean' },
-  { id: 'minimal', label: 'Minimal Form' },
-  { id: 'centered', label: 'Balanced Split' },
+  { id: 'modern', label: '(1) Chia đôi' },
+  { id: 'floating', label: '(2) Khối nổi' },
+  { id: 'grid', label: '(3) Lưới thẻ' },
+  { id: 'elegant', label: '(4) Thanh lịch' },
+  { id: 'minimal', label: '(5) Tối giản' },
+  { id: 'centered', label: '(6) Cân bằng' },
+  { id: 'kanban', label: '(7) Ba cột' },
 ];
 
 export const DEFAULT_CONTACT_CONFIG: ContactConfigState = {
@@ -120,6 +121,11 @@ export const DEFAULT_CONTACT_TEXTS: Record<ContactStyle, Record<string, string>>
     heading: 'Liên hệ & hỗ trợ',
     description: 'Phản hồi nhanh trong giờ làm việc.',
   },
+  kanban: {
+    badge: 'Thông tin liên hệ',
+    heading: 'Kết nối với chúng tôi',
+    description: 'Chúng tôi luôn sẵn sàng hỗ trợ bạn',
+  },
 };
 
 export const TEXT_FIELDS: Record<ContactStyle, Array<{ key: string; label: string; placeholder: string }>> = {
@@ -147,6 +153,11 @@ export const TEXT_FIELDS: Record<ContactStyle, Array<{ key: string; label: strin
   centered: [
     { key: 'heading', label: 'Heading hiển thị', placeholder: 'Liên hệ & hỗ trợ' },
     { key: 'description', label: 'Mô tả', placeholder: 'Phản hồi nhanh trong giờ làm việc.' },
+  ],
+  kanban: [
+    { key: 'badge', label: 'Badge hiển thị', placeholder: 'Thông tin liên hệ' },
+    { key: 'heading', label: 'Heading hiển thị', placeholder: 'Kết nối với chúng tôi' },
+    { key: 'description', label: 'Mô tả', placeholder: 'Chúng tôi luôn sẵn sàng hỗ trợ bạn' },
   ],
 };
 

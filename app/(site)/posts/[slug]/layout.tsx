@@ -3,8 +3,13 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { getConvexClient } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { getContactSettings, getSEOSettings, getSiteSettings, getSocialSettings } from '@/lib/get-settings';
-import { JsonLd, generateArticleSchema, generateBreadcrumbSchema } from '@/components/seo/JsonLd';
+import { JsonLd, generateBreadcrumbSchema } from '@/components/seo/JsonLd';
 import { buildSeoMetadata } from '@/lib/seo/metadata';
+import {
+  buildModuleArticleSchema,
+  buildModuleDetailFaqSchema,
+  toModuleDetailSeoData,
+} from '@/lib/seo/module-detail';
 import { buildDetailPath } from '@/lib/ia/route-mode';
 
 interface Props {
@@ -69,14 +74,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return buildSeoMetadata({
     contact,
-    entity: {
-      content: post.content,
-      excerpt: post.excerpt,
-      metaDescription: post.metaDescription,
-      metaTitle: post.metaTitle,
-      thumbnail: post.thumbnail,
-      title: post.title,
-    },
+    entity: toModuleDetailSeoData(post),
     entityExists: true,
     openGraphType: 'article',
     pathname: canonicalPath,
@@ -125,16 +123,15 @@ export default async function PostLayout({ params, children }: Props) {
   });
   const postUrl = `${baseUrl}${postPath}`;
   const image = post.thumbnail ?? seo.seo_og_image;
-
-  const articleSchema = generateArticleSchema({
-    description: (post.metaDescription ?? post.excerpt) ?? seo.seo_description,
+  const articleSchema = buildModuleArticleSchema({
+    entity: post,
+    fallbackDescription: seo.seo_description,
     image,
-    publishedAt: post.publishedAt,
     siteName: site.site_name,
     title: post.metaTitle ?? post.title,
-    authorName: post.authorName,
     url: postUrl,
   });
+  const faqSchema = buildModuleDetailFaqSchema(post);
 
   const breadcrumbSchema = generateBreadcrumbSchema([
     { name: 'Trang chủ', url: baseUrl },
@@ -150,6 +147,7 @@ export default async function PostLayout({ params, children }: Props) {
   return (
     <>
       <JsonLd data={articleSchema} />
+      {faqSchema && <JsonLd data={faqSchema} />}
       <JsonLd data={breadcrumbSchema} />
       {children}
     </>

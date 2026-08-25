@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, HelpCircle, Plus } from 'lucide-react';
 import { cn } from '../../../components/ui';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
 import type { PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { FaqStyleTokens } from '../_lib/colors';
 import { getFaqRoundedClassName, normalizeFaqDesktopColumns, normalizeFaqRounded, type FaqConfig, type FaqItem, type FaqStyle } from '../_types';
@@ -21,6 +22,7 @@ interface FaqSectionSharedProps {
   spacingClassName?: string;
   rounded?: FaqConfig['cornerRadius'];
   desktopColumns?: 3 | 4;
+  onItemTextChange?: (id: FaqItem['id'], field: 'question' | 'answer', value: string) => void;
 }
 
 const FAQ_FALLBACKS = {
@@ -154,8 +156,46 @@ const SectionHeader = ({
   );
 };
 
-const getFaqQuestion = (item: FaqItem, idx: number) => getValue(item.question) ?? `${FAQ_FALLBACKS.question} ${idx + 1}`;
-const getFaqAnswer = (item: FaqItem) => getValue(item.answer) ?? FAQ_FALLBACKS.answer;
+const EditableFaqText = ({
+  active,
+  value,
+  fallback,
+  className,
+  style,
+  onChange,
+}: {
+  active: boolean;
+  value?: string;
+  fallback: string;
+  className?: string;
+  style?: React.CSSProperties;
+  onChange?: (value: string) => void;
+}) => {
+  const currentValue = value?.trim() ? value : fallback;
+
+  return (
+    <span
+      contentEditable={active}
+      suppressContentEditableWarning={active}
+      onClick={active ? (event) => { event.stopPropagation(); } : undefined}
+      onMouseDown={active ? (event) => { event.stopPropagation(); } : undefined}
+      onKeyDown={active ? (event) => { event.stopPropagation(); } : undefined}
+      onBlur={active ? (event) => {
+        const nextValue = event.currentTarget.textContent?.trim() ?? '';
+        if (nextValue !== (value ?? '')) {
+          onChange?.(nextValue);
+        }
+      } : undefined}
+      className={cn(
+        className,
+        active && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text',
+      )}
+      style={style}
+    >
+      {currentValue}
+    </span>
+  );
+};
 
 export function FaqSectionShared({
   items,
@@ -170,8 +210,11 @@ export function FaqSectionShared({
   spacingClassName = 'py-8 md:py-10',
   rounded,
   desktopColumns,
+  onItemTextChange,
 }: FaqSectionSharedProps) {
+  const visualEdit = usePreviewVisualEdit();
   const isPreview = context === 'preview';
+  const isVisualEditActive = isPreview && visualEdit.active && Boolean(onItemTextChange);
   const previewLimit = getPreviewLimit(device);
   const displayedItems = React.useMemo(
     () => {
@@ -200,6 +243,26 @@ export function FaqSectionShared({
   }, [displayedItems, style]);
 
   const activeItem = displayedItems[activeIdx] || displayedItems[0];
+  const renderQuestion = (item: FaqItem, idx: number, className?: string, style?: React.CSSProperties) => (
+    <EditableFaqText
+      active={isVisualEditActive}
+      value={getValue(item.question)}
+      fallback={`${FAQ_FALLBACKS.question} ${idx + 1}`}
+      className={className}
+      style={style}
+      onChange={(value) => onItemTextChange?.(item.id, 'question', value)}
+    />
+  );
+  const renderAnswer = (item: FaqItem, className?: string, style?: React.CSSProperties) => (
+    <EditableFaqText
+      active={isVisualEditActive}
+      value={getValue(item.answer)}
+      fallback={FAQ_FALLBACKS.answer}
+      className={className}
+      style={style}
+      onChange={(value) => onItemTextChange?.(item.id, 'answer', value)}
+    />
+  );
 
   if (items.length === 0) {
     return (
@@ -253,7 +316,7 @@ export function FaqSectionShared({
               {displayedItems.map((item, idx) => {
                 const isOpen = openId === item.id;
                 return (
-                  <div key={item.id} className={cn('flex flex-col', idx !== 0 && 'border-t')} style={{ borderColor: tokens.panelBorder }}>
+                  <div key={item.id || idx} className={cn('flex flex-col', idx !== 0 && 'border-t')} style={{ borderColor: tokens.panelBorder }}>
                     <button
                       type="button"
                       onClick={() => { setOpenId((prev) => prev === item.id ? null : item.id); }}
@@ -261,7 +324,7 @@ export function FaqSectionShared({
                     >
                       <div className="flex items-center gap-3 @3xl:gap-4 flex-1">
                         <span className="font-bold text-[15px] @3xl:text-lg break-words leading-tight transition-colors duration-300" style={{ color: isOpen ? tokens.heading : tokens.questionText }}>
-                          {getFaqQuestion(item, idx)}
+                          {renderQuestion(item, idx)}
                         </span>
                       </div>
                       <ChevronDown className={cn('w-5 h-5 @3xl:w-6 @3xl:h-6 shrink-0 transition-transform duration-300', isOpen && 'rotate-180')} style={{ color: isOpen ? tokens.heading : tokens.chevron }} />
@@ -278,7 +341,7 @@ export function FaqSectionShared({
                         >
                           <div className="pb-6 pt-1 @3xl:pl-2 pr-2 @3xl:pr-4">
                             <p className="text-[15px] @3xl:text-[1.05rem] leading-[1.65] break-words text-pretty" style={{ color: tokens.body }}>
-                              {getFaqAnswer(item)}
+                              {renderAnswer(item)}
                             </p>
                           </div>
                         </motion.div>
@@ -304,13 +367,13 @@ export function FaqSectionShared({
               {showInternalHeader ? <SectionHeader title={sectionTitle} subtitle={sectionSubtitle} align="center" className="mb-10 @5xl:mb-14" /> : null}
               <div className={cn('grid w-full', getGridLayoutClassName(context, device, resolvedDesktopColumns))}>
                 {displayedItems.map((item, idx) => (
-                  <div key={item.id} className={cn('p-4 @3xl:p-5 @5xl:p-8 flex flex-col border shadow-sm relative overflow-hidden h-full drop-shadow-sm', roundedClassName)} style={{ backgroundColor: tokens.panelBg, borderColor: tokens.panelBorder }}>
+                  <div key={item.id || idx} className={cn('p-4 @3xl:p-5 @5xl:p-8 flex flex-col border shadow-sm relative overflow-hidden h-full drop-shadow-sm', roundedClassName)} style={{ backgroundColor: tokens.panelBg, borderColor: tokens.panelBorder }}>
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-[var(--token-primary)] opacity-90" />
                     <h4 className="font-bold text-[14px] @3xl:text-[16px] @5xl:text-xl mb-3 pt-2 leading-snug" style={{ color: tokens.questionText }}>
-                      {getFaqQuestion(item, idx)}
+                      {renderQuestion(item, idx)}
                     </h4>
                     <p className="text-[13px] @3xl:text-[14px] @5xl:text-[15.5px] leading-[1.6] @5xl:leading-[1.65] text-pretty mt-auto" style={{ color: tokens.body }}>
-                      {getFaqAnswer(item)}
+                      {renderAnswer(item)}
                     </p>
                   </div>
                 ))}
@@ -342,7 +405,7 @@ export function FaqSectionShared({
                     style={{ backgroundColor: tokens.panelBg, borderColor: tokens.panelBorder }}
                   >
                     <span className="text-[15px] @2xl:text-base font-bold leading-snug flex-1" style={{ color: tokens.questionText }}>
-                      {getFaqQuestion(activeItem, activeIdx)}
+                      {renderQuestion(activeItem, activeIdx)}
                     </span>
                     <ChevronDown className={`w-5 h-5 shrink-0 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} style={{ color: tokens.chevron }} />
                   </button>
@@ -358,7 +421,7 @@ export function FaqSectionShared({
                       >
                         {displayedItems.map((item, idx) => (
                           <button
-                            key={item.id}
+                            key={item.id || idx}
                             type="button"
                             onClick={() => {
                               setActiveIdx(idx);
@@ -371,7 +434,7 @@ export function FaqSectionShared({
                             }}
                           >
                             <span className={`text-[14.5px] @2xl:text-[15.5px] leading-snug ${idx === activeIdx ? 'font-bold' : 'font-medium'}`} style={{ color: idx === activeIdx ? tokens.badgeText : tokens.questionText }}>
-                              {getFaqQuestion(item, idx)}
+                              {renderQuestion(item, idx)}
                             </span>
                           </button>
                         ))}
@@ -386,7 +449,7 @@ export function FaqSectionShared({
                   const isActive = idx === activeIdx;
                   return (
                     <button
-                      key={item.id}
+                      key={item.id || idx}
                       type="button"
                       onClick={() => { setActiveIdx(idx); }}
                       className={cn('text-left p-4 transition-all duration-300 border focus:outline-none flex items-start gap-4', roundedClassName, isActive && 'scale-[1.02] shadow-sm')}
@@ -396,7 +459,7 @@ export function FaqSectionShared({
                       }}
                     >
                       <span className={`font-bold leading-snug transition-colors ${isActive ? 'text-[16px]' : 'text-[15px]'}`} style={{ color: isActive ? tokens.badgeText : tokens.questionText }}>
-                        {getFaqQuestion(item, idx)}
+                        {renderQuestion(item, idx)}
                       </span>
                     </button>
                   );
@@ -416,10 +479,10 @@ export function FaqSectionShared({
                   >
                     <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--token-primary)] opacity-5 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/3" />
                     <h3 className="text-2xl @4xl:text-3xl font-bold mb-6 leading-tight" style={{ color: tokens.panelTitleText }}>
-                      {getFaqQuestion(activeItem, activeIdx)}
+                      {renderQuestion(activeItem, activeIdx)}
                     </h3>
                     <p className="text-lg @4xl:text-[1.1rem] leading-[1.7] text-pretty" style={{ color: tokens.body }}>
-                      {getFaqAnswer(activeItem)}
+                      {renderAnswer(activeItem)}
                     </p>
                   </motion.div>
                 </AnimatePresence>
@@ -443,7 +506,7 @@ export function FaqSectionShared({
                 const isOpen = openId === item.id;
                 return (
                   <div
-                    key={item.id}
+                    key={item.id || idx}
                     className={cn('border transition-all duration-300 shadow-sm overflow-hidden', roundedClassName, isOpen && 'ring-1 ring-slate-200')}
                     style={{ backgroundColor: tokens.panelBg, borderColor: isOpen ? tokens.panelBorderStrong : tokens.panelBorder }}
                   >
@@ -453,7 +516,7 @@ export function FaqSectionShared({
                       className="flex items-center justify-between w-full p-5 @3xl:p-6 text-left gap-4 group focus:outline-none"
                     >
                       <span className="font-bold text-[16px] @3xl:text-lg transition-colors" style={{ color: isOpen ? tokens.heading : tokens.questionText }}>
-                        {getFaqQuestion(item, idx)}
+                        {renderQuestion(item, idx)}
                       </span>
                       <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-300" style={{ backgroundColor: isOpen ? tokens.iconSolidBg : tokens.iconBg, color: isOpen ? tokens.iconSolidText : tokens.iconText }}>
                         <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
@@ -470,7 +533,7 @@ export function FaqSectionShared({
                         >
                           <div className="px-5 @3xl:px-6 pb-6 pt-1">
                             <p className="text-[15px] @3xl:text-[1.05rem] leading-relaxed text-pretty" style={{ color: tokens.body }}>
-                              {getFaqAnswer(item)}
+                              {renderAnswer(item)}
                             </p>
                           </div>
                         </motion.div>
@@ -496,15 +559,15 @@ export function FaqSectionShared({
               {showInternalHeader ? <SectionHeader title={sectionTitle} subtitle={sectionSubtitle} align="left" className="mb-8 @5xl:mb-12" /> : null}
               <div className="flex flex-col border-t" style={{ borderColor: tokens.panelBorder }}>
                 {displayedItems.map((item, idx) => (
-                  <div key={item.id} className={cn('flex border-b items-start', getSplitLayoutClassName(context, device))} style={{ borderColor: tokens.panelBorder }}>
+                  <div key={item.id || idx} className={cn('flex border-b items-start', getSplitLayoutClassName(context, device))} style={{ borderColor: tokens.panelBorder }}>
                     <div className={getSplitQuestionClassName(context, device)}>
                       <h4 className="text-[17px] @3xl:text-lg @5xl:text-[1.2rem] font-bold leading-snug text-pretty pt-1" style={{ color: tokens.questionText }}>
-                        {getFaqQuestion(item, idx)}
+                        {renderQuestion(item, idx)}
                       </h4>
                     </div>
                     <div className={getSplitAnswerClassName(context, device)}>
                       <p className="text-[15px] @5xl:text-[1.05rem] leading-[1.75] text-pretty" style={{ color: tokens.body }}>
-                        {getFaqAnswer(item)}
+                        {renderAnswer(item)}
                       </p>
                     </div>
                   </div>
@@ -541,7 +604,7 @@ export function FaqSectionShared({
 
               return (
                 <article
-                  key={item.id}
+                  key={item.id || idx}
                   className={cn(
                     'overflow-hidden border',
                     roundedClassName,
@@ -565,7 +628,7 @@ export function FaqSectionShared({
                       style={{ color: tokens.chevron }}
                     />
                     <span className="text-lg font-medium leading-8" style={{ color: tokens.questionText }}>
-                      {getFaqQuestion(item, idx)}
+                      {renderQuestion(item, idx)}
                     </span>
                   </button>
 
@@ -581,7 +644,7 @@ export function FaqSectionShared({
                       >
                         <div className="px-5 pb-5 pl-[56px]">
                           <p className="text-[15px] leading-[1.7]" style={{ color: tokens.body }}>
-                            {getFaqAnswer(item)}
+                            {renderAnswer(item)}
                           </p>
                         </div>
                       </motion.div>
@@ -620,7 +683,7 @@ export function FaqSectionShared({
                 const isOpen = openId === item.id;
                 return (
                   <div
-                    key={item.id}
+                    key={item.id || idx}
                     className={cn('transition-all duration-300 overflow-hidden border', roundedClassName)}
                     style={{
                       backgroundColor: isOpen ? tokens.panelBgMuted : 'transparent',
@@ -633,7 +696,7 @@ export function FaqSectionShared({
                       className="flex items-center justify-between w-full p-5 @4xl:p-6 text-left gap-6 focus:outline-none group"
                     >
                       <span className="font-bold text-[16px] @4xl:text-xl transition-colors leading-snug" style={{ color: isOpen ? tokens.heading : tokens.questionText }}>
-                        {getFaqQuestion(item, idx)}
+                        {renderQuestion(item, idx)}
                       </span>
                       <div
                         className={cn('shrink-0 w-8 h-8 @4xl:w-10 @4xl:h-10 rounded-full flex items-center justify-center transition-all duration-300 border', isOpen && 'rotate-45')}
@@ -657,7 +720,7 @@ export function FaqSectionShared({
                         >
                           <div className="px-5 @4xl:px-6 pb-6 pt-0">
                             <p className="text-[15px] @4xl:text-[1.05rem] leading-[1.75] text-pretty" style={{ color: tokens.body }}>
-                              {getFaqAnswer(item)}
+                              {renderAnswer(item)}
                             </p>
                           </div>
                         </motion.div>

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { AlertTriangle } from 'lucide-react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -30,6 +32,8 @@ import { Label, cn } from '../../../components/ui';
 
 export default function TestimonialsCreatePage() {
   const COMPONENT_TYPE = 'Testimonials';
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Đánh giá / Review', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -259,6 +263,16 @@ export default function TestimonialsCreatePage() {
         desktopColumns={desktopColumns}
         splitBackgroundImage={splitBackgroundImage}
         splitBackgroundOverlayOpacity={splitBackgroundOverlayOpacity}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
+        onItemsChange={(nextItems) => {
+          setItems(nextItems.map((item, idx) => ({
+            ...item,
+            id: items[idx]?.id ?? item.id,
+          })));
+        }}
       />
     </ComponentFormWrapper>
   );

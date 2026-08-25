@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy, FileText, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Label, cn } from '../../../components/ui';
+import { Button } from '../../../components/ui';
+import { AiImportDialogShell } from '@/app/admin/components/AiImportDialogShell';
 import type { CountdownConfigState } from '../_types';
 import { useTypeAiImportEnabled } from '../../_shared/hooks/useTypeAiImportEnabled';
 import { HomeComponentFooterActionPortal } from '../../_shared/components/HomeComponentFooterActions';
@@ -54,18 +55,12 @@ const trimText = (value: unknown, maxLength: number) => {
   return String(value).trim().slice(0, maxLength);
 };
 
-const cleanJsonInput = (raw: string) => {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-};
-
 const parseAiCountdown = (raw: string): ParseResult => {
   let parsed: unknown;
   const errors: string[] = [];
 
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
     return { errors: ['JSON chưa hợp lệ. Hãy dán object có key "countdown".'], item: null };
   }
@@ -119,28 +114,19 @@ export function AiCountdownImport({
 }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = useState(false);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
-  const result = useMemo(() => parseAiCountdown(rawInput), [rawInput]);
-  const canApply = rawInput.trim().length > 0 && result.item !== null && result.errors.length === 0;
 
   if (!isAiImportEnabled) {
     return null;
   }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    const res = parseAiCountdown(rawInput);
+    return { data: res.item, errors: res.errors };
   };
 
-  const applyItem = () => {
-    if (!canApply || !result.item) { return; }
-    onApply(result.item);
+  const handleApply = (item: Partial<CountdownConfigState>) => {
+    onApply(item);
     toast.success('Đã nhập nội dung Countdown');
-    setOpen(false);
-    setRawInput('');
   };
 
   return (
@@ -150,70 +136,32 @@ export function AiCountdownImport({
           <Bot size={16} /> Import AI
         </Button>
       </HomeComponentFooterActionPortal>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import Countdown bằng AI</DialogTitle>
-            <DialogDescription>Copy prompt, nhờ AI tạo JSON, dán kết quả vào đây để preview rồi áp dụng vào form.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(AI_COUNTDOWN_PROMPT, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{AI_COUNTDOWN_PROMPT}</pre>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label>JSON mẫu</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(SAMPLE_COUNTDOWN_JSON, 'sample')}>
-                    {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{SAMPLE_COUNTDOWN_JSON}</pre>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Dán kết quả AI</Label>
-                <textarea className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" placeholder={SAMPLE_COUNTDOWN_JSON} value={rawInput} onChange={(event) => setRawInput(event.target.value)} />
-              </div>
-              {rawInput.trim().length > 0 && (
-                <div className={cn('rounded-lg border p-3 text-sm', result.errors.length > 0 ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300' : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300')}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">{result.errors.map((error) => (<li key={error} className="flex gap-1.5"><X size={14} className="mt-0.5 shrink-0" /><span>{error}</span></li>))}</ul>
-                  ) : (
-                    <div className="flex gap-1.5"><Check size={14} className="mt-0.5 shrink-0" /><span>Sẵn sàng nhập nội dung Countdown.</span></div>
-                  )}
-                </div>
-              )}
-              {result.item ? (
-                <div className="space-y-2">
-                  <Label>Preview</Label>
-                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 space-y-1">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{result.item.heading}</p>
-                    <p className="text-xs text-slate-500">{result.item.subHeading}</p>
-                    <p className="text-xs text-slate-400">{result.item.description}</p>
-                    <div className="flex gap-3 text-[10px] text-slate-400 pt-1">
-                      <span>⏰ {result.item.endDate}</span>
-                      {result.item.discountText && <span className="font-bold text-red-500">{result.item.discountText}</span>}
-                      <span>🔗 {result.item.buttonText}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+
+      <AiImportDialogShell<Partial<CountdownConfigState>>
+        open={open}
+        onOpenChange={setOpen}
+        title="Import Countdown bằng AI"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={AI_COUNTDOWN_PROMPT}
+        sampleJson={SAMPLE_COUNTDOWN_JSON}
+        directSessionId="admin-countdown-import"
+        directPlaceholder="Ví dụ: Tạo countdown ưu đãi khai giảng khóa học 3D, hết hạn cuối tháng, CTA Đăng ký ngay."
+        parse={handleParse}
+        renderPreview={(item) => (
+          <div className="space-y-1 text-xs">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">{item.heading}</p>
+            {item.subHeading && <p className="text-slate-500">{item.subHeading}</p>}
+            {item.description && <p className="text-slate-400 line-clamp-2">{item.description}</p>}
+            <div className="flex gap-3 text-[11px] text-slate-400 pt-1">
+              <span>⏰ {item.endDate}</span>
+              {item.discountText && <span className="font-bold text-red-500">{item.discountText}</span>}
+              <span>🔗 {item.buttonText}</span>
             </div>
           </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="button" disabled={!canApply} onClick={applyItem}>Áp dụng vào form</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }

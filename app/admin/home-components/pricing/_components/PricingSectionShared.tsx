@@ -47,20 +47,44 @@ interface PricingSectionSharedProps {
   /** Grid columns: 3 or 4. Affects responsive breakpoints. */
   gridCols?: 3 | 4;
   cornerRadius?: PricingCornerRadius;
+  visualEditActive?: boolean;
+  onItemsChange?: (value: PricingPlan[]) => void;
 }
 
-const formatPriceDisplay = (value?: string) => {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) {return '0';}
-  return trimmed;
-};
-
-const normalizePeriod = (value?: string, isYearly = false) => {
-  const trimmed = String(value ?? '').trim();
-  if (!trimmed) {
-    return isYearly ? '/năm' : '/tháng';
+const EditableText = ({
+  active,
+  value,
+  onChange,
+  className,
+  style,
+  element: Element = 'span',
+}: {
+  active: boolean;
+  value: string;
+  onChange: (val: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  element?: React.ElementType;
+}) => {
+  if (!active) {
+    return <Element className={className} style={style}>{value}</Element>;
   }
-  return trimmed;
+  return (
+    <Element
+      contentEditable={active}
+      suppressContentEditableWarning={active}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => {
+        onChange(e.currentTarget.textContent ?? '');
+      }}
+      className={cn(
+        className,
+        'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+      )}
+      style={style}
+    >
+      {value}
+    </Element>
+  );
 };
 
 const sanitizeFeatures = (features?: string[]) => (
@@ -68,22 +92,6 @@ const sanitizeFeatures = (features?: string[]) => (
     .map((feature) => String(feature ?? '').trim())
     .filter((feature) => feature.length > 0)
 );
-
-const getPlanPrice = (plan: PricingPlan, isYearly: boolean) => {
-  if (isYearly && String(plan.yearlyPrice ?? '').trim()) {
-    return formatPriceDisplay(plan.yearlyPrice);
-  }
-  return formatPriceDisplay(plan.price);
-};
-
-/** Chỉ thêm 'đ' khi giá là số; text như 'Liên hệ' giữ nguyên */
-const formatPriceWithSuffix = (price: string) => {
-  const cleaned = price.replace(/[.,\s]/g, '');
-  if (/^\d+$/.test(cleaned)) {
-    return `${price}đ`;
-  }
-  return price;
-};
 
 const wrapAction = ({
   context,
@@ -224,7 +232,39 @@ export function PricingSectionShared({
   previewDevice,
   gridCols = 3,
   cornerRadius,
+  visualEditActive = false,
+  onItemsChange,
 }: PricingSectionSharedProps) {
+  const handleItemTextUpdate = (planIdx: number, field: string, nextText: string) => {
+    if (!onItemsChange) return;
+    const nextPlans = plans.map((plan, idx) => {
+      if (idx === planIdx) {
+        return {
+          ...plan,
+          [field]: nextText,
+        };
+      }
+      return plan;
+    });
+    onItemsChange(nextPlans);
+  };
+
+  const handleFeatureUpdate = (planIdx: number, featureIdx: number, nextText: string) => {
+    if (!onItemsChange) return;
+    const nextPlans = plans.map((plan, idx) => {
+      if (idx === planIdx) {
+        const nextFeatures = [...plan.features];
+        nextFeatures[featureIdx] = nextText;
+        return {
+          ...plan,
+          features: nextFeatures,
+        };
+      }
+      return plan;
+    });
+    onItemsChange(nextPlans);
+  };
+
   const cardRadiusClassName = getPricingCornerRadiusClassName(normalizePricingCornerRadius(cornerRadius));
 
   const renderPlanFeatures = (features: string[]) => {
@@ -330,14 +370,14 @@ export function PricingSectionShared({
                   ) : null}
 
                   <h3 className="text-center text-lg font-semibold" style={{ color: tokens.neutralText }}>
-                    {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                    <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
                   </h3>
                   <div className="mt-3 text-center">
                     <span className="text-3xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                      <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                     </span>
                     <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
-                      {normalizePeriod(plan.period, isYearly)}
+                      <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(index, 'period', val)} />
                     </span>
                   </div>
 
@@ -345,7 +385,7 @@ export function PricingSectionShared({
                     {features.map((feature, featureIndex) => (
                       <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2 text-sm" style={{ color: tokens.featureText }}>
                         <Check size={14} className="mt-0.5 flex-shrink-0" style={{ color: tokens.featureIcon }} />
-                        <span>{feature}</span>
+                        <EditableText active={visualEditActive} value={feature} onChange={(val) => handleFeatureUpdate(index, featureIndex, val)} />
                       </li>
                     ))}
                   </ul>
@@ -357,7 +397,7 @@ export function PricingSectionShared({
                           href: actionHref,
                           className: 'block w-full rounded-lg py-3 text-center text-sm font-semibold transition-colors',
                           style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                          children: plan.buttonText.trim() || 'Chọn gói',
+                          children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn gói'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                         })
                       : wrapAction({
                           context,
@@ -368,7 +408,7 @@ export function PricingSectionShared({
                             borderColor: tokens.ctaGhostBorder,
                             color: tokens.ctaGhostText,
                           },
-                          children: plan.buttonText.trim() || 'Chọn gói',
+                          children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn gói'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                         })}
                   </div>
                 </article>
@@ -407,7 +447,9 @@ export function PricingSectionShared({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="min-w-0 break-words text-base font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
+                      <h3 className="min-w-0 break-words text-base font-semibold" style={{ color: tokens.neutralText }}>
+                        <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
+                      </h3>
                       {plan.isPopular ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase"
@@ -422,9 +464,9 @@ export function PricingSectionShared({
 
                   <div className="mt-3 flex items-center justify-between gap-3 @md:mt-0 @md:flex-shrink-0">
                     <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                      <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                       <span className="ml-1 text-sm font-normal" style={{ color: tokens.periodText }}>
-                        {normalizePeriod(plan.period, isYearly)}
+                        <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(index, 'period', val)} />
                       </span>
                     </span>
                     {wrapAction({
@@ -432,7 +474,7 @@ export function PricingSectionShared({
                       href: actionHref,
                       className: 'rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
                       style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                      children: plan.buttonText.trim() || texts.selectButton || 'Chọn',
+                      children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || texts.selectButton || 'Chọn'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                     })}
                   </div>
                 </article>
@@ -474,7 +516,9 @@ export function PricingSectionShared({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="min-w-0 break-words text-lg font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h3>
+                      <h3 className="min-w-0 break-words text-lg font-semibold" style={{ color: tokens.neutralText }}>
+                        <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
+                      </h3>
                       {plan.isPopular ? (
                         <span
                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase"
@@ -489,9 +533,9 @@ export function PricingSectionShared({
 
                   <div className="mt-3 flex items-center gap-4 @md:mt-0">
                     <span className="text-2xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                      {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                      <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                       <span className="ml-1 text-sm font-normal" style={{ color: tokens.periodText }}>
-                        {normalizePeriod(plan.period, isYearly)}
+                        <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(index, 'period', val)} />
                       </span>
                     </span>
                     {plan.isPopular
@@ -500,14 +544,14 @@ export function PricingSectionShared({
                           href: actionHref,
                           className: 'rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors',
                           style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                          children: plan.buttonText.trim() || 'Chọn gói',
+                          children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn gói'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                         })
                       : wrapAction({
                           context,
                           href: actionHref,
                           className: 'rounded-lg border px-5 py-2.5 text-sm font-semibold',
                           style: { backgroundColor: tokens.ctaGhostBg, borderColor: tokens.ctaGhostBorder, color: tokens.ctaGhostText },
-                          children: plan.buttonText.trim() || 'Chọn gói',
+                          children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn gói'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                         })}
                   </div>
                 </article>
@@ -522,6 +566,18 @@ export function PricingSectionShared({
   if (style === 'comparison') {
     const comparisonPlans = displayPlans.slice(0, 4);
     const allFeatures = [...new Set(comparisonPlans.flatMap((plan) => renderPlanFeatures(plan.features)))].slice(0, 12);
+
+    const handleComparisonFeatureUpdate = (oldText: string, nextText: string) => {
+      if (!onItemsChange) return;
+      const nextPlans = plans.map((plan) => {
+        const nextFeatures = plan.features.map((f) => (f.trim() === oldText.trim() ? nextText : f));
+        return {
+          ...plan,
+          features: nextFeatures,
+        };
+      });
+      onItemsChange(nextPlans);
+    };
 
     return (
       <section className="bg-white px-4" data-mode={mode} style={PRICING_SECTION_FONT}>
@@ -551,9 +607,11 @@ export function PricingSectionShared({
                         backgroundColor: plan.isPopular ? tokens.comparisonPopularColumnBg : tokens.neutralSurface,
                       }}
                     >
-                      <div className="text-sm font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</div>
+                      <div className="text-sm font-semibold" style={{ color: tokens.neutralText }}>
+                        <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
+                      </div>
                       <div className="mt-1 text-2xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                        <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                       </div>
                       {plan.isPopular ? (
                         <div className="mt-2">
@@ -576,7 +634,9 @@ export function PricingSectionShared({
               <tbody>
                 {allFeatures.map((feature, featureIndex) => (
                   <tr key={`${featureIndex}-${feature}`} style={{ backgroundColor: featureIndex % 2 === 0 ? tokens.comparisonAltRowBg : tokens.neutralSurface }}>
-                    <td className="border-b p-4 text-sm" style={{ color: tokens.featureText, borderColor: tokens.neutralBorder }}>{feature}</td>
+                    <td className="border-b p-4 text-sm" style={{ color: tokens.featureText, borderColor: tokens.neutralBorder }}>
+                      <EditableText active={visualEditActive} value={feature} onChange={(val) => handleComparisonFeatureUpdate(feature, val)} />
+                    </td>
                     {comparisonPlans.map((plan, planIndex) => (
                       <td
                         key={`${String(plan.id ?? planIndex)}-feature-${featureIndex}`}
@@ -611,14 +671,14 @@ export function PricingSectionShared({
                               href: actionHref,
                               className: 'inline-block rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors',
                               style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                              children: plan.buttonText.trim() || 'Chọn',
+                              children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                             })
                           : wrapAction({
                               context,
                               href: actionHref,
                               className: 'inline-block rounded-lg border px-5 py-2.5 text-sm font-semibold transition-colors',
                               style: { backgroundColor: tokens.ctaGhostBg, borderColor: tokens.ctaGhostBorder, color: tokens.ctaGhostText },
-                              children: plan.buttonText.trim() || 'Chọn',
+                              children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                             })}
                       </td>
                     );
@@ -640,6 +700,7 @@ export function PricingSectionShared({
       return sectionBase;
     }
 
+    const featuredPlanIdx = plans.findIndex((p) => p.id === featuredPlan.id);
     const actionHref = featuredPlan.buttonLink.trim() || '#';
 
     return (
@@ -671,15 +732,15 @@ export function PricingSectionShared({
               </div>
 
               <h3 className="mt-3 text-center text-2xl font-bold" style={{ color: tokens.neutralText }}>
-                {featuredPlan.name.trim() || texts.defaultPlanName || 'Gói nổi bật'}
+                <EditableText active={visualEditActive} value={featuredPlan.name.trim() || texts.defaultPlanName || 'Gói nổi bật'} onChange={(val) => handleItemTextUpdate(featuredPlanIdx, 'name', val)} />
               </h3>
 
               <div className="my-6 text-center">
                 <span className="text-4xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                  {formatPriceWithSuffix(getPlanPrice(featuredPlan, isYearly))}
+                  <EditableText active={visualEditActive} value={isYearly ? (featuredPlan.yearlyPrice ?? '') : featuredPlan.price} onChange={(val) => handleItemTextUpdate(featuredPlanIdx, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                 </span>
                 <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
-                  {normalizePeriod(featuredPlan.period, isYearly)}
+                  <EditableText active={visualEditActive} value={featuredPlan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(featuredPlanIdx, 'period', val)} />
                 </span>
               </div>
 
@@ -687,7 +748,7 @@ export function PricingSectionShared({
                 {renderPlanFeatures(featuredPlan.features).slice(0, 7).map((feature, featureIndex) => (
                   <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2 text-sm" style={{ color: tokens.featureText }}>
                     <Check size={15} className="mt-0.5 flex-shrink-0" style={{ color: tokens.featureIcon }} />
-                    <span>{feature}</span>
+                    <EditableText active={visualEditActive} value={feature} onChange={(val) => handleFeatureUpdate(featuredPlanIdx, featureIndex, val)} />
                   </li>
                 ))}
               </ul>
@@ -697,7 +758,7 @@ export function PricingSectionShared({
                 href: actionHref,
                 className: 'block w-full rounded-xl py-3 text-center text-sm font-semibold transition-colors',
                 style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                children: featuredPlan.buttonText.trim() || texts.startNowButton || 'Bắt đầu ngay',
+                children: <EditableText active={visualEditActive} value={featuredPlan.buttonText.trim() || texts.startNowButton || 'Bắt đầu ngay'} onChange={(val) => handleItemTextUpdate(featuredPlanIdx, 'buttonText', val)} />,
               })}
             </article>
 
@@ -705,16 +766,21 @@ export function PricingSectionShared({
               <div className="flex flex-col gap-4 @lg:w-72">
                 {sidePlans.map((plan, index) => {
                   const sideHref = plan.buttonLink.trim() || '#';
+                  const realPlanIdx = plans.findIndex((p) => p.id === plan.id);
                   return (
                     <article
                       key={`${String(plan.id ?? index)}-${index}`}
                       className={cn('flex flex-1 flex-col border p-4', cardRadiusClassName)}
                       style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}
                     >
-                      <h4 className="text-sm font-semibold" style={{ color: tokens.neutralText }}>{plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}</h4>
+                      <h4 className="text-sm font-semibold" style={{ color: tokens.neutralText }}>
+                        <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(realPlanIdx, 'name', val)} />
+                      </h4>
                       <p className="mt-2 text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
-                        <span className="ml-1 text-xs font-normal" style={{ color: tokens.periodText }}>{normalizePeriod(plan.period, isYearly)}</span>
+                        <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(realPlanIdx, isYearly ? 'yearlyPrice' : 'price', val)} />đ
+                        <span className="ml-1 text-xs font-normal" style={{ color: tokens.periodText }}>
+                          <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(realPlanIdx, 'period', val)} />
+                        </span>
                       </p>
                       <p className="mt-2 flex-1 text-xs" style={{ color: tokens.mutedText }}>
                         {renderPlanFeatures(plan.features).slice(0, 2).join(', ')}
@@ -725,7 +791,7 @@ export function PricingSectionShared({
                           href: sideHref,
                           className: 'block w-full rounded-lg border py-2 text-center text-xs font-semibold transition-colors',
                           style: { backgroundColor: tokens.ctaGhostBg, borderColor: tokens.ctaGhostBorder, color: tokens.ctaGhostText },
-                          children: plan.buttonText.trim() || texts.selectButton || 'Chọn',
+                          children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || texts.selectButton || 'Chọn'} onChange={(val) => handleItemTextUpdate(realPlanIdx, 'buttonText', val)} />,
                         })}
                       </div>
                     </article>
@@ -745,6 +811,7 @@ export function PricingSectionShared({
       displayPlans.findIndex((plan, index) => getPlanKey(plan, index) === activeTabbedPlanKey),
     );
     const activePlan = displayPlans[activeIndex] ?? displayPlans[0];
+    const activePlanIdx = plans.findIndex((p) => p.id === activePlan.id);
     const activeFeatures = renderPlanFeatures(activePlan.features).slice(0, 8);
     const midpoint = Math.ceil(activeFeatures.length / 2);
     const featureColumns = [
@@ -776,6 +843,7 @@ export function PricingSectionShared({
               {displayPlans.map((plan, index) => {
                 const planKey = getPlanKey(plan, index);
                 const isActive = index === activeIndex;
+                const realPlanIdx = plans.findIndex((p) => p.id === plan.id);
                 return (
                   <button
                     key={planKey}
@@ -794,12 +862,12 @@ export function PricingSectionShared({
                     }}
                   >
                     <span className="min-w-0 break-words text-lg font-semibold leading-tight md:text-xl">
-                      {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                      <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(realPlanIdx, 'name', val)} />
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block text-xs opacity-80">từ</span>
                       <span className="text-2xl font-bold tabular-nums">
-                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                        <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(realPlanIdx, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                       </span>
                     </span>
                   </button>
@@ -814,14 +882,14 @@ export function PricingSectionShared({
               <div className="mb-6 flex items-start justify-between gap-3 border-b border-dashed pb-3" style={{ borderColor: tokens.neutralBorder }}>
                 <div className="min-w-0">
                   <h3 className="break-words text-lg font-semibold md:text-xl" style={{ color: tokens.headingText }}>
-                    {activePlan.name.trim() || texts.defaultPlanName || 'Gói dịch vụ'}
+                    <EditableText active={visualEditActive} value={activePlan.name.trim() || texts.defaultPlanName || 'Gói dịch vụ'} onChange={(val) => handleItemTextUpdate(activePlanIdx, 'name', val)} />
                   </h3>
                   <div className="mt-1">
                     <span className="text-3xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                      {formatPriceWithSuffix(getPlanPrice(activePlan, isYearly))}
+                      <EditableText active={visualEditActive} value={isYearly ? (activePlan.yearlyPrice ?? '') : activePlan.price} onChange={(val) => handleItemTextUpdate(activePlanIdx, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                     </span>
                     <span className="ml-1 text-sm" style={{ color: tokens.periodText }}>
-                      {normalizePeriod(activePlan.period, isYearly)}
+                      <EditableText active={visualEditActive} value={activePlan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(activePlanIdx, 'period', val)} />
                     </span>
                   </div>
                 </div>
@@ -842,12 +910,15 @@ export function PricingSectionShared({
               <div className={cn('mb-8 flex flex-1 gap-6', isStacked ? 'flex-col' : 'flex-col sm:flex-row')}>
                 {featureColumns.map((column, columnIndex) => (
                   <ul key={columnIndex} className="flex-1 space-y-3">
-                    {column.map((feature, featureIndex) => (
-                      <li key={`${columnIndex}-${featureIndex}-${feature}`} className="flex items-start gap-2 text-[15px] font-medium" style={{ color: tokens.featureText }}>
-                        <Check size={15} className="mt-0.5 shrink-0" style={{ color: tokens.featureIcon }} />
-                        <span className="break-words">{feature}</span>
-                      </li>
-                    ))}
+                    {column.map((feature, featureIndex) => {
+                      const realFeatureIdx = columnIndex === 0 ? featureIndex : midpoint + featureIndex;
+                      return (
+                        <li key={`${columnIndex}-${featureIndex}-${feature}`} className="flex items-start gap-2 text-[15px] font-medium" style={{ color: tokens.featureText }}>
+                          <Check size={15} className="mt-0.5 shrink-0" style={{ color: tokens.featureIcon }} />
+                          <EditableText active={visualEditActive} value={feature} onChange={(val) => handleFeatureUpdate(activePlanIdx, realFeatureIdx, val)} />
+                        </li>
+                      );
+                    })}
                   </ul>
                 ))}
               </div>
@@ -858,7 +929,7 @@ export function PricingSectionShared({
                   href: actionHref,
                   className: 'block w-full rounded-full py-3.5 px-6 text-center text-sm font-semibold transition-colors',
                   style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                  children: activePlan.buttonText.trim() || texts.defaultButtonText || 'Xem chi tiết',
+                  children: <EditableText active={visualEditActive} value={activePlan.buttonText.trim() || texts.defaultButtonText || 'Xem chi tiết'} onChange={(val) => handleItemTextUpdate(activePlanIdx, 'buttonText', val)} />,
                 })}
               </div>
             </div>
@@ -905,15 +976,15 @@ export function PricingSectionShared({
                           color: tokens.ctaSolidText,
                         }}
                       >
-                        {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                        <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
                       </h3>
                     </div>
                     <div className="space-y-2">
                       <p className="break-words text-4xl font-extrabold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
-                        {formatPriceWithSuffix(getPlanPrice(plan, isYearly))}
+                        <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
                       </p>
                       <p className="mt-2 block text-sm font-medium uppercase tracking-widest" style={{ color: tokens.mutedText }}>
-                        {normalizePeriod(plan.period, isYearly)}
+                        <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(index, 'period', val)} />
                       </p>
                     </div>
                   </div>
@@ -924,7 +995,7 @@ export function PricingSectionShared({
                       {features.map((feature, featureIndex) => (
                         <li key={`${featureIndex}-${feature}`} className="flex items-start">
                           <Check size={20} className="mr-3 mt-0.5 shrink-0" style={{ color: tokens.featureIcon }} />
-                          <span className="break-words leading-snug" style={{ color: tokens.featureText }}>{feature}</span>
+                          <EditableText active={visualEditActive} value={feature} onChange={(val) => handleFeatureUpdate(index, featureIndex, val)} />
                         </li>
                       ))}
                     </ul>
@@ -936,7 +1007,7 @@ export function PricingSectionShared({
                       href: actionHref,
                       className: 'block h-14 w-full rounded-full px-6 py-4 text-center text-base font-medium transition-all hover:shadow-md',
                       style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                      children: plan.buttonText.trim() || texts.defaultButtonText || 'Đăng ký ngay',
+                      children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || texts.defaultButtonText || 'Đăng ký ngay'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                     })}
                   </div>
                 </article>
@@ -987,11 +1058,15 @@ export function PricingSectionShared({
                   </div>
                 ) : null}
                 <h4 className="mt-1 break-words text-sm font-semibold" style={{ color: tokens.neutralText }}>
-                  {plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`}
+                  <EditableText active={visualEditActive} value={plan.name.trim() || `${texts.defaultPlanName || 'Gói'} ${index + 1}`} onChange={(val) => handleItemTextUpdate(index, 'name', val)} />
                 </h4>
                 <div className="my-2">
-                  <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>{formatPriceWithSuffix(getPlanPrice(plan, isYearly))}</span>
-                  <span className="block text-[10px]" style={{ color: tokens.periodText }}>{normalizePeriod(plan.period, isYearly)}</span>
+                  <span className="text-xl font-bold tabular-nums" style={{ color: tokens.priceText, ...PRICING_PRICE_SCALE }}>
+                    <EditableText active={visualEditActive} value={isYearly ? (plan.yearlyPrice ?? '') : plan.price} onChange={(val) => handleItemTextUpdate(index, isYearly ? 'yearlyPrice' : 'price', val)} />đ
+                  </span>
+                  <span className="block text-[10px]" style={{ color: tokens.periodText }}>
+                    <EditableText active={visualEditActive} value={plan.period || (isYearly ? '/năm' : '/tháng')} onChange={(val) => handleItemTextUpdate(index, 'period', val)} />
+                  </span>
                 </div>
                 <p className="mb-2 min-h-[2rem] text-[11px]" style={{ color: tokens.mutedText }}>
                   {renderPlanFeatures(plan.features).slice(0, 2).join(', ')}
@@ -1002,14 +1077,14 @@ export function PricingSectionShared({
                       href: actionHref,
                       className: 'mt-auto block w-full rounded py-1.5 text-center text-xs font-semibold transition-colors',
                       style: { backgroundColor: tokens.ctaSolidBg, color: tokens.ctaSolidText },
-                      children: plan.buttonText.trim() || 'Chọn',
+                      children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                     })
                   : wrapAction({
                       context,
                       href: actionHref,
                       className: 'mt-auto block w-full rounded border py-1.5 text-center text-xs font-semibold transition-colors',
                       style: { backgroundColor: tokens.ctaGhostBg, borderColor: tokens.ctaGhostBorder, color: tokens.ctaGhostText },
-                      children: plan.buttonText.trim() || 'Chọn',
+                      children: <EditableText active={visualEditActive} value={plan.buttonText.trim() || 'Chọn'} onChange={(val) => handleItemTextUpdate(index, 'buttonText', val)} />,
                     })}
               </article>
             );

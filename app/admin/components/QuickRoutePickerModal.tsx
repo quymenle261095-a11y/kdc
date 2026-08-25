@@ -3,12 +3,31 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/admin/components/ui';
+import { Button, Dialog, DialogContent, cn } from '@/app/admin/components/ui';
 import { InputWithClear } from '@/app/admin/home-components/stats/_components/InputWithClear';
-import { Loader2 } from 'lucide-react';
-import { buildCategoryPath } from '@/lib/ia/route-mode';
+import {
+  BookOpen,
+  ChevronRight,
+  FileArchive,
+  FolderOpen,
+  GraduationCap,
+  Home,
+  Loader2,
+  Package,
+  ShieldCheck,
+  Wrench,
+} from 'lucide-react';
+import {
+  buildCategoryPath,
+  buildDetailPath,
+  buildModuleListPath,
+  normalizeRouteMode,
+  type RoutableModuleKey,
+} from '@/lib/ia/route-mode';
 
-export type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục';
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type QuickRouteGroup = 'Trang cơ bản' | 'Module' | 'Danh mục' | 'Trang tin cậy';
 
 export type QuickRouteOption = {
   group: QuickRouteGroup;
@@ -17,188 +36,296 @@ export type QuickRouteOption = {
   url: string;
 };
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const CORE_ROUTE_OPTIONS: QuickRouteOption[] = [
   { label: 'Trang chủ', url: '/', source: 'Core', group: 'Trang cơ bản' },
   { label: 'Liên hệ', url: '/contact', source: 'Core', group: 'Trang cơ bản' },
 ];
 
 const MODULE_SITE_ROUTE_CATALOG: Record<string, { label: string; url: string }[]> = {
-  cart: [
-    { label: 'Giỏ hàng', url: '/cart' },
-  ],
-  customers: [
+  cart:        [{ label: 'Giỏ hàng', url: '/cart' }],
+  customers:   [
     { label: 'Đăng nhập', url: '/account/login' },
     { label: 'Đăng ký', url: '/account/register' },
     { label: 'Tài khoản', url: '/account/profile' },
     { label: 'Đơn hàng', url: '/account/orders' },
   ],
-  orders: [
+  orders:      [
     { label: 'Đơn hàng', url: '/account/orders' },
     { label: 'Checkout', url: '/checkout' },
   ],
-  promotions: [
-    { label: 'Khuyến mãi', url: '/promotions' },
-  ],
-  wishlist: [
-    { label: 'Wishlist', url: '/wishlist' },
-  ],
+  posts:       [{ label: 'Tất cả bài viết', url: buildModuleListPath('posts') }],
+  products:    [{ label: 'Tất cả sản phẩm', url: buildModuleListPath('products') }],
+  promotions:  [{ label: 'Khuyến mãi', url: '/promotions' }],
+  services:    [{ label: 'Tất cả dịch vụ', url: buildModuleListPath('services') }],
+  projects:    [{ label: 'Tất cả dự án', url: buildModuleListPath('projects') }],
+  courses:     [{ label: 'Tất cả khóa học', url: buildModuleListPath('courses') }],
+  resources:   [{ label: 'Tất cả tài nguyên', url: buildModuleListPath('resources') }],
+  wishlist:    [{ label: 'Wishlist', url: '/wishlist' }],
 };
+
+type PickerType = 'core' | 'module' | 'category' | 'trust' | 'detail';
+type DetailModule = 'posts' | 'products' | 'services' | 'projects' | 'courses' | 'resources';
+
+interface DetailModuleConfig {
+  key: DetailModule;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const DETAIL_MODULE_CONFIGS: DetailModuleConfig[] = [
+  { key: 'posts',     label: 'Bài viết',   description: 'Chọn 1 bài viết cụ thể',   icon: <BookOpen size={15} /> },
+  { key: 'products',  label: 'Sản phẩm',   description: 'Chọn 1 sản phẩm cụ thể',  icon: <Package size={15} /> },
+  { key: 'services',  label: 'Dịch vụ',    description: 'Chọn 1 dịch vụ cụ thể',   icon: <Wrench size={15} /> },
+  { key: 'projects',  label: 'Dự án',      description: 'Chọn 1 dự án cụ thể',     icon: <FolderOpen size={15} /> },
+  { key: 'courses',   label: 'Khóa học',   description: 'Chọn 1 khóa học cụ thể',  icon: <GraduationCap size={15} /> },
+  { key: 'resources', label: 'Tài nguyên', description: 'Chọn 1 tài nguyên cụ thể', icon: <FileArchive size={15} /> },
+];
+
+// ─── Group badge styles ───────────────────────────────────────────────────────
+
+const GROUP_BADGE: Record<QuickRouteGroup, string> = {
+  'Trang cơ bản': 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  'Module':        'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
+  'Danh mục':      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+  'Trang tin cậy': 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
+};
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 interface QuickRoutePickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Nhận QuickRouteOption gồm cả label + url */
   onSelect: (option: QuickRouteOption) => void;
   title?: string;
 }
 
-export function QuickRoutePickerModal({ open, onOpenChange, onSelect, title }: QuickRoutePickerModalProps) {
-  const [quickRouteSearch, setQuickRouteSearch] = useState('');
-  const [pickerStep, setPickerStep] = useState(1);
-  const [selectedType, setSelectedType] = useState<'core' | 'module' | 'category' | 'detail' | null>(null);
-  const [selectedModule, setSelectedModule] = useState<'posts' | 'products' | 'services' | null>(null);
+// ─── Component ───────────────────────────────────────────────────────────────
 
-  const productCategories = useQuery(api.productCategories.listActive);
-  const serviceCategories = useQuery(api.serviceCategories.listActive, { limit: 100 });
-  const postCategories = useQuery(api.postCategories.listActive, { limit: 100 });
-  const enabledModules = useQuery(api.admin.modules.listEnabledModules);
+export function QuickRoutePickerModal({
+  open,
+  onOpenChange,
+  onSelect,
+  title = 'Chọn link',
+}: QuickRoutePickerModalProps) {
+  const [search, setSearch] = useState('');
+  const [step, setStep]   = useState<1 | 2 | 3>(1);
+  const [selectedType,   setSelectedType]   = useState<PickerType | null>(null);
+  const [selectedModule, setSelectedModule] = useState<DetailModule | null>(null);
 
-  const detailPosts = useQuery(
-    api.menus.listPostsForPicker,
-    selectedModule === 'posts' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailProducts = useQuery(
-    api.menus.listProductsForPicker,
-    selectedModule === 'products' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
-  );
-  const detailServices = useQuery(
-    api.menus.listServicesForPicker,
-    selectedModule === 'services' && pickerStep === 3
-      ? { search: quickRouteSearch, limit: 20 }
-      : 'skip'
+  // ── Data queries ────────────────────────────────────────────────────────────
+  const enabledModules     = useQuery(api.admin.modules.listEnabledModules);
+  const productCategories  = useQuery(api.productCategories.listActive);
+  const postCategories     = useQuery(api.postCategories.listActive,    { limit: 100 });
+  const serviceCategories  = useQuery(api.serviceCategories.listActive, { limit: 100 });
+  const projectCategories  = useQuery(api.projectCategories.listActive, { limit: 100 });
+  const courseCategories   = useQuery(api.courseCategories.listActive,  { limit: 100 });
+  const resourceCategories = useQuery(api.resourceCategories.listActive,{ limit: 100 });
+  const trustPageRoutes    = useQuery(api.menus.listTrustPageRoutesForPicker, {});
+  const routeModeSetting   = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
+  const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
+
+  // ── Detail item queries (lazy) ───────────────────────────────────────────────
+  const detailPosts      = useQuery(api.menus.listPostsForPicker,
+    selectedModule === 'posts'     && step === 3 ? { search, limit: 20 } : 'skip');
+  const detailProducts   = useQuery(api.menus.listProductsForPicker,
+    selectedModule === 'products'  && step === 3 ? { search, limit: 20 } : 'skip');
+  const detailServices   = useQuery(api.menus.listServicesForPicker,
+    selectedModule === 'services'  && step === 3 ? { search, limit: 20 } : 'skip');
+  const detailProjects   = useQuery(api.menus.listProjectsForPicker,
+    selectedModule === 'projects'  && step === 3 ? { search, limit: 20 } : 'skip');
+  const detailCourses    = useQuery(api.menus.listCoursesForPicker,
+    selectedModule === 'courses'   && step === 3 ? { search, limit: 20 } : 'skip');
+  const detailResources  = useQuery(api.menus.listResourcesForPicker,
+    selectedModule === 'resources' && step === 3 ? { search, limit: 20 } : 'skip');
+
+  // ── Build route options ─────────────────────────────────────────────────────
+  const enabledKeys = useMemo(
+    () => new Set((enabledModules ?? []).map((m: { key: string }) => m.key)),
+    [enabledModules],
   );
 
-  const quickRouteOptions = useMemo(() => {
-    const enabledKeys = new Set((enabledModules ?? []).map((m: any) => m.key));
+  const quickRouteOptions = useMemo<QuickRouteOption[]>(() => {
     const options: QuickRouteOption[] = [...CORE_ROUTE_OPTIONS];
 
+    // Module list routes
     Object.entries(MODULE_SITE_ROUTE_CATALOG).forEach(([moduleKey, routes]) => {
       if (!enabledKeys.has(moduleKey)) return;
-      routes.forEach((route) => {
+      routes.forEach(route => {
         options.push({ ...route, source: moduleKey, group: 'Module' });
       });
     });
 
-    if (enabledKeys.has('products')) {
-      (productCategories ?? []).forEach((category: any) => {
+    // Category routes — all routable modules
+    const catModules: Array<{ key: RoutableModuleKey; categories: Array<{ name: string; slug: string }> | undefined }> = [
+      { key: 'products',  categories: productCategories  as any },
+      { key: 'posts',     categories: postCategories     as any },
+      { key: 'services',  categories: serviceCategories  as any },
+      { key: 'projects',  categories: projectCategories  as any },
+      { key: 'courses',   categories: courseCategories   as any },
+      { key: 'resources', categories: resourceCategories as any },
+    ];
+    catModules.forEach(({ key, categories }) => {
+      if (!enabledKeys.has(key)) return;
+      (categories ?? []).forEach(cat => {
         options.push({
           group: 'Danh mục',
-          label: category.name,
-          source: 'products',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: 'unified', moduleKey: 'products' }),
+          label: cat.name,
+          source: key,
+          url: buildCategoryPath({ categorySlug: cat.slug, mode: routeMode, moduleKey: key }),
         });
       });
-    }
-
-    if (enabledKeys.has('posts')) {
-      (postCategories ?? []).forEach((category: any) => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'posts',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: 'unified', moduleKey: 'posts' }),
-        });
-      });
-    }
-
-    if (enabledKeys.has('services')) {
-      (serviceCategories ?? []).forEach((category: any) => {
-        options.push({
-          group: 'Danh mục',
-          label: category.name,
-          source: 'services',
-          url: buildCategoryPath({ categorySlug: category.slug, mode: 'unified', moduleKey: 'services' }),
-        });
-      });
-    }
-
-    const deduped = new Map<string, QuickRouteOption>();
-    options.forEach((option) => {
-      if (!deduped.has(option.url)) {
-        deduped.set(option.url, option);
-      }
     });
 
-    return Array.from(deduped.values());
-  }, [enabledModules, postCategories, productCategories, serviceCategories]);
+    // Trust pages
+    (trustPageRoutes ?? []).forEach(route => {
+      options.push({ group: 'Trang tin cậy', label: route.label, source: 'trust-pages', url: route.url });
+    });
 
-  const quickRouteKeyword = quickRouteSearch.trim().toLowerCase();
+    // Dedup by URL
+    const seen = new Map<string, QuickRouteOption>();
+    options.forEach(o => { if (!seen.has(o.url)) seen.set(o.url, o); });
+    return Array.from(seen.values());
+  }, [enabledKeys, postCategories, productCategories, serviceCategories, projectCategories, courseCategories, resourceCategories, trustPageRoutes, routeMode]);
 
-  const filteredQuickRoutes = useMemo(() => {
-    if (!quickRouteKeyword) return quickRouteOptions;
-    return quickRouteOptions.filter((option) =>
-      option.label.toLowerCase().includes(quickRouteKeyword) ||
-      option.url.toLowerCase().includes(quickRouteKeyword) ||
-      option.source.toLowerCase().includes(quickRouteKeyword)
+  // ── Filtered routes ─────────────────────────────────────────────────────────
+  const keyword = search.trim().toLowerCase();
+  const filteredRoutes = useMemo<QuickRouteOption[]>(() => {
+    if (!keyword) return quickRouteOptions;
+    return quickRouteOptions.filter(o =>
+      o.label.toLowerCase().includes(keyword) ||
+      o.url.toLowerCase().includes(keyword) ||
+      o.source.toLowerCase().includes(keyword),
     );
-  }, [quickRouteOptions, quickRouteKeyword]);
+  }, [quickRouteOptions, keyword]);
 
-  const pickerTypeOptions = [
-    { type: 'core' as const, label: 'Trang cơ bản', description: 'Trang chủ, liên hệ...' },
-    { type: 'module' as const, label: 'Module', description: 'Posts, Products, Services...' },
-    { type: 'category' as const, label: 'Danh mục', description: 'Danh mục thật từ dữ liệu' },
-    { type: 'detail' as const, label: 'Chi tiết', description: 'Bài viết, sản phẩm, dịch vụ cụ thể' },
-  ];
+  // ── Group counts for Step-1 cards ───────────────────────────────────────────
+  const groupCounts = useMemo(() => {
+    const counts: Partial<Record<QuickRouteGroup, number>> = {};
+    quickRouteOptions.forEach(o => { counts[o.group] = (counts[o.group] ?? 0) + 1; });
+    return counts;
+  }, [quickRouteOptions]);
 
-  const detailModuleOptions = [
+  // ── Step-1 category cards ────────────────────────────────────────────────────
+  type CardDef = {
+    type: PickerType;
+    label: string;
+    desc: string;
+    count: number | null;
+    icon: React.ReactNode;
+  };
+
+  const pickerCards: CardDef[] = ([
     {
-      key: 'posts' as const,
-      label: 'Bài viết chi tiết',
-      description: 'Chọn 1 bài viết cụ thể',
-      enabled: enabledModules?.some((m: any) => m.key === 'posts'),
+      type: 'core',
+      label: 'Trang cơ bản',
+      desc: 'Trang chủ, liên hệ',
+      count: groupCounts['Trang cơ bản'] ?? 0,
+      icon: <Home size={16} />,
     },
     {
-      key: 'products' as const,
-      label: 'Sản phẩm chi tiết',
-      description: 'Chọn 1 sản phẩm cụ thể',
-      enabled: enabledModules?.some((m: any) => m.key === 'products'),
+      type: 'module',
+      label: 'Module',
+      desc: 'Bài viết, sản phẩm, dịch vụ…',
+      count: groupCounts['Module'] ?? 0,
+      icon: <Package size={16} />,
     },
     {
-      key: 'services' as const,
-      label: 'Dịch vụ chi tiết',
-      description: 'Chọn 1 dịch vụ cụ thể',
-      enabled: enabledModules?.some((m: any) => m.key === 'services'),
+      type: 'category',
+      label: 'Danh mục',
+      desc: 'Danh mục thực từ dữ liệu',
+      count: groupCounts['Danh mục'] ?? 0,
+      icon: <FolderOpen size={16} />,
     },
-  ];
-
-  const availableDetailModules = detailModuleOptions.filter((option) => option.enabled);
-  const filteredDetailModules = quickRouteKeyword
-    ? availableDetailModules.filter((option) =>
-        option.label.toLowerCase().includes(quickRouteKeyword) ||
-        option.description.toLowerCase().includes(quickRouteKeyword)
-      )
-    : availableDetailModules;
-  const resolvedDetailModules = filteredDetailModules.length > 0 ? filteredDetailModules : availableDetailModules;
-
-  const filteredPickerRoutes = filteredQuickRoutes.filter((option) => {
-    if (selectedType === 'core') return option.group === 'Trang cơ bản';
-    if (selectedType === 'module') return option.group === 'Module';
-    if (selectedType === 'category') return option.group === 'Danh mục';
-    return false;
+    {
+      type: 'trust',
+      label: 'Chính sách',
+      desc: 'Trang tin cậy đã xuất bản',
+      count: groupCounts['Trang tin cậy'] ?? 0,
+      icon: <ShieldCheck size={16} />,
+    },
+    {
+      type: 'detail',
+      label: 'Nội dung cụ thể',
+      desc: 'Chọn bài, sản phẩm, dịch vụ…',
+      count: null,
+      icon: <FileArchive size={16} />,
+    },
+  ] as CardDef[]).filter(c => {
+    // Ẩn trust nếu không có
+    if (c.type === 'trust') return (groupCounts['Trang tin cậy'] ?? 0) > 0;
+    return true;
   });
 
-  const isDetailLoading =
-    pickerStep === 3 &&
-    ((selectedModule === 'posts' && detailPosts === undefined) ||
-      (selectedModule === 'products' && detailProducts === undefined) ||
-      (selectedModule === 'services' && detailServices === undefined));
+  // ── Detail module options (chỉ module enabled) ───────────────────────────────
+  const availableDetailModules = DETAIL_MODULE_CONFIGS.filter(m => enabledKeys.has(m.key));
+  const filteredDetailModules  = keyword
+    ? availableDetailModules.filter(m =>
+        m.label.toLowerCase().includes(keyword) ||
+        m.description.toLowerCase().includes(keyword),
+      )
+    : availableDetailModules;
 
+  // ── Route list (step 2 non-detail) ──────────────────────────────────────────
+  const filteredPickerRoutes = useMemo(() => {
+    const groupMap: Partial<Record<PickerType, QuickRouteGroup>> = {
+      core:     'Trang cơ bản',
+      module:   'Module',
+      category: 'Danh mục',
+      trust:    'Trang tin cậy',
+    };
+    const targetGroup = selectedType ? groupMap[selectedType] : undefined;
+    if (!targetGroup) return [];
+    return filteredRoutes.filter(o => o.group === targetGroup);
+  }, [filteredRoutes, selectedType]);
+
+  // ── Detail items (step 3) ────────────────────────────────────────────────────
+  type RawDetailItem = { _id: string; slug: string; categorySlug: string };
+  type LabeledDetail = RawDetailItem & { displayTitle: string };
+
+  const isDetailLoading =
+    step === 3 && (
+      (selectedModule === 'posts'     && detailPosts     === undefined) ||
+      (selectedModule === 'products'  && detailProducts  === undefined) ||
+      (selectedModule === 'services'  && detailServices  === undefined) ||
+      (selectedModule === 'projects'  && detailProjects  === undefined) ||
+      (selectedModule === 'courses'   && detailCourses   === undefined) ||
+      (selectedModule === 'resources' && detailResources === undefined)
+    );
+
+  const detailItems: LabeledDetail[] = useMemo(() => {
+    if (!selectedModule) return [];
+    if (selectedModule === 'posts')     return (detailPosts     ?? []).map(p => ({ _id: p._id, displayTitle: p.title,   slug: p.slug, categorySlug: p.categorySlug }));
+    if (selectedModule === 'products')  return (detailProducts  ?? []).map(p => ({ _id: p._id, displayTitle: p.name,    slug: p.slug, categorySlug: p.categorySlug }));
+    if (selectedModule === 'services')  return (detailServices  ?? []).map(p => ({ _id: p._id, displayTitle: p.title,   slug: p.slug, categorySlug: p.categorySlug }));
+    if (selectedModule === 'projects')  return (detailProjects  ?? []).map(p => ({ _id: p._id, displayTitle: p.title,   slug: p.slug, categorySlug: p.categorySlug }));
+    if (selectedModule === 'courses')   return (detailCourses   ?? []).map(p => ({ _id: p._id, displayTitle: p.title,   slug: p.slug, categorySlug: p.categorySlug }));
+    if (selectedModule === 'resources') return (detailResources ?? []).map(p => ({ _id: p._id, displayTitle: p.title,   slug: p.slug, categorySlug: p.categorySlug }));
+    return [];
+  }, [selectedModule, detailPosts, detailProducts, detailServices, detailProjects, detailCourses, detailResources]);
+
+  // ── Breadcrumb ───────────────────────────────────────────────────────────────
+  const breadcrumbParts = useMemo(() => {
+    const parts: string[] = [title];
+    if (step >= 2 && selectedType) {
+      const card = pickerCards.find(c => c.type === selectedType);
+      if (card) parts.push(card.label);
+    }
+    if (step === 3 && selectedModule) {
+      const mod = DETAIL_MODULE_CONFIGS.find(m => m.key === selectedModule);
+      if (mod) parts.push(mod.label);
+    }
+    return parts;
+
+  }, [step, selectedType, selectedModule, title]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleClose = () => {
-    setQuickRouteSearch('');
-    setPickerStep(1);
+    setSearch('');
+    setStep(1);
     setSelectedType(null);
     setSelectedModule(null);
     onOpenChange(false);
@@ -209,256 +336,218 @@ export function QuickRoutePickerModal({ open, onOpenChange, onSelect, title }: Q
     handleClose();
   };
 
+  const handleBack = () => {
+    setSearch('');
+    if (step === 3) { setStep(2); setSelectedModule(null); }
+    else            { setStep(1); setSelectedType(null); }
+  };
+
+  // ── Search placeholder ───────────────────────────────────────────────────────
+  const searchPlaceholder =
+    step === 1 ? 'Tìm loại trang...' :
+    step === 2 && selectedType === 'detail' ? 'Lọc module...' :
+    'Tìm tên hoặc URL...';
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
-    <Dialog open={open} onOpenChange={(val) => { if (!val) handleClose(); else onOpenChange(true); }}>
-      <DialogContent className="w-[90vw] max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {title || 'Chọn link gợi ý'} - Bước {pickerStep}/3
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <InputWithClear
-            value={quickRouteSearch}
-            onChange={(v) => setQuickRouteSearch(v)}
-            placeholder={
-              pickerStep === 1
-                ? 'Tìm theo loại...'
-                : pickerStep === 2
-                ? selectedType === 'detail'
-                  ? 'Tìm module...'
-                  : 'Tìm theo tên hoặc URL...'
-                : 'Tìm theo tên...'
-            }
-            className="h-9 text-sm"
-          />
+    <Dialog open={open} onOpenChange={val => { if (!val) handleClose(); else onOpenChange(true); }}>
+      <DialogContent className="w-[92vw] max-w-xl p-0 gap-0 overflow-hidden rounded-xl shadow-2xl">
 
-          <div className="space-y-3">
-            {pickerStep === 1 && (
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {pickerTypeOptions.map((option) => (
-                  <Button
-                    key={option.type}
-                    type="button"
-                    variant="outline"
-                    className="h-20 flex-col items-start gap-1.5 text-left"
-                    onClick={() => {
-                      setSelectedType(option.type);
-                      setPickerStep(2);
-                    }}
-                  >
-                    <span className="font-semibold">{option.label}</span>
-                    <span className="text-xs text-slate-500">{option.description}</span>
-                  </Button>
-                ))}
-              </div>
-            )}
-
-            {pickerStep === 2 && selectedType === 'detail' && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setPickerStep(1);
-                    setSelectedType(null);
-                  }}
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-slate-800/80 space-y-2.5">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1 min-w-0">
+            {breadcrumbParts.map((part, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <ChevronRight size={11} className="shrink-0 text-slate-300 dark:text-slate-600" />}
+                <span
+                  className={cn(
+                    'text-xs truncate',
+                    i === breadcrumbParts.length - 1
+                      ? 'font-semibold text-slate-700 dark:text-slate-200'
+                      : 'text-slate-400 dark:text-slate-500',
+                  )}
                 >
-                  ← Quay lại
-                </Button>
-
-                {resolvedDetailModules.length === 0 ? (
-                  <div className="rounded-md border border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-800">
-                    Không có module phù hợp.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2">
-                    {resolvedDetailModules.map((option) => (
-                      <Button
-                        key={option.key}
-                        type="button"
-                        variant="outline"
-                        className="h-16 justify-start"
-                        onClick={() => {
-                          setSelectedModule(option.key);
-                          setPickerStep(3);
-                        }}
-                      >
-                        <div className="text-left">
-                          <div className="font-semibold">{option.label}</div>
-                          <div className="text-xs text-slate-500">{option.description}</div>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {pickerStep === 2 && selectedType && selectedType !== 'detail' && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setPickerStep(1);
-                    setSelectedType(null);
-                  }}
-                >
-                  ← Quay lại
-                </Button>
-
-                <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                  {filteredPickerRoutes.length === 0 ? (
-                    <div className="px-4 py-6 text-sm text-slate-500">Không có gợi ý phù hợp.</div>
-                  ) : (
-                    <div className="space-y-1 p-2">
-                      {filteredPickerRoutes.map((option) => (
-                        <button
-                          key={`${option.url}-${option.source}`}
-                          type="button"
-                          onClick={() => handleSelect(option)}
-                          className="flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <div className="min-w-0">
-                            <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
-                              {option.label}
-                            </div>
-                            <div className="break-all font-mono text-xs text-slate-500">{option.url}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {pickerStep === 3 && selectedModule && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setPickerStep(2);
-                    setSelectedModule(null);
-                  }}
-                >
-                  ← Quay lại
-                </Button>
-
-                <div className="max-h-[50vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-                  {isDetailLoading && (
-                    <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-500">
-                      <Loader2 size={14} className="animate-spin" /> Đang tải dữ liệu...
-                    </div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) === 0 && (
-                    <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy bài viết.</div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) === 0 && (
-                    <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy sản phẩm.</div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) === 0 && (
-                    <div className="px-4 py-6 text-sm text-slate-500">Không tìm thấy dịch vụ.</div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'posts' && (detailPosts?.length ?? 0) > 0 && (
-                    <div className="space-y-1 p-2">
-                      {detailPosts?.map((post) => (
-                        <button
-                          key={post._id}
-                          type="button"
-                          onClick={() =>
-                            handleSelect({
-                              label: post.title,
-                              url: `/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`,
-                              source: 'posts',
-                              group: 'Module',
-                            })
-                          }
-                          className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
-                              {post.title}
-                            </div>
-                            <div className="break-all font-mono text-xs text-slate-500">
-                              {`/${post.categorySlug || 'chua-phan-loai'}/${post.slug}`}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'products' && (detailProducts?.length ?? 0) > 0 && (
-                    <div className="space-y-1 p-2">
-                      {detailProducts?.map((product) => (
-                        <button
-                          key={product._id}
-                          type="button"
-                          onClick={() =>
-                            handleSelect({
-                              label: product.name,
-                              url: `/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`,
-                              source: 'products',
-                              group: 'Module',
-                            })
-                          }
-                          className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
-                              {product.name}
-                            </div>
-                            <div className="break-all font-mono text-xs text-slate-500">
-                              {`/${product.categorySlug || 'chua-phan-loai'}/${product.slug}`}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {!isDetailLoading && selectedModule === 'services' && (detailServices?.length ?? 0) > 0 && (
-                    <div className="space-y-1 p-2">
-                      {detailServices?.map((service) => (
-                        <button
-                          key={service._id}
-                          type="button"
-                          onClick={() =>
-                            handleSelect({
-                              label: service.title,
-                              url: `/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`,
-                              source: 'services',
-                              group: 'Module',
-                            })
-                          }
-                          className="flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="break-words font-semibold text-slate-700 dark:text-slate-200">
-                              {service.title}
-                            </div>
-                            <div className="break-all font-mono text-xs text-slate-500">
-                              {`/${service.categorySlug || 'chua-phan-loai'}/${service.slug}`}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+                  {part}
+                </span>
+              </React.Fragment>
+            ))}
           </div>
+
+          {/* Search */}
+          <InputWithClear
+            value={search}
+            onChange={setSearch}
+            placeholder={searchPlaceholder}
+            className="h-9 text-sm"
+
+            autoFocus
+          />
+        </div>
+
+        {/* ── Body ───────────────────────────────────────────────────── */}
+        <div className="p-3 space-y-2 overflow-y-auto max-h-[70vh]">
+
+          {/* Back link */}
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors mb-0.5"
+            >
+              <ChevronRight size={11} className="rotate-180" />
+              Quay lại
+            </button>
+          )}
+
+          {/* ── STEP 1: Category cards ──────────────────────────────── */}
+          {step === 1 && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {pickerCards.map(card => (
+                <button
+                  key={card.type}
+                  type="button"
+                  onClick={() => { setSelectedType(card.type); setStep(2); setSearch(''); }}
+                  className={cn(
+                    'group flex flex-col items-start gap-2.5 rounded-lg border p-3 text-left',
+                    'border-slate-200 dark:border-slate-700/60',
+                    'hover:border-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-950/20 dark:hover:border-blue-600',
+                    'transition-all duration-150',
+                  )}
+                >
+                  {/* Icon row */}
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-slate-400 dark:text-slate-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+                      {card.icon}
+                    </span>
+                    {card.count !== null && card.count > 0 && (
+                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 py-px text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                        {card.count}
+                      </span>
+                    )}
+                  </div>
+                  {/* Label + desc */}
+                  <div className="min-w-0 w-full">
+                    <p className="text-[13px] font-semibold leading-tight text-slate-700 dark:text-slate-200 group-hover:text-blue-700 dark:group-hover:text-blue-300">
+                      {card.label}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-400 dark:text-slate-500 line-clamp-2">
+                      {card.desc}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── STEP 2a: Detail module selector ─────────────────────── */}
+          {step === 2 && selectedType === 'detail' && (
+            <div className="space-y-1">
+              {(filteredDetailModules.length === 0 ? availableDetailModules : filteredDetailModules).length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">Không có module nào được bật.</p>
+              ) : (
+                (filteredDetailModules.length === 0 ? availableDetailModules : filteredDetailModules).map(mod => (
+                  <button
+                    key={mod.key}
+                    type="button"
+                    onClick={() => { setSelectedModule(mod.key); setStep(3); setSearch(''); }}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left',
+                      'border-slate-200 dark:border-slate-700/60',
+                      'hover:border-blue-400 hover:bg-blue-50/60 dark:hover:bg-blue-950/20 dark:hover:border-blue-600',
+                      'transition-all duration-150',
+                    )}
+                  >
+                    <span className="shrink-0 text-slate-400 dark:text-slate-500">{mod.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{mod.label}</p>
+                      <p className="text-xs text-slate-400">{mod.description}</p>
+                    </div>
+                    <ChevronRight size={13} className="shrink-0 text-slate-300 dark:text-slate-600" />
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 2b: Route list ─────────────────────────────────── */}
+          {step === 2 && selectedType && selectedType !== 'detail' && (
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700/60 overflow-hidden">
+              {filteredPickerRoutes.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">Không có gợi ý phù hợp.</p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {filteredPickerRoutes.map(option => (
+                    <button
+                      key={`${option.url}-${option.source}`}
+                      type="button"
+                      onClick={() => handleSelect(option)}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{option.label}</p>
+                        <p className="truncate font-mono text-[11px] text-slate-400">{option.url}</p>
+                      </div>
+                      <span className={cn(
+                        'shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium',
+                        GROUP_BADGE[option.group],
+                      )}>
+                        {option.source}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 3: Detail items ─────────────────────────────────── */}
+          {step === 3 && selectedModule && (
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700/60 overflow-hidden">
+              {isDetailLoading && (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+                  <Loader2 size={15} className="animate-spin" />
+                  Đang tải...
+                </div>
+              )}
+              {!isDetailLoading && detailItems.length === 0 && (
+                <p className="py-8 text-center text-sm text-slate-400">Không tìm thấy nội dung.</p>
+              )}
+              {!isDetailLoading && detailItems.length > 0 && (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {detailItems.map(item => {
+                    const url = buildDetailPath({
+                      categorySlug: item.categorySlug,
+                      mode: routeMode,
+                      moduleKey: selectedModule as RoutableModuleKey,
+                      recordSlug: item.slug,
+                    });
+                    return (
+                      <button
+                        key={item._id}
+                        type="button"
+                        onClick={() => handleSelect({ label: item.displayTitle, url, source: selectedModule, group: 'Module' })}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{item.displayTitle}</p>
+                          <p className="truncate font-mono text-[11px] text-slate-400">{url}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer (cancel) ─────────────────────────────────────────── */}
+        <div className="border-t border-slate-100 dark:border-slate-800/80 px-4 py-2.5 flex justify-end">
+          <Button type="button" variant="ghost" size="sm" onClick={handleClose} className="text-xs h-7">
+            Đóng
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -2,12 +2,12 @@
 
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ChevronDown, ChevronRight, Eye, Heart, LogOut, Mail, Package, Phone, Search, ShoppingCart, User } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Heart, LogOut, Mail, Package, Phone, Search, ShoppingCart, User, Moon } from 'lucide-react';
 import { Card, CardContent, cn } from '@/app/admin/components/ui';
 import { getMenuColors, resolveMenuLayerColors, type MenuColorMode, type MenuColors, type MenuLayerColorConfig } from '@/components/site/header/colors';
 import { buildMenuTree, type MenuTreeNode } from '@/lib/utils/menu-tree';
 
-export type HeaderLayoutStyle = 'classic' | 'topbar' | 'allbirds';
+export type HeaderLayoutStyle = 'classic' | 'topbar' | 'allbirds' | 'darkglass';
 export type LogoBackgroundStyle = 'none' | 'border' | 'shadow' | 'soft' | 'solid' | 'outline' | 'hairline' | 'inset' | 'pill';
 
 export type HeaderMenuConfig = {
@@ -28,7 +28,7 @@ export type HeaderMenuConfig = {
   cart: { show: boolean };
   cta: { show: boolean; text: string; url?: string };
   login: { show: boolean; text: string };
-  search: { show: boolean; placeholder: string; searchProducts: boolean; searchPosts: boolean; searchServices: boolean };
+  search: { show: boolean; placeholder: string; searchProducts: boolean; searchPosts: boolean; searchServices: boolean; searchCourses?: boolean };
   topbar: {
     email: string;
     hotline: string;
@@ -41,6 +41,8 @@ export type HeaderMenuConfig = {
   };
   wishlist: { show: boolean };
   megaLevel1Color?: 'default' | 'primary' | 'secondary';
+  showDarkModeToggle?: boolean;
+  enableGlassmorphism?: boolean;
 };
 
 type MenuItem = {
@@ -88,6 +90,7 @@ export type HeaderMenuPreviewProps = {
   productsEnabled: boolean;
   postsEnabled: boolean;
   servicesEnabled: boolean;
+  coursesEnabled?: boolean;
 };
 
 export function HeaderMenuPreview({
@@ -107,10 +110,33 @@ export function HeaderMenuPreview({
   productsEnabled,
   postsEnabled,
   servicesEnabled,
+  coursesEnabled = false,
 }: HeaderMenuPreviewProps) {
+  const [isDark, setIsDark] = useState(false);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setIsDark(document.documentElement.classList.contains('dark'));
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const tokens = useMemo<MenuColors>(
-    () => getMenuColors(brandColor, secondaryColor, colorMode),
-    [brandColor, secondaryColor, colorMode]
+    () => {
+      const baseTokens = getMenuColors(brandColor, secondaryColor, colorMode, isDark);
+      if (config.enableGlassmorphism) {
+        return {
+          ...baseTokens,
+          dropdownBg: isDark ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.75)',
+          dropdownBorder: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+        };
+      }
+      return baseTokens;
+    },
+    [brandColor, secondaryColor, colorMode, isDark, config.enableGlassmorphism]
   );
   const layerColors = useMemo(
     () => resolveMenuLayerColors(config.layerColors, tokens, colorMode),
@@ -145,18 +171,25 @@ export function HeaderMenuPreview({
     : level1ColorMode === 'secondary' ? tokens.secondary
     : tokens.textPrimary;
 
+  const resolvedStyle: HeaderLayoutStyle = 
+    (layoutStyle as string) === 'transparent' || (layoutStyle as string) === 'centered'
+      ? 'allbirds'
+      : (layoutStyle || 'classic') as HeaderLayoutStyle;
+
   const logoSizeMap: Record<HeaderLayoutStyle, number[]> = {
     classic: buildLinearSteps(24, 160),
     topbar: buildLinearSteps(28, 180),
     allbirds: buildLinearSteps(16, 140),
+    darkglass: buildLinearSteps(24, 128),
   };
   const headerSpacingMap: Record<HeaderLayoutStyle, number[]> = {
     classic: [6, 8, 10, 12, 14, 16, 18],
     topbar: [4, 6, 8, 10, 12, 14, 16],
     allbirds: [6, 8, 10, 12, 14, 16, 18],
+    darkglass: [6, 8, 10, 12, 14, 16, 18],
   };
-  const logoSize = logoSizeMap[layoutStyle][logoSizeLevel - 1] ?? logoSizeMap[layoutStyle][0];
-  const headerSpacingY = headerSpacingMap[layoutStyle][headerSpacingLevel - 1] ?? headerSpacingMap[layoutStyle][3];
+  const logoSize = logoSizeMap[resolvedStyle][logoSizeLevel - 1] ?? logoSizeMap[resolvedStyle][0];
+  const headerSpacingY = headerSpacingMap[resolvedStyle][headerSpacingLevel - 1] ?? headerSpacingMap[resolvedStyle][3];
   const logoDotSize = Math.max(2, Math.round(logoSize / 4));
   const logoBackgroundStyle: LogoBackgroundStyle =
     config.logoBackgroundStyle === 'border'
@@ -173,12 +206,12 @@ export function HeaderMenuPreview({
   const logoBackgroundStyles: Record<LogoBackgroundStyle, React.CSSProperties> = {
     none: {},
     border: {
-      backgroundColor: 'rgba(255, 255, 255, 0.6)',
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)',
       border: `1px solid ${tokens.borderStrong}`,
-      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+      boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(15, 23, 42, 0.08)',
     },
     outline: {
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.2)',
       border: `1px solid ${tokens.borderStrong}`,
     },
     hairline: {
@@ -188,27 +221,27 @@ export function HeaderMenuPreview({
     inset: {
       backgroundColor: tokens.surfaceAlt,
       border: `1px solid ${tokens.border}`,
-      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+      boxShadow: isDark ? 'inset 0 1px 0 rgba(255, 255, 255, 0.05)' : 'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
     },
     pill: {
-      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.12)',
       border: `1px solid ${tokens.border}`,
     },
     shadow: {
-      backgroundColor: 'rgba(255, 255, 255, 0.88)',
-      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.16)',
-      border: '1px solid rgba(148, 163, 184, 0.2)',
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.88)',
+      boxShadow: isDark ? '0 10px 30px rgba(0, 0, 0, 0.4)' : '0 10px 30px rgba(15, 23, 42, 0.16)',
+      border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(148, 163, 184, 0.2)',
       backdropFilter: 'blur(10px)',
     },
     soft: {
       backgroundColor: tokens.surfaceAlt,
       border: `1px solid ${tokens.border}`,
-      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+      boxShadow: isDark ? 'inset 0 1px 0 rgba(255, 255, 255, 0.05)' : 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
     },
     solid: {
       backgroundColor: tokens.textPrimary,
       border: `1px solid ${tokens.textPrimary}`,
-      boxShadow: '0 12px 28px rgba(15, 23, 42, 0.18)',
+      boxShadow: isDark ? '0 12px 28px rgba(0, 0, 0, 0.4)' : '0 12px 28px rgba(15, 23, 42, 0.18)',
     },
   };
   const hasBackgroundFrame = logoBackgroundStyle !== 'none';
@@ -218,7 +251,7 @@ export function HeaderMenuPreview({
     ...(logo && hasBackgroundFrame ? { padding: Math.max(4, Math.round(logoSize * 0.1)) } : {}),
     borderRadius: logoBackgroundStyle === 'pill'
       ? logoContainerSize
-      : layoutStyle === 'allbirds'
+      : resolvedStyle === 'allbirds'
         ? logoContainerSize
         : Math.max(16, Math.round(logoContainerSize * 0.24)),
     display: 'flex',
@@ -230,7 +263,7 @@ export function HeaderMenuPreview({
   const logoInnerBaseStyle: React.CSSProperties = {
     width: logoSize,
     height: logo ? 'auto' : logoSize,
-    borderRadius: layoutStyle === 'allbirds' ? logoSize : Math.max(8, Math.round(logoSize * 0.24)),
+    borderRadius: resolvedStyle === 'allbirds' ? logoSize : Math.max(8, Math.round(logoSize * 0.24)),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -285,7 +318,7 @@ export function HeaderMenuPreview({
     };
     return new Map<Id<'menuItems'>, number>(rootItems.map((root) => [root._id, getNodeMaxLevel(root, 1)]));
   }, [rootItems]);
-  const isDeepMenuForItem = (itemId: Id<'menuItems'>) => (maxLevelByRootId.get(itemId) ?? 1) >= 4;
+  const isDeepMenuForItem = (itemId: Id<'menuItems'>) => (maxLevelByRootId.get(itemId) ?? 1) >= 3;
 
   useLayoutEffect(() => {
     if (measureItemRefs.current.length !== rootItems.length) {
@@ -359,7 +392,7 @@ export function HeaderMenuPreview({
     calculate();
 
     return () => resizeObserver.disconnect();
-  }, [rootItems.length, logoSizeLevel, showBrandName, layoutStyle, config.cta.show, config.cart.show, config.wishlist.show]);
+  }, [rootItems.length, logoSizeLevel, showBrandName, resolvedStyle, config.cta.show, config.cart.show, config.wishlist.show]);
 
   const displayTopbar = useMemo(() => ({
     ...config.topbar,
@@ -376,7 +409,8 @@ export function HeaderMenuPreview({
   const canSearchProducts = config.search.searchProducts && productsEnabled;
   const canSearchPosts = config.search.searchPosts && postsEnabled;
   const canSearchServices = config.search.searchServices && servicesEnabled;
-  const showSearch = config.search.show && (canSearchProducts || canSearchPosts || canSearchServices);
+  const canSearchCourses = Boolean(config.search.searchCourses && coursesEnabled);
+  const showSearch = config.search.show && (canSearchProducts || canSearchPosts || canSearchServices || canSearchCourses);
   const isDesktop = device === 'desktop';
 
   const renderUserMenu = (variant: 'text' | 'icon') => (
@@ -621,10 +655,10 @@ export function HeaderMenuPreview({
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
-                <span className="flex items-center gap-1"><Phone size={12} /><span>{displayTopbar.hotline}</span></span>
+                <a href={`tel:${displayTopbar.hotline}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Phone size={12} /><span>{displayTopbar.hotline}</span></a>
               )}
               {device !== 'mobile' && showTopbarEmail && (
-                <span className="flex items-center gap-1"><Mail size={12} /><span>{displayTopbar.email}</span></span>
+                <a href={`mailto:${displayTopbar.email}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Mail size={12} /><span>{displayTopbar.email}</span></a>
               )}
             </div>
             {showSlogan && (
@@ -635,13 +669,13 @@ export function HeaderMenuPreview({
             <div className="flex items-center gap-3">
               {device !== 'mobile' && (
                 <>
-                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
+                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline" style={{ color: layerColors.topnav.text }}>Theo dõi đơn hàng</a>}
                   {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
               {showLoginLink && (
-                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1">
+                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1" style={{ color: layerColors.topnav.text }}>
                   <User size={12} />
                   {loginLabel}
                 </a>
@@ -935,6 +969,11 @@ export function HeaderMenuPreview({
                     </button>
                   </div>
                 )}
+                {config.showDarkModeToggle && (
+                  <button className="p-2 transition-colors hover:text-[var(--menu-icon-hover)]" style={{ color: layerColors.navbar.text, ...menuVars }}>
+                    <Moon size={20} />
+                  </button>
+                )}
                 {config.cart.show && (
                   <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                     <ShoppingCart size={20} />
@@ -962,6 +1001,11 @@ export function HeaderMenuPreview({
               {showSearch && (
                 <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: layerColors.navbar.text }}>
                   <Search size={20} />
+                </button>
+              )}
+              {config.showDarkModeToggle && (
+                <button className="p-2" style={{ color: layerColors.navbar.text }}>
+                  <Moon size={20} />
                 </button>
               )}
               {config.cart.show && (
@@ -1024,10 +1068,10 @@ export function HeaderMenuPreview({
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
-                <span className="flex items-center gap-1"><Phone size={12} /><span>{displayTopbar.hotline}</span></span>
+                <a href={`tel:${displayTopbar.hotline}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Phone size={12} /><span>{displayTopbar.hotline}</span></a>
               )}
               {device !== 'mobile' && showTopbarEmail && (
-                <span className="flex items-center gap-1"><Mail size={12} /><span>{displayTopbar.email}</span></span>
+                <a href={`mailto:${displayTopbar.email}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Mail size={12} /><span>{displayTopbar.email}</span></a>
               )}
             </div>
             {showSlogan && (
@@ -1038,13 +1082,13 @@ export function HeaderMenuPreview({
             <div className="flex items-center gap-3">
               {device !== 'mobile' && (
                 <>
-                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
+                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline" style={{ color: layerColors.topnav.text }}>Theo dõi đơn hàng</a>}
                   {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
               {showLoginLink && (
-                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1">
+                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1" style={{ color: layerColors.topnav.text }}>
                   <User size={12} />
                   {loginLabel}
                 </a>
@@ -1101,6 +1145,11 @@ export function HeaderMenuPreview({
                     <Search size={20} />
                   </button>
                 )}
+                {config.showDarkModeToggle && (
+                  <button className="p-2" style={{ color: layerColors.navbar.text }}>
+                    <Moon size={20} />
+                  </button>
+                )}
                 {config.cart.show && (
                   <a href={defaultLinks.cart} className="p-2 relative" style={{ color: layerColors.navbar.text }}>
                     <ShoppingCart size={20} />
@@ -1124,6 +1173,11 @@ export function HeaderMenuPreview({
                   >
                     <Heart size={20} /><span>Yêu thích</span>
                   </a>
+                )}
+                {config.showDarkModeToggle && (
+                  <button className="p-2 transition-colors flex flex-col items-center text-xs gap-0.5 hover:text-[var(--menu-icon-hover)]" style={{ color: layerColors.navbar.text, ...menuVars }}>
+                    <Moon size={20} /><span>Theme</span>
+                  </button>
                 )}
                 {config.cart.show && (
                   <a
@@ -1315,10 +1369,10 @@ export function HeaderMenuPreview({
           <div className="flex items-center justify-between gap-4 min-w-0">
             <div className="flex items-center gap-4">
               {showTopbarHotline && (
-                <span className="flex items-center gap-1"><Phone size={12} /><span>{displayTopbar.hotline}</span></span>
+                <a href={`tel:${displayTopbar.hotline}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Phone size={12} /><span>{displayTopbar.hotline}</span></a>
               )}
               {device !== 'mobile' && showTopbarEmail && (
-                <span className="flex items-center gap-1"><Mail size={12} /><span>{displayTopbar.email}</span></span>
+                <a href={`mailto:${displayTopbar.email}`} className="flex items-center gap-1" style={{ color: layerColors.topnav.text }}><Mail size={12} /><span>{displayTopbar.email}</span></a>
               )}
             </div>
             {showSlogan && (
@@ -1329,13 +1383,13 @@ export function HeaderMenuPreview({
             <div className="flex items-center gap-3">
               {device !== 'mobile' && (
                 <>
-                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline">Theo dõi đơn hàng</a>}
+                  {showTrackOrder && <a href={defaultLinks.trackOrder} className="hover:underline" style={{ color: layerColors.topnav.text }}>Theo dõi đơn hàng</a>}
                   {showTrackOrder && showLoginLink && <span style={{ color: layerColors.topnav.text }}>|</span>}
                 </>
               )}
               {showUserMenu && renderUserMenu('text')}
               {showLoginLink && (
-                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1">
+                <a href={defaultLinks.login} className="hover:underline flex items-center gap-1" style={{ color: layerColors.topnav.text }}>
                   <User size={12} />
                   {loginLabel}
                 </a>
@@ -1387,12 +1441,15 @@ export function HeaderMenuPreview({
                     <a
                       href={item.url}
                       className={cn(
-                        'text-sm font-medium transition-colors',
+                        'text-sm font-medium transition-colors flex items-center gap-1',
                         hoveredItem === item._id ? 'text-[var(--menu-hover-text)]' : 'hover:text-[var(--menu-hover-text)]'
                       )}
                       style={{ color: layerColors.navbar.text, ...menuVars }}
                     >
-                      {item.label}
+                      <span>{item.label}</span>
+                      {item.children.length > 0 && (
+                        <ChevronDown size={14} className={cn("transition-transform duration-200 shrink-0", hoveredItem === item._id && "rotate-180")} />
+                      )}
                     </a>
                     {item.children.length > 0 && hoveredItem === item._id && (
                       <div className="absolute left-1/2 top-full mt-6 -translate-x-1/2 z-50">
@@ -1523,6 +1580,11 @@ export function HeaderMenuPreview({
                   <User size={18} />
                 </a>
               )}
+              {config.showDarkModeToggle && (
+                <button className="p-2 transition-colors hover:text-[var(--menu-icon-hover)]" style={{ color: layerColors.navbar.text, ...menuVars }}>
+                  <Moon size={18} />
+                </button>
+              )}
               {config.cart.show && (
                 <a
                   href={defaultLinks.cart}
@@ -1557,6 +1619,11 @@ export function HeaderMenuPreview({
               {showSearch && (
                 <button onClick={() => setSearchOpen((prev) => !prev)} className="p-2" style={{ color: layerColors.navbar.text }}>
                   <Search size={18} />
+                </button>
+              )}
+              {config.showDarkModeToggle && (
+                <button className="p-2" style={{ color: layerColors.navbar.text }}>
+                  <Moon size={18} />
                 </button>
               )}
               {config.cart.show && (
@@ -1615,11 +1682,380 @@ export function HeaderMenuPreview({
     </div>
   );
 
+  // ─── Dark Glass Style ───────────────────────────────────────────────────────
+  // Lấy cảm hứng từ dự án dohy: nền tối backdrop-blur, pill sticky, social icons
+  const darkGlassPillBg = 'rgba(0,0,0,0.65)';
+  const darkGlassNavText = '#ffffff';
+
+
+
+  const renderDarkGlassStyle = () => {
+    const pillLogoSize = Math.min(64, logoSize);
+
+    // Render desktop nav items
+    const renderDarkGlassNav = () => (
+      <nav className="hidden lg:flex justify-center flex-1">
+        <ul className="flex items-center justify-center gap-1" style={{ flexWrap: 'nowrap' }}>
+          {menuTree.slice(0, 6).map((item) => {
+            const hasSubItems = item.children.some((child) => child.children.length > 0);
+            const totalSubItems = item.children.reduce((acc, child) => acc + child.children.length, 0);
+            const isMega = item.children.length >= 3 || totalSubItems > 6;
+            const isMedium = !isMega && (item.children.length > 1 || hasSubItems);
+            const dropdownWidth = isMega ? 'w-[720px]' : isMedium ? 'w-[420px]' : 'w-[240px]';
+            const gridCols = isMega
+              ? 'grid-cols-3'
+              : item.children.length > 1
+                ? 'grid-cols-2'
+                : 'grid-cols-1';
+
+            return (
+              <li
+                key={item._id}
+                style={{ flexShrink: 0 }}
+                className="relative"
+                onMouseEnter={() => setHoveredItem(item._id)}
+                onMouseLeave={() => setHoveredItem(null)}
+              >
+                <a
+                  href={item.url}
+                  className="px-3 py-2 text-xs font-semibold uppercase tracking-wide whitespace-nowrap transition-colors duration-200 rounded-md flex items-center gap-1"
+                  style={{
+                    color: hoveredItem === item._id ? tokens.primary : darkGlassNavText,
+                  }}
+                >
+                  <span>{item.label}</span>
+                  {item.children.length > 0 && (
+                    <ChevronDown size={12} className={cn("transition-transform duration-200 shrink-0", hoveredItem === item._id && "rotate-180")} />
+                  )}
+                </a>
+                 {item.children.length > 0 && hoveredItem === item._id && (
+                  <div className="absolute left-1/2 top-full mt-6 -translate-x-1/2 z-50">
+                    {isDeepMenuForItem(item._id) ? (
+                      <div
+                        className={cn('rounded-2xl border p-6', dropdownWidth)}
+                        style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder }}
+                      >
+                        <div className={cn('grid gap-6', gridCols)}>
+                          {item.children.map((child) => (
+                            <div key={child._id} className="space-y-3">
+                              <a href={child.url} className="text-sm font-semibold whitespace-normal break-words leading-snug" style={{ color: level1Color }}>
+                                {child.label}
+                              </a>
+                              <div className="space-y-2">
+                                {child.children.length > 0 ? child.children.map((sub) => (
+                                  <div key={sub._id} className="relative group/menu-node">
+                                    <a
+                                      href={sub.url}
+                                      target={sub.openInNewTab ? '_blank' : undefined}
+                                      rel={sub.openInNewTab ? 'noreferrer' : undefined}
+                                      className="flex min-w-0 items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:text-[var(--menu-dropdown-sub-hover-text)]"
+                                      style={{ color: tokens.dropdownSubItemText, ...menuVars }}
+                                    >
+                                      <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{sub.label}</span>
+                                      {sub.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
+                                    </a>
+                                    {sub.children.length > 0 && (
+                                      <div className="absolute left-full top-0 ml-2 hidden group-hover/menu-node:block">
+                                        <div className="rounded-xl border py-2 min-w-[220px] shadow-lg overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
+                                          {renderDesktopFlyoutNodes(sub.children)}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )) : (
+                                  <a
+                                    href={child.url}
+                                    className="text-sm hover:text-[var(--menu-dropdown-sub-hover-text)]"
+                                    style={{ color: tokens.dropdownSubItemText, ...menuVars }}
+                                  >
+                                    Xem thêm
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="rounded-lg border py-2 min-w-[200px] overflow-y-auto scrollbar-menu-thin"
+                        style={{ 
+                          backgroundColor: tokens.dropdownBg, 
+                          borderColor: tokens.dropdownBorder,
+                          maxHeight: 'min(70vh, 290px)',
+                        }}
+                      >
+                        {item.children.map((child) => (
+                          <div key={child._id} className="relative group/menu-node">
+                            <a
+                              href={child.url}
+                              target={child.openInNewTab ? '_blank' : undefined}
+                              rel={child.openInNewTab ? 'noreferrer' : undefined}
+                              className="flex min-w-0 items-start justify-between gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--menu-dropdown-hover-bg)] hover:text-[var(--menu-dropdown-hover-text)]"
+                              style={{ color: tokens.dropdownItemText, ...menuVars }}
+                            >
+                              <span className="min-w-0 flex-1 whitespace-normal break-words leading-snug">{child.label}</span>
+                              {child.children.length > 0 && <ChevronRight size={10} className="transition-transform duration-200 group-hover/menu-node:rotate-90" />}
+                            </a>
+                            {child.children.length > 0 && (
+                              <div className="absolute left-full top-0 pl-1 hidden group-hover/menu-node:block">
+                                <div className="rounded-lg border py-2 min-w-[180px] overflow-y-auto scrollbar-menu-thin" style={{ backgroundColor: tokens.dropdownBg, borderColor: tokens.dropdownBorder, maxHeight: 'min(70vh, 290px)' }}>
+                                  {renderDesktopFlyoutNodes(child.children)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+          {menuTree.length === 0 && (
+            ['TRANG CHỦ', 'KHÓA HỌC', 'DỰ ÁN', 'VỀ CHÚNG TÔI', 'THƯ VIỆN'].map((label) => (
+              <li key={label} style={{ flexShrink: 0 }}>
+                <span
+                  className="px-3 py-2 text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: darkGlassNavText }}
+                >
+                  {label}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      </nav>
+    );
+
+    // Render search + wishlist + cart + login + CTA bên phải
+    const renderDarkGlassActions = () => (
+      <div className="flex items-center justify-end gap-3" style={{ flexShrink: 0 }}>
+        <div className="hidden lg:flex items-center gap-3">
+          {/* Search */}
+          {showSearch && (
+            <div className="flex items-center gap-2">
+              <div className={cn('overflow-hidden transition-all duration-200', searchOpen ? 'w-40' : 'w-0')}>
+                <input
+                  type="text"
+                  placeholder={config.search.placeholder ?? 'Tìm kiếm...'}
+                  className={cn('w-40 px-3 py-1.5 rounded-full border text-xs focus:outline-none transition-opacity bg-white/10 text-white border-white/20')}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    color: '#ffffff',
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => setSearchOpen((prev) => !prev)}
+                className="p-2 text-white hover:opacity-80 transition-opacity"
+              >
+                <Search size={18} />
+              </button>
+            </div>
+          )}
+
+          {/* User Menu / Login */}
+          {showUserMenu && renderUserMenu('icon')}
+          {showLoginLink && (
+            <a
+              href={defaultLinks.login}
+              className="p-2 text-white hover:opacity-80 transition-opacity"
+            >
+              <User size={18} />
+            </a>
+          )}
+
+          {/* Wishlist */}
+          {config.wishlist.show && (
+            <a
+              href={defaultLinks.wishlist}
+              className="p-2 text-white hover:opacity-80 transition-opacity"
+            >
+              <Heart size={18} />
+            </a>
+          )}
+
+          {/* Dark Mode */}
+          {config.showDarkModeToggle && (
+            <button className="p-2 text-white hover:opacity-80 transition-opacity">
+              <Moon size={18} />
+            </button>
+          )}
+
+          {/* Cart */}
+          {config.cart.show && (
+            <a
+              href={defaultLinks.cart}
+              className="p-2 relative text-white hover:opacity-80 transition-opacity"
+            >
+              <ShoppingCart size={18} />
+              <span
+                className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full flex items-center justify-center"
+                style={{ backgroundColor: '#ffffff', color: '#000000' }}
+              >
+                0
+              </span>
+            </a>
+          )}
+
+          {/* CTA Button */}
+          {config.cta.show && (
+            <a
+              href={defaultLinks.cta}
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-full text-[11px] font-semibold uppercase tracking-widest transition-transform hover:scale-105"
+              style={{ backgroundColor: tokens.primary, color: tokens.textInverse, padding: '8px 18px' }}
+            >
+              {ctaLabel}
+            </a>
+          )}
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="lg:hidden p-2 rounded-md"
+          style={{ color: '#ffffff' }}
+          aria-label="Toggle menu"
+        >
+          <div className="w-5 h-4 flex flex-col justify-between">
+            <span className="w-full h-0.5 rounded" style={{ backgroundColor: '#ffffff' }} />
+            <span className="w-full h-0.5 rounded" style={{ backgroundColor: '#ffffff' }} />
+            <span className="w-full h-0.5 rounded" style={{ backgroundColor: '#ffffff' }} />
+          </div>
+        </button>
+      </div>
+    );
+
+    // Render logo block
+    const renderDarkGlassLogo = (size: number) => (
+      <div className="flex items-center" style={{ flexShrink: 0 }}>
+        {logo ? (
+          <img
+            src={logo}
+            alt={brandLabel}
+            style={{ width: size, height: 'auto', objectFit: 'contain' }}
+          />
+        ) : (
+          <div
+            className="flex items-center justify-center rounded-xl text-xs font-bold"
+            style={{ width: size, height: size, backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff' }}
+          >
+            {brandLabel.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div style={{ position: 'relative' }}>
+        {/* ── Pill Sticky Header (trạng thái đặc trưng của Dark Glass) ── */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            width: '96%',
+            margin: '12px auto 0',
+            height: device === 'mobile' ? 72 : 88,
+            padding: device === 'mobile' ? '0 16px' : '0 28px',
+            background: darkGlassPillBg,
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            borderRadius: 9999,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
+          {/* Logo */}
+          {renderDarkGlassLogo(device === 'mobile' ? Math.min(48, pillLogoSize) : pillLogoSize)}
+
+          {/* Nav (desktop) */}
+          {renderDarkGlassNav()}
+
+          {/* Actions */}
+          {renderDarkGlassActions()}
+        </div>
+
+        {/* ── Mobile Menu Overlay ── */}
+        {device === 'mobile' && mobileMenuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '80%',
+              background: 'rgba(0,0,0,0.95)',
+              backdropFilter: 'blur(16px)',
+              borderLeft: '1px solid rgba(255,255,255,0.1)',
+              zIndex: 60,
+              borderRadius: '0 0 0 16px',
+            }}
+          >
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              {renderDarkGlassLogo(40)}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ color: '#ffffff', background: 'none', border: 'none', cursor: 'pointer', fontSize: 20 }}
+              >
+                ✕
+              </button>
+            </div>
+            <nav style={{ padding: '12px 0' }}>
+              {(menuTree.length > 0 ? menuTree : [
+                { label: 'TRANG CHỦ' }, { label: 'KHÓA HỌC' }, { label: 'DỰ ÁN' }, { label: 'VỀ CHÚNG TÔI' }, { label: 'THƯ VIỆN' },
+              ]).map((item, i) => (
+                <a
+                  key={'_id' in item ? item._id : i}
+                  href={'url' in item ? item.url : '#'}
+                  style={{ display: 'block', padding: '10px 20px', color: '#ffffff', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+            {config.cta.show && (
+              <div style={{ padding: '12px 20px' }}>
+                <a
+                  href={defaultLinks.cta}
+                  style={{ display: 'block', width: '100%', textAlign: 'center', padding: '10px', background: '#ffffff', color: '#000000', borderRadius: 9999, fontSize: 12, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}
+                >
+                  {ctaLabel}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="border rounded-lg overflow-hidden" style={{ borderColor: tokens.border }}>
-      {layoutStyle === 'classic' && renderClassicStyle()}
-      {layoutStyle === 'topbar' && renderTopbarStyle()}
-      {layoutStyle === 'allbirds' && renderAllbirdsStyle()}
+    <div className={cn("border rounded-lg overflow-hidden", config.enableGlassmorphism && "glass-enabled-menu")} style={{ borderColor: tokens.border }}>
+      {config.enableGlassmorphism && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          .glass-enabled-menu div.absolute.border,
+          .glass-enabled-menu div.absolute div.border,
+          .glass-enabled-menu div.absolute div.rounded-xl,
+          .glass-enabled-menu div.absolute div.rounded-lg {
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            box-shadow: ${isDark 
+              ? '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05)' 
+              : '0 10px 30px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
+            } !important;
+          }
+        `}} />
+      )}
+      {resolvedStyle === 'classic' && renderClassicStyle()}
+      {resolvedStyle === 'topbar' && renderTopbarStyle()}
+      {resolvedStyle === 'allbirds' && renderAllbirdsStyle()}
+      {resolvedStyle === 'darkglass' && renderDarkGlassStyle()}
 
       <div className="p-4 space-y-3" style={{ backgroundColor: tokens.surfaceAlt }}>
         <div className="h-32 rounded-lg flex items-center justify-center" style={{ backgroundColor: tokens.placeholderBg }}>

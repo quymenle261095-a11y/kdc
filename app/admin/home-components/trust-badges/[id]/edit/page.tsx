@@ -119,6 +119,8 @@ export default function TrustBadgesEditPage({
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
   const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
@@ -526,6 +528,10 @@ export default function TrustBadgesEditPage({
               }}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              isVisualEditAllowed={isVisualEditAllowed}
+              onTitleChange={setTitle}
+              onSubtitleChange={headerState.setSubtitle}
+              onBadgeTextChange={headerState.setBadgeText}
             />
           </div>
         </div>

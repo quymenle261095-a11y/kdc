@@ -4,11 +4,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../components/ui';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { CopyableInput } from '../../components/CopyTextButton';
+import { SettingsImageUploader } from '../../components/SettingsImageUploader';
+import { AdminStickyFooter } from '@/app/admin/components/AdminStickyFooter';
+import {
+  AdminFormPageWrapper,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'promotions';
 
@@ -24,7 +28,7 @@ export default function PromotionCreatePage() {
   const [promotionType, setPromotionType] = useState<'coupon' | 'campaign' | 'flash_sale' | 'bundle' | 'loyalty'>('coupon');
   const [discountType, setDiscountType] = useState<'percent' | 'fixed' | 'buy_x_get_y' | 'buy_a_get_b' | 'tiered' | 'free_shipping' | 'gift'>('percent');
   const [discountValue, setDiscountValue] = useState<number>(10);
-  const [discountConfigText, setDiscountConfigText] = useState('');
+  const [discountConfigText] = useState('');
   const [applicableTo, setApplicableTo] = useState<'all' | 'products' | 'categories' | 'brands' | 'tags'>('all');
   const [applicableIdsText, setApplicableIdsText] = useState('');
   const [excludeIdsText, setExcludeIdsText] = useState('');
@@ -46,7 +50,9 @@ export default function PromotionCreatePage() {
   const [stackable, setStackable] = useState(true);
   const [priority, setPriority] = useState<number | undefined>();
   const [displayOnPage, setDisplayOnPage] = useState(true);
+  const [isPrivate] = useState(false);
   const [featured, setFeatured] = useState(false);
+  const [maxShippingDiscount, setMaxShippingDiscount] = useState<number | undefined>();
   const [thumbnail, setThumbnail] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -142,10 +148,12 @@ export default function PromotionCreatePage() {
         discountType,
         discountValue: discountType === 'percent' || discountType === 'fixed' ? discountValue : undefined,
         displayOnPage: isFeatureEnabled('enableDisplay') ? displayOnPage : undefined,
-        endDate: isFeatureEnabled('enableSchedule') && endDate ? new Date(endDate).getTime() : undefined,
+        endDate: isFeatureEnabled('enableSchedule') && scheduleType !== 'always' && endDate ? new Date(endDate).getTime() : undefined,
         excludeIds: isFeatureEnabled('enableApplicable') ? parseList(excludeIdsText) : undefined,
         featured: isFeatureEnabled('enableDisplay') ? featured : undefined,
+        isPrivate,
         maxDiscountAmount: isFeatureEnabled('enableMaxDiscount') && discountType === 'percent' ? maxDiscountAmount : undefined,
+        maxShippingDiscount: discountType === 'free_shipping' ? maxShippingDiscount : undefined,
         minOrderAmount: isFeatureEnabled('enableMinOrder') ? minOrderAmount : undefined,
         minOrderHistory: isFeatureEnabled('enableCustomerConditions') ? minOrderHistory : undefined,
         minQuantity: isFeatureEnabled('enableApplicable') ? minQuantity : undefined,
@@ -157,7 +165,7 @@ export default function PromotionCreatePage() {
         recurringHours,
         scheduleType: isFeatureEnabled('enableSchedule') ? scheduleType : undefined,
         stackable: isFeatureEnabled('enableStacking') ? stackable : undefined,
-        startDate: isFeatureEnabled('enableSchedule') && startDate ? new Date(startDate).getTime() : undefined,
+        startDate: isFeatureEnabled('enableSchedule') && scheduleType !== 'always' && startDate ? new Date(startDate).getTime() : undefined,
         status,
         thumbnail: isFeatureEnabled('enableDisplay') && thumbnail.trim() ? thumbnail.trim() : undefined,
         usageLimit: isFeatureEnabled('enableUsageLimit') ? usageLimit : undefined,
@@ -172,14 +180,86 @@ export default function PromotionCreatePage() {
     }
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thêm khuyến mãi mới</h1>
-          <p className="text-sm text-slate-500 mt-1">Tạo voucher hoặc mã giảm giá mới</p>
+  const renderScheduleStatusHelper = (startDateStr?: string, endDateStr?: string) => {
+    if (!startDateStr && !endDateStr) {return null;}
+
+    const now = Date.now();
+    const startTs = startDateStr ? new Date(startDateStr).getTime() : undefined;
+    const endTs = endDateStr ? new Date(endDateStr).getTime() : undefined;
+
+    const formatDuration = (ms: number) => {
+      const totalMinutes = Math.floor(ms / (1000 * 60));
+      const days = Math.floor(totalMinutes / (60 * 24));
+      const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+      const minutes = totalMinutes % 60;
+
+      const parts: string[] = [];
+      if (days > 0) {parts.push(`${days} ngày`);}
+      if (hours > 0) {parts.push(`${hours} giờ`);}
+      if (minutes > 0 || parts.length === 0) {parts.push(`${minutes} phút`);}
+      return parts.join(' ');
+    };
+
+    if (startTs && now < startTs) {
+      const diff = startTs - now;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+          <span className="font-semibold shrink-0">⏳ Chưa tới thời gian:</span>
+          <span>Còn <strong>{formatDuration(diff)}</strong> nữa khuyến mãi mới chính thức bắt đầu.</span>
         </div>
-      </div>
+      );
+    }
+
+    if (endTs && now > endTs) {
+      const diff = now - endTs;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-300">
+          <span className="font-semibold shrink-0">🔴 Đã hết hạn:</span>
+          <span>Khuyến mãi đã kết thúc cách đây <strong>{formatDuration(diff)}</strong>.</span>
+        </div>
+      );
+    }
+
+    if (endTs && now <= endTs) {
+      const diff = endTs - now;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <span className="font-semibold shrink-0">✅ Đang áp dụng:</span>
+          <span>Còn <strong>{formatDuration(diff)}</strong> nữa mới hết hạn khuyến mãi.</span>
+        </div>
+      );
+    }
+
+    if (startTs && now >= startTs && !endTs) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <span className="font-semibold shrink-0">✅ Đang áp dụng:</span>
+          <span>Khuyến mãi đang hoạt động (không cài ngày kết thúc).</span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <AdminFormPageWrapper
+      title="Thêm khuyến mãi mới"
+      subtitle="Tạo voucher hoặc mã giảm giá mới"
+      backHref="/admin/promotions"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          submitLabel="Tạo khuyến mãi"
+          onCancel={() => router.push('/admin/promotions')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          disableSave={isSubmitting || !name.trim()}
+        />
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -193,18 +273,16 @@ export default function PromotionCreatePage() {
                   onChange={(e) =>{  setPromotionType(e.target.value as typeof promotionType); }}
                   className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
                 >
-                  <option value="coupon">Coupon nhập mã</option>
-                  <option value="campaign">Chương trình tự động</option>
-                  <option value="flash_sale">Flash sale</option>
-                  <option value="bundle">Combo sản phẩm</option>
-                  <option value="loyalty">Loyalty</option>
+                  <option value="coupon">Coupon nhập mã (Coupon v1)</option>
                 </select>
+                <p className="text-xs text-slate-500">Các loại Ưu đãi tự động, Flash sale, Combo, Loyalty hiện đang thuộc Roadmap sản phẩm.</p>
               </div>
               <div className="space-y-2">
                 <Label>Tên khuyến mãi <span className="text-red-500">*</span></Label>
-                <Input 
+                <CopyableInput
                   value={name} 
                   onChange={(e) =>{  setName(e.target.value); }} 
+                  copyLabel="tên khuyến mãi"
                   required 
                   placeholder="VD: Giảm 10% đơn hàng" 
                 />
@@ -264,11 +342,7 @@ export default function PromotionCreatePage() {
                 >
                   <option value="percent">Giảm theo phần trăm (%)</option>
                   <option value="fixed">Giảm số tiền cố định (VND)</option>
-                  <option value="buy_x_get_y">Mua X tặng Y</option>
-                  <option value="buy_a_get_b">Mua A tặng B</option>
-                  <option value="tiered">Giảm theo bậc</option>
-                  <option value="free_shipping">Miễn phí ship</option>
-                  <option value="gift">Tặng quà</option>
+                  <option value="free_shipping">Miễn phí vận chuyển (Free Ship)</option>
                 </select>
               </div>
 
@@ -291,16 +365,17 @@ export default function PromotionCreatePage() {
                 </div>
               )}
 
-              {discountType !== 'percent' && discountType !== 'fixed' && isFeatureEnabled('enableAdvancedDiscount') && (
+              {discountType === 'free_shipping' && (
                 <div className="space-y-2">
-                  <Label>Cấu hình chi tiết (JSON)</Label>
-                  <textarea 
-                    value={discountConfigText}
-                    onChange={(e) =>{  setDiscountConfigText(e.target.value); }}
-                    className="w-full min-h-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"
-                    placeholder='VD: {"buyQuantity":2,"getQuantity":1}'
+                  <Label>Trần giảm phí vận chuyển tối đa (VND)</Label>
+                  <Input 
+                    type="number"
+                    value={maxShippingDiscount ?? ''} 
+                    onChange={(e) => { setMaxShippingDiscount(e.target.value ? Number(e.target.value) : undefined); }}
+                    min={0}
+                    placeholder="VD: 30000 (Để trống nếu miễn phí 100%)"
                   />
-                  <p className="text-xs text-slate-500">Dùng JSON để mô tả chi tiết mua X tặng Y, combo, quà tặng.</p>
+                  <p className="text-xs text-slate-500">Để trống để hỗ trợ 100% phí vận chuyển, hoặc nhập số tiền giảm tối đa.</p>
                 </div>
               )}
 
@@ -454,24 +529,33 @@ export default function PromotionCreatePage() {
                     <option value="recurring">Lặp theo lịch</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Ngày bắt đầu</Label>
-                    <Input 
-                      type="datetime-local"
-                      value={startDate}
-                      onChange={(e) =>{  setStartDate(e.target.value); }}
-                    />
+                {scheduleType === 'always' ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    ⚡ <strong>Chế độ luôn hoạt động:</strong> Khuyến mãi được tự động áp dụng ngay lập tức và không bị giới hạn thời gian kết thúc.
                   </div>
-                  <div className="space-y-2">
-                    <Label>Ngày kết thúc</Label>
-                    <Input 
-                      type="datetime-local"
-                      value={endDate}
-                      onChange={(e) =>{  setEndDate(e.target.value); }}
-                    />
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Ngày bắt đầu</Label>
+                        <Input 
+                          type="datetime-local"
+                          value={startDate}
+                          onChange={(e) =>{  setStartDate(e.target.value); }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Ngày kết thúc</Label>
+                        <Input 
+                          type="datetime-local"
+                          value={endDate}
+                          onChange={(e) =>{  setEndDate(e.target.value); }}
+                        />
+                      </div>
+                    </div>
+                    {renderScheduleStatusHelper(startDate, endDate)}
+                  </>
+                )}
                 {scheduleType === 'recurring' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
@@ -549,14 +633,13 @@ export default function PromotionCreatePage() {
                       <option value="true">Nổi bật</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Thumbnail</Label>
-                    <Input
-                      value={thumbnail}
-                      onChange={(e) =>{  setThumbnail(e.target.value); }}
-                      placeholder="URL ảnh thumbnail"
-                    />
-                  </div>
+                  <SettingsImageUploader
+                    label="Ảnh đại diện (Thumbnail)"
+                    value={thumbnail}
+                    onChange={(url) => setThumbnail(url ?? '')}
+                    folder="promotions"
+                    previewSize="md"
+                  />
                 </>
               )}
             </CardContent>
@@ -633,24 +716,7 @@ export default function PromotionCreatePage() {
           )}
         </div>
       </div>
-
-      <HomeComponentStickyFooter
-        isSubmitting={isSubmitting}
-        submitLabel="Tạo khuyến mãi"
-        onCancel={() =>{  router.push('/admin/promotions'); }}
-        disableSave={isSubmitting}
-      >
-        <>
-          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/promotions'); }}>Hủy bỏ</Button>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={() =>{  setStatus('Inactive'); }}>Lưu nháp</Button>
-            <Button type="submit" className="bg-pink-600 hover:bg-pink-500" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-              Tạo khuyến mãi
-            </Button>
-          </div>
-        </>
-      </HomeComponentStickyFooter>
-    </form>
+      </form>
+    </AdminFormPageWrapper>
   );
 }

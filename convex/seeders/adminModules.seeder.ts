@@ -17,21 +17,6 @@ export class AdminModulesSeeder extends BaseSeeder<AdminModuleData> {
     const startTime = Date.now();
     this.config = { batchSize: 50, dependencies: true, force: false, ...config };
 
-    if (this.config.force) {
-      await this.clear();
-    }
-
-    const existing = await this.ctx.db.query('adminModules').first();
-    if (existing) {
-      return {
-        created: 0,
-        dependencies: [],
-        duration: Date.now() - startTime,
-        module: this.moduleName,
-        skipped: 1,
-      };
-    }
-
     const modules: AdminModuleData[] = [
       { category: 'content', description: 'Quản lý bài viết, tin tức, blog và danh mục bài viết', enabled: true, icon: 'FileText', isCore: false, key: 'posts', name: 'Bài viết & Danh mục', order: 1 },
       { category: 'content', dependencies: ['posts', 'products'], dependencyType: 'any', description: 'Bình luận và đánh giá cho bài viết, sản phẩm', enabled: true, icon: 'MessageSquare', isCore: false, key: 'comments', name: 'Bình luận và đánh giá', order: 2 },
@@ -51,18 +36,47 @@ export class AdminModulesSeeder extends BaseSeeder<AdminModuleData> {
       { category: 'marketing', dependencies: ['products', 'orders'], dependencyType: 'all', description: 'Quản lý mã giảm giá, voucher', enabled: false, icon: 'Megaphone', isCore: false, key: 'promotions', name: 'Khuyến mãi', order: 16 },
       { category: 'marketing', description: 'Báo cáo và phân tích dữ liệu', enabled: true, icon: 'BarChart3', isCore: false, key: 'analytics', name: 'Thống kê', order: 17 },
       { category: 'content', description: 'Quản lý dịch vụ và danh mục dịch vụ', enabled: true, icon: 'Briefcase', isCore: false, key: 'services', name: 'Dịch vụ', order: 18 },
-      { category: 'system', description: 'Bảng Kanban quản lý công việc nội bộ', enabled: true, icon: 'LayoutGrid', isCore: false, key: 'kanban', name: 'Kanban Board', order: 19 },
-      { category: 'system', description: 'Quản lý gia hạn subscription khách hàng', enabled: true, icon: 'CalendarDays', isCore: false, key: 'subscriptions', name: 'Subscriptions', order: 20 },
+      { category: 'content', description: 'Quản lý dự án, danh mục, video và thư viện ảnh dự án', enabled: true, icon: 'Briefcase', isCore: false, key: 'projects', name: 'Dự án', order: 19 },
+      { category: 'content', description: 'Quản lý khóa học, danh mục và nội dung học', enabled: true, icon: 'GraduationCap', isCore: false, key: 'courses', name: 'Khóa học', order: 20 },
+      { category: 'content', description: 'Quản lý tài nguyên, danh mục, link tải và quyền truy cập', enabled: true, icon: 'FileText', isCore: false, key: 'resources', name: 'Tài nguyên', order: 21 },
+      { category: 'system', description: 'Nền tảng Mini App để tách thử nghiệm khỏi hệ thống lõi', enabled: true, icon: 'PanelsTopLeft', isCore: false, key: 'miniApps', name: 'Mini Apps', order: 22 },
+      { category: 'content', description: 'Tài liệu catalog PDF dạng flipbook', enabled: true, icon: 'BookOpen', isCore: false, key: 'catalogs', name: 'Catalog', order: 23 },
+      { category: 'system', description: 'Quản lý gia hạn subscription khách hàng', enabled: true, icon: 'CalendarDays', isCore: false, key: 'subscriptions', name: 'Subscriptions', order: 24 },
     ];
 
-    await Promise.all(modules.map(module => this.ctx.db.insert('adminModules', module)));
+    const existingModules = await this.ctx.db.query('adminModules').collect();
+    const existingMap = new Map(existingModules.map((m) => [m.key, m]));
+
+    let created = 0;
+    let updated = 0;
+
+    for (const module of modules) {
+      const existing = existingMap.get(module.key);
+      if (existing) {
+        // LOGIC: Chỉ cập nhật metadata, KHÔNG đổi trạng thái enabled của module đang tắt
+        await this.ctx.db.patch(existing._id, {
+          category: module.category,
+          dependencies: module.dependencies,
+          dependencyType: module.dependencyType,
+          description: module.description,
+          icon: module.icon,
+          isCore: module.isCore,
+          name: module.name,
+          order: module.order,
+        });
+        updated++;
+      } else {
+        await this.ctx.db.insert('adminModules', module);
+        created++;
+      }
+    }
 
     return {
-      created: modules.length,
+      created,
       dependencies: [],
       duration: Date.now() - startTime,
       module: this.moduleName,
-      skipped: 0,
+      skipped: updated,
     };
   }
 

@@ -1,19 +1,10 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Label,
-  cn,
-} from '../../components/ui';
+import { Button } from '../../components/ui';
+import { AiImportDialogShell } from '../../components/AiImportDialogShell';
 
 export type PendingAttributeTerm = {
   name: string;
@@ -29,16 +20,10 @@ const slugify = (value: string) => value.toLowerCase()
   .replaceAll(/\s+/g, '-')
   .replaceAll(/-+/g, '-');
 
-const cleanJsonInput = (raw: string) => raw
-  .trim()
-  .replace(/^```(?:json)?/i, '')
-  .replace(/```$/i, '')
-  .trim();
-
 const parseTermsPayload = (raw: string): { terms: PendingAttributeTerm[]; errors: string[] } => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
     return { terms: [], errors: ['JSON chưa hợp lệ. Hãy dán đúng object có key "terms".'] };
   }
@@ -81,6 +66,26 @@ const parseTermsPayload = (raw: string): { terms: PendingAttributeTerm[]; errors
   return { terms, errors };
 };
 
+const SAMPLE_TERMS_JSON = `{
+  "terms": [
+    {
+      "name": "Pinot Noir",
+      "slug": "pinot-noir",
+      "description": "Giống nho đỏ thanh lịch, thường có hương trái đỏ và cấu trúc nhẹ đến vừa."
+    },
+    {
+      "name": "Chardonnay",
+      "slug": "chardonnay",
+      "description": "Giống nho trắng phổ biến, linh hoạt từ phong cách tươi sáng đến béo ngậy."
+    },
+    {
+      "name": "Tempranillo",
+      "slug": "tempranillo",
+      "description": "Giống nho đỏ đặc trưng Tây Ban Nha, hợp vang có hương trái chín và gia vị."
+    }
+  ]
+}`;
+
 export function AiAttributeTermsImportDialog({
   groupName,
   filterType,
@@ -93,19 +98,6 @@ export function AiAttributeTermsImportDialog({
   onApply: (terms: PendingAttributeTerm[]) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const [rawJson, setRawJson] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
-  const result = useMemo(() => parseTermsPayload(rawJson), [rawJson]);
-  const hasInput = rawJson.trim().length > 0;
-  const canApply = hasInput && result.terms.length > 0 && result.errors.length === 0;
-
-  const sample = useMemo(() => JSON.stringify({
-    terms: [
-      { name: 'Pinot Noir', slug: 'pinot-noir', description: 'Giống nho đỏ thanh lịch, thường có hương trái đỏ và cấu trúc nhẹ đến vừa.' },
-      { name: 'Chardonnay', slug: 'chardonnay', description: 'Giống nho trắng phổ biến, linh hoạt từ phong cách tươi sáng đến béo ngậy.' },
-      { name: 'Tempranillo', slug: 'tempranillo', description: 'Giống nho đỏ đặc trưng Tây Ban Nha, hợp vang có hương trái chín và gia vị.' },
-    ],
-  }, null, 2), []);
 
   const prompt = useMemo(() => {
     const resolvedName = groupName.trim() || 'Nhóm thuộc tính sản phẩm';
@@ -139,18 +131,14 @@ Chỉ trả về JSON đúng schema:
 }`;
   }, [filterType, groupName, inputType]);
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt AI' : 'Đã copy JSON mẫu');
+  const handleParse = (rawInput: string) => {
+    const res = parseTermsPayload(rawInput);
+    return { data: res.terms.length > 0 ? res.terms : null, errors: res.errors };
   };
 
-  const handleApply = async () => {
-    if (!canApply) {return;}
-    await onApply(result.terms);
-    toast.success(`Đã nạp ${result.terms.length} giá trị thuộc tính`);
-    setOpen(false);
-    setRawJson('');
+  const handleApply = async (terms: PendingAttributeTerm[]) => {
+    await onApply(terms);
+    toast.success(`Đã nạp ${terms.length} giá trị thuộc tính`);
   };
 
   return (
@@ -159,86 +147,38 @@ Chỉ trả về JSON đúng schema:
         <Bot size={16} />
         Import AI
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import AI giá trị thuộc tính</DialogTitle>
-            <DialogDescription>
-              Copy prompt để AI tạo JSON, dán kết quả vào ô dưới rồi áp dụng vào danh sách giá trị.
-            </DialogDescription>
-          </DialogHeader>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Prompt cẩn thận</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(prompt, 'prompt')} className="gap-1">
-                  {lastCopied === 'prompt' ? <Check size={14} /> : <Copy size={14} />}
-                  Copy
-                </Button>
-              </div>
-              <textarea
-                readOnly
-                value={prompt}
-                className="h-64 w-full rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>JSON AI trả về</Label>
-                <Button type="button" variant="ghost" size="sm" onClick={() => copyText(sample, 'sample')} className="gap-1">
-                  {lastCopied === 'sample' ? <Check size={14} /> : <Copy size={14} />}
-                  JSON mẫu
-                </Button>
-              </div>
-              <textarea
-                value={rawJson}
-                onChange={(event) => setRawJson(event.target.value)}
-                placeholder={sample}
-                className="h-64 w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-              />
-              {hasInput && (
-                <div className={cn(
-                  'rounded-lg border p-3 text-sm',
-                  result.errors.length > 0
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
-                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300'
-                )}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">
-                      {result.errors.map(error => <li key={error}>- {error}</li>)}
-                    </ul>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <Check size={14} />
-                      JSON hợp lệ, preview {result.terms.length} giá trị bên dưới.
-                    </div>
-                  )}
+      <AiImportDialogShell<PendingAttributeTerm[]>
+        open={open}
+        onOpenChange={setOpen}
+        title={`Import AI giá trị thuộc tính (${groupName || 'Thuộc tính'})`}
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={prompt}
+        sampleJson={SAMPLE_TERMS_JSON}
+        directSessionId="admin-attribute-terms-import"
+        directPlaceholder="Ví dụ: Tạo 12 giá trị cho nhóm Giống nho, ưu tiên các giống phổ biến, mô tả ngắn dễ hiểu."
+        parse={handleParse}
+        renderPreview={(terms) => (
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Danh sách {terms.length} giá trị sẽ thêm vào nhóm:
+            </p>
+            {terms.map((term, index) => (
+              <div key={term.slug} className="rounded-md bg-white border border-slate-100 p-2 text-xs dark:bg-slate-900 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{index + 1}. {term.name}</span>
+                  <span className="font-mono text-[10px] text-slate-400">{term.slug}</span>
                 </div>
-              )}
-              {canApply && (
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</div>
-                  <div className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-                    {result.terms.map((term, index) => (
-                      <div key={term.slug} className="rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-900/60">
-                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{index + 1}. {term.name}</div>
-                        <div className="font-mono text-xs text-slate-500">{term.slug}</div>
-                        {term.description && <div className="mt-1 line-clamp-2 text-xs text-slate-500">{term.description}</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                {term.description && (
+                  <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-1">{term.description}</p>
+                )}
+              </div>
+            ))}
           </div>
-
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Đóng</Button>
-            <Button type="button" variant="accent" disabled={!canApply} onClick={handleApply}>Áp dụng vào form</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào danh sách"
+        onApply={handleApply}
+      />
     </>
   );
 }

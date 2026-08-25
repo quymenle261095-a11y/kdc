@@ -184,6 +184,10 @@ export default function VideoCreatePage() {
         showBadge={headerState.showBadge}
         badgeText={headerState.badgeText}
         spacing={headerState.spacing}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
+        onConfigChange={setConfig}
       />
     </ComponentFormWrapper>
   );

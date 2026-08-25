@@ -8,6 +8,7 @@ export const RATE_LIMITS = {
   mutation: { kind: "token bucket", rate: 10, period: MINUTE, capacity: 100 },
   query: { kind: "token bucket", rate: 50, period: MINUTE, capacity: 500 },
   auth: { kind: "token bucket", rate: 5, period: HOUR, capacity: 5 },
+  aiChat: { kind: "token bucket", rate: 6, period: MINUTE, capacity: 12 },
   pageViewTrack: { kind: "token bucket", rate: 30, period: MINUTE, capacity: 120 },
   publicBooking: { kind: "token bucket", rate: 3, period: MINUTE, capacity: 10 },
   usageTrack: { kind: "token bucket", rate: 20, period: MINUTE, capacity: 60 },

@@ -405,6 +405,10 @@ export default function VideoEditPage({
             showBadge={showBadge}
             badgeText={badgeText}
             spacing={spacing}
+            onTitleChange={setTitle}
+            onSubtitleChange={setSubtitle}
+            onBadgeTextChange={setBadgeText}
+            onConfigChange={setConfig}
           />
         </div>
 

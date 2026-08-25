@@ -1,5 +1,7 @@
 'use client';
 
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import React, { useState } from 'react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -35,6 +37,9 @@ export default function CTACreatePage() {
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
+
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const [ctaConfig, setCtaConfig] = useState<CTAConfig>(INITIAL_CTA_CONFIG);
   const [ctaStyle, setCtaStyle] = useState<CTAStyle>('banner');
@@ -130,6 +135,8 @@ export default function CTACreatePage() {
         onStyleChange={setCtaStyle}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        isVisualEditAllowed={isVisualEditAllowed}
+        onConfigChange={setCtaConfig}
       />
     </ComponentFormWrapper>
   );

@@ -3,13 +3,13 @@ import { DEFAULT_SECTION_SPACING } from '../../_shared/types/sectionSpacing';
 import type { DemoVoucherPromotionItem, VoucherPromotionsConfigState, VoucherPromotionsCornerRadius, VoucherPromotionsTexts } from '../_types';
 
 export const VOUCHER_PROMOTIONS_STYLES: { id: VoucherPromotionsStyle; label: string }[] = [
-  { id: 'enterpriseCards', label: 'Enterprise Cards' },
-  { id: 'ticketHorizontal', label: 'Ticket Ngang' },
-  { id: 'imageTicket', label: 'Ticket Ảnh' },
-  { id: 'couponGrid', label: 'Coupon Grid' },
-  { id: 'stackedBanner', label: 'Stacked Banner' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'minimal', label: 'Minimal' },
+  { id: 'enterpriseCards', label: '(1) Dạng thẻ' },
+  { id: 'ticketHorizontal', label: '(2) Vé ngang' },
+  { id: 'imageTicket', label: '(3) Vé ảnh' },
+  { id: 'couponGrid', label: '(4) Lưới thẻ' },
+  { id: 'stackedBanner', label: '(5) Xếp chồng' },
+  { id: 'carousel', label: '(6) Trượt ngang' },
+  { id: 'minimal', label: '(7) Tối giản' },
 ];
 
 export const AVAILABLE_VOUCHER_PROMOTION_ICONS = [

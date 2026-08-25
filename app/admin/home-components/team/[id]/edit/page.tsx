@@ -537,6 +537,10 @@ export default function TeamEditPage({
             spacing={spacing}
             desktopColumns={desktopColumns}
             cornerRadius={cornerRadius}
+            onTitleChange={setTitle}
+            onSubtitleChange={setSubtitle}
+            onBadgeTextChange={setBadgeText}
+            onMembersChange={setMembers}
           />
         </div>
 

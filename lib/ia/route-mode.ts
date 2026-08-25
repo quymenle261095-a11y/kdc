@@ -1,14 +1,17 @@
 export type RouteMode = 'unified' | 'namespace';
+export type RoutableModuleKey = 'posts' | 'products' | 'services' | 'courses' | 'projects' | 'resources';
 
 export const normalizeRouteMode = (value?: unknown): RouteMode => (
   value === 'namespace' ? 'namespace' : 'unified'
 );
 
-export const buildModuleListPath = (moduleKey: 'posts' | 'products' | 'services'): string => `/${moduleKey}`;
+export const buildModuleListPath = (moduleKey: RoutableModuleKey): string => (
+  moduleKey === 'courses' ? '/khoa-hoc' : `/${moduleKey}`
+);
 
 export const buildCategoryPath = (params: {
   mode: RouteMode;
-  moduleKey: 'posts' | 'products' | 'services';
+  moduleKey: RoutableModuleKey;
   categorySlug: string;
 }): string => {
   return `/${params.categorySlug}`;
@@ -16,7 +19,7 @@ export const buildCategoryPath = (params: {
 
 export const buildDetailPath = (params: {
   mode: RouteMode;
-  moduleKey: 'posts' | 'products' | 'services';
+  moduleKey: RoutableModuleKey;
   recordSlug: string;
   categorySlug?: string | null;
 }): string => {
@@ -26,6 +29,6 @@ export const buildDetailPath = (params: {
   return `/${params.moduleKey}/${params.recordSlug}`;
 };
 
-export const buildCategorySearchParamKey = (moduleKey: 'posts' | 'products' | 'services'): string => (
+export const buildCategorySearchParamKey = (moduleKey: RoutableModuleKey): string => (
   moduleKey === 'posts' ? 'catpost' : 'category'
 );

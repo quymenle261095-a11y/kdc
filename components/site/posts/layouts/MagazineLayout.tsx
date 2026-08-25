@@ -49,6 +49,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { label: 'Cũ nhất', value: 'oldest' },
   { label: 'Xem nhiều', value: 'popular' },
   { label: 'Theo tên A-Z', value: 'title' },
+  { label: 'Theo tên Z-A', value: 'title_desc' },
 ];
 
 export function MagazineLayout({

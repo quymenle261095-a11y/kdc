@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy, FileText, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Label, cn } from '../../../components/ui';
+import { Button } from '../../../components/ui';
+import { AiImportDialogShell } from '@/app/admin/components/AiImportDialogShell';
 import { createAboutEditorFeature, createAboutEditorStat, normalizeAboutImages, normalizeAboutStyle } from '../_lib/constants';
 import type { AboutEditorState } from '../_types';
 import { useTypeAiImportEnabled } from '../../_shared/hooks/useTypeAiImportEnabled';
@@ -84,12 +85,6 @@ const trimText = (value: unknown, maxLength: number) => {
   return String(value).trim().slice(0, maxLength);
 };
 
-const cleanJsonInput = (raw: string) => {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-};
-
 const isValidImageUrl = (value: string) => {
   if (!value) { return true; }
   if (value.startsWith('/')) { return true; }
@@ -106,7 +101,7 @@ const parseAiAbout = (raw: string): ParseResult => {
   const errors: string[] = [];
 
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
     return { errors: ['JSON chưa hợp lệ. Hãy dán object có key "about".'], item: null };
   }
@@ -118,32 +113,44 @@ const parseAiAbout = (raw: string): ParseResult => {
       : null;
 
   if (!source) {
-    return { errors: ['Root JSON phải là { "about": {...} } hoặc object about.'], item: null };
+    return { errors: ['Root JSON phải là object hoặc { "about": {...} }.'], item: null };
   }
 
-  const subHeading = trimText(source.subHeading, 120);
-  const heading = trimText(source.heading, 180);
+  const heading = trimText(source.heading, 140);
+  const subHeading = trimText(source.subHeading, 80);
   const description = trimText(source.description, 500);
+
+  if (!heading) {
+    errors.push('Thiếu trường heading.');
+  }
+
+  if (!subHeading) {
+    errors.push('Thiếu trường subHeading.');
+  }
+
+  if (!description) {
+    errors.push('Thiếu trường description.');
+  }
+
   const image = trimText(source.image, 500);
-  const imagesSource = Array.isArray(source.images) ? source.images : [];
+  if (image && !isValidImageUrl(image)) {
+    errors.push('Trường image phải là URL http/https hoặc đường dẫn /...');
+  }
 
-  if (!subHeading) { errors.push('Thiếu subHeading.'); }
-  if (!heading) { errors.push('Thiếu heading.'); }
-  if (!description) { errors.push('Thiếu description.'); }
-  if (!isValidImageUrl(image)) { errors.push('image phải là URL http/https hoặc path bắt đầu bằng /.'); }
+  const images = Array.isArray(source.images)
+    ? source.images
+      .map((item) => trimText(item, 500))
+      .filter((item) => item.length > 0)
+    : [];
 
-  const images = imagesSource.slice(0, 3).map((item, index) => {
-    const value = trimText(item, 500);
-    if (!isValidImageUrl(value)) {
-      errors.push(`images[${index}] phải là URL http/https hoặc path bắt đầu bằng /.`);
-    }
-    return value;
-  });
+  const invalidImage = images.find((item) => !isValidImageUrl(item));
+  if (invalidImage) {
+    errors.push(`Ảnh không hợp lệ trong mảng images: "${invalidImage}".`);
+  }
 
   const rawFeatures = Array.isArray(source.features) ? source.features : [];
-  const rawStats = Array.isArray(source.stats) ? source.stats : [];
-  if (rawFeatures.length === 0) {
-    errors.push('Thiếu features.');
+  if (rawFeatures.length > MAX_FEATURES) {
+    errors.push(`Tối đa ${MAX_FEATURES} features, nhận được ${rawFeatures.length}. Hệ thống sẽ lấy ${MAX_FEATURES} mục đầu.`);
   }
 
   const features = rawFeatures.slice(0, MAX_FEATURES).reduce<AboutEditorState['features']>((acc, item, index) => {
@@ -153,26 +160,32 @@ const parseAiAbout = (raw: string): ParseResult => {
     }
 
     const record = item as Record<string, unknown>;
-    const title = trimText(record.title, 120);
+    const title = trimText(record.title, 100);
+    const iconName = trimText(record.iconName, 80);
     const featureImage = trimText(record.image, 500);
+    const mediaType = record.mediaType === 'image' ? 'image' : 'icon';
+
     if (!title) {
       errors.push(`Feature ${index + 1}: thiếu title.`);
       return acc;
     }
-    if (!isValidImageUrl(featureImage)) {
-      errors.push(`Feature ${index + 1}: image phải là URL http/https hoặc path bắt đầu bằng /.`);
-      return acc;
+
+    if (featureImage && !isValidImageUrl(featureImage)) {
+      errors.push(`Feature ${index + 1}: URL ảnh không hợp lệ.`);
     }
 
     acc.push(createAboutEditorFeature({
-      iconName: trimText(record.iconName, 80) || 'CheckCircle2',
-      id: `about-ai-${Date.now()}-${index}`,
-      image: featureImage,
-      mediaType: record.mediaType === 'image' ? 'image' : 'icon',
+      id: `about-ai-feature-${Date.now()}-${index}`,
+      iconName: iconName || undefined,
+      image: featureImage || undefined,
+      mediaType,
       title,
     }));
+
     return acc;
   }, []);
+
+  const rawStats = Array.isArray(source.stats) ? source.stats : [];
 
   if (errors.length > 0) {
     return { errors, item: null };
@@ -181,8 +194,8 @@ const parseAiAbout = (raw: string): ParseResult => {
   return {
     errors: [],
     item: {
-      buttonLink: trimText(source.buttonLink, 200) || '/about',
-      buttonText: trimText(source.buttonText, 80) || 'Xem chi tiết',
+      buttonLink: trimText(source.buttonLink, 200),
+      buttonText: trimText(source.buttonText, 60),
       description,
       features,
       heading,
@@ -216,28 +229,19 @@ export function AiAboutImport({
 }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = useState(false);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
-  const result = useMemo(() => parseAiAbout(rawInput), [rawInput]);
-  const canApply = rawInput.trim().length > 0 && result.item !== null && result.errors.length === 0;
 
   if (!isAiImportEnabled) {
     return null;
   }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    const res = parseAiAbout(rawInput);
+    return { data: res.item, errors: res.errors };
   };
 
-  const applyItem = () => {
-    if (!canApply || !result.item) { return; }
-    onApply(result.item);
+  const handleApply = (item: Partial<AboutEditorState>) => {
+    onApply(item);
     toast.success('Đã nhập nội dung Về chúng tôi');
-    setOpen(false);
-    setRawInput('');
   };
 
   return (
@@ -247,66 +251,28 @@ export function AiAboutImport({
           <Bot size={16} /> Import AI
         </Button>
       </HomeComponentFooterActionPortal>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import Về chúng tôi bằng AI</DialogTitle>
-            <DialogDescription>Copy prompt, nhờ AI tạo JSON, dán kết quả vào đây để preview rồi áp dụng vào form.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(AI_ABOUT_PROMPT, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{AI_ABOUT_PROMPT}</pre>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label>JSON mẫu</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(SAMPLE_ABOUT_JSON, 'sample')}>
-                    {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{SAMPLE_ABOUT_JSON}</pre>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Dán kết quả AI</Label>
-                <textarea className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" placeholder={SAMPLE_ABOUT_JSON} value={rawInput} onChange={(event) => setRawInput(event.target.value)} />
-              </div>
-              {rawInput.trim().length > 0 && (
-                <div className={cn('rounded-lg border p-3 text-sm', result.errors.length > 0 ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300' : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300')}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">{result.errors.map((error) => (<li key={error} className="flex gap-1.5"><X size={14} className="mt-0.5 shrink-0" /><span>{error}</span></li>))}</ul>
-                  ) : (
-                    <div className="flex gap-1.5"><Check size={14} className="mt-0.5 shrink-0" /><span>Sẵn sàng nhập nội dung Về chúng tôi.</span></div>
-                  )}
-                </div>
-              )}
-              {result.item ? (
-                <div className="space-y-2">
-                  <Label>Preview</Label>
-                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{result.item.subHeading}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{[result.item.heading, result.item.highlightText].filter(Boolean).join(' ')}</p>
-                    <p className="mt-1 line-clamp-3 text-xs text-slate-500">{result.item.description}</p>
-                    <p className="mt-2 text-xs text-slate-500">{result.item.features?.length ?? 0} điểm nổi bật • {result.item.style}</p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+
+      <AiImportDialogShell<Partial<AboutEditorState>>
+        open={open}
+        onOpenChange={setOpen}
+        title="Import Về chúng tôi bằng AI"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={AI_ABOUT_PROMPT}
+        sampleJson={SAMPLE_ABOUT_JSON}
+        directSessionId="admin-about-import"
+        directPlaceholder="Ví dụ: Viết giới thiệu Dohy Studio, chuyên đào tạo 3D và tài nguyên thiết kế, giọng chuyên nghiệp, có 3 số liệu và 4 điểm mạnh."
+        parse={handleParse}
+        renderPreview={(item) => (
+          <div className="space-y-1 text-xs">
+            <p className="font-medium uppercase tracking-wide text-slate-500">{item.subHeading}</p>
+            <p className="font-semibold text-slate-800 dark:text-slate-100">{[item.heading, item.highlightText].filter(Boolean).join(' ')}</p>
+            <p className="line-clamp-2 text-slate-500">{item.description}</p>
+            <p className="text-[11px] text-slate-400">{item.features?.length ?? 0} điểm nổi bật • {item.style}</p>
           </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="button" disabled={!canApply} onClick={applyItem}>Áp dụng vào form</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }

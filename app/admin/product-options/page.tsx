@@ -8,7 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Edit, GripVertical, Layers, Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '../components/ui';
-import { BulkActionBar, ColumnToggle, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminDragHandle, AdminPageHeader, AdminPageLayout, AdminPagination, buildOrderUpdates, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, getReorderedItems, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, SortableTableRow, TableCellControls, TableEmptyState, TableHeadControls, TableSkeleton, TableToolbar, useAdminDndSensors, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import type { DragEndEvent } from '@dnd-kit/core';
@@ -54,22 +54,13 @@ function SortableRow({ isDraggingDisabled, isSelected, onDelete, onToggleSelect,
       style={style}
       className={cn(isSelected && 'bg-orange-500/5', isDragging && 'bg-slate-100 dark:bg-slate-800 opacity-80')}
     >
-      <TableCell className="w-[40px]">
-        <SelectCheckbox checked={isSelected} onChange={onToggleSelect} />
-      </TableCell>
-      <TableCell className="w-[40px]">
-        <button
-          {...attributes}
-          {...listeners}
-          disabled={isDraggingDisabled}
-          className={cn(
-            'p-1 rounded transition-colors',
-            isDraggingDisabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-grab active:cursor-grabbing'
-          )}
-        >
-          <GripVertical size={16} />
-        </button>
-      </TableCell>
+      <TableCellControls
+        checked={isSelected}
+        onChange={onToggleSelect}
+        attributes={attributes}
+        dragDisabled={isDraggingDisabled}
+        listeners={listeners}
+      />
       <TableCell className="font-medium">{option.name}</TableCell>
       <TableCell className="text-slate-500 font-mono text-sm">{option.slug}</TableCell>
       <TableCell>
@@ -80,10 +71,10 @@ function SortableRow({ isDraggingDisabled, isSelected, onDelete, onToggleSelect,
         <Badge variant={option.isPreset ? 'default' : 'secondary'}>{option.isPreset ? 'Preset' : 'Custom'}</Badge>
       </TableCell>
       <TableCell>
-        <Badge variant={option.active ? 'default' : 'secondary'}>{option.active ? 'Hoạt động' : 'Ẩn'}</Badge>
+        <Badge variant={option.active ? 'default' : 'secondary'}>{option.active ? 'Hiện' : 'Ẩn'}</Badge>
       </TableCell>
       <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-1">
           <Link href={`/admin/product-options/${option._id}/values`}>
             <Button variant="ghost" size="sm">Giá trị</Button>
           </Link>
@@ -116,7 +107,6 @@ function ProductOptionsContent() {
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [filterPreset, setFilterPreset] = useState<'all' | 'preset' | 'custom'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: 'order' });
-  const [visibleColumns, setVisibleColumns] = useState(['select', 'drag', 'name', 'slug', 'displayType', 'unit', 'preset', 'status', 'actions']);
   const [selectedIds, setSelectedIds] = useState<Id<'productOptions'>[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<Id<'productOptions'> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -132,6 +122,7 @@ function ProductOptionsContent() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_product_options_visible_columns');
   const isLoading = optionsData === undefined;
 
   const filteredOptions = useMemo(() => {
@@ -154,7 +145,7 @@ function ProductOptionsContent() {
   }, [optionsData, searchTerm, filterActive, filterPreset]);
 
   const columns = [
-    { key: 'select', label: 'Chọn' },
+    { key: 'select', label: 'Chọn', required: true },
     { key: 'drag', label: '' },
     { key: 'name', label: 'Tên option', required: true },
     { key: 'slug', label: 'Slug' },
@@ -166,15 +157,11 @@ function ProductOptionsContent() {
   ];
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
   };
 
   const sortedData = useSortableData(filteredOptions, sortConfig);
   const isReorderEnabled = !searchTerm.trim() && filterActive === 'all' && filterPreset === 'all' && (sortConfig.key === 'order' || sortConfig.key === null);
-
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  };
 
   const toggleSelectAll = () =>{
     setSelectedIds(selectedIds.length === sortedData.length ? [] : sortedData.map(item => item._id));
@@ -242,23 +229,12 @@ function ProductOptionsContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-500/10 rounded-lg">
-            <Layers className="w-6 h-6 text-orange-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Loại tùy chọn sản phẩm</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý các option dùng cho phiên bản sản phẩm</p>
-          </div>
-        </div>
-        <Link href="/admin/product-options/create">
-          <Button className="gap-2" variant="accent">
-            <Plus size={16} /> Thêm option
-          </Button>
-        </Link>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Loại tùy chọn sản phẩm"
+        description="Quản lý các option dùng cho phiên bản sản phẩm"
+        addHref="/admin/product-options/create"
+      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}
@@ -268,33 +244,54 @@ function ProductOptionsContent() {
       />
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 justify-between">
-          <div className="flex flex-wrap gap-4 flex-1">
-            <div className="relative max-w-xs flex-1 min-w-[220px]">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Tìm kiếm option..." className="pl-9" value={searchTerm} onChange={(e) =>{  setSearchTerm(e.target.value); }} />
-            </div>
-            <select
-              value={filterActive}
-              onChange={(e) =>{  setFilterActive(e.target.value as 'all' | 'active' | 'inactive'); }}
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="active">Hoạt động</option>
-              <option value="inactive">Ẩn</option>
-            </select>
-            <select
-              value={filterPreset}
-              onChange={(e) =>{  setFilterPreset(e.target.value as 'all' | 'preset' | 'custom'); }}
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-            >
-              <option value="all">Preset + Custom</option>
-              <option value="preset">Preset</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          <ColumnToggle columns={columns} visibleColumns={visibleColumns} onToggle={toggleColumn} />
-        </div>
+        <TableToolbar
+          activeFilterCount={[filterActive !== 'all' && filterActive, filterPreset !== 'all' && filterPreset].filter(Boolean).length}
+          onResetFilters={() => {
+            setSearchTerm('');
+            setFilterActive('all');
+            setFilterPreset('all');
+          }}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => setSearchTerm(val)}
+              placeholder="Tìm kiếm option..."
+            />
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Trạng thái"
+                value={filterActive === 'all' ? '' : filterActive}
+                onChange={(val) => setFilterActive((val || 'all') as 'all' | 'active' | 'inactive')}
+                placeholder="Tất cả trạng thái"
+                options={[
+                  { value: 'active', label: 'Hiện' },
+                  { value: 'inactive', label: 'Ẩn' },
+                ]}
+              />
+              <FilterSelect
+                label="Loại"
+                value={filterPreset === 'all' ? '' : filterPreset}
+                onChange={(val) => setFilterPreset((val || 'all') as 'all' | 'preset' | 'custom')}
+                placeholder="Preset + Custom"
+                options={[
+                  { value: 'preset', label: 'Preset' },
+                  { value: 'custom', label: 'Custom' },
+                ]}
+              />
+              <ResetFilterButton
+                isFiltered={Boolean(searchTerm.trim() || filterActive !== 'all' || filterPreset !== 'all')}
+                onReset={() => {
+                  setSearchTerm('');
+                  setFilterActive('all');
+                  setFilterPreset('all');
+                }}
+              />
+              <ColumnToggle columns={columns} visibleColumns={visibleColumns} onToggle={(key) => toggleColumn(key, columns.map(c => c.key))} />
+            </>
+          }
+        />
 
         {!isReorderEnabled && (
           <div className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800">
@@ -303,46 +300,85 @@ function ProductOptionsContent() {
         )}
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <Table>
-            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-              <TableRow>
-                {visibleColumns.includes('select') && (
-                  <TableHead className="w-[40px]">
-                    <SelectCheckbox checked={selectedIds.length === sortedData.length && sortedData.length > 0} onChange={toggleSelectAll} indeterminate={selectedIds.length > 0 && selectedIds.length < sortedData.length} />
-                  </TableHead>
-                )}
-                {visibleColumns.includes('drag') && <TableHead className="w-[40px]" />}
-                {visibleColumns.includes('name') && <SortableHeader label="Tên option" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('slug') && <SortableHeader label="Slug" sortKey="slug" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('displayType') && <SortableHeader label="Hiển thị" sortKey="displayType" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('unit') && <SortableHeader label="Đơn vị" sortKey="unit" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('preset') && <SortableHeader label="Preset" sortKey="isPreset" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="active" sortConfig={sortConfig} onSort={handleSort} />}
-                {visibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <SortableContext items={sortedData.map(item => item._id)} strategy={verticalListSortingStrategy}>
-              <TableBody>
-                {sortedData.map(option => (
-                  <SortableRow
-                    key={option._id}
-                    option={option}
-                    isDraggingDisabled={!isReorderEnabled}
-                    isSelected={selectedIds.includes(option._id)}
-                    onToggleSelect={() =>{  toggleSelectItem(option._id); }}
-                    onDelete={() =>{  void handleDelete(option._id); }}
+          {/* Desktop View */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
+                <TableRow>
+                  <TableHeadControls
+                    showDrag={visibleColumns.includes('drag')}
+                    showSelect={visibleColumns.includes('select')}
+                    checked={selectedIds.length === sortedData.length && sortedData.length > 0}
+                    onChange={toggleSelectAll}
+                    indeterminate={selectedIds.length > 0 && selectedIds.length < sortedData.length}
                   />
-                ))}
-                {sortedData.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={visibleColumns.length} className="text-center py-8 text-slate-500">
-                      {searchTerm ? 'Không tìm thấy option phù hợp' : 'Chưa có option nào'}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </SortableContext>
-          </Table>
+                  {visibleColumns.includes('name') && <SortableHeader label="Tên option" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('slug') && <SortableHeader label="Slug" sortKey="slug" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('displayType') && <SortableHeader label="Hiển thị" sortKey="displayType" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('unit') && <SortableHeader label="Đơn vị" sortKey="unit" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('preset') && <SortableHeader label="Preset" sortKey="isPreset" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="active" sortConfig={sortConfig} onSort={handleSort} />}
+                  {visibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <SortableContext items={sortedData.map(item => item._id)} strategy={verticalListSortingStrategy}>
+                <TableBody>
+                  {sortedData.map(option => (
+                    <SortableRow
+                      key={option._id}
+                      option={option}
+                      isDraggingDisabled={!isReorderEnabled}
+                      isSelected={selectedIds.includes(option._id)}
+                      onToggleSelect={() =>{  toggleSelectItem(option._id); }}
+                      onDelete={() =>{  void handleDelete(option._id); }}
+                    />
+                  ))}
+                  {sortedData.length === 0 && (
+                    <TableEmptyState
+                      colSpan={visibleColumns.length}
+                      message={searchTerm ? 'Không tìm thấy option phù hợp' : 'Chưa có option nào'}
+                    />
+                  )}
+                </TableBody>
+              </SortableContext>
+            </Table>
+          </div>
+
+          {/* Mobile View */}
+          <MobileCardList>
+            {sortedData.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                {searchTerm ? 'Không tìm thấy option phù hợp' : 'Chưa có option nào'}
+              </div>
+            ) : (
+              sortedData.map(option => (
+                <MobileRowCard
+                  key={option._id}
+                  selected={selectedIds.includes(option._id)}
+                  checkbox={<SelectCheckbox checked={selectedIds.includes(option._id)} onChange={() => toggleSelectItem(option._id)} />}
+                  title={option.name}
+                  subtitle={<span className="text-xs text-slate-500">{option.slug}</span>}
+                  badge={
+                    <Badge variant={option.active ? 'success' : 'secondary'}>
+                      {option.active ? 'Hiện' : 'Ẩn'}
+                    </Badge>
+                  }
+                  details={
+                    <div className="space-y-1">
+                      <div><span className="text-slate-400">Kểu hiển thị:</span> {DISPLAY_TYPE_LABELS[option.displayType] || option.displayType}</div>
+                      {option.unit && <div><span className="text-slate-400">Đơn vị:</span> {option.unit}</div>}
+                    </div>
+                  }
+                  actions={
+                    <RowActions>
+                      <EditActionButton href={`/admin/product-options/${option._id}/edit`} />
+                      <DeleteActionButton onClick={() => void handleDelete(option._id)} />
+                    </RowActions>
+                  }
+                />
+              ))
+            )}
+          </MobileCardList>
         </DndContext>
 
         {sortedData.length > 0 && (
@@ -363,6 +399,6 @@ function ProductOptionsContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

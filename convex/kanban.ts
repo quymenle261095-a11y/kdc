@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { kanbanPriority } from "./lib/validators";
@@ -37,10 +37,27 @@ const taskDoc = v.object({
   title: v.string(),
 });
 
+async function resolveKanbanActorId(ctx: MutationCtx) {
+  const activeUser = await ctx.db
+    .query("users")
+    .withIndex("by_status", (q) => q.eq("status", "Active"))
+    .first();
+  if (activeUser) {
+    return activeUser._id;
+  }
+
+  const fallbackUser = await ctx.db.query("users").first();
+  if (fallbackUser) {
+    return fallbackUser._id;
+  }
+
+  throw new Error("Cần seed ít nhất một user admin trước khi dùng Kanban.");
+}
+
 export const listBoards = query({
   args: {},
   handler: async (ctx) => {
-    const boards = await ctx.db.query("kanbanBoards").collect();
+    const boards = await ctx.db.query("kanbanBoards").withIndex("by_order").take(100);
     return boards.sort((a, b) => a.order - b.order);
   },
   returns: v.array(boardDoc),
@@ -91,18 +108,19 @@ export const listTasksByColumn = query({
 
 export const createBoard = mutation({
   args: {
-    createdBy: v.id("users"),
+    createdBy: v.optional(v.id("users")),
     description: v.optional(v.string()),
     includeReview: v.optional(v.boolean()),
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const count = (await ctx.db.query("kanbanBoards").collect()).length;
+    const createdBy = args.createdBy ?? await resolveKanbanActorId(ctx);
+    const lastBoard = await ctx.db.query("kanbanBoards").withIndex("by_order").order("desc").first();
     const boardId = await ctx.db.insert("kanbanBoards", {
-      createdBy: args.createdBy,
+      createdBy,
       description: args.description,
       name: args.name,
-      order: count,
+      order: lastBoard ? lastBoard.order + 1 : 0,
     });
 
     const columns = [
@@ -300,13 +318,14 @@ export const createTask = mutation({
     assigneeId: v.optional(v.id("users")),
     boardId: v.id("kanbanBoards"),
     columnId: v.id("kanbanColumns"),
-    createdBy: v.id("users"),
+    createdBy: v.optional(v.id("users")),
     description: v.optional(v.string()),
     dueDate: v.optional(v.number()),
     priority: kanbanPriority,
     title: v.string(),
   },
   handler: async (ctx, args) => {
+    const createdBy = args.createdBy ?? await resolveKanbanActorId(ctx);
     const tasks = await ctx.db
       .query("kanbanTasks")
       .withIndex("by_column_order", (q) => q.eq("columnId", args.columnId))
@@ -316,7 +335,7 @@ export const createTask = mutation({
       assigneeId: args.assigneeId,
       boardId: args.boardId,
       columnId: args.columnId,
-      createdBy: args.createdBy,
+      createdBy,
       description: args.description,
       dueDate: args.dueDate,
       order: tasks.length,
@@ -366,7 +385,7 @@ export const deleteTask = mutation({
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.id);
     if (!task) {
-      throw new Error("Task không tồn tại");
+      return null;
     }
     await ctx.db.delete(args.id);
 

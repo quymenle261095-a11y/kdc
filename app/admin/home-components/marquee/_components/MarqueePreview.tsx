@@ -1,8 +1,10 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import { getMarqueeSectionColors } from '../_lib/colors';
@@ -16,18 +18,19 @@ import type {
   MarqueeSpeed,
   MarqueeStyle,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 const MARQUEE_STYLES: Array<{ id: MarqueeStyle; label: string }> = [
-  { id: 'ribbon', label: 'Ribbon' },
-  { id: 'gradient', label: 'Gradient' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'dark', label: 'Dark' },
-  { id: 'split', label: 'Split' },
-  { id: 'stripe', label: 'Stripe' },
+  { id: 'ribbon', label: '(1) Chạy ngang' },
+  { id: 'gradient', label: '(2) Chuyển màu' },
+  { id: 'minimal', label: '(3) Tối giản' },
+  { id: 'dark', label: '(4) Nền tối' },
+  { id: 'split', label: '(5) Chia đôi' },
+  { id: 'stripe', label: '(6) Sọc kẻ' },
 ];
 
 export const MarqueePreview = ({
-  items,
+  items = [],
   brandColor,
   secondary,
   mode = 'dual',
@@ -53,8 +56,12 @@ export const MarqueePreview = ({
   badgeText,
   spacing,
   cornerRadius,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
 }: {
-  items: MarqueeItem[];
+  items?: MarqueeItem[];
   brandColor: string;
   secondary: string;
   mode?: MarqueeBrandMode;
@@ -80,10 +87,19 @@ export const MarqueePreview = ({
   badgeText?: string;
   spacing?: SectionSpacing;
   cornerRadius?: MarqueeCornerRadius;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (items: MarqueeItem[]) => void;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
   const previewStyle = selectedStyle ?? 'ribbon';
-  const itemCount = items.length;
+  const itemCount = items?.length ?? 0;
+  const isVisualEditAllowed = Boolean(onItemsChange || onTitleChange || onSubtitleChange || onBadgeTextChange);
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
 
   const setPreviewStyle = (style: string) => {
     if (['ribbon', 'gradient', 'minimal', 'dark', 'split', 'stripe'].includes(style)) {
@@ -91,7 +107,10 @@ export const MarqueePreview = ({
     }
   };
 
-  const colors = getMarqueeSectionColors({ mode, primary: brandColor, secondary });
+  const colors = React.useMemo(
+    () => adaptTokensForDarkMode(getMarqueeSectionColors({ mode, primary: brandColor, secondary }), isDark),
+    [mode, brandColor, secondary, isDark]
+  );
 
   return (
     <PreviewWrapper
@@ -105,6 +124,9 @@ export const MarqueePreview = ({
       info={`${itemCount} mục`}
       fontStyle={fontStyle}
       fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={() => setVisualEditEnabled((prev) => !prev)}
     >
       <BrowserFrame>
         <div className="@container/preview">
@@ -135,6 +157,11 @@ export const MarqueePreview = ({
             badgeText={badgeText}
             spacing={spacing}
             cornerRadius={cornerRadius}
+            visualEditEnabled={isVisualEditActive}
+            onItemsChange={onItemsChange}
+            onTitleChange={onTitleChange}
+            onSubtitleChange={onSubtitleChange}
+            onBadgeTextChange={onBadgeTextChange}
           />
         </div>
       </BrowserFrame>

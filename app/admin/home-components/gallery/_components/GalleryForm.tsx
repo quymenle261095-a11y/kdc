@@ -97,7 +97,7 @@ export const GalleryForm = ({
           minItems={1}
           maxItems={20}
           aspectRatio={componentType === 'Partners' ? 'video' : (componentType === 'Gallery' ? 'video' : 'square')}
-          columns={componentType === 'Gallery' ? 2 : (componentType === 'TrustBadges' ? 3 : 2)}
+          columns={componentType === 'Gallery' ? 3 : (componentType === 'TrustBadges' ? 3 : 2)}
           showReorder={true}
           addButtonText={componentType === 'Partners' ? 'Thêm logo' : (componentType === 'TrustBadges' ? 'Thêm chứng nhận' : 'Thêm ảnh')}
           emptyText="Chưa có ảnh nào"

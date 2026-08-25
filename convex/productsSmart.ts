@@ -36,6 +36,8 @@ const inlineVariantDoc = v.object({
   price: v.number(),
   salePrice: v.optional(v.union(v.number(), v.null())),
   stock: v.number(),
+  image: v.optional(v.string()),
+  images: v.optional(v.array(v.string())),
   optionValues: v.array(inlineOptionValueDoc),
 });
 
@@ -105,6 +107,13 @@ const smartProductArgs = {
   digitalCredentialsTemplate: v.optional(digitalCredentialsDoc),
   metaDescription: v.optional(v.string()),
   metaTitle: v.optional(v.string()),
+  focusKeyword: v.optional(v.string()),
+  relatedQueries: v.optional(v.array(v.string())),
+  tags: v.optional(v.array(v.string())),
+  faqItems: v.optional(v.array(v.object({
+    question: v.string(),
+    answer: v.string(),
+  }))),
   name: v.string(),
   order: v.optional(v.number()),
   price: v.number(),
@@ -129,6 +138,8 @@ type InlineVariantInput = {
   price: number;
   salePrice?: number | null;
   stock: number;
+  image?: string;
+  images?: string[];
   optionValues: Array<{
     optionId: Id<"productOptions">;
     valueId: Id<"productOptionValues">;
@@ -327,6 +338,8 @@ function normalizeInlineVariants(variants: InlineVariantInput[], baseSku: string
       price: Number.isFinite(variant.price) ? variant.price : 0,
       salePrice: resolveSalePrice(variant.salePrice),
       stock: Number.isFinite(variant.stock) ? Math.max(0, Math.trunc(variant.stock)) : 0,
+      image: variant.image,
+      images: variant.images,
       optionValues: variant.optionValues.filter((item) => Boolean(item.optionId && item.valueId)),
     }))
     .filter((variant) => variant.optionValues.length > 0);
@@ -446,6 +459,8 @@ async function upsertVariants(
       salePrice: variant.salePrice,
       stock: variant.stock,
       order: index,
+      image: variant.image,
+      images: variant.images,
       optionValues: variant.optionValues,
     };
 
@@ -577,6 +592,10 @@ export const createProductWithVariants = mutation({
       digitalCredentialsTemplate: productType === "digital" ? args.digitalCredentialsTemplate : undefined,
       metaDescription: args.metaDescription,
       metaTitle: args.metaTitle,
+      focusKeyword: args.focusKeyword,
+      relatedQueries: args.relatedQueries,
+      tags: args.tags,
+      faqItems: args.faqItems,
       name: args.name,
       order: args.order ?? nextOrder,
       price: args.price,
@@ -727,7 +746,7 @@ export const updateProductWithVariants = mutation({
           const pCombos = pDoc.combos || [];
           const existingIndex = pCombos.findIndex((c: any) => c.syncId === combo.syncId);
 
-          let updatedCombos = [...pCombos];
+          const updatedCombos = [...pCombos];
           if (existingIndex >= 0) {
             updatedCombos[existingIndex] = comboForP;
           } else {
@@ -763,6 +782,10 @@ export const updateProductWithVariants = mutation({
       digitalCredentialsTemplate: productType === "digital" ? args.digitalCredentialsTemplate : undefined,
       metaDescription: args.metaDescription,
       metaTitle: args.metaTitle,
+      focusKeyword: args.focusKeyword,
+      relatedQueries: args.relatedQueries,
+      tags: args.tags,
+      faqItems: args.faqItems,
       name: args.name,
       order: args.order ?? product.order,
       price: args.price,

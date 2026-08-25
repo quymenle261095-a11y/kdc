@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from 'convex/react';
-import { Briefcase, FileText, LayoutGrid, Package, Search, Users, X } from 'lucide-react';
+import { Briefcase, FileText, History, LayoutGrid, Package, Search, Users, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { cn } from './ui';
 
@@ -27,6 +27,19 @@ type SuggestionSection = {
   key: string;
   label: string;
   items: SuggestionItem[];
+};
+
+type RecentSearchItem = Omit<SuggestionItem, 'icon'>;
+
+const ADMIN_RECENT_SEARCHES_KEY = 'admin_recent_searches';
+const MAX_RECENT_SEARCHES = 5;
+
+const SUGGESTION_KIND_ICONS: Record<SuggestionItem['kind'], React.ElementType> = {
+  menu: LayoutGrid,
+  posts: FileText,
+  products: Package,
+  services: Briefcase,
+  users: Users,
 };
 
 const ADMIN_MENU_ITEMS: MenuSuggestion[] = [
@@ -94,6 +107,42 @@ function scoreMatch(text: string, query: string) {
   return 20;
 }
 
+function isSuggestionKind(value: unknown): value is SuggestionItem['kind'] {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SUGGESTION_KIND_ICONS, value);
+}
+
+function isRecentSearchItem(value: unknown): value is RecentSearchItem {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const item = value as Partial<Record<keyof RecentSearchItem, unknown>>;
+  return (
+    typeof item.id === 'string'
+    && typeof item.title === 'string'
+    && (typeof item.subtitle === 'string' || item.subtitle === undefined)
+    && typeof item.href === 'string'
+    && isSuggestionKind(item.kind)
+  );
+}
+
+function toRecentSearchItem(item: SuggestionItem): RecentSearchItem {
+  return {
+    href: item.href,
+    id: item.id,
+    kind: item.kind,
+    subtitle: item.subtitle,
+    title: item.title,
+  };
+}
+
+function restoreRecentSearchItem(item: RecentSearchItem): SuggestionItem {
+  return {
+    ...item,
+    icon: SUGGESTION_KIND_ICONS[item.kind],
+  };
+}
+
 export function AdminHeaderSearchAutocomplete(): React.ReactElement {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +150,23 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [recentSearches, setRecentSearches] = useState<SuggestionItem[]>([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(ADMIN_RECENT_SEARCHES_KEY);
+    if (!stored) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed)) {
+        setRecentSearches(parsed.filter(isRecentSearchItem).map(restoreRecentSearchItem));
+      }
+    } catch (error) {
+      console.error('Lỗi khi parse lịch sử tìm kiếm admin:', error);
+    }
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -176,9 +242,9 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
 
   const dataSections = useMemo(() => {
     const results = contentResults as {
-      posts?: Array<{ id: string; title: string }>;
-      products?: Array<{ id: string; title: string }>;
-      services?: Array<{ id: string; title: string }>;
+      posts?: { items: Array<{ id: string; title: string }>; total: number };
+      products?: { items: Array<{ id: string; title: string }>; total: number };
+      services?: { items: Array<{ id: string; title: string }>; total: number };
     } | undefined;
 
     const postItems: SuggestionItem[] = [
@@ -190,7 +256,7 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
         icon: FileText,
         kind: 'posts',
       },
-      ...((results?.posts ?? []).map((post) => ({
+      ...((results?.posts?.items ?? []).map((post) => ({
         id: `post-${post.id}`,
         title: post.title,
         subtitle: 'Sửa bài viết',
@@ -209,7 +275,7 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
         icon: Package,
         kind: 'products',
       },
-      ...((results?.products ?? []).map((product) => ({
+      ...((results?.products?.items ?? []).map((product) => ({
         id: `product-${product.id}`,
         title: product.title,
         subtitle: 'Sửa sản phẩm',
@@ -228,7 +294,7 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
         icon: Briefcase,
         kind: 'services',
       },
-      ...((results?.services ?? []).map((service) => ({
+      ...((results?.services?.items ?? []).map((service) => ({
         id: `service-${service.id}`,
         title: service.title,
         subtitle: 'Sửa dịch vụ',
@@ -278,13 +344,21 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
     ].filter((section) => section.items.length > 0 || section.key !== 'menu');
   }, [dataSections, menuSuggestions]);
 
-  const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections]);
+  const showRecent = query.trim() === '' && recentSearches.length > 0;
+  const flatItems = useMemo(() => {
+    if (showRecent) {
+      return recentSearches;
+    }
+
+    return sections.flatMap((section) => section.items);
+  }, [recentSearches, sections, showRecent]);
+  const visibleSections = showRecent ? [] : sections;
   const hasResults = flatItems.length > 0;
-  const isLoading = shouldSearch && (contentResults === undefined || usersResults === undefined);
+  const isLoading = shouldSearch && !showRecent && (contentResults === undefined || usersResults === undefined);
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [debouncedQuery]);
+  }, [debouncedQuery, showRecent]);
 
   useEffect(() => {
     if (!hasResults) {
@@ -302,6 +376,35 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
     router.push(href);
   };
 
+  const addToRecentSearches = (item: SuggestionItem) => {
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((recentItem) => recentItem.href !== item.href);
+      const updated = [item, ...filtered].slice(0, MAX_RECENT_SEARCHES);
+      localStorage.setItem(ADMIN_RECENT_SEARCHES_KEY, JSON.stringify(updated.map(toRecentSearchItem)));
+      return updated;
+    });
+  };
+
+  const removeFromRecentSearches = (href: string) => {
+    setRecentSearches((prev) => {
+      const updated = prev.filter((item) => item.href !== href);
+      localStorage.setItem(ADMIN_RECENT_SEARCHES_KEY, JSON.stringify(updated.map(toRecentSearchItem)));
+      if (activeIndex >= updated.length && updated.length > 0) {
+        setActiveIndex(updated.length - 1);
+      }
+      return updated;
+    });
+  };
+
+  const handleSelect = (item: SuggestionItem) => {
+    addToRecentSearches(item);
+    setQuery('');
+    setDebouncedQuery('');
+    setIsOpen(false);
+    setActiveIndex(0);
+    router.push(item.href);
+  };
+
   const handleClear = () => {
     setQuery('');
     setDebouncedQuery('');
@@ -313,7 +416,7 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
     if (hasResults) {
       const target = flatItems[activeIndex] ?? flatItems[0];
       if (target) {
-        handleNavigate(target.href);
+        handleSelect(target);
       }
       return;
     }
@@ -330,14 +433,14 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
         type="text"
         value={query}
         onFocus={() => {
-          if (query.trim()) {
+          if (query.trim() || recentSearches.length > 0) {
             setIsOpen(true);
           }
         }}
         onChange={(event) => {
           const value = event.target.value;
           setQuery(value);
-          setIsOpen(Boolean(value.trim()));
+          setIsOpen(Boolean(value.trim()) || recentSearches.length > 0);
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
@@ -381,7 +484,7 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
         </button>
       )}
 
-      {isOpen && shouldSearch && (
+      {isOpen && (shouldSearch || showRecent) && (
         <div className="absolute right-0 mt-2 w-[420px] max-h-[420px] overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900 z-50">
           {isLoading && (
             <div className="px-3 py-2 text-sm text-slate-500">Đang tìm kiếm...</div>
@@ -391,12 +494,64 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
             <div className="px-3 py-2 text-sm text-slate-500">Không có kết quả phù hợp.</div>
           )}
 
-          {!isLoading && hasResults && (
+          {!isLoading && showRecent && (
+            <div className="rounded-lg border border-slate-100 p-1.5 dark:border-slate-800">
+              <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Tìm kiếm gần đây
+              </div>
+
+              <div className="space-y-0.5">
+                {recentSearches.map((item, index) => {
+                  const isActive = index === activeIndex;
+
+                  return (
+                    <div
+                      key={item.href}
+                      role="button"
+                      tabIndex={-1}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => handleSelect(item)}
+                      className={cn(
+                        'group flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+                      )}
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                          <History size={14} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{item.title}</span>
+                          {item.subtitle && <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{item.subtitle}</span>}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeFromRecentSearches(item.href);
+                        }}
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 opacity-0 transition-colors hover:bg-slate-200 hover:text-red-500 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-slate-700"
+                        aria-label="Xóa lịch sử"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!isLoading && !showRecent && hasResults && (
             <div className="space-y-2">
               {(() => {
                 let currentIndex = -1;
 
-                return sections.map((section) => {
+                return visibleSections.map((section) => {
                   if (section.items.length === 0) {
                     return null;
                   }
@@ -410,15 +565,16 @@ export function AdminHeaderSearchAutocomplete(): React.ReactElement {
                       <div className="space-y-0.5">
                         {section.items.map((item) => {
                           currentIndex += 1;
+                          const itemIndex = currentIndex;
                           const Icon = item.icon;
-                          const isActive = currentIndex === activeIndex;
+                          const isActive = itemIndex === activeIndex;
 
                           return (
                             <button
                               key={item.id}
                               type="button"
-                              onMouseEnter={() => setActiveIndex(currentIndex)}
-                              onClick={() => handleNavigate(item.href)}
+                              onMouseEnter={() => setActiveIndex(itemIndex)}
+                              onClick={() => handleSelect(item)}
                               className={cn(
                                 'w-full rounded-md px-2 py-1.5 text-left transition-colors',
                                 isActive

@@ -178,16 +178,17 @@ export type ProductsListColors = {
 export const getProductsListColors = (
   primary: string,
   secondary: string | undefined,
-  mode: ProductsListColorMode = 'single'
+  mode: ProductsListColorMode = 'single',
+  isDark?: boolean
 ): ProductsListColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSubtle = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderSoft = '#e5e7eb';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSoft = '#94a3b8';
-  const overlayBase = '#0f172a';
+  const neutralSurface = isDark ? '#161617' : '#ffffff';
+  const neutralSubtle = isDark ? '#1c1c1e' : '#f1f5f9';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralBorderSoft = isDark ? '#1c1c1e' : '#e5e7eb';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
+  const overlayBase = isDark ? '#ffffff' : '#0f172a';
 
   const secondaryResolved = resolveSecondaryForMode(primary, secondary, mode);
   const primaryTint = getSolidTint(primary, primary, 0.42);
@@ -225,7 +226,14 @@ export const getProductsListColors = (
     categoryBadgeBg: secondaryTint,
     categoryBadgeText: ensureAPCATextColor(secondaryResolved, secondaryTint, 12, 600),
     categoryBadgeBorder: secondaryTint,
-    priceColor: ensureAPCATextColor(secondaryResolved, neutralSurface, 16, 700),
+    priceColor: ensureAPCATextColor(
+      isDark && getAPCALc(secondaryResolved, neutralSurface) < 45
+        ? (getAPCALc(primary, neutralSurface) >= 45 ? primary : '#ffffff')
+        : secondaryResolved,
+      neutralSurface,
+      16,
+      700
+    ),
     priceOriginalText: ensureAPCATextColor(neutralSoft, neutralSurface, 12, 500),
     ratingStarActive: secondaryResolved,
     ratingStarInactive: neutralBorder,

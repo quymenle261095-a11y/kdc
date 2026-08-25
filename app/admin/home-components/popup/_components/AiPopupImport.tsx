@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Label, cn } from '../../../components/ui';
+import { Button } from '../../../components/ui';
+import { AiImportDialogShell } from '@/app/admin/components/AiImportDialogShell';
 import type { PopupConfig } from '../_types';
 import { useTypeAiImportEnabled } from '../../_shared/hooks/useTypeAiImportEnabled';
 import { HomeComponentFooterActionPortal } from '../../_shared/components/HomeComponentFooterActions';
@@ -50,7 +51,7 @@ Ràng buộc chất lượng:
 - Không tạo field ngoài schema.
 - Giữ câu chữ tự nhiên, dấu tiếng Việt đầy đủ, đọc tốt trên mobile.`;
 
-const SAMPLE_JSON = `{
+const SAMPLE_POPUP_JSON = `{
   "eyebrow": "Ưu đãi mới",
   "heading": "Nhận ưu đãi dành riêng cho bạn",
   "description": "Đăng ký hôm nay để nhận thông tin khuyến mãi và tư vấn phù hợp.",
@@ -62,33 +63,27 @@ const SAMPLE_JSON = `{
   "icon": "Gift"
 }`;
 
-const cleanJsonInput = (raw: string) => {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-};
-
 const trimText = (value: unknown, maxLength: number) => {
   if (typeof value !== 'string' && typeof value !== 'number') {return '';}
   return String(value).trim().slice(0, maxLength);
 };
 
-const parsePopupJson = (raw: string): { data: Partial<PopupConfig>; errors: string[] } => {
+const parsePopupJson = (raw: string): { data: Partial<PopupConfig> | null; errors: string[] } => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
-    return { data: {}, errors: ['JSON chưa hợp lệ.'] };
+    return { data: null, errors: ['JSON chưa hợp lệ.'] };
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return { data: {}, errors: ['Root JSON phải là object.'] };
+    return { data: null, errors: ['Root JSON phải là object.'] };
   }
 
   const record = parsed as Record<string, unknown>;
   const heading = trimText(record.heading, 80);
   if (!heading) {
-    return { data: {}, errors: ['Thiếu heading.'] };
+    return { data: null, errors: ['Thiếu heading.'] };
   }
 
   return {
@@ -110,28 +105,18 @@ const parsePopupJson = (raw: string): { data: Partial<PopupConfig>; errors: stri
 export function AiPopupImport({ onApply }: { onApply: (config: Partial<PopupConfig>) => void }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = useState(false);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
-  const result = useMemo(() => parsePopupJson(rawInput), [rawInput]);
-  const canApply = rawInput.trim().length > 0 && result.errors.length === 0;
 
   if (!isAiImportEnabled) {
     return null;
   }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    return parsePopupJson(rawInput);
   };
 
-  const apply = () => {
-    if (!canApply) {return;}
-    onApply(result.data);
+  const handleApply = (config: Partial<PopupConfig>) => {
+    onApply(config);
     toast.success('Đã nhập nội dung popup');
-    setOpen(false);
-    setRawInput('');
   };
 
   return (
@@ -141,57 +126,33 @@ export function AiPopupImport({ onApply }: { onApply: (config: Partial<PopupConf
           <Bot size={16} /> Import AI
         </Button>
       </HomeComponentFooterActionPortal>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import nội dung popup bằng AI</DialogTitle>
-            <DialogDescription>Copy prompt, nhờ AI tạo JSON rồi dán kết quả vào đây.</DialogDescription>
-          </DialogHeader>
 
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(AI_POPUP_PROMPT, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{AI_POPUP_PROMPT}</pre>
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label>JSON mẫu</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(SAMPLE_JSON, 'sample')}>
-                    {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{SAMPLE_JSON}</pre>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Dán kết quả AI</Label>
-                <textarea
-                  className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  placeholder={SAMPLE_JSON}
-                  value={rawInput}
-                  onChange={(event) => setRawInput(event.target.value)}
-                />
-              </div>
-              {rawInput.trim().length > 0 && (
-                <div className={cn('rounded-md border p-2 text-xs', result.errors.length > 0 ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700')}>
-                  {result.errors.length > 0 ? result.errors.join(' ') : 'JSON hợp lệ, có thể áp dụng.'}
-                </div>
-              )}
+      <AiImportDialogShell<Partial<PopupConfig>>
+        open={open}
+        onOpenChange={setOpen}
+        title="Import nội dung popup bằng AI"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={AI_POPUP_PROMPT}
+        sampleJson={SAMPLE_POPUP_JSON}
+        directSessionId="admin-popup-import"
+        directPlaceholder="Ví dụ: Popup mời khách nhận tư vấn miễn phí về khóa học 3D, CTA Liên hệ tư vấn, không giảm giá."
+        parse={handleParse}
+        renderPreview={(config) => (
+          <div className="space-y-1 text-xs">
+            {config.eyebrow && <span className="text-[10px] font-semibold uppercase text-blue-600 dark:text-blue-400">{config.eyebrow}</span>}
+            <p className="font-semibold text-slate-800 dark:text-slate-100">{config.heading}</p>
+            {config.description && <p className="text-slate-500">{config.description}</p>}
+            {config.note && <p className="text-[11px] text-slate-400 italic">{config.note}</p>}
+            <div className="flex gap-2 text-[11px] text-slate-400 pt-1">
+              {config.primaryButtonText && <span>🔘 {config.primaryButtonText}</span>}
+              {config.secondaryButtonText && <span>🔘 {config.secondaryButtonText}</span>}
+              {config.icon && <span>🔔 {config.icon}</span>}
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Đóng</Button>
-            <Button type="button" disabled={!canApply} onClick={apply}>Áp dụng</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }

@@ -18,9 +18,10 @@ interface ContactSectionProps {
   mode: ContactBrandMode;
   title: string;
   snapshotComponentKey?: string;
+  isDark?: boolean;
 }
 
-export function ContactSection({ config, brandColor, secondary, mode, title, snapshotComponentKey }: ContactSectionProps) {
+export function ContactSection({ config, brandColor, secondary, mode, title, snapshotComponentKey, isDark }: ContactSectionProps) {
   const snapshotDemo = useSnapshotDemoContext();
   const normalizedConfig = React.useMemo(() => normalizeContactConfig(config), [config]);
   const pathname = usePathname();
@@ -43,11 +44,14 @@ export function ContactSection({ config, brandColor, secondary, mode, title, sna
     return getContactMapDataFromSettings(contactSettings ?? []);
   }, [contactSettings, snapshotData]);
 
-  const validation = React.useMemo(() => getContactValidationResult({
-    primary: brandColor,
-    secondary,
-    mode,
-  }), [brandColor, secondary, mode]);
+  const validation = React.useMemo(() => {
+    return getContactValidationResult({
+      primary: brandColor,
+      secondary,
+      mode,
+      isDark: isDark ?? false,
+    });
+  }, [brandColor, secondary, mode, isDark]);
 
   return (
     <ContactSectionShared
@@ -59,6 +63,7 @@ export function ContactSection({ config, brandColor, secondary, mode, title, sna
       title={title}
       mapData={mapData}
       sourcePath={pathname}
+      isDark={isDark ?? false}
     />
   );
 }

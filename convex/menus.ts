@@ -1,7 +1,8 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
+import { v } from "convex/values";
 import { MENU_MAX_DEPTH, clampMenuDepth } from "../lib/utils/menu-tree";
+import { TRUST_PAGE_SLOTS } from "../lib/ia/trust-pages";
 
 const menuDoc = v.object({
   _creationTime: v.number(),
@@ -16,6 +17,7 @@ const menuItemDoc = v.object({
   active: v.boolean(),
   depth: v.number(),
   icon: v.optional(v.string()),
+  isSpecial: v.optional(v.boolean()),
   label: v.string(),
   menuId: v.id("menus"),
   openInNewTab: v.optional(v.boolean()),
@@ -202,6 +204,7 @@ export const createMenuItem = mutation({
     active: v.optional(v.boolean()),
     depth: v.optional(v.number()),
     icon: v.optional(v.string()),
+    isSpecial: v.optional(v.boolean()),
     label: v.string(),
     menuId: v.id("menus"),
     openInNewTab: v.optional(v.boolean()),
@@ -252,6 +255,7 @@ export const updateMenuItem = mutation({
     depth: v.optional(v.number()),
     icon: v.optional(v.string()),
     id: v.id("menuItems"),
+    isSpecial: v.optional(v.boolean()),
     label: v.optional(v.string()),
     openInNewTab: v.optional(v.boolean()),
     order: v.optional(v.number()),
@@ -331,6 +335,7 @@ export const saveMenuItemsBulk = mutation({
       depth: v.number(),
       active: v.boolean(),
       icon: v.optional(v.string()),
+      isSpecial: v.optional(v.boolean()),
       openInNewTab: v.optional(v.boolean()),
       parentId: v.optional(v.id("menuItems")),
     })),
@@ -367,6 +372,7 @@ export const saveMenuItemsBulk = mutation({
           depth: normalizedDepth,
           active: item.active,
           icon: item.icon,
+          isSpecial: item.isSpecial,
           openInNewTab: item.openInNewTab,
           parentId: item.parentId,
           order: index,
@@ -379,6 +385,7 @@ export const saveMenuItemsBulk = mutation({
           depth: normalizedDepth,
           active: item.active,
           icon: item.icon,
+          isSpecial: item.isSpecial,
           openInNewTab: item.openInNewTab,
           parentId: item.parentId,
           order: index,
@@ -565,6 +572,130 @@ export const listServicesForPicker = query({
   })),
 });
 
+export const listProjectsForPicker = query({
+  args: {
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 20, 50);
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_status_publishedAt", (q) => q.eq("status", "Published"))
+      .order("desc")
+      .take(limit);
+
+    const categories = await Promise.all(projects.map((project) => ctx.db.get(project.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    const formatProject = (project: Doc<"projects">) => ({
+      _id: project._id,
+      title: project.title,
+      slug: project.slug,
+      categorySlug: categoryMap.get(project.categoryId)?.slug ?? "",
+    });
+
+    if (args.search?.trim()) {
+      const searchLower = args.search.toLowerCase();
+      return projects
+        .filter((project) => project.title.toLowerCase().includes(searchLower))
+        .map(formatProject);
+    }
+
+    return projects.map(formatProject);
+  },
+  returns: v.array(v.object({
+    _id: v.id("projects"),
+    title: v.string(),
+    slug: v.string(),
+    categorySlug: v.string(),
+  })),
+});
+
+export const listCoursesForPicker = query({
+  args: {
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 20, 50);
+    const search = args.search?.trim();
+    const courses = search
+      ? await ctx.db
+        .query("courses")
+        .withSearchIndex("search_title", (q) => q.search("title", search.toLowerCase()).eq("status", "Published"))
+        .take(limit)
+      : await ctx.db
+        .query("courses")
+        .withIndex("by_status_publishedAt", (q) => q.eq("status", "Published"))
+        .order("desc")
+        .take(limit);
+
+    const categories = await Promise.all(courses.map((course) => ctx.db.get(course.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    return courses.map((course: Doc<"courses">) => ({
+      _id: course._id,
+      title: course.title,
+      slug: course.slug,
+      categorySlug: categoryMap.get(course.categoryId)?.slug ?? "",
+    }));
+  },
+  returns: v.array(v.object({
+    _id: v.id("courses"),
+    title: v.string(),
+    slug: v.string(),
+    categorySlug: v.string(),
+  })),
+});
+
+export const listTrustPageRoutesForPicker = query({
+  args: {},
+  handler: async (ctx) => {
+    const trustPagesFeature = await ctx.db
+      .query("moduleFeatures")
+      .withIndex("by_module_feature", (q) => q.eq("moduleKey", "settings").eq("featureKey", "enableTrustPages"))
+      .unique();
+    if (trustPagesFeature && !trustPagesFeature.enabled) {
+      return [];
+    }
+
+    const settingKeys = TRUST_PAGE_SLOTS.map((slot) => slot.iaKey);
+    const settings = await Promise.all(
+      settingKeys.map((key) =>
+        ctx.db
+          .query("settings")
+          .withIndex("by_key", (q) => q.eq("key", key))
+          .unique()
+      )
+    );
+    const settingMap = new Map(settings.filter(Boolean).map((setting) => [setting!.key, setting!.value]));
+
+    const pages = await ctx.db.query("pages").collect();
+    const pageMap = new Map(pages.map((p) => [p.key, p]));
+
+    return TRUST_PAGE_SLOTS.flatMap((slot) => {
+      const isEnabled = settingMap.get(slot.iaKey) !== false;
+      const page = pageMap.get(slot.key);
+      if (!isEnabled || !page || page.status !== "Published") {
+        return [];
+      }
+      return [{
+        key: slot.key,
+        label: slot.defaultTitle,
+        postTitle: page.title,
+        url: slot.slug,
+      }];
+    });
+  },
+  returns: v.array(v.object({
+    key: v.string(),
+    label: v.string(),
+    postTitle: v.string(),
+    url: v.string(),
+  })),
+});
+
 export const getSmartMenuBuilderData = query({
   args: {},
   handler: async (ctx) => {
@@ -583,3 +714,41 @@ export const getSmartMenuBuilderData = query({
     };
   },
 });
+
+export const listResourcesForPicker = query({
+  args: {
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 20, 50);
+    const search = args.search?.trim();
+    const resources = search
+      ? await ctx.db
+        .query("resources")
+        .withSearchIndex("search_title", (q) => q.search("title", search.toLowerCase()).eq("status", "Published"))
+        .take(limit)
+      : await ctx.db
+        .query("resources")
+        .withIndex("by_status_publishedAt", (q) => q.eq("status", "Published"))
+        .order("desc")
+        .take(limit);
+
+    const categories = await Promise.all(resources.map((resource) => ctx.db.get(resource.categoryId)));
+    const categoryMap = new Map(categories.filter(Boolean).map((cat) => [cat!._id, cat!]));
+
+    return resources.map((resource: Doc<"resources">) => ({
+      _id: resource._id,
+      title: resource.title,
+      slug: resource.slug,
+      categorySlug: categoryMap.get(resource.categoryId)?.slug ?? "",
+    }));
+  },
+  returns: v.array(v.object({
+    _id: v.id("resources"),
+    title: v.string(),
+    slug: v.string(),
+    categorySlug: v.string(),
+  })),
+});
+

@@ -1,9 +1,12 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
+
 import { cn } from '../../../components/ui';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
@@ -14,6 +17,7 @@ import {
   type BlogBrandMode,
 } from '../_lib/colors';
 import { BLOG_STYLES } from '../_lib/constants';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import type { BlogCardRadius, BlogStyle } from '../_types';
 import { BlogSectionRuntime } from './BlogSectionRuntime';
 import type { PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
@@ -48,6 +52,10 @@ interface BlogPreviewProps {
   // Grid columns
   desktopColumns?: 3 | 4;
   cornerRadius?: BlogCardRadius;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }
 
 const getPreviewViewportClassName = (device: PreviewDevice) => {
@@ -203,15 +211,33 @@ export const BlogPreview = ({
   // Grid columns
   desktopColumns = 4,
   cornerRadius = 'lg',
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: BlogPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
   const previewDeviceWidthClass = deviceWidths[device];
 
-  const tokens = getBlogColorTokens({
-    primary: brandColor,
-    secondary,
-    mode,
-  });
+  const tokens = React.useMemo(
+    () => adaptTokensForDarkMode(getBlogColorTokens({ primary: brandColor, secondary, mode }), isDark),
+    [brandColor, secondary, mode, isDark]
+  );
 
   const validation = getBlogValidationResult({
     primary: brandColor,
@@ -271,6 +297,9 @@ export const BlogPreview = ({
         device={device}
         setDevice={setDevice}
         previewStyle={selectedStyle}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
         setPreviewStyle={(style) => {onStyleChange?.(style as BlogStyle);}}
         styles={BLOG_STYLES}
         info="desktop shell"
@@ -278,45 +307,52 @@ export const BlogPreview = ({
         fontStyle={fontStyle}
         fontClassName={fontClassName}
       >
-        <BrowserFrame url="yoursite.com/blog">
-          <div className={getPreviewContentClassName(device)}>
-            <div
-              className={cn('bg-white transition-all duration-300 relative flex flex-col', getDeviceFrameClassName(device))}
-              style={{
-                borderTopColor: tokens.primary.solid,
-              } as React.CSSProperties}
-            >
-              <div className={getPreviewViewportClassName(device)}>
-                <BlogSectionRuntime
-                  items={displayPosts}
-                  title={title}
-                  subtitle={subtitle}
-                  style={selectedStyle}
-                  tokens={tokens}
-                  context="preview"
-                  device={device}
-                  showAuthor={showAuthor}
-                  showExcerpt={showExcerpt}
-                  showDate={showDate}
-                  fontClassName={fontClassName}
-                  fontStyle={fontStyle}
-                  hideHeader={hideHeader}
-                  showTitleHeader={showTitleHeader}
-                  showSubtitleHeader={showSubtitleHeader}
-                  showBadge={showBadge}
-                  badgeText={badgeText}
-                  headerAlign={headerAlign}
-                  titleColorPrimary={titleColorPrimary}
-                  subtitleAboveTitle={subtitleAboveTitle}
-                  uppercaseText={uppercaseText}
-                  desktopColumns={desktopColumns}
-                  spacing={spacing}
-                  cornerRadius={cornerRadius}
-                />
+        <div className="space-y-3">
+
+          <BrowserFrame url="yoursite.com/blog">
+            <div className={getPreviewContentClassName(device)}>
+              <div
+                className={cn(isDark ? 'bg-slate-900' : 'bg-white', 'transition-all duration-300 relative flex flex-col', getDeviceFrameClassName(device))}
+                style={{
+                  borderTopColor: tokens.primary.solid,
+                } as React.CSSProperties}
+              >
+                <div className={getPreviewViewportClassName(device)}>
+                  <BlogSectionRuntime
+                    items={displayPosts}
+                    title={title}
+                    subtitle={subtitle}
+                    style={selectedStyle}
+                    tokens={tokens}
+                    context="preview"
+                    device={device}
+                    showAuthor={showAuthor}
+                    showExcerpt={showExcerpt}
+                    showDate={showDate}
+                    fontClassName={fontClassName}
+                    fontStyle={fontStyle}
+                    hideHeader={hideHeader}
+                    showTitleHeader={showTitleHeader}
+                    showSubtitleHeader={showSubtitleHeader}
+                    showBadge={showBadge}
+                    badgeText={badgeText}
+                    headerAlign={headerAlign}
+                    titleColorPrimary={titleColorPrimary}
+                    subtitleAboveTitle={subtitleAboveTitle}
+                    uppercaseText={uppercaseText}
+                    desktopColumns={desktopColumns}
+                    spacing={spacing}
+                    cornerRadius={cornerRadius}
+                    visualEditEnabled={isVisualEditActive}
+                    onTitleChange={onTitleChange}
+                    onSubtitleChange={onSubtitleChange}
+                    onBadgeTextChange={onBadgeTextChange}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </BrowserFrame>
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' && (

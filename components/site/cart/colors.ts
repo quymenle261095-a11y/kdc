@@ -167,16 +167,17 @@ export type CartColors = {
 export const getCartColors = (
   primary: string,
   secondary: string | undefined,
-  mode: CartColorMode = 'single'
+  mode: CartColorMode = 'single',
+  isDark = false
 ): CartColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSurfaceMuted = '#f8fafc';
-  const neutralSurfaceSoft = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderStrong = '#cbd5e1';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSoft = '#94a3b8';
+  const neutralSurface = isDark ? '#111111' : '#ffffff';
+  const neutralSurfaceMuted = isDark ? '#161617' : '#f8fafc';
+  const neutralSurfaceSoft = isDark ? '#2c2c2e' : '#f1f5f9';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralBorderStrong = isDark ? '#3f3f46' : '#cbd5e1';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
   const overlayBase = '#0f172a';
 
   const secondaryResolved = resolveSecondaryForMode(primary, secondary, mode);

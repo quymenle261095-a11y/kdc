@@ -1,8 +1,6 @@
 import { api } from '@/convex/_generated/api';
 import { getConvexClient } from '@/lib/convex';
-import type { Id } from '@/convex/_generated/dataModel';
 import { normalizeRouteMode, type RouteMode } from './route-mode';
-import { TRUST_PAGE_MAPPING_KEYS, TRUST_PAGE_SLOTS, type TrustPageKey } from './trust-pages';
 
 export const IA_SETTINGS_KEYS = [
   'ia_route_mode',
@@ -14,7 +12,6 @@ export const IA_SETTINGS_KEYS = [
   'ia_page_shipping',
   'ia_page_payment',
   'ia_page_faq',
-  ...TRUST_PAGE_MAPPING_KEYS,
 ] as const;
 
 export type IASettings = {
@@ -29,17 +26,11 @@ export type IASettings = {
     payment: boolean;
     faq: boolean;
   };
-  trustPages: Record<TrustPageKey, Id<'posts'> | null>;
 };
 
 const resolveBoolean = (value: unknown, fallback = true): boolean => {
   if (typeof value === 'boolean') {return value;}
   return fallback;
-};
-
-const resolvePostId = (value: unknown): Id<'posts'> | null => {
-  if (typeof value === 'string' && value.trim()) {return value as Id<'posts'>;}
-  return null;
 };
 
 export const getIASettings = async (): Promise<IASettings> => {
@@ -58,9 +49,5 @@ export const getIASettings = async (): Promise<IASettings> => {
       terms: resolveBoolean(raw.ia_page_terms, true),
     },
     routeMode: normalizeRouteMode(raw.ia_route_mode),
-    trustPages: TRUST_PAGE_SLOTS.reduce((acc, slot) => {
-      acc[slot.key] = resolvePostId(raw[slot.mappingKey]);
-      return acc;
-    }, {} as Record<TrustPageKey, Id<'posts'> | null>),
   };
 };

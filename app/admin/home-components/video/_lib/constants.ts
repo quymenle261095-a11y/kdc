@@ -2,12 +2,12 @@ import type { VideoAspect, VideoBrandMode, VideoConfig, VideoCornerRadius, Video
 import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const VIDEO_STYLES: Array<{ id: VideoStyle; label: string }> = [
-  { id: 'centered', label: 'Centered' },
-  { id: 'split', label: 'Split' },
-  { id: 'fullwidth', label: 'Fullwidth' },
-  { id: 'cinema', label: 'Cinema' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'parallax', label: 'Parallax' },
+  { id: 'centered', label: '(1) Căn giữa' },
+  { id: 'split', label: '(2) Chia đôi' },
+  { id: 'fullwidth', label: '(3) Tràn viền' },
+  { id: 'cinema', label: '(4) Khung rộng' },
+  { id: 'minimal', label: '(5) Tối giản' },
+  { id: 'parallax', label: '(6) Cuộn nền' },
 ];
 
 export const DEFAULT_TEXTS: Record<VideoStyle, Record<string, string>> = {

@@ -15,7 +15,7 @@ export interface ContactSocialLink {
   url: string;
 }
 
-export type ContactStyle = 'modern' | 'floating' | 'grid' | 'elegant' | 'minimal' | 'centered';
+export type ContactStyle = 'modern' | 'floating' | 'grid' | 'elegant' | 'minimal' | 'centered' | 'kanban';
 
 export type ContactBrandMode = 'single' | 'dual';
 export type ContactCornerRadius = 'none' | 'sm' | 'lg';

@@ -20,9 +20,9 @@ export function ExampleLinks({ title = 'Xem ví dụ thực tế', links, color 
   if (compact) {
     return (
       <div className="space-y-1">
-        {links.map((link) => (
+        {links.map((link, index) => (
           <a
-            key={link.url}
+            key={`${link.url}-${index}`}
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
@@ -43,9 +43,9 @@ export function ExampleLinks({ title = 'Xem ví dụ thực tế', links, color 
         {title}
       </h3>
       <div className="space-y-2">
-        {links.map((link) => (
+        {links.map((link, index) => (
           <Link
-            key={link.url}
+            key={`${link.url}-${index}`}
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"

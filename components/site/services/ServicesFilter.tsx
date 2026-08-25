@@ -5,7 +5,7 @@ import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { ServicesListColors } from './colors';
 
-export type ServiceSortOption = 'newest' | 'oldest' | 'popular' | 'title' | 'price_asc' | 'price_desc';
+export type ServiceSortOption = 'newest' | 'oldest' | 'popular' | 'title' | 'title_desc' | 'price_asc' | 'price_desc';
 
 interface Category {
   _id: Id<"serviceCategories">;
@@ -30,6 +30,7 @@ const SORT_OPTIONS: { value: ServiceSortOption; label: string }[] = [
   { label: 'Cũ nhất', value: 'oldest' },
   { label: 'Xem nhiều', value: 'popular' },
   { label: 'Theo tên A-Z', value: 'title' },
+  { label: 'Theo tên Z-A', value: 'title_desc' },
   { label: 'Giá: Thấp đến cao', value: 'price_asc' },
   { label: 'Giá: Cao đến thấp', value: 'price_desc' },
 ];
@@ -69,7 +70,7 @@ export function ServicesFilter({
   return (
     <div className="space-y-3">
       {/* Desktop Filter Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           {/* Search Input */}
           <div className="relative flex-1 max-w-md">
@@ -79,13 +80,13 @@ export function ServicesFilter({
               placeholder="Tìm kiếm dịch vụ..."
               value={localSearch}
               onChange={(e) =>{  setLocalSearch(e.target.value); }}
-              className="w-full pl-10 pr-10 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 text-sm"
+              className="w-full pl-10 pr-10 py-2 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
             />
             {localSearch && (
               <button
                 onClick={() => { setLocalSearch(''); onSearchChange(''); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-100"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <X className="w-4 h-4 text-slate-400" />
               </button>
@@ -100,7 +101,7 @@ export function ServicesFilter({
                 const value = e.target.value as Id<"serviceCategories"> | '';
                 onCategoryChange(value ? value : null);
               }}
-              className="appearance-none px-4 py-2 pr-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 cursor-pointer min-w-[200px]"
+              className="appearance-none px-4 py-2 pr-10 border border-slate-200 dark:border-slate-800 rounded-lg text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 cursor-pointer min-w-[200px]"
               style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
             >
               <option value="">Tất cả danh mục</option>
@@ -118,7 +119,7 @@ export function ServicesFilter({
             <select
               value={sortBy}
               onChange={(e) =>{  onSortChange(e.target.value as ServiceSortOption); }}
-              className="appearance-none px-4 py-2 pr-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 cursor-pointer"
+              className="appearance-none px-4 py-2 pr-10 border border-slate-200 dark:border-slate-800 rounded-lg text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 cursor-pointer"
               style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
             >
               {SORT_OPTIONS.map((option) => (
@@ -133,7 +134,7 @@ export function ServicesFilter({
           {/* Mobile Filter Toggle */}
           <button
             onClick={() =>{  setShowMobileFilters(!showMobileFilters); }}
-            className="lg:hidden flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm"
+            className="lg:hidden flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-200 rounded-lg text-sm"
           >
             <SlidersHorizontal className="w-4 h-4" />
             Bộ lọc
@@ -148,7 +149,7 @@ export function ServicesFilter({
 
         {/* Mobile Filters Panel */}
         {showMobileFilters && (
-          <div className="lg:hidden mt-3 pt-3 border-t border-slate-200 space-y-3">
+          <div className="lg:hidden mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
             {/* Categories */}
             <div>
               <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2 block">
@@ -161,7 +162,7 @@ export function ServicesFilter({
                     const value = e.target.value as Id<"serviceCategories"> | '';
                     onCategoryChange(value ? value : null);
                   }}
-                  className="w-full appearance-none px-4 py-2 pr-10 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2"
+                  className="w-full appearance-none px-4 py-2 pr-10 border border-slate-200 dark:border-slate-800 rounded-lg text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2"
                   style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
                 >
                   <option value="">Tất cả danh mục</option>
@@ -183,7 +184,7 @@ export function ServicesFilter({
               <select
                 value={sortBy}
                 onChange={(e) =>{  onSortChange(e.target.value as ServiceSortOption); }}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2"
+                className="w-full px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-sm bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2"
                 style={{ '--tw-ring-color': tokens.filterRing } as React.CSSProperties}
               >
                 {SORT_OPTIONS.map((option) => (

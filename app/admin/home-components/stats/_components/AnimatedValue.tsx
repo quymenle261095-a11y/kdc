@@ -3,7 +3,7 @@
 import React from 'react';
 import { useCountAnimation } from '../_hooks/useCountAnimation';
 
-interface AnimatedValueProps {
+interface AnimatedValueProps extends React.HTMLAttributes<HTMLSpanElement> {
   value: string;
   enabled: boolean;
   className?: string;
@@ -16,7 +16,8 @@ export const AnimatedValue: React.FC<AnimatedValueProps> = ({
   enabled,
   className,
   style,
-  children
+  children,
+  ...props
 }) => {
   const { displayValue, elementRef } = useCountAnimation(value, enabled);
   
@@ -32,6 +33,7 @@ export const AnimatedValue: React.FC<AnimatedValueProps> = ({
       ref={elementRef}
       className={className}
       style={style}
+      {...props}
     >
       {displayValue}
       {children}

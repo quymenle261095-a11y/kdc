@@ -1,19 +1,11 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy, FileText, X } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useMemo } from 'react';
+import { AiImportDialogShell } from '../components/AiImportDialogShell';
 import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Label,
-  cn,
-} from '../components/ui';
+  buildAiFillMissingPrompt,
+  buildAiFillMissingSample,
+} from '@/lib/ai-import/fill-missing';
 import { parseAiMenuInput, type AiMenuLine } from './_ai-menu-parser';
 
 /* ────────────────────────────────────────────────────────────
@@ -74,134 +66,91 @@ const SAMPLE_JSON = `{
   ]
 }`;
 
-/* ────────────────────────────────────────────────────────────
-   Dialog Component (same layout as AiHomepagePromptDialog)
-   ──────────────────────────────────────────────────────────── */
-
 export function AiMenuImportDialog({
+  currentItems,
   open,
   onOpenChange,
   onApply,
 }: {
+  currentItems?: AiMenuLine[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApply: (items: AiMenuLine[]) => void;
 }) {
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
+  const currentMenuData = useMemo(() => ({ items: currentItems ?? [] }), [currentItems]);
 
-  const result = useMemo(() => {
-    if (!rawInput.trim()) return { lines: [] as AiMenuLine[], error: '' };
-    return parseAiMenuInput(rawInput);
-  }, [rawInput]);
+  const fillMissingPrompt = useMemo(
+    () => buildAiFillMissingPrompt(MENU_MEGA_PROMPT, currentMenuData, { contextLabel: 'Menu hiện có' }),
+    [currentMenuData]
+  );
 
-  const canApply = rawInput.trim().length > 0 && result.lines.length > 0 && !result.error;
+  const fillMissingSampleJson = useMemo(
+    () => buildAiFillMissingSample(SAMPLE_JSON, currentMenuData),
+    [currentMenuData]
+  );
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
-  };
+  const handleParse = (rawInput: string, isFillMissing: boolean) => {
+    const result = parseAiMenuInput(rawInput);
+    if (result.error) {
+      return { data: null, errors: [result.error] };
+    }
+    if (!result.lines.length) {
+      return { data: null, errors: ['Không tìm thấy menu item nào trong dữ liệu JSON.'] };
+    }
 
-  const handleApply = () => {
-    if (!canApply) return;
-    onApply(result.lines);
-    setRawInput('');
-    onOpenChange(false);
+    if (isFillMissing && currentItems?.length) {
+      const existingLabels = new Set(currentItems.map((item) => item.label.trim().toLowerCase()).filter(Boolean));
+      const filtered = result.lines.filter((line) => !existingLabels.has(line.label.trim().toLowerCase()));
+      if (!filtered.length) {
+        return { data: null, errors: ['Tất cả menu items tạo ra đều đã tồn tại trong menu hiện có.'] };
+      }
+      return { data: filtered, errors: [] };
+    }
+
+    return { data: result.lines, errors: [] };
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-blue-500" />
-            Import AI — Tạo menu header
-          </DialogTitle>
-          <DialogDescription>
-            Copy prompt, nhờ AI tạo JSON, dán kết quả vào đây để preview rồi áp dụng.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          {/* ── Cột trái: Prompt + JSON mẫu ── */}
-          <div className="space-y-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(MENU_MEGA_PROMPT, 'prompt')}>
-                  {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                </Button>
-              </div>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{MENU_MEGA_PROMPT}</pre>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <Label>JSON mẫu</Label>
-                <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(SAMPLE_JSON, 'sample')}>
-                  {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy
-                </Button>
-              </div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{SAMPLE_JSON}</pre>
-            </div>
-          </div>
-
-          {/* ── Cột phải: Textarea + Preview ── */}
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Dán kết quả AI</Label>
-              <textarea
-                className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                placeholder={SAMPLE_JSON}
-                value={rawInput}
-                onChange={(e) => setRawInput(e.target.value)}
-              />
-            </div>
-
-            {/* Validation */}
-            {rawInput.trim().length > 0 && (
-              <div className={cn(
-                'rounded-lg border p-3 text-sm',
-                result.error
-                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
-                  : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300',
-              )}>
-                {result.error ? (
-                  <div className="flex gap-1.5"><X size={14} className="mt-0.5 shrink-0" /><span>{result.error}</span></div>
-                ) : (
-                  <div className="flex gap-1.5"><Check size={14} className="mt-0.5 shrink-0" /><span>Sẵn sàng thêm {result.lines.length} menu item.</span></div>
+    <AiImportDialogShell<AiMenuLine[]>
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Import AI — Tạo menu header"
+      description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+      prompt={MENU_MEGA_PROMPT}
+      sampleJson={SAMPLE_JSON}
+      enableFillMissing={Boolean(currentItems && currentItems.length > 0)}
+      fillMissingPrompt={fillMissingPrompt}
+      fillMissingSampleJson={fillMissingSampleJson}
+      fillMissingHint="Chỉ thêm các mục menu mới chưa có."
+      directSessionId="admin-menu-import"
+      directPlaceholder="Ví dụ: Website bán phụ kiện tủ bếp, cần menu gồm Trang chủ, Sản phẩm, Dịch vụ, Dự án, Bài viết, Liên hệ."
+      parse={handleParse}
+      renderPreview={(items) => (
+        <div className="space-y-1">
+          <p className="mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Danh sách {items.length} menu items sẽ được thêm:
+          </p>
+          <div className="space-y-1">
+            {items.map((line, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/70 px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                style={{ marginLeft: line.depth * 16 }}
+              >
+                <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
+                {line.depth > 0 && (
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    Cấp {line.depth + 1}
+                  </span>
                 )}
+                <span className="font-medium">{line.label}</span>
               </div>
-            )}
-
-            {/* Preview list */}
-            {result.lines.length > 0 && !result.error && (
-              <div className="space-y-2">
-                <Label>Preview ({result.lines.length} items)</Label>
-                <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  {result.lines.map((line, idx) => (
-                    <div key={idx} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-800" style={{ paddingLeft: 12 + line.depth * 20 }}>
-                      <span className="w-5 text-xs text-slate-400">{idx + 1}</span>
-                      {line.depth > 0 && (
-                        <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">Tầng {line.depth + 1}</span>
-                      )}
-                      <p className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-100">{line.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-
-        <DialogFooter className="gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Huỷ</Button>
-          <Button type="button" disabled={!canApply} onClick={handleApply}>
-            Thêm {result.lines.length || ''} menu item
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+      onApply={onApply}
+      applyButtonText="Thêm vào menu website"
+    />
   );
 }

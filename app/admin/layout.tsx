@@ -4,11 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { Toaster } from 'sonner';
+import { CustomToaster } from '@/components/shared/CustomToaster';
 import { AdminModulesProvider } from './context/AdminModulesContext';
 import { SidebarProvider } from './context/SidebarContext';
 import { AdminAuthProvider } from './auth/context';
 import { AdminAuthGuard } from './auth/AdminAuthGuard';
+import { AdminPermissionGuard } from './auth/AdminPermissionGuard';
 
 function AdminLayoutContent({
   children,
@@ -34,8 +35,8 @@ function AdminLayoutContent({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex font-sans">
-      <Toaster position="top-right" richColors theme={isDarkMode ? 'dark' : 'light'} />
+    <div className="admin-shell min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 flex font-sans">
+      <CustomToaster position="top-right" richColors theme={isDarkMode ? 'dark' : 'light'} />
       
       <SidebarProvider>
         <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
@@ -47,14 +48,18 @@ function AdminLayoutContent({
             setMobileMenuOpen={setMobileMenuOpen} 
           />
 
-          <main className="flex-1 p-4 lg:p-8 overflow-x-hidden w-full max-w-[1600px] mx-auto">
-            {children}
+          <main className="flex-1 px-4 pt-3 pb-4 lg:px-8 lg:pt-4 lg:pb-8 overflow-x-hidden w-full max-w-[1800px] mx-auto">
+            <AdminPermissionGuard>
+              {children}
+            </AdminPermissionGuard>
           </main>
         </div>
       </SidebarProvider>
     </div>
   );
 }
+
+import { AdminBreadcrumbProvider } from './context/AdminBreadcrumbContext';
 
 function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -67,7 +72,9 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <AdminAuthGuard>
       <AdminModulesProvider>
-        <AdminLayoutContent>{children}</AdminLayoutContent>
+        <AdminBreadcrumbProvider>
+          <AdminLayoutContent>{children}</AdminLayoutContent>
+        </AdminBreadcrumbProvider>
       </AdminModulesProvider>
     </AdminAuthGuard>
   );

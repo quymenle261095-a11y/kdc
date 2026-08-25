@@ -13,10 +13,9 @@ export default function ProductsModuleConfigPage() {
           // 1. Khi bật enableCombos
           if (key === 'enableCombos' && value === true) {
             const saleMode = props.localSettings.saleMode;
-            const variantEnabled = props.localSettings.variantEnabled;
 
-            if (saleMode !== 'contact' || variantEnabled === true) {
-              toast.error('Hệ thống Combo chỉ hoạt động ở Chế độ bán hàng liên hệ và khi tính năng phiên bản bị tắt.');
+            if (saleMode !== 'contact') {
+              toast.error('Hệ thống Combo chỉ hoạt động ở Chế độ bán hàng liên hệ.');
               return;
             }
           }
@@ -26,14 +25,6 @@ export default function ProductsModuleConfigPage() {
             if (props.localSettings.enableCombos === true) {
               props.onSettingChange('enableCombos', false);
               toast.info('Đã tự động tắt hệ thống Combo do chế độ bán hàng không phù hợp.');
-            }
-          }
-
-          // 3. Khi bật variantEnabled lên true mà enableCombos đang bật
-          if (key === 'variantEnabled' && value === true) {
-            if (props.localSettings.enableCombos === true) {
-              props.onSettingChange('enableCombos', false);
-              toast.info('Đã tự động tắt hệ thống Combo do tính năng phiên bản được kích hoạt.');
             }
           }
 

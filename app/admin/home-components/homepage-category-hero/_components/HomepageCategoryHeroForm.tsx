@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Bot, Check, ChevronDown, Copy, Database, FileText, GripVertical, Image, ImagePlus, Layers2, Plus, Trash2, X } from 'lucide-react';
+import { Bot, ChevronDown, Database, GripVertical, Image, ImagePlus, Layers2, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Card, CardContent, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, cn } from '../../../components/ui';
+import { Button, Card, CardContent, Input, Label, cn } from '../../../components/ui';
+import { AiImportDialogShell } from '@/app/admin/components/AiImportDialogShell';
 import { MultiImageUploader } from '../../../components/MultiImageUploader';
 import { DEMO_CATEGORIES_DATA, getHomepageCategoryHeroCropAspectRatio } from '../_lib/constants';
 import { HOMEPAGE_CATEGORY_HERO_ICON_OPTIONS, getHomepageCategoryHeroIcon } from '../_lib/icon-options';
@@ -220,26 +221,27 @@ function FullAiImportButton({
 }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = React.useState(false);
-  const [rawInput, setRawInput] = React.useState('');
-  const [lastCopied, setLastCopied] = React.useState<'prompt' | 'sample' | null>(null);
-  const result = React.useMemo(() => parseFullAiImport(rawInput), [rawInput]);
-  const canApply = rawInput.trim().length > 0 && result.errors.length === 0;
 
   if (!isAiImportEnabled) { return null; }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    const res = parseFullAiImport(rawInput);
+    if (res.errors.length > 0) {
+      return { data: null, errors: res.errors };
+    }
+    return {
+      data: {
+        categories: res.categories,
+        demoCategoriesData: res.demoCategoriesData,
+        heroSlides: res.heroSlides,
+      },
+      errors: [],
+    };
   };
 
-  const apply = () => {
-    if (!canApply) { return; }
-    onApply({ categories: result.categories, demoCategoriesData: result.demoCategoriesData, heroSlides: result.heroSlides });
+  const handleApply = (data: Omit<FullAiImportResult, 'errors'>) => {
+    onApply(data);
     toast.success('Đã import đầy đủ banner, danh mục và menu');
-    setRawInput('');
-    setOpen(false);
   };
 
   return (
@@ -249,50 +251,27 @@ function FullAiImportButton({
           <Bot size={16} /> Import AI
         </Button>
       </HomeComponentFooterActionPortal>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import AI Hero danh mục</DialogTitle>
-            <DialogDescription>Copy prompt, nhờ AI tạo JSON đầy đủ rồi dán vào đây để áp dụng banner, danh mục demo và menu cùng lúc.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(AI_FULL_PROMPT, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600">{AI_FULL_PROMPT}</pre>
-              </div>
-              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => void copyText(AI_FULL_SAMPLE, 'sample')}>
-                {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy JSON mẫu
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <Label>Dán JSON AI trả về</Label>
-              <textarea
-                value={rawInput}
-                onChange={(event) => setRawInput(event.target.value)}
-                className="min-h-[320px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs leading-5"
-                placeholder={AI_FULL_SAMPLE}
-              />
-              {rawInput.trim() && (
-                <div className={cn('rounded-lg border px-3 py-2 text-xs', result.errors.length > 0 ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700')}>
-                  {result.errors.length > 0
-                    ? result.errors.join(' ')
-                    : `Sẵn sàng import ${result.heroSlides.length} banner, ${result.categories.length} danh mục, ${result.demoCategoriesData.length} mục demo.`}
-                </div>
-              )}
-            </div>
+
+      <AiImportDialogShell<Omit<FullAiImportResult, 'errors'>>
+        open={open}
+        onOpenChange={setOpen}
+        title="Import AI Hero danh mục"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={AI_FULL_PROMPT}
+        sampleJson={AI_FULL_SAMPLE}
+        directSessionId="admin-homepage-category-hero-import"
+        directPlaceholder="Ví dụ: Tạo hero danh mục cho website bán phụ kiện tủ bếp, nhóm sản phẩm theo công năng, 3 banner và menu sidebar rõ ràng."
+        parse={handleParse}
+        renderPreview={(data) => (
+          <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+            <p><strong>Banners:</strong> {data.heroSlides.length} slide</p>
+            <p><strong>Danh mục chính:</strong> {data.categories.length} mục</p>
+            <p><strong>Tổng mục danh mục & link:</strong> {data.demoCategoriesData.length} mục demo</p>
           </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="button" disabled={!canApply} onClick={apply}>Áp dụng toàn bộ</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng toàn bộ"
+        onApply={handleApply}
+      />
     </>
   );
 }
@@ -547,13 +526,13 @@ export function HomepageCategoryHeroForm({
           </div>
           <div className="space-y-2">
             <Label className="text-sm">Kích thước</Label>
-            <select value={categoryImageSize} onChange={(e) => setCategoryImageSize(e.target.value as HomepageCategoryHeroCategoryImageSize)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+            <select value={categoryImageSize} onChange={(e) => setCategoryImageSize(e.target.value as HomepageCategoryHeroCategoryImageSize)} className="h-10 w-full rounded-md border border-slate-200 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 px-3 text-sm">
               {avatarSizeOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </div>
           <div className="space-y-2">
             <Label className="text-sm">Hình dạng</Label>
-            <select value={categoryImageShape} onChange={(e) => setCategoryImageShape(e.target.value as HomepageCategoryHeroCategoryImageShape)} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+            <select value={categoryImageShape} onChange={(e) => setCategoryImageShape(e.target.value as HomepageCategoryHeroCategoryImageShape)} className="h-10 w-full rounded-md border border-slate-200 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 px-3 text-sm">
               {avatarShapeOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </div>
@@ -814,13 +793,13 @@ export function HomepageCategoryHeroForm({
                             value={item.categoryId}
                             onChange={(e) => updateCategory(item.id, { categoryId: e.target.value })}
                             className={cn(
-                              'h-10 w-full rounded-md border bg-white px-3 text-sm',
+                              'h-10 w-full rounded-md border bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 px-3 text-sm',
                               isDuplicate ? 'border-amber-400' : 'border-slate-200'
                             )}
                           >
-                            <option value="">-- Chọn danh mục --</option>
+                            <option value="" className="text-slate-500 dark:text-slate-400">-- Chọn danh mục --</option>
                             {resolvedCategoriesData.map((cat) => (
-                              <option key={cat._id} value={cat._id}>{cat.name}</option>
+                              <option key={cat._id} value={cat._id} className="text-slate-900 dark:text-slate-100">{cat.name}</option>
                             ))}
                           </select>
                           {isDuplicate && <p className="text-xs text-amber-700">Danh mục này đang bị trùng.</p>}
@@ -964,11 +943,11 @@ export function HomepageCategoryHeroForm({
                                             <select
                                               value={link.categoryId}
                                               onChange={(e) => updateGroupItem(item.id, group.id, link.id, { targetType: 'category', categoryId: e.target.value })}
-                                              className="h-7 flex-1 min-w-0 rounded border border-slate-200 bg-white px-2 text-[11px]"
+                                              className="h-7 flex-1 min-w-0 rounded border border-slate-200 bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 px-2 text-[11px]"
                                             >
-                                              <option value="">-- Danh mục --</option>
+                                              <option value="" className="text-slate-500 dark:text-slate-400">-- Danh mục --</option>
                                               {resolvedCategoriesData.map((cat) => (
-                                                <option key={cat._id} value={cat._id}>{cat.name}</option>
+                                                <option key={cat._id} value={cat._id} className="text-slate-900 dark:text-slate-100">{cat.name}</option>
                                               ))}
                                             </select>
                                           )}

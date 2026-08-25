@@ -8,6 +8,8 @@ import { deviceWidths, type PreviewDevice } from '../../_shared/hooks/usePreview
 import { getPopupColorTokens } from '../_lib/colors';
 import { POPUP_STYLES } from '../_lib/constants';
 import type { PopupConfig, PopupStyle } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+import { cn } from '@/app/admin/components/ui';
 
 type PopupContext = 'preview' | 'site';
 
@@ -25,6 +27,11 @@ interface PopupSectionSharedProps {
   setPreviewDevice?: (device: PreviewDevice) => void;
   previewStyle?: PopupStyle;
   onPreviewStyleChange?: (style: PopupStyle) => void;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onVisualEditToggle?: () => void;
+  onConfigChange?: (config: PopupConfig) => void;
+  onTitleChange?: (val: string) => void;
 }
 
 const getPopupStorageKey = (config: PopupConfig) => {
@@ -185,6 +192,37 @@ const isDarkBackground = (style: PopupStyle, backgroundMode?: string) => {
   return true;
 };
 
+const EditableText = ({
+  text,
+  onSave,
+  className,
+  style,
+  tag: Tag = 'span',
+  placeholder = '',
+  isVisualEditActive = false,
+}: {
+  text: string;
+  onSave: (val: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  tag?: any;
+  placeholder?: string;
+  isVisualEditActive?: boolean;
+}) => {
+  const Component = Tag;
+  return (
+    <Component
+      contentEditable={isVisualEditActive}
+      suppressContentEditableWarning={isVisualEditActive}
+      onBlur={isVisualEditActive ? (e: any) => onSave(e.currentTarget.textContent ?? '') : undefined}
+      className={cn(className, isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+      style={style}
+    >
+      {text || (isVisualEditActive ? placeholder : '')}
+    </Component>
+  );
+};
+
 const popupFontStyle = {
   fontFamily: 'var(--font-active, var(--font-be-vietnam-pro)), var(--font-be-vietnam-pro), sans-serif',
 } as React.CSSProperties;
@@ -201,85 +239,137 @@ const getOverlayPaddingClass = (config: PopupConfig) => {
   return 'p-4';
 };
 
-function PopupActions({ config, brandColor, onClose, onDismissToday, forceStack = false, isDarkBg = false }: { config: PopupConfig; brandColor: string; onClose: () => void; onDismissToday: () => void; forceStack?: boolean; isDarkBg?: boolean }) {
+function PopupActions({
+  config,
+  brandColor,
+  onClose,
+  onDismissToday,
+  forceStack = false,
+  isDarkBg = false,
+  isDark,
+  isVisualEditActive = false,
+  onConfigChange,
+}: {
+  config: PopupConfig;
+  brandColor: string;
+  onClose: () => void;
+  onDismissToday: () => void;
+  forceStack?: boolean;
+  isDarkBg?: boolean;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: PopupConfig) => void;
+}) {
   const hasPrimaryLink = config.primaryButtonLink.trim().length > 0 && config.primaryButtonLink !== '#';
   const hasSecondaryLink = config.secondaryButtonLink.trim().length > 0 && config.secondaryButtonLink !== '#';
-  const hasPrimaryText = config.primaryButtonText.trim().length > 0;
-  const hasSecondaryText = config.secondaryButtonText.trim().length > 0;
-  const tokens = getPopupColorTokens(brandColor, config.colorIntensity);
+  const hasPrimaryText = config.primaryButtonText.trim().length > 0 || isVisualEditActive;
+  const hasSecondaryText = config.secondaryButtonText.trim().length > 0 || isVisualEditActive;
+  const tokens = adaptTokensForDarkMode(getPopupColorTokens(brandColor, config.colorIntensity), isDark ?? false);
   const secondaryClass = `inline-flex min-h-[46px] flex-1 items-center justify-center rounded-2xl border px-5 py-2.5 text-center text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 whitespace-normal break-words ${config.secondaryButtonDisabled ? 'cursor-not-allowed opacity-55' : isDarkBg ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-50 text-slate-700'}`;
   const primaryClass = `inline-flex min-h-[46px] flex-1 items-center justify-center rounded-2xl px-5 py-2.5 text-center text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 whitespace-normal break-words ${config.primaryButtonDisabled ? 'cursor-not-allowed opacity-55' : 'hover:brightness-95'}`;
   const wrapperClass = forceStack ? 'flex flex-col gap-2.5' : 'flex flex-col gap-2.5 sm:flex-row';
 
   return (
     <div className={wrapperClass}>
-      {hasSecondaryText && (config.secondaryButtonDisabled ? (
-        <button
-          type="button"
-          disabled
-          className={secondaryClass}
-          style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
-        >
-          {config.secondaryButtonText}
-        </button>
-      ) : hasSecondaryLink ? (
-        <a
-          {...getLinkProps(config.secondaryButtonLink)}
-          className={secondaryClass}
-          style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
-        >
-          {config.secondaryButtonText}
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={onClose}
-          className={secondaryClass}
-          style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
-        >
-          {config.secondaryButtonText}
-        </button>
-      ))}
+      {hasSecondaryText && (
+        isVisualEditActive ? (
+          <div
+            className={secondaryClass}
+            style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
+          >
+            <EditableText
+              text={config.secondaryButtonText || ''}
+              placeholder="Nút phụ..."
+              onSave={(val) => onConfigChange?.({ ...config, secondaryButtonText: val })}
+              isVisualEditActive={isVisualEditActive}
+            />
+          </div>
+        ) : config.secondaryButtonDisabled ? (
+          <button
+            type="button"
+            disabled
+            className={secondaryClass}
+            style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
+          >
+            {config.secondaryButtonText}
+          </button>
+        ) : hasSecondaryLink ? (
+          <a
+            {...getLinkProps(config.secondaryButtonLink)}
+            className={secondaryClass}
+            style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
+          >
+            {config.secondaryButtonText}
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className={secondaryClass}
+            style={{ borderColor: isDarkBg ? 'rgba(255,255,255,0.25)' : tokens.primaryBorder, '--tw-ring-color': tokens.ring } as React.CSSProperties}
+          >
+            {config.secondaryButtonText}
+          </button>
+        )
+      )}
 
-      {hasPrimaryText && (config.primaryButtonDisabled ? (
-        <button
-          type="button"
-          disabled
-          className={primaryClass}
-          style={{ 
-            backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
-            color: isDarkBg ? '#0f172a' : '#ffffff', 
-            '--tw-ring-color': tokens.ring 
-          } as React.CSSProperties}
-        >
-          {config.primaryButtonText}
-        </button>
-      ) : hasPrimaryLink ? (
-        <a
-          {...getLinkProps(config.primaryButtonLink)}
-          className={primaryClass}
-          style={{ 
-            backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
-            color: isDarkBg ? '#0f172a' : '#ffffff', 
-            '--tw-ring-color': tokens.ring 
-          } as React.CSSProperties}
-        >
-          {config.primaryButtonText}
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={onClose}
-          className={primaryClass}
-          style={{ 
-            backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
-            color: isDarkBg ? '#0f172a' : '#ffffff', 
-            '--tw-ring-color': tokens.ring 
-          } as React.CSSProperties}
-        >
-          {config.primaryButtonText}
-        </button>
-      ))}
+      {hasPrimaryText && (
+        isVisualEditActive ? (
+          <div
+            className={primaryClass}
+            style={{ 
+              backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
+              color: isDarkBg ? '#0f172a' : '#ffffff', 
+              '--tw-ring-color': tokens.ring 
+            } as React.CSSProperties}
+          >
+            <EditableText
+              text={config.primaryButtonText || ''}
+              placeholder="Nút chính..."
+              onSave={(val) => onConfigChange?.({ ...config, primaryButtonText: val })}
+              isVisualEditActive={isVisualEditActive}
+            />
+          </div>
+        ) : config.primaryButtonDisabled ? (
+          <button
+            type="button"
+            disabled
+            className={primaryClass}
+            style={{ 
+              backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
+              color: isDarkBg ? '#0f172a' : '#ffffff', 
+              '--tw-ring-color': tokens.ring 
+            } as React.CSSProperties}
+          >
+            {config.primaryButtonText}
+          </button>
+        ) : hasPrimaryLink ? (
+          <a
+            {...getLinkProps(config.primaryButtonLink)}
+            className={primaryClass}
+            style={{ 
+              backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
+              color: isDarkBg ? '#0f172a' : '#ffffff', 
+              '--tw-ring-color': tokens.ring 
+            } as React.CSSProperties}
+          >
+            {config.primaryButtonText}
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className={primaryClass}
+            style={{ 
+              backgroundColor: isDarkBg ? '#f59e0b' : brandColor, 
+              color: isDarkBg ? '#0f172a' : '#ffffff', 
+              '--tw-ring-color': tokens.ring 
+            } as React.CSSProperties}
+          >
+            {config.primaryButtonText}
+          </button>
+        )
+      )}
       {config.showDoNotShowToday && (
         <button
           type="button"
@@ -294,23 +384,74 @@ function PopupActions({ config, brandColor, onClose, onDismissToday, forceStack 
   );
 }
 
-function PopupText({ config, brandColor, align = 'center', isDarkBg = false }: { config: PopupConfig; brandColor: string; align?: 'center' | 'left'; isDarkBg?: boolean }) {
-  const tokens = getPopupColorTokens(brandColor, config.colorIntensity);
+function PopupText({
+  config,
+  brandColor,
+  align = 'center',
+  isDarkBg = false,
+  isDark,
+  isVisualEditActive = false,
+  onConfigChange,
+  onTitleChange,
+}: {
+  config: PopupConfig;
+  brandColor: string;
+  align?: 'center' | 'left';
+  isDarkBg?: boolean;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: PopupConfig) => void;
+  onTitleChange?: (val: string) => void;
+}) {
+  const tokens = adaptTokensForDarkMode(getPopupColorTokens(brandColor, config.colorIntensity), isDark ?? false);
 
   return (
     <div className={align === 'center' ? 'text-center' : 'text-left'}>
-      {config.eyebrow && (
+      {(config.eyebrow || isVisualEditActive) && (
         <div className="mb-3 inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-white" style={{ backgroundColor: tokens.primary }}>
-          {config.eyebrow}
+          <EditableText
+            text={config.eyebrow || ''}
+            placeholder="Eyebrow..."
+            onSave={(val) => onConfigChange?.({ ...config, eyebrow: val })}
+            isVisualEditActive={isVisualEditActive}
+          />
         </div>
       )}
-      <h2 className={`break-words text-balance text-2xl font-bold tracking-[-0.03em] sm:text-3xl ${isDarkBg ? 'text-white' : 'text-slate-950'}`}>{config.heading}</h2>
-      {config.description && (
-        <p className={`mt-3 break-words text-sm leading-6 sm:text-base whitespace-pre-wrap ${isDarkBg ? 'text-slate-100' : 'text-slate-600'}`}>{parseDescription(config.description, isDarkBg)}</p>
+      <EditableText
+        text={config.heading || ''}
+        placeholder="Tiêu đề..."
+        onSave={(val) => {
+          onConfigChange?.({ ...config, heading: val });
+          onTitleChange?.(val);
+        }}
+        isVisualEditActive={isVisualEditActive}
+        tag="h2"
+        className={`break-words text-balance text-2xl font-bold tracking-[-0.03em] sm:text-3xl ${isDarkBg ? 'text-white' : 'text-slate-950'}`}
+      />
+      {isVisualEditActive ? (
+        <EditableText
+          text={config.description || ''}
+          placeholder="Mô tả..."
+          onSave={(val) => onConfigChange?.({ ...config, description: val })}
+          isVisualEditActive={isVisualEditActive}
+          tag="p"
+          className={`mt-3 break-words text-sm leading-6 sm:text-base whitespace-pre-wrap ${isDarkBg ? 'text-slate-100' : 'text-slate-600'}`}
+        />
+      ) : (
+        config.description && (
+          <p className={`mt-3 break-words text-sm leading-6 sm:text-base whitespace-pre-wrap ${isDarkBg ? 'text-slate-100' : 'text-slate-600'}`}>
+            {parseDescription(config.description, isDarkBg)}
+          </p>
+        )
       )}
-      {config.note && (
+      {(config.note || isVisualEditActive) && (
         <div className={`${roundedClass(config, 'rounded-2xl', 'rounded-lg')} mt-5 break-words border px-4 py-3 text-sm leading-5`} style={{ backgroundColor: isDarkBg ? 'rgba(255,255,255,0.08)' : tokens.primaryWash, borderColor: isDarkBg ? 'rgba(255,255,255,0.15)' : tokens.border, color: isDarkBg ? 'rgba(255,255,255,0.8)' : '#64748b' }}>
-          {config.note}
+          <EditableText
+            text={config.note || ''}
+            placeholder="Ghi chú..."
+            onSave={(val) => onConfigChange?.({ ...config, note: val })}
+            isVisualEditActive={isVisualEditActive}
+          />
         </div>
       )}
     </div>
@@ -331,8 +472,32 @@ function CloseButton({ onClose, isDarkBg = false }: { onClose: () => void; isDar
   );
 }
 
-function PopupCard({ config, brandColor, secondary, style, previewDevice, onClose, onDismissToday }: { config: PopupConfig; brandColor: string; secondary?: string; style: PopupStyle; previewDevice: PreviewDevice; onClose: () => void; onDismissToday: () => void }) {
-  const tokens = getPopupColorTokens(brandColor, config.colorIntensity);
+function PopupCard({
+  config,
+  brandColor,
+  secondary,
+  style,
+  previewDevice,
+  onClose,
+  onDismissToday,
+  isDark,
+  isVisualEditActive = false,
+  onConfigChange,
+  onTitleChange,
+}: {
+  config: PopupConfig;
+  brandColor: string;
+  secondary?: string;
+  style: PopupStyle;
+  previewDevice: PreviewDevice;
+  onClose: () => void;
+  onDismissToday: () => void;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: PopupConfig) => void;
+  onTitleChange?: (val: string) => void;
+}) {
+  const tokens = adaptTokensForDarkMode(getPopupColorTokens(brandColor, config.colorIntensity), isDark ?? false);
   const borderStyle = { borderColor: tokens.border };
   const isMobilePreview = previewDevice === 'mobile';
   const darkBg = isDarkBackground(style, config.backgroundMode);
@@ -350,7 +515,7 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
         <CloseButton onClose={onClose} isDarkBg={darkBg} />
         {hasSunburst && <SunburstPattern />}
         <div className="relative z-10 w-full space-y-5">
-          <PopupText config={config} brandColor={brandColor} align="center" isDarkBg={darkBg} />
+          <PopupText config={config} brandColor={brandColor} align="center" isDarkBg={darkBg} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
           <div className="w-full overflow-hidden">
             {config.imageUrl.trim() ? (
               <img src={config.imageUrl} alt={config.heading || sectionImageAlt} className="mx-auto aspect-[3/4] w-[190px] rounded-full object-cover border-2 border-white/10 shadow-md" />
@@ -358,7 +523,7 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
               <PopupImage config={config} className="min-h-[180px] p-2" />
             )}
           </div>
-          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={true} isDarkBg={darkBg} />
+          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={true} isDarkBg={darkBg} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
         </div>
       </div>
     );
@@ -370,8 +535,8 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
         <CloseButton onClose={onClose} />
         <PopupImage config={config} className={isMobilePreview ? 'min-h-[150px] overflow-hidden' : 'min-h-[240px]'} />
         <div className={`flex flex-col justify-center space-y-5 ${isMobilePreview ? 'pr-10' : 'pr-0 sm:pr-6'}`}>
-          <PopupText config={config} brandColor={brandColor} align="left" />
-          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={isMobilePreview} />
+          <PopupText config={config} brandColor={brandColor} align="left" isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
+          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={isMobilePreview} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
         </div>
       </div>
     );
@@ -383,9 +548,9 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
         <CloseButton onClose={onClose} />
         <div className={`mx-auto mb-4 h-1.5 w-14 rounded-full ${isMobilePreview ? '' : 'sm:hidden'}`} style={{ backgroundColor: tokens.primaryBorder }} />
         <div className={`grid items-center gap-5 ${isMobilePreview ? '' : 'sm:grid-cols-[1fr_auto]'}`}>
-          <PopupText config={config} brandColor={brandColor} align="left" />
+          <PopupText config={config} brandColor={brandColor} align="left" isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
           <div className={isMobilePreview ? 'min-w-0 w-full' : 'min-w-[260px]'}>
-            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={isMobilePreview} />
+            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} forceStack={isMobilePreview} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
           </div>
         </div>
       </div>
@@ -398,8 +563,8 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
         <CloseButton onClose={onClose} />
         <div className="space-y-5">
           <PopupIcon config={config} brandColor={brandColor} />
-          <PopupText config={config} brandColor={brandColor} align="left" />
-          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} />
+          <PopupText config={config} brandColor={brandColor} align="left" isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
+          <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
         </div>
       </div>
     );
@@ -417,8 +582,8 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
             </div>
           )}
           <div className="min-w-0 flex-1 space-y-4">
-            <PopupText config={config} brandColor={brandColor} align="left" />
-            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} />
+            <PopupText config={config} brandColor={brandColor} align="left" isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
+            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
           </div>
         </div>
       </div>
@@ -431,9 +596,9 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
         <CloseButton onClose={onClose} />
         <div className={`mx-auto max-w-2xl space-y-6 bg-white p-6 text-center sm:p-8 ${roundedClass(config, 'rounded-[2rem]', 'rounded-2xl')}`} style={{ boxShadow: tokens.premiumShadow }}>
           <PopupIcon config={config} brandColor={brandColor} />
-          <PopupText config={config} brandColor={brandColor} />
+          <PopupText config={config} brandColor={brandColor} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
           <div className="mx-auto max-w-md">
-            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} />
+            <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
           </div>
         </div>
       </div>
@@ -467,8 +632,8 @@ function PopupCard({ config, brandColor, secondary, style, previewDevice, onClos
       <CloseButton onClose={onClose} />
       <div className="space-y-5">
         <PopupIcon config={config} brandColor={brandColor} />
-        <PopupText config={config} brandColor={brandColor} />
-        <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} />
+        <PopupText config={config} brandColor={brandColor} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
+        <PopupActions config={config} brandColor={brandColor} onClose={onClose} onDismissToday={onDismissToday} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} />
       </div>
     </div>
   );
@@ -484,6 +649,10 @@ function PopupOverlay({
   fontStyle,
   fontClassName,
   onClose,
+  isDark,
+  isVisualEditActive = false,
+  onConfigChange,
+  onTitleChange,
 }: {
   config: PopupConfig;
   brandColor: string;
@@ -494,8 +663,12 @@ function PopupOverlay({
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
   onClose: () => void;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: PopupConfig) => void;
+  onTitleChange?: (val: string) => void;
 }) {
-  const tokens = getPopupColorTokens(brandColor, config.colorIntensity);
+  const tokens = adaptTokensForDarkMode(getPopupColorTokens(brandColor, config.colorIntensity), isDark ?? false);
   const isPreview = context === 'preview';
   const style = config.style;
   const positionClass = style === 'bottom-sheet'
@@ -529,7 +702,7 @@ function PopupOverlay({
       onClick={onClose}
     >
       <div onClick={(event) => event.stopPropagation()} className="contents">
-        <PopupCard config={config} brandColor={brandColor} secondary={secondary} style={style} previewDevice={previewDevice} onClose={onClose} onDismissToday={handleDismissToday} />
+        <PopupCard config={config} brandColor={brandColor} secondary={secondary} style={style} previewDevice={previewDevice} onClose={onClose} onDismissToday={handleDismissToday} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
       </div>
     </div>
   );
@@ -544,6 +717,10 @@ function PopupRuntime({
   previewDevice,
   fontStyle,
   fontClassName,
+  isDark,
+  isVisualEditActive = false,
+  onConfigChange,
+  onTitleChange,
 }: {
   config: PopupConfig;
   brandColor: string;
@@ -553,6 +730,10 @@ function PopupRuntime({
   previewDevice: PreviewDevice;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: PopupConfig) => void;
+  onTitleChange?: (val: string) => void;
 }) {
   const [visible, setVisible] = React.useState(context === 'preview');
   const [wasShownInPageView, setWasShownInPageView] = React.useState(false);
@@ -618,10 +799,23 @@ function PopupRuntime({
   };
 
   if (!visible) {
+    if (context === 'preview') {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-[9999]">
+          <button
+            type="button"
+            onClick={() => setVisible(true)}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 transition-colors"
+          >
+            Hiện lại Popup Preview
+          </button>
+        </div>
+      );
+    }
     return null;
   }
 
-  return <PopupOverlay config={config} brandColor={brandColor} secondary={secondary} mode={mode} context={context} previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} onClose={handleClose} />;
+  return <PopupOverlay config={config} brandColor={brandColor} secondary={secondary} mode={mode} context={context} previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} onClose={handleClose} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />;
 }
 
 export function PopupSectionShared({
@@ -638,12 +832,17 @@ export function PopupSectionShared({
   setPreviewDevice,
   previewStyle,
   onPreviewStyleChange,
+  isDark,
+  isVisualEditActive = false,
+  onVisualEditToggle,
+  onConfigChange,
+  onTitleChange,
 }: PopupSectionSharedProps) {
   const style = previewStyle ?? config.style;
   const nextConfig = { ...config, style };
 
   if (!includePreviewWrapper) {
-    return <PopupRuntime config={nextConfig} brandColor={brandColor} secondary={secondary} mode={mode} context={context} previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} />;
+    return <PopupRuntime config={nextConfig} brandColor={brandColor} secondary={secondary} mode={mode} context={context} previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />;
   }
 
   return (
@@ -656,6 +855,9 @@ export function PopupSectionShared({
         setPreviewStyle={(nextStyle) => onPreviewStyleChange?.(nextStyle as PopupStyle)}
         styles={POPUP_STYLES}
         deviceWidthClass={deviceWidths[previewDevice]}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={true}
+        onVisualEditToggle={onVisualEditToggle}
       >
         <BrowserFrame>
           <div
@@ -670,7 +872,7 @@ export function PopupSectionShared({
                 <div className="h-28 rounded-2xl bg-white" />
               </div>
             </div>
-            <PopupRuntime config={nextConfig} brandColor={brandColor} secondary={secondary} mode={mode} context="preview" previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} />
+            <PopupRuntime config={nextConfig} brandColor={brandColor} secondary={secondary} mode={mode} context="preview" previewDevice={previewDevice} fontStyle={fontStyle} fontClassName={fontClassName} isDark={isDark} isVisualEditActive={isVisualEditActive} onConfigChange={onConfigChange} onTitleChange={onTitleChange} />
           </div>
         </BrowserFrame>
       </PreviewWrapper>

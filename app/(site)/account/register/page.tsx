@@ -16,24 +16,29 @@ export default function CustomerRegisterPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showClaimLink, setShowClaimLink] = useState(false);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push('/wishlist');
+      router.push('/account/profile');
     }
   }, [isAuthenticated, isLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setShowClaimLink(false);
     setIsSubmitting(true);
 
     try {
       const result = await register({ email, name, password, phone });
       if (result.success) {
-        router.push('/wishlist');
+        router.push('/account/profile');
       } else {
         setError(result.message);
+        if (result.code === 'GUEST_ACCOUNT_EXISTS') {
+          setShowClaimLink(true);
+        }
       }
     } catch {
       setError('Có lỗi xảy ra khi đăng ký');
@@ -43,17 +48,30 @@ export default function CustomerRegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
+    <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center px-4 py-12 md:py-20">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Tạo tài khoản</h1>
-          <p className="text-sm text-slate-500 mt-2">Lưu sản phẩm yêu thích của bạn</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
               {error}
+            </div>
+          )}
+
+          {showClaimLink && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+              <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                Tài khoản này đã tồn tại dưới dạng khách mua hàng vãng lai. Bạn có thể kích hoạt mật khẩu ngay để giữ lịch sử mua hàng và tiếp tục đăng nhập.
+              </p>
+              <Link
+                href={`/account/login?mode=claim&identifier=${encodeURIComponent(email)}`}
+                className="inline-block bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all"
+              >
+                Kích hoạt tài khoản ngay
+              </Link>
             </div>
           )}
 

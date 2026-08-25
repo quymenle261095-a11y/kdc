@@ -23,7 +23,17 @@ export const useSeoChecklist = (): SeoChecklistHookResult => {
     keys: ['site_name', 'site_url', 'site_logo', 'site_tagline'],
   });
   const seoSettings = useQuery(api.settings.getMultiple, {
-    keys: ['seo_title', 'seo_description', 'seo_keywords', 'seo_og_image'],
+    keys: [
+      'seo_title',
+      'seo_description',
+      'seo_keywords',
+      'seo_og_image',
+      'seo_brand_aliases',
+      'seo_brand_summary',
+      'seo_brand_search_queries',
+      'seo_brand_services',
+      'seo_brand_same_as',
+    ],
   });
   const contactSettings = useQuery(api.settings.getMultiple, {
     keys: ['contact_email', 'contact_phone', 'contact_address', 'contact_tax_id'],
@@ -152,6 +162,11 @@ export const useSeoChecklist = (): SeoChecklistHookResult => {
       seoDescription: seoSettings.seo_description as string,
       seoKeywords: seoSettings.seo_keywords as string,
       seoOgImage: seoSettings.seo_og_image as string,
+      seoBrandAliases: seoSettings.seo_brand_aliases as string,
+      seoBrandSameAs: seoSettings.seo_brand_same_as as string,
+      seoBrandSearchQueries: seoSettings.seo_brand_search_queries as string,
+      seoBrandServices: seoSettings.seo_brand_services as string,
+      seoBrandSummary: seoSettings.seo_brand_summary as string,
       contactEmail: contactSettings.contact_email as string,
       contactPhone: contactSettings.contact_phone as string,
       contactAddress: contactSettings.contact_address as string,

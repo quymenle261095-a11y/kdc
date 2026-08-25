@@ -12,7 +12,8 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Loader2, PhoneCall } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Label } from '../../../../components/ui';
+import { CopyableInput } from '../../../../components/CopyTextButton';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
 import { getSuggestedSecondary, resolveSecondaryByMode } from '../../../_shared/lib/typeColorOverride';
@@ -88,6 +89,7 @@ const toSnapshot = (payload: {
   defaultOpen: boolean;
   showOnAllPages: boolean;
   enableShadow: boolean;
+  enableGlassmorphism: boolean;
   actions: SpeedDialAction[];
 }) => JSON.stringify({
   ...payload,
@@ -133,6 +135,7 @@ export default function SpeedDialEditPage({
   const [defaultOpen, setDefaultOpen] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
   const [showOnAllPages, setShowOnAllPages] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.showOnAllPages);
   const [enableShadow, setEnableShadow] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.enableShadow);
+  const [enableGlassmorphism, setEnableGlassmorphism] = useState<boolean>(DEFAULT_SPEED_DIAL_CONFIG.enableGlassmorphism ?? false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
@@ -151,6 +154,7 @@ export default function SpeedDialEditPage({
     const normalizedDefaultOpen = normalizeBoolean((rawConfig as Record<string, unknown>).defaultOpen, DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
     const normalizedShowOnAllPages = normalizeBoolean((rawConfig as Record<string, unknown>).showOnAllPages, DEFAULT_SPEED_DIAL_CONFIG.showOnAllPages);
     const normalizedEnableShadow = normalizeBoolean((rawConfig as Record<string, unknown>).enableShadow, DEFAULT_SPEED_DIAL_CONFIG.enableShadow);
+    const normalizedEnableGlassmorphism = normalizeBoolean((rawConfig as Record<string, unknown>).enableGlassmorphism, DEFAULT_SPEED_DIAL_CONFIG.enableGlassmorphism ?? false);
 
     setTitle(component.title);
     setActive(component.active);
@@ -160,6 +164,7 @@ export default function SpeedDialEditPage({
     setDefaultOpen(normalizedDefaultOpen);
     setShowOnAllPages(normalizedShowOnAllPages);
     setEnableShadow(normalizedEnableShadow);
+    setEnableGlassmorphism(normalizedEnableGlassmorphism);
 
     setInitialSnapshot(toSnapshot({
       title: component.title,
@@ -169,6 +174,7 @@ export default function SpeedDialEditPage({
       defaultOpen: normalizedDefaultOpen,
       showOnAllPages: normalizedShowOnAllPages,
       enableShadow: normalizedEnableShadow,
+      enableGlassmorphism: normalizedEnableGlassmorphism,
       actions: normalizedActions,
     }));
   }, [component, id, router]);
@@ -181,6 +187,7 @@ export default function SpeedDialEditPage({
     defaultOpen,
     showOnAllPages,
     enableShadow,
+    enableGlassmorphism,
     actions,
   });
   const resolvedCustomSecondary = resolveSecondaryByMode(customState.mode, customState.primary, customState.secondary);
@@ -213,6 +220,7 @@ export default function SpeedDialEditPage({
         defaultOpen,
         showOnAllPages,
         enableShadow,
+        enableGlassmorphism,
       };
 
       if (onSnapshotSave) {
@@ -244,6 +252,7 @@ export default function SpeedDialEditPage({
         defaultOpen,
         showOnAllPages,
         enableShadow,
+        enableGlassmorphism,
         actions,
       }));
       if (enableTypeOverrides && showCustomBlock) {
@@ -295,9 +304,10 @@ export default function SpeedDialEditPage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
+              <CopyableInput
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); }}
+                copyLabel="tiêu đề hiển thị"
                 required
                 placeholder="Nhập tiêu đề component..."
               />
@@ -316,6 +326,8 @@ export default function SpeedDialEditPage({
           onShowOnAllPagesChange={setShowOnAllPages}
           enableShadow={enableShadow}
           onEnableShadowChange={setEnableShadow}
+          enableGlassmorphism={enableGlassmorphism}
+          onEnableGlassmorphismChange={setEnableGlassmorphism}
           defaultActionColor={effectiveColors.secondary}
           defaultExpanded={false}
         />
@@ -363,6 +375,13 @@ export default function SpeedDialEditPage({
               onStyleChange={setStyle}
               defaultOpen={defaultOpen}
               enableShadow={enableShadow}
+              enableGlassmorphism={enableGlassmorphism}
+              onActionLabelChange={(index, val) => {
+                const nextActions = actions.map((act, idx) =>
+                  idx === index ? { ...act, label: val } : act
+                );
+                setActions(nextActions);
+              }}
             />
           </div>
         </div>

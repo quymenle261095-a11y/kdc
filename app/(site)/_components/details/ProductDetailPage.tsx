@@ -20,7 +20,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useInView } from 'react-intersection-observer';
 import { api } from '@/convex/_generated/api';
-import { useBrandColors } from '@/components/site/hooks';
+import { useBrandColors, useSiteSettings } from '@/components/site/hooks';
 import {
   getProductDetailColors,
   resolveProductDetailElementColor,
@@ -43,7 +43,7 @@ import { getFaqColors } from '@/app/admin/home-components/faq/_lib/colors';
 import { useCustomerAuth } from '@/app/(site)/auth/context';
 import { notifyAddToCart, useCart } from '@/lib/cart';
 import { useCartConfig, useCheckoutConfig } from '@/lib/experiences';
-import { ArrowLeft, Award, BadgeCheck, Bell, Bolt, Calendar, Camera, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, CreditCard, Gift, Globe, Heart, HeartHandshake, Leaf, Lock, MapPin, MessageSquare, Minus, Package, Phone, Plus, Reply, RotateCcw, Share2, Shield, ShoppingBag, ShoppingCart, Star, ThumbsUp, Truck, Facebook, Instagram, Youtube, Mail, Send } from 'lucide-react';
+import { ArrowLeft, Award, BadgeCheck, Bell, Bolt, Calendar, Camera, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, CreditCard, Gift, Globe, Heart, HeartHandshake, Leaf, Lock, MapPin, MessageSquare, Minus, Package, Phone, PiggyBank, Plus, Reply, RotateCcw, Share2, Shield, ShoppingBag, ShoppingCart, Star, ThumbsUp, Truck, Facebook, Instagram, Youtube, Mail, Send } from 'lucide-react';
 import { VariantSelector, type VariantSelectorOption } from '@/components/products/VariantSelector';
 import type { Id } from '@/convex/_generated/dataModel';
 import { getPublicPriceLabel } from '@/lib/products/public-price';
@@ -51,6 +51,12 @@ import { toRichTextContent } from '@/lib/products/product-supplemental-content';
 import { ProductAttributesBadges } from '../products/ProductsPage';
 import { buildCategoryPath, buildDetailPath, normalizeRouteMode } from '@/lib/ia/route-mode';
 import { useProductFrameConfig } from '@/components/shared/ProductImageFrameBox';
+import {
+  PRODUCT_CONTACT_SALE_LINK_SETTING_KEYS,
+  navigateProductContactSaleHref,
+  resolveProductContactSaleHref,
+} from '@/lib/products/contact-sale-link';
+import { getCategoryPathItems, type CategoryTreeItem } from '@/lib/products/category-tree';
 
 type ProductDetailStyle = 'classic' | 'modern' | 'minimal' | 'premium';
 type ModernHeroStyle = 'full' | 'split' | 'minimal';
@@ -66,16 +72,6 @@ type ProductDetailAccentColorConfig = {
   primaryButton?: ProductDetailElementColorChoice;
   comboBadge?: ProductDetailElementColorChoice;
 };
-
-const LEGACY_COMBO_EFFECT_MAP = {
-  'sparkle-gradient': { type: 'sparkle', color: 'gradient-1' },
-  'sparkle-black': { type: 'sparkle', color: 'black' },
-  'sparkle-gold': { type: 'sparkle', color: 'gradient-2' },
-  'sparkle-emerald': { type: 'sparkle', color: 'gradient-3' },
-  'sparkle-red': { type: 'sparkle', color: 'red' },
-  'sparkle-primary': { type: 'sparkle', color: 'primary' },
-  'sparkle-secondary': { type: 'sparkle', color: 'secondary' },
-} as const;
 
 type BaseImageLayoutConfig = {
   showRating: boolean;
@@ -128,6 +124,8 @@ type ProductDetailExperienceConfig = {
   premiumBannerText?: 'primary' | 'secondary' | 'black' | 'white';
   premiumBannerItems?: { title: string; subtitle: string }[];
   showPremiumBanner?: boolean;
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
 };
 
 type ProductVariantOptionValue = {
@@ -220,8 +218,6 @@ const DEFAULT_CLASSIC_HIGHLIGHTS: ClassicHighlightItem[] = [
 
 function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
   const experienceSetting = useQuery(api.settings.getByKey, { key: 'product_detail_ui' });
-  const detailStyleSetting = useQuery(api.settings.getByKey, { key: 'products_detail_style' });
-  const highlightsSetting = useQuery(api.settings.getByKey, { key: 'products_detail_classic_highlights_enabled' });
   const moduleAspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
   const cartModule = useQuery(api.admin.modules.getModuleByKey, { key: 'cart' });
   const ordersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'orders' });
@@ -230,8 +226,6 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
   const commentsLikesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableLikes', moduleKey: 'comments' });
   const commentsRepliesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableReplies', moduleKey: 'comments' });
 
-  const legacyStyle = (detailStyleSetting?.value as ProductDetailStyle) || 'classic';
-  const legacyHighlightsEnabled = (highlightsSetting?.value as boolean) ?? true;
   const cartAvailable = (cartModule?.enabled ?? false) && (ordersModule?.enabled ?? false);
   const ordersEnabled = ordersModule?.enabled ?? false;
   const canUseWishlist = wishlistModule?.enabled ?? false;
@@ -268,13 +262,15 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
       imageAspectRatioSource?: ProductImageAspectRatioSource;
       relatedProductsMode: RelatedProductsMode;
       relatedProductsPerPage: number;
-      comboAnimateType?: ComboAnimateType | 'pulse' | 'bounce' | keyof typeof LEGACY_COMBO_EFFECT_MAP;
+      comboAnimateType?: ComboAnimateType;
       comboEffectColor?: ComboEffectColor;
       accentColors?: ProductDetailAccentColorConfig;
       showSocialButtons?: boolean;
       socialButtons?: Array<{ id: string; icon: string; label: string; url: string; active: boolean }>;
+      highlightsPosition?: 'info_column' | 'image_column';
+      highlightsSpacing?: 'low' | 'high' | 'none';
     }> | undefined;
-    const layoutStyle = raw?.layoutStyle ?? legacyStyle;
+    const layoutStyle = raw?.layoutStyle ?? 'classic';
     const layoutConfig = raw?.layouts?.[layoutStyle];
     const normalizedRelatedMode = raw?.relatedProductsMode === 'infiniteScroll' || raw?.relatedProductsMode === 'pagination'
       ? raw.relatedProductsMode
@@ -282,7 +278,7 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
     const relatedProductsPerPage = typeof raw?.relatedProductsPerPage === 'number' && raw.relatedProductsPerPage > 0
       ? raw.relatedProductsPerPage
       : 8;
-    const legacyAspectRatio = resolveProductImageAspectRatio(
+    const selectedImageAspectRatio = resolveProductImageAspectRatio(
       raw?.imageAspectRatio
       ?? raw?.layouts?.classic?.imageAspectRatio
       ?? raw?.layouts?.modern?.imageAspectRatio
@@ -299,29 +295,20 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
         : 'module';
     const resolvedImageAspectRatio = imageAspectRatioSource === 'module'
       ? moduleDefaultAspectRatio
-      : legacyAspectRatio;
+      : selectedImageAspectRatio;
     const configShowAddToCart = layoutConfig?.showAddToCart ?? raw?.showAddToCart ?? true;
     const classicLayoutHighlights = raw?.layouts?.classic?.showClassicHighlights
       ?? (layoutConfig as Partial<Record<'showClassicHighlights', boolean>>)?.showClassicHighlights;
-    const legacyLayoutHighlights = raw?.layouts?.classic
-      ? (raw.layouts.classic as Partial<Record<'showHighlights', boolean>>)?.showHighlights
-      : undefined;
     const resolvedHighlights = classicLayoutHighlights
-      ?? legacyLayoutHighlights
       ?? raw?.showClassicHighlights
       ?? raw?.showHighlights
-      ?? legacyHighlightsEnabled;
+      ?? true;
     const layoutComments = layoutConfig as Partial<ClassicLayoutConfig & ModernLayoutConfig & MinimalLayoutConfig> | undefined;
     const showComments = layoutComments?.showComments ?? raw?.showComments ?? true;
     const showCommentLikes = layoutComments?.showCommentLikes ?? raw?.showCommentLikes ?? true;
     const showCommentReplies = layoutComments?.showCommentReplies ?? raw?.showCommentReplies ?? true;
     const showShare = layoutComments?.showShare ?? raw?.showShare ?? true;
-    const legacyComboEffect = raw?.comboAnimateType && (raw.comboAnimateType in LEGACY_COMBO_EFFECT_MAP)
-      ? LEGACY_COMBO_EFFECT_MAP[raw.comboAnimateType as keyof typeof LEGACY_COMBO_EFFECT_MAP]
-      : undefined;
-    const comboAnimateType: ComboAnimateType = raw?.comboAnimateType === 'pulse' || raw?.comboAnimateType === 'bounce'
-      ? 'luxury-sheen'
-      : legacyComboEffect?.type ?? (raw?.comboAnimateType as ComboAnimateType | undefined) ?? 'luxury-sheen';
+    const comboAnimateType: ComboAnimateType = raw?.comboAnimateType ?? 'luxury-sheen';
     return {
       layoutStyle,
       showAddToCart: configShowAddToCart && cartAvailable,
@@ -347,7 +334,7 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
       relatedProductsMode: normalizedRelatedMode,
       relatedProductsPerPage,
       comboAnimateType,
-      comboEffectColor: raw?.comboEffectColor ?? legacyComboEffect?.color ?? 'gradient-1',
+      comboEffectColor: raw?.comboEffectColor ?? 'gradient-1',
       accentColors: {
         categoryBadge: 'secondary',
         discountBadge: 'primary',
@@ -374,8 +361,11 @@ function useProductDetailExperienceConfig(): ProductDetailExperienceConfig {
       priceRightIcon: (raw?.layouts?.premium as any)?.priceRightIcon ?? 'Gift',
       showPriceLeftIcon: (raw?.layouts?.premium as any)?.showPriceLeftIcon !== false,
       showPriceRightIcon: (raw?.layouts?.premium as any)?.showPriceRightIcon !== false,
+      highlightsPosition: raw?.highlightsPosition ?? 'image_column',
+      highlightsSpacing: raw?.highlightsSpacing ?? 'high',
+      cornerRadius: (raw?.layouts?.premium as any)?.cornerRadius,
     };
-  }, [experienceSetting?.value, legacyHighlightsEnabled, legacyStyle, cartAvailable, canUseComments, canUseCommentLikes, canUseCommentReplies, canUseWishlist, ordersEnabled, moduleDefaultAspectRatio]);
+  }, [experienceSetting?.value, cartAvailable, canUseComments, canUseCommentLikes, canUseCommentReplies, canUseWishlist, ordersEnabled, moduleDefaultAspectRatio]);
 }
 
 type RatingSummary = { average: number | null; count: number };
@@ -434,15 +424,17 @@ function useEnabledProductFields(): Set<string> {
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  initialProduct?: any;
 }
 
-export default function ProductDetailPage({ params }: PageProps) {
+export default function ProductDetailPage({ params, initialProduct }: PageProps) {
   const { slug } = use(params);
   const brandColors = useBrandColors();
   const brandColor = brandColors.primary;
+  const { isDark } = useSiteSettings();
   const tokens = useMemo(
-    () => getProductDetailColors(brandColors.primary, brandColors.secondary, brandColors.mode || 'single'),
-    [brandColors.primary, brandColors.secondary, brandColors.mode]
+    () => getProductDetailColors(brandColors.primary, brandColors.secondary, brandColors.mode || 'single', isDark),
+    [brandColors.primary, brandColors.secondary, brandColors.mode, isDark]
   );
   const experienceConfig = useProductDetailExperienceConfig();
   const classicHighlights = useClassicHighlights();
@@ -458,14 +450,17 @@ export default function ProductDetailPage({ params }: PageProps) {
   const commentsRepliesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableReplies', moduleKey: 'comments' });
   const commentsSettings = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'comments' });
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
+  const contactSaleLinkSettings = useQuery(api.settings.getMultiple, { keys: [...PRODUCT_CONTACT_SALE_LINK_SETTING_KEYS] });
   const wishlistModule = useQuery(api.admin.modules.getModuleByKey, { key: 'wishlist' });
   const ordersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'orders' });
+  const commerceCapabilities = useQuery(api.cart.getCommerceCapabilities, {});
   const toggleWishlist = useMutation(api.wishlist.toggle);
   const createComment = useMutation(api.comments.create);
   const incrementLike = useMutation(api.comments.incrementLike);
   const decrementLike = useMutation(api.comments.decrementLike);
   
-  const product = useQuery(api.products.getBySlug, { slug });
+  const productQuery = useQuery(api.products.getBySlug, { slug });
+  const product = productQuery ?? (initialProduct as Exclude<typeof productQuery, undefined>);
 
   const enableProductTypesSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'enableProductTypes' });
   const enableProductTypes = enableProductTypesSetting?.value === true;
@@ -546,6 +541,10 @@ export default function ProductDetailPage({ params }: PageProps) {
     if (!categories) {return new Map<string, string>();}
     return new Map(categories.map((item) => [item._id, item.slug]));
   }, [categories]);
+  const categoryPath = useMemo(
+    () => getCategoryPathItems(categories ?? [], product?.categoryId),
+    [categories, product?.categoryId]
+  );
   const productImagePlaceholderSetting = useQuery(api.settings.getValue, { key: 'product_image_placeholder', defaultValue: '' });
   const productImagePlaceholder = isValidImageSrc(productImagePlaceholderSetting)
     ? productImagePlaceholderSetting.trim()
@@ -685,6 +684,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     }
     return 'cart';
   }, [saleModeSetting?.value]);
+  const contactSaleHref = useMemo(() => resolveProductContactSaleHref(contactSaleLinkSettings), [contactSaleLinkSettings]);
   const commentRepliesMap = useMemo(() => {
     const map = new Map<string, CommentData[]>();
     comments.forEach((comment) => {
@@ -789,10 +789,6 @@ export default function ProductDetailPage({ params }: PageProps) {
     if (!product?._id) {
       return;
     }
-    if (!isAuthenticated) {
-      openLoginModal();
-      return;
-    }
     if (product.hasVariants && !variantId) {
       toast.error('Vui lòng chọn phiên bản trước khi thêm vào giỏ hàng');
       return;
@@ -810,10 +806,6 @@ export default function ProductDetailPage({ params }: PageProps) {
     if (!product?._id) {
       return;
     }
-    if (!isAuthenticated) {
-      openLoginModal();
-      return;
-    }
     if (product.hasVariants && !variantId) {
       toast.error('Vui lòng chọn phiên bản trước khi thanh toán');
       return;
@@ -828,7 +820,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     }
 
     if (saleMode === 'contact') {
-      router.push('/contact');
+      navigateProductContactSaleHref(contactSaleHref, router);
       return;
     }
 
@@ -935,8 +927,8 @@ export default function ProductDetailPage({ params }: PageProps) {
     }
   };
 
-  const canBuyNow = experienceConfig.showBuyNow && checkoutConfig.showBuyNow && (ordersModule?.enabled ?? false);
-  const canUseCartActions = saleMode === 'cart';
+  const canUseCartActions = saleMode === 'cart' && Boolean(commerceCapabilities?.cartAvailable && commerceCapabilities.providers.some((provider) => provider.provider === 'products' && provider.cartCapable));
+  const canBuyNow = experienceConfig.showBuyNow && checkoutConfig.showBuyNow && (ordersModule?.enabled ?? false) && canUseCartActions;
   const buyNowLabel = saleMode === 'contact' ? 'Liên hệ' : 'Mua ngay';
   const showStock = enabledFields.has('stock');
   const requireStockForBuyNow = saleMode === 'cart' && showStock;
@@ -1018,6 +1010,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     ...product,
     categoryName: category?.name ?? 'Sản phẩm',
     categorySlug: category?.slug,
+    categoryPath,
     hasVariants: product.hasVariants,
   };
 
@@ -1036,6 +1029,8 @@ export default function ProductDetailPage({ params }: PageProps) {
           variantOptions={variantOptions}
           highlights={classicHighlights}
           highlightsEnabled={classicHighlightsEnabled}
+          highlightsPosition={experienceConfig.highlightsPosition}
+          highlightsSpacing={experienceConfig.highlightsSpacing}
           ratingSummary={ratingSummary}
           saleMode={saleMode}
           showAddToCart={canUseCartActions ? experienceConfig.showAddToCart : false}
@@ -1078,6 +1073,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           productAttributesMap={productAttributesMap}
           productTypeId={(product as any)?.productTypeId}
           premiumBannerItems={experienceConfig.premiumBannerItems}
+          productTerms={productTerms}
           premiumBannerBg={experienceConfig.premiumBannerBg}
           premiumBannerText={experienceConfig.premiumBannerText}
           showPremiumBanner={experienceConfig.showPremiumBanner}
@@ -1094,6 +1090,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           priceRightIcon={(experienceConfig as any).priceRightIcon}
           showPriceLeftIcon={(experienceConfig as any).showPriceLeftIcon}
           showPriceRightIcon={(experienceConfig as any).showPriceRightIcon}
+          cornerRadius={(experienceConfig as any).cornerRadius}
         />
       )}
       {experienceConfig.layoutStyle === 'classic' && (
@@ -1109,6 +1106,8 @@ export default function ProductDetailPage({ params }: PageProps) {
           variantOptions={variantOptions}
           highlights={classicHighlights}
           highlightsEnabled={classicHighlightsEnabled}
+          highlightsPosition={experienceConfig.highlightsPosition}
+          highlightsSpacing={experienceConfig.highlightsSpacing}
           ratingSummary={ratingSummary}
           saleMode={saleMode}
           showAddToCart={canUseCartActions ? experienceConfig.showAddToCart : false}
@@ -1150,6 +1149,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           socialButtons={experienceConfig.socialButtons}
           productAttributesMap={productAttributesMap}
           productTypeId={(product as any)?.productTypeId}
+          productTerms={productTerms}
         />
       )}
       {experienceConfig.layoutStyle === 'modern' && (
@@ -1165,6 +1165,8 @@ export default function ProductDetailPage({ params }: PageProps) {
           variantOptions={variantOptions}
           highlights={classicHighlights}
           showHighlights={experienceConfig.showHighlights}
+          highlightsPosition={experienceConfig.highlightsPosition}
+          highlightsSpacing={experienceConfig.highlightsSpacing}
           ratingSummary={ratingSummary}
           saleMode={saleMode}
           showAddToCart={canUseCartActions ? experienceConfig.showAddToCart : false}
@@ -1209,6 +1211,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           productTypeId={(product as any)?.productTypeId}
           enableProductTypes={enableProductTypes}
           productTypeSlugMap={productTypeSlugMap}
+          productTerms={productTerms}
         />
       )}
       {experienceConfig.layoutStyle === 'minimal' && (
@@ -1224,6 +1227,8 @@ export default function ProductDetailPage({ params }: PageProps) {
           variantOptions={variantOptions}
           highlights={classicHighlights}
           showHighlights={experienceConfig.showHighlights}
+          highlightsPosition={experienceConfig.highlightsPosition}
+          highlightsSpacing={experienceConfig.highlightsSpacing}
           ratingSummary={ratingSummary}
           saleMode={saleMode}
           showAddToCart={canUseCartActions ? experienceConfig.showAddToCart : false}
@@ -1268,6 +1273,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           productTypeId={(product as any)?.productTypeId}
           enableProductTypes={enableProductTypes}
           productTypeSlugMap={productTypeSlugMap}
+          productTerms={productTerms}
         />
       )}
       <ProductImageLightbox
@@ -1302,6 +1308,7 @@ interface ProductData {
   categoryId: Id<"productCategories">;
   categoryName: string;
   categorySlug?: string;
+  categoryPath?: CategoryTreeItem[];
   combos?: any[];
 }
 
@@ -1329,6 +1336,52 @@ interface CommentData {
 interface ProductSupplementalContentData {
   preContent?: string;
   postContent?: string;
+}
+
+function ProductCategoryBreadcrumbLinks({
+  product,
+  routeMode,
+  iconSize,
+  includeProductsLink = false,
+}: {
+  product: ProductData;
+  routeMode: 'unified' | 'namespace';
+  iconSize: number;
+  includeProductsLink?: boolean;
+}) {
+  const categoryPath: CategoryTreeItem[] = product.categoryPath?.length
+    ? product.categoryPath
+    : product.categorySlug
+      ? [{ _id: product.categoryId, name: product.categoryName, slug: product.categorySlug }]
+      : [];
+
+  return (
+    <>
+      {includeProductsLink && (
+        <>
+          <Link href="/products" className="transition-colors">Sản phẩm</Link>
+          <ChevronRight size={iconSize} />
+        </>
+      )}
+      {categoryPath.map((category) => (
+        <React.Fragment key={category._id}>
+          <Link
+            href={buildCategoryPath({ categorySlug: category.slug ?? '', mode: routeMode, moduleKey: 'products' })}
+            className="transition-colors"
+          >
+            {category.name}
+          </Link>
+          <ChevronRight size={iconSize} />
+        </React.Fragment>
+      ))}
+      {categoryPath.length === 0 && !includeProductsLink && (
+        <>
+          <Link href="/products" className="transition-colors">Sản phẩm</Link>
+          <ChevronRight size={iconSize} />
+        </>
+      )}
+    </>
+  );
 }
 
 interface StyleProps {
@@ -1369,6 +1422,7 @@ interface StyleProps {
   productTypeId?: string;
   enableProductTypes?: boolean;
   productTypeSlugMap?: Map<string, string>;
+  productTerms: any[];
 }
 
 interface ExperienceBlocksProps {
@@ -1392,12 +1446,22 @@ interface ExperienceBlocksProps {
 interface HighlightBlockProps {
   highlights: ClassicHighlightItem[];
   showHighlights: boolean;
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
 }
 
 interface ClassicStyleProps extends StyleProps, ExperienceBlocksProps {
   highlights: ClassicHighlightItem[];
   highlightsEnabled: boolean;
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
 }
+
+const getHighlightsSpacingClass = (spacing?: 'low' | 'high' | 'none') => {
+  if (spacing === 'none') return '!mt-0';
+  if (spacing === 'low') return '!mt-4 md:!mt-5';
+  return '!mt-8 md:!mt-10';
+};
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
@@ -1459,6 +1523,7 @@ function ProductImageWithFallback({
   return (
     <Image
       {...props}
+      alt={typeof props.alt === 'string' ? props.alt : placeholderLabel}
       src={currentSrc}
       onError={() => {
         setCurrentSrc(currentSrc !== normalizedFallback ? normalizedFallback : null);
@@ -1601,18 +1666,81 @@ function BlurredProductImage({ src, alt, sizes, fallbackSrc }: { src?: string | 
   );
 }
 
-function HighlightsGrid({ highlights, tokens }: { highlights: ClassicHighlightItem[]; tokens: ProductDetailColors }) {
-  if (highlights.length === 0) {
+function HighlightsGrid({
+  highlights,
+  tokens,
+  spacing,
+  layoutStyle = 'classic',
+  isSingleImage = false,
+  position = 'image_column'
+}: {
+  highlights: ClassicHighlightItem[];
+  tokens: ProductDetailColors;
+  spacing?: 'low' | 'high' | 'none';
+  layoutStyle?: 'classic' | 'modern' | 'minimal' | 'premium';
+  isSingleImage?: boolean;
+  position?: 'image_column' | 'info_column';
+}) {
+  if (!highlights || highlights.length === 0) {
     return null;
   }
+
+  const isNoneSpacing = spacing === 'none';
+  const isImageCol = position === 'image_column';
+  
+  // Cho phép ghép sát đối với layoutStyle === 'premium' bất kể isSingleImage thế nào (vì thumbnail nằm dọc bên trái)
+  const shouldAttach = isNoneSpacing && isImageCol && (isSingleImage || layoutStyle === 'premium');
+
+  // Xác định class bo góc cho container highlights
+  let borderRadiusClass = 'rounded-2xl';
+  if (layoutStyle === 'minimal') {
+    borderRadiusClass = shouldAttach ? 'rounded-b-sm rounded-t-none' : 'rounded-sm';
+  } else {
+    borderRadiusClass = shouldAttach ? 'rounded-b-2xl rounded-t-none' : 'rounded-2xl';
+  }
+
+  // Padding & gap
+  const paddingClass = shouldAttach ? 'p-3' : 'p-4';
+  const gapClass = isNoneSpacing ? 'gap-x-5 gap-y-2' : 'gap-x-6 gap-y-3';
+  
+  const isGridStyle = position === 'image_column';
+  const marginClass = isGridStyle ? (isNoneSpacing ? 'mt-0' : 'mt-4 md:mt-6') : '';
+
   return (
-    <div className="grid grid-cols-3 gap-4 p-4 rounded-xl" style={{ backgroundColor: tokens.highlightBg }}>
+    <div
+      className={`${
+        isGridStyle 
+          ? 'grid gap-2' 
+          : `flex flex-wrap items-center justify-center ${gapClass}`
+      } w-full ${borderRadiusClass} ${paddingClass} ${marginClass} animate-fadeIn transition-all duration-300`}
+      style={{
+        gridTemplateColumns: isGridStyle ? `repeat(${highlights.length}, minmax(0, 1fr))` : undefined,
+        backgroundColor: shouldAttach
+          ? (tokens.highlightBg || tokens.surfaceMuted || 'rgba(0,0,0,0.02)')
+          : (tokens.highlightBg || 'transparent'),
+        border: shouldAttach ? 'none' : `1px solid ${tokens.divider || 'rgba(0,0,0,0.08)'}`,
+      }}
+    >
       {highlights.map((item, index) => {
-        const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon];
+        const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon] || BadgeCheck;
         return (
-          <div key={`${item.icon}-${index}`} className="text-center">
-            <Icon size={24} className="mx-auto mb-2" style={{ color: tokens.highlightIcon }} />
-            <p className="text-xs" style={{ color: tokens.highlightText }}>{item.text}</p>
+          <div
+            key={`${item.icon}-${index}`}
+            className={`flex items-center gap-1.5 ${isGridStyle ? 'justify-center' : ''} min-w-0`}
+          >
+            <div className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary/5 dark:bg-primary/10">
+              <Icon
+                size={12}
+                className="stroke-[1.75]"
+                style={{ color: tokens.primary }}
+              />
+            </div>
+            <span
+              className="text-[10px] md:text-xs font-semibold leading-tight line-clamp-2"
+              style={{ color: tokens.bodyText }}
+            >
+              {item.text}
+            </span>
           </div>
         );
       })}
@@ -2048,6 +2176,9 @@ function ClassicStyle({
   socialButtons,
   productAttributesMap,
   productTypeId,
+  highlightsPosition,
+  highlightsSpacing,
+  productTerms,
 }: ClassicStyleProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -2120,7 +2251,7 @@ function ClassicStyle({
         }
         const selected = selectedOptions[optionValue.optionId];
         return !selected || selected === optionValue.valueId;
-      })
+      }) && (!showStock || (variant.stock ?? product.stock ?? 0) > 0)
     );
 
   const showPrice = enabledFields.has('price') || enabledFields.size === 0;
@@ -2193,30 +2324,13 @@ function ClassicStyle({
       <div className="border-b" style={{ borderColor: tokens.divider }}>
         <div className="max-w-6xl mx-auto px-4 py-2 md:py-3">
           <nav className="flex items-center gap-1 text-[11px] md:hidden" style={{ color: tokens.breadcrumbText }}>
-            {product.categorySlug && product.categoryName ? (
-              <>
-                <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                <ChevronRight size={10} />
-              </>
-            ) : (
-              <>
-                <Link href="/products" className="transition-colors">Sản phẩm</Link>
-                <ChevronRight size={10} />
-              </>
-            )}
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={10} />
             <span className="font-medium truncate max-w-[180px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
           <nav className="hidden md:flex items-center gap-2 text-sm" style={{ color: tokens.breadcrumbText }}>
             <Link href="/" className="transition-colors">Trang chủ</Link>
             <ChevronRight size={14} />
-            <Link href="/products" className="transition-colors">Sản phẩm</Link>
-            <ChevronRight size={14} />
-            {product.categorySlug && (
-              <>
-                <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                <ChevronRight size={14} />
-              </>
-            )}
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={14} includeProductsLink />
             <span className="font-medium truncate max-w-[200px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
         </div>
@@ -2226,9 +2340,17 @@ function ClassicStyle({
         <div className="lg:grid lg:grid-cols-2 lg:gap-12">
           {/* Product Images */}
           <div className="mb-6 lg:mb-0">
-            <div className={`${imageFrame.frameWidthClassName} mb-3 md:mb-4 group/carousel relative`}>
+            <div className={`${imageFrame.frameWidthClassName} ${
+              highlightsEnabled && highlights.length > 0 && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                ? 'mb-0'
+                : 'mb-3 md:mb-4'
+            } group/carousel relative`}>
               <div
-                className={`relative rounded-2xl overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                className={`relative overflow-hidden ${
+                  highlightsEnabled && highlights.length > 0 && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                    ? 'rounded-t-2xl rounded-b-none'
+                    : 'rounded-2xl'
+                } ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                 style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                 role={canOpenLightbox ? 'button' : undefined}
                 tabIndex={canOpenLightbox ? 0 : -1}
@@ -2253,7 +2375,7 @@ function ClassicStyle({
                       type="button"
                       disabled={!canScrollPrev}
                       onClick={(e) => { e.stopPropagation(); emblaApi?.scrollPrev(); }}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                       aria-label="Ảnh trước"
                     >
                       <ChevronLeft size={16} />
@@ -2262,7 +2384,7 @@ function ClassicStyle({
                       type="button"
                       disabled={!canScrollNext}
                       onClick={(e) => { e.stopPropagation(); emblaApi?.scrollNext(); }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                       aria-label="Ảnh sau"
                     >
                       <ChevronRight size={16} />
@@ -2278,6 +2400,17 @@ function ClassicStyle({
                   <span className="absolute top-3 left-3 px-3 py-1.5 text-sm font-bold rounded-lg z-30" style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}>-{discountPercent}%</span>
                 )}
               </div>
+
+              {highlightsEnabled && highlights.length > 0 && highlightsPosition === 'image_column' && (images.length <= 1 || highlightsSpacing === 'none') && (
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="classic"
+                  isSingleImage={images.length <= 1}
+                  position="image_column"
+                />
+              )}
             </div>
             {images.length > 1 && (
               <>
@@ -2295,6 +2428,18 @@ function ClassicStyle({
                   />
                 </div>
               </>
+            )}
+            {highlightsEnabled && highlights.length > 0 && highlightsPosition === 'image_column' && !(images.length <= 1 || highlightsSpacing === 'none') && (
+              <div className={imageFrame.frameWidthClassName}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="classic"
+                  isSingleImage={images.length <= 1}
+                  position="image_column"
+                />
+              </div>
             )}
           </div>
 
@@ -2448,17 +2593,16 @@ function ClassicStyle({
               />
             )}
 
-            {highlightsEnabled && highlights.length > 0 && (
-              <div className="grid grid-cols-3 gap-4 p-4 rounded-xl mb-8" style={{ backgroundColor: tokens.highlightBg }}>
-                {highlights.map((item, index) => {
-                  const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon];
-                  return (
-                    <div key={`${item.icon}-${index}`} className="text-center">
-                      <Icon size={24} className="mx-auto mb-2" style={{ color: tokens.highlightIcon }} />
-                      <p className="text-xs" style={{ color: tokens.highlightText }}>{item.text}</p>
-                    </div>
-                  );
-                })}
+            {highlightsEnabled && highlights.length > 0 && highlightsPosition !== 'image_column' && (
+              <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-8`}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="classic"
+                  isSingleImage={images.length <= 1}
+                  position="info_column"
+                />
               </div>
             )}
 
@@ -2499,6 +2643,14 @@ function ClassicStyle({
                   style={{ color: tokens.bodyText }}
                 />
               )}
+              {productTerms.filter(term => term.description && term.description.trim()).map(term => (
+                <RichContent
+                  key={term._id}
+                  content={toRichTextContent(term.description!)}
+                  className="max-w-none mt-4 pt-4 border-t border-dashed border-slate-100 dark:border-slate-800"
+                  style={{ color: tokens.bodyText }}
+                />
+              ))}
               {supplementalContent?.postContent ? (
                 <RichContent
                   content={toRichTextContent(supplementalContent.postContent)}
@@ -2566,12 +2718,21 @@ function ClassicStyle({
   );
 }
 
+const getRadiusClass = (radius?: 'none' | 'sm' | 'lg', type?: 'box' | 'button' | 'image') => {
+  if (radius === 'none') return 'rounded-none';
+  if (radius === 'sm') return 'rounded-lg';
+  if (type === 'button') return 'rounded-full';
+  return 'rounded-2xl';
+};
+
 // ====================================================================================
 // STYLE 4: PREMIUM - Elegant premium product page with dynamic layouts & colors
 // ====================================================================================
 interface PremiumStyleProps extends StyleProps, ExperienceBlocksProps {
   highlights: ClassicHighlightItem[];
   highlightsEnabled: boolean;
+  highlightsPosition?: 'info_column' | 'image_column';
+  highlightsSpacing?: 'low' | 'high' | 'none';
   premiumBannerItems?: { title: string; subtitle: string }[];
   premiumBannerBg?: 'primary' | 'secondary' | 'black' | 'white';
   premiumBannerText?: 'primary' | 'secondary' | 'black' | 'white';
@@ -2589,6 +2750,7 @@ interface PremiumStyleProps extends StyleProps, ExperienceBlocksProps {
   priceRightIcon?: string;
   showPriceLeftIcon?: boolean;
   showPriceRightIcon?: boolean;
+  cornerRadius?: 'none' | 'sm' | 'lg';
 }
 
 function PremiumStyle({
@@ -2639,6 +2801,7 @@ function PremiumStyle({
   productAttributesMap,
   productTypeId,
   premiumBannerItems,
+  productTerms,
   premiumBannerBg = 'primary',
   premiumBannerText = 'white',
   showPremiumBanner = true,
@@ -2651,10 +2814,11 @@ function PremiumStyle({
   phoneIcon = 'Phone',
   phoneUrl = '',
   mobileFontSize = 'xs',
-  priceLeftIcon = 'Award',
   priceRightIcon = 'Gift',
-  showPriceLeftIcon = true,
   showPriceRightIcon = true,
+  highlightsPosition,
+  highlightsSpacing,
+  cornerRadius,
 }: PremiumStyleProps) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
@@ -2799,7 +2963,7 @@ function PremiumStyle({
         }
         const selected = selectedOptions[optionValue.optionId];
         return !selected || selected === optionValue.valueId;
-      })
+      }) && (!showStock || (variant.stock ?? product.stock ?? 0) > 0)
     );
 
   const showPrice = enabledFields.has('price') || enabledFields.size === 0;
@@ -2864,6 +3028,121 @@ function PremiumStyle({
   const discountBadgeColors = resolveProductDetailElementColor(accentColors?.discountBadge ?? 'primary', tokens);
   const primaryButtonColors = resolveProductDetailElementColor(accentColors?.primaryButton ?? 'primary', tokens);
 
+  // Hàm tính toán chi tiết combo dựa trên data cấu hình từ Convex DB
+  const getResolvedComboData = (cItem: any) => {
+    const mainPrice = basePrice || 0;
+    
+    let totalBottles = 1;
+    let payBottles = 1;
+    let giftProductPrice = 0;
+    let giftQty = 0;
+    let isGiftSelf = false;
+    let isGiftOther = false;
+    
+    if (cItem.type === 'standard') {
+      const cfg = cItem.standardConfig;
+      const minQty = cfg?.minQty || 1;
+      payBottles = minQty;
+      
+      if (cfg?.rewardType === 'gift_self') {
+        giftQty = cfg.giftQty || 1;
+        totalBottles = minQty + giftQty;
+        isGiftSelf = true;
+      } else if (cfg?.rewardType === 'gift_other' && cfg.giftProductId) {
+        giftQty = cfg.giftQty || 1;
+        totalBottles = minQty;
+        isGiftOther = true;
+        const gp = comboProductsMap?.get(cfg.giftProductId);
+        giftProductPrice = gp?.salePrice || gp?.price || 0;
+      } else {
+        totalBottles = minQty;
+      }
+    } else if (cItem.type === 'mix') {
+      const cfg = cItem.mixConfig;
+      const curQty = cfg?.currentProductQty || 1;
+      payBottles = curQty;
+      
+      const mixItemsQty = cfg?.items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0;
+      totalBottles = curQty + mixItemsQty;
+      
+      if (cfg?.rewardType === 'gift_other' && cfg.giftProductId) {
+        giftQty = cfg.giftQty || 1;
+        isGiftOther = true;
+        const gp = comboProductsMap?.get(cfg.giftProductId);
+        giftProductPrice = gp?.salePrice || gp?.price || 0;
+      }
+    }
+    
+    let originalValue = mainPrice * payBottles;
+    if (cItem.type === 'standard') {
+      if (isGiftSelf) {
+        originalValue = mainPrice * (payBottles + giftQty);
+      } else if (isGiftOther) {
+        originalValue = (mainPrice * payBottles) + (giftProductPrice * giftQty);
+      }
+    } else if (cItem.type === 'mix') {
+      const cfg = cItem.mixConfig;
+      const itemsValue = cfg?.items?.reduce((acc: number, item: any) => {
+        const p = comboProductsMap?.get(item.productId);
+        const pPrice = p?.salePrice || p?.price || 0;
+        return acc + (pPrice * item.quantity);
+      }, 0) || 0;
+      
+      originalValue = (mainPrice * payBottles) + itemsValue;
+      if (isGiftOther) {
+        originalValue += (giftProductPrice * giftQty);
+      }
+    }
+    
+    let comboPrice = cItem.price || 0;
+    if (!comboPrice) {
+      if (cItem.type === 'standard') {
+        const cfg = cItem.standardConfig;
+        if (cfg?.rewardType === 'discount_percent') {
+          const pct = cfg.rewardValue || 0;
+          comboPrice = (mainPrice * payBottles) * (1 - pct / 100);
+        } else if (cfg?.rewardType === 'discount_amount') {
+          const amt = cfg.rewardValue || 0;
+          comboPrice = (mainPrice * payBottles) - amt;
+        } else if (cfg?.rewardType === 'gift_self') {
+          comboPrice = mainPrice * payBottles;
+        } else if (cfg?.rewardType === 'gift_other') {
+          comboPrice = mainPrice * payBottles;
+        }
+      } else if (cItem.type === 'mix') {
+        const cfg = cItem.mixConfig;
+        const itemsValue = cfg?.items?.reduce((acc: number, item: any) => {
+          const p = comboProductsMap?.get(item.productId);
+          const pPrice = p?.salePrice || p?.price || 0;
+          return acc + (pPrice * item.quantity);
+        }, 0) || 0;
+        const baseMixPrice = (mainPrice * payBottles) + itemsValue;
+        
+        if (cfg?.rewardType === 'discount_percent') {
+          const pct = cfg.rewardValue || 0;
+          comboPrice = baseMixPrice * (1 - pct / 100);
+        } else if (cfg?.rewardType === 'discount_amount') {
+          const amt = cfg.rewardValue || 0;
+          comboPrice = baseMixPrice - amt;
+        } else if (cfg?.rewardType === 'gift_other') {
+          comboPrice = baseMixPrice;
+        }
+      }
+    }
+    
+    let savingAmount = originalValue - comboPrice;
+    if (savingAmount < 0) savingAmount = 0;
+    
+    const avgPricePerBottle = totalBottles > 0 ? Math.round(comboPrice / totalBottles) : 0;
+    
+    return {
+      comboPrice,
+      savingAmount,
+      avgPricePerBottle,
+      totalBottles
+    };
+  };
+
   // Lấy các attributes thật của sản phẩm để render
   const rawAttributes = productAttributesMap && productAttributesMap.has(product._id)
     ? productAttributesMap.get(product._id)!
@@ -2875,30 +3154,13 @@ function PremiumStyle({
       <div className="border-b" style={{ borderColor: tokens.divider }}>
         <div className="max-w-6xl mx-auto px-4 py-2 md:py-3">
           <nav className="flex items-center gap-1 text-[11px] md:hidden" style={{ color: tokens.breadcrumbText }}>
-            {product.categorySlug && product.categoryName ? (
-              <>
-                <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                <ChevronRight size={10} />
-              </>
-            ) : (
-              <>
-                <Link href="/products" className="transition-colors">Sản phẩm</Link>
-                <ChevronRight size={10} />
-              </>
-            )}
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={10} />
             <span className="font-medium truncate max-w-[180px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
           <nav className="hidden md:flex items-center gap-2 text-sm" style={{ color: tokens.breadcrumbText }}>
             <Link href="/" className="transition-colors">Trang chủ</Link>
             <ChevronRight size={14} />
-            <Link href="/products" className="transition-colors">Sản phẩm</Link>
-            <ChevronRight size={14} />
-            {product.categorySlug && (
-              <>
-                <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                <ChevronRight size={14} />
-              </>
-            )}
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={14} includeProductsLink />
             <span className="font-medium truncate max-w-[200px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
         </div>
@@ -2920,7 +3182,7 @@ function PremiumStyle({
                     visibleSlots={4}
                     tokens={tokens}
                     thumbnailAspectRatio={imageFrame.thumbnailAspectRatio}
-                    itemClassName="w-full rounded-lg"
+                    itemClassName="w-20 rounded-lg"
                     fallbackSrc={productImagePlaceholder}
                   />
                 </div>
@@ -2930,7 +3192,13 @@ function PremiumStyle({
               <div className="flex-1">
                 <div className={`${imageFrame.frameWidthClassName} group/carousel relative`}>
                   <div
-                    className={`relative rounded-2xl overflow-hidden ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                    className={cn(
+                      "relative overflow-hidden",
+                      highlightsEnabled && highlights && highlights.length > 0 && highlightsPosition !== 'info_column' && highlightsSpacing === 'none'
+                        ? (cornerRadius === 'none' ? 'rounded-none' : cornerRadius === 'sm' ? 'rounded-t-lg rounded-b-none' : 'rounded-t-2xl rounded-b-none')
+                        : getRadiusClass(cornerRadius, 'image'),
+                      canOpenLightbox ? 'cursor-zoom-in' : ''
+                    )}
                     style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                     role={canOpenLightbox ? 'button' : undefined}
                     tabIndex={canOpenLightbox ? 0 : -1}
@@ -2955,7 +3223,7 @@ function PremiumStyle({
                           type="button"
                           disabled={!canScrollPrev}
                           onClick={(e) => { e.stopPropagation(); emblaApi?.scrollPrev(); }}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                           aria-label="Ảnh trước"
                         >
                           <ChevronLeft size={16} />
@@ -2964,7 +3232,7 @@ function PremiumStyle({
                           type="button"
                           disabled={!canScrollNext}
                           onClick={(e) => { e.stopPropagation(); emblaApi?.scrollNext(); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                           aria-label="Ảnh sau"
                         >
                           <ChevronRight size={16} />
@@ -2980,6 +3248,18 @@ function PremiumStyle({
                       <span className="absolute top-3 left-3 px-3 py-1.5 text-sm font-bold rounded-lg z-30" style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}>-{discountPercent}%</span>
                     )}
                   </div>
+
+                  {/* Highlights động từ cài đặt dưới ảnh sản phẩm */}
+                  {highlightsEnabled && highlights && highlights.length > 0 && highlightsPosition !== 'info_column' && (
+                    <HighlightsGrid
+                      highlights={highlights}
+                      tokens={tokens}
+                      spacing={highlightsSpacing}
+                      layoutStyle="premium"
+                      isSingleImage={images.length <= 1}
+                      position="image_column"
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -3000,21 +3280,6 @@ function PremiumStyle({
                 />
               </div>
             )}
-
-            {/* Highlights động từ cài đặt dưới ảnh sản phẩm */}
-            {highlightsEnabled && highlights && highlights.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 border-t pt-4" style={{ borderColor: tokens.divider }}>
-                {highlights.map((item, index) => {
-                  const Icon = CLASSIC_HIGHLIGHT_ICON_MAP[item.icon] || BadgeCheck;
-                  return (
-                    <div key={`${item.icon}-${index}`} className="flex flex-col items-center text-center p-2.5 rounded-2xl" style={{ backgroundColor: tokens.surfaceMuted }}>
-                      <Icon size={20} style={{ color: tokens.primary }} />
-                      <span className="text-[10px] md:text-xs font-semibold mt-1 line-clamp-1" style={{ color: tokens.bodyText }}>{item.text}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
 
           {/* Cột phải: Thông tin sản phẩm */}
@@ -3033,7 +3298,7 @@ function PremiumStyle({
                   )}
                   {stockStatus && <InlineStockBadge label={stockStatus.label} color={stockStatus.color} tokens={tokens} />}
                 </div>
-                <h1 className="text-xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>{product.name}</h1>
+                <h1 className="text-sm md:text-lg font-bold" style={{ color: '#000000' }}>{product.name}</h1>
               </div>
               <div className="flex gap-2 shrink-0">
                 {showWishlist && (
@@ -3071,7 +3336,7 @@ function PremiumStyle({
             {/* Box Giá Premium sử dụng dynamic brand colors từ Tokens */}
             {showPrice && (
               <div
-                className="rounded-2xl border p-4 relative overflow-hidden"
+                className={cn("border p-4 relative overflow-hidden", getRadiusClass(cornerRadius, 'box'))}
                 style={{
                   backgroundColor: tokens.surfaceMuted,
                   borderColor: tokens.border,
@@ -3082,27 +3347,29 @@ function PremiumStyle({
                     {renderPremiumIcon(priceRightIcon, 120) || <Gift size={120} />}
                   </div>
                 )}
-                <div className="flex items-start gap-3">
-                  {showPriceLeftIcon !== false && (
-                    <div className="p-2 rounded-xl" style={{ backgroundColor: tokens.surface, color: tokens.primary }}>
-                      {renderPremiumIcon(priceLeftIcon, 20) || <Award size={20} />}
-                    </div>
-                  )}
-                  <div className="flex-1 space-y-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ ƯU ĐÃI HÔM NAY</p>
-                    <div className="flex flex-col md:flex-row md:items-baseline gap-1 md:gap-3">
-                      <span className="text-2xl md:text-3xl font-extrabold" style={{ color: tokens.priceColor }}>{priceDisplay.label}</span>
+                <div className="flex items-start gap-3 relative z-10">
+                  <div className="flex-1 grid grid-cols-12 gap-3 items-center">
+                    {/* Cột trái: Giá bán ưu đãi và text Tiết kiệm */}
+                    <div className={cn(
+                      "space-y-1",
+                      showSalePrice && priceDisplay.comparePrice ? "col-span-8 pr-2" : "col-span-12"
+                    )}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ ƯU ĐÃI HÔM NAY ✨</p>
+                      <span className="text-2xl md:text-3xl font-extrabold block leading-tight" style={{ color: tokens.primary }}>{priceDisplay.label}</span>
                       {showSalePrice && priceDisplay.comparePrice && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm line-through italic" style={{ color: tokens.priceOriginalText }}>{formatPrice(priceDisplay.comparePrice)}</span>
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded" style={{ backgroundColor: discountBadgeColors.bg, color: discountBadgeColors.text }}>-{discountPercent}%</span>
-                        </div>
+                        <p className="text-[10px] md:text-xs font-semibold" style={{ color: tokens.primary }}>
+                          Tiết kiệm {formatPrice(priceDisplay.comparePrice - basePrice)} so với giá gốc
+                        </p>
                       )}
                     </div>
+
+                    {/* Cột phải: Giá gốc và badge giảm giá */}
                     {showSalePrice && priceDisplay.comparePrice && (
-                      <p className="text-xs font-semibold" style={{ color: tokens.priceColor }}>
-                        Tiết kiệm {formatPrice(priceDisplay.comparePrice - basePrice)} so với giá gốc
-                      </p>
+                      <div className="col-span-4 pl-3 border-l space-y-1 text-left" style={{ borderColor: tokens.divider || tokens.border }}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.metaText }}>GIÁ GỐC</p>
+                        <span className="text-xs md:text-sm line-through block" style={{ color: tokens.priceOriginalText }}>{formatPrice(priceDisplay.comparePrice)}</span>
+                        <span className="inline-block px-1.5 py-0.5 text-[10px] font-bold rounded text-white" style={{ backgroundColor: discountBadgeColors.bg }}>-{discountPercent}%</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -3123,51 +3390,59 @@ function PremiumStyle({
 
             {/* Box Combo dạng trượt Carousel chuyên nghiệp - DỮ LIỆU THỰC */}
             {enableCombos && product.combos && product.combos.length > 0 && (
-              <div className="space-y-3 relative">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider animate-pulse" style={{ color: tokens.metaText }}>
-                    ƯU ĐÃI COMBO – MUA NHIỀU, TIẾT KIỆM HƠN
-                  </p>
-                  {product.combos.length > 2 && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => comboApi?.scrollPrev()}
-                        disabled={!canScrollComboPrev}
-                        className="h-6 w-6 rounded-full flex items-center justify-center transition-all opacity-70 hover:opacity-100 disabled:opacity-10 hover:scale-105 active:scale-95 border"
-                        style={{ color: tokens.headingColor, backgroundColor: tokens.surface, borderColor: tokens.border }}
-                      >
-                        <ChevronLeft size={12} strokeWidth={3} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => comboApi?.scrollNext()}
-                        disabled={!canScrollComboNext}
-                        className="h-6 w-6 rounded-full flex items-center justify-center transition-all opacity-70 hover:opacity-100 disabled:opacity-10 hover:scale-105 active:scale-95 border"
-                        style={{ color: tokens.headingColor, backgroundColor: tokens.surface, borderColor: tokens.border }}
-                      >
-                        <ChevronRight size={12} strokeWidth={3} />
-                      </button>
-                    </div>
-                  )}
+              <div
+                className={cn(
+                  "border p-2.5 md:p-3 pt-8 relative mt-6 mb-6",
+                  getRadiusClass(cornerRadius, 'box')
+                )}
+                style={{
+                  borderColor: tokens.border,
+                }}
+              >
+                {/* Badge Header nổi ở góc trái trên */}
+                <div
+                  className="absolute -top-[16px] left-[-1px] px-5 py-2 text-[10px] md:text-xs font-bold text-white shadow-sm flex items-center gap-1.5 z-20"
+                  style={{ 
+                    backgroundColor: brandColor || '#8B0000',
+                    borderRadius: '12px 16px 24px 0px',
+                    lineHeight: '1.2'
+                  }}
+                >
+                  <Gift size={13} className="text-white shrink-0 animate-bounce" />
+                  <span className="tracking-wide font-extrabold uppercase">ƯU ĐÃI COMBO – MUA NHIỀU, TIẾT KIỆM HƠN</span>
                 </div>
 
-                <div className="overflow-hidden py-3 -my-3" ref={comboRef}>
-                  <div className="flex gap-3 pt-3">
+                {/* Các nút điều hướng Carousel ở góc trên bên phải */}
+                {product.combos.length > 2 && (
+                  <div className="absolute -top-3.5 right-4 flex items-center gap-1 z-20">
+                    <button
+                      type="button"
+                      onClick={() => comboApi?.scrollPrev()}
+                      disabled={!canScrollComboPrev}
+                      className="h-6 w-6 rounded-full flex items-center justify-center transition-all opacity-70 hover:opacity-100 disabled:opacity-10 hover:scale-105 active:scale-95 border"
+                      style={{ color: tokens.headingColor, backgroundColor: tokens.surface, borderColor: tokens.border }}
+                    >
+                      <ChevronLeft size={12} strokeWidth={3} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => comboApi?.scrollNext()}
+                      disabled={!canScrollComboNext}
+                      className="h-6 w-6 rounded-full flex items-center justify-center transition-all opacity-70 hover:opacity-100 disabled:opacity-10 hover:scale-105 active:scale-95 border"
+                      style={{ color: tokens.headingColor, backgroundColor: tokens.surface, borderColor: tokens.border }}
+                    >
+                      <ChevronRight size={12} strokeWidth={3} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="overflow-hidden" ref={comboRef}>
+                  <div className="flex gap-2 pt-4 pb-2">
                     {product.combos.map((combo, index) => {
                       const isBestSeller = index === 0; // Combo đầu tiên là bán chạy
                       
-                      let totalBottles = 1;
-                      if (combo.type === 'standard') {
-                        totalBottles = combo.standardConfig?.minQty || 1;
-                      } else if (combo.type === 'mix') {
-                        const mixItemsQty = combo.mixConfig?.items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0;
-                        totalBottles = (combo.mixConfig?.currentProductQty || 1) + mixItemsQty;
-                      } else if (Array.isArray((combo as any).products)) {
-                        totalBottles = (combo as any).products.reduce((acc: number, p: { quantity: number }) => acc + p.quantity, 0);
-                      }
-
-                      const avgPricePerBottle = combo.price ? Math.round(combo.price / totalBottles) : 0;
+                      // Tính toán giá trị combo bằng hàm helper getResolvedComboData
+                      const { comboPrice, savingAmount, avgPricePerBottle, totalBottles } = getResolvedComboData(combo);
                       
                       // Sửa lỗi gạch ngang thô
                       const rawComboName = typeof combo.name === 'string' ? combo.name.trim() : '';
@@ -3184,69 +3459,136 @@ function PremiumStyle({
                         }
                       };
 
+                      const isSelected = combo.type === 'mix' ? activeMixCombo?._id === combo._id : quantity === totalBottles;
+                      const comboColor = isBestSeller ? (brandColor || '#8B0000') : '#c98500';
+                      const normalizedComboName = cleanName.replace(/\s+/g, ' ').trim();
+                      const toSubtitleLabel = (value: string) => value.toLowerCase().replace(/^./u, (char) => char.toUpperCase());
+                      const buyGiftMatch = normalizedComboName.match(/^(MUA\s+\d+\s+TẶNG\s+\d+)(?:\s+(.+))?$/i);
+                      const buyBottleMatch = normalizedComboName.match(/^(MUA\s+\d+\s+CHAI)(?:\s+(.+))?$/i);
+                      const comboTitle = (buyGiftMatch?.[1] ?? buyBottleMatch?.[1] ?? normalizedComboName).toUpperCase();
+                      const subtitleFromName = buyGiftMatch?.[2] ?? buyBottleMatch?.[2];
+                      const comboSubtitle = typeof combo.description === 'string' && combo.description.trim()
+                        ? combo.description.trim()
+                        : subtitleFromName
+                          ? toSubtitleLabel(subtitleFromName)
+                          : combo.type === 'mix'
+                            ? 'Kết hợp đặc biệt'
+                            : 'Ưu đãi combo';
+
                       return (
                         <div
                           key={combo.id || index}
                           onClick={handleComboClick}
                           className={cn(
-                            "rounded-xl p-4 flex flex-col justify-between transition-all cursor-pointer relative border select-none shrink-0 flex-grow-0",
-                            isBestSeller ? "border-2" : "border",
-                            (product.combos?.length ?? 0) > 2 ? "w-[260px] md:w-[290px]" : "flex-1 min-w-[210px]"
+                            "flex flex-col justify-between transition-all cursor-pointer relative select-none shrink-0 flex-grow-0 border-2 hover:scale-[1.01] active:scale-[0.99]",
+                            cornerRadius === 'none' ? 'rounded-none' : cornerRadius === 'sm' ? 'rounded-lg' : 'rounded-xl',
+                            "w-[calc(50%-4px)] md:w-[calc(50%-6px)]"
                           )}
                           style={{
                             backgroundColor: tokens.surface,
-                            borderColor: isBestSeller ? brandColor : tokens.border,
+                            borderColor: comboColor,
+                            boxShadow: isSelected
+                              ? `0 12px 28px ${comboColor}18`
+                              : '0 10px 24px rgba(15, 23, 42, 0.06)'
                           }}
                         >
+                          {/* ★ BÁN CHẠY badge lệch lên trên bên phải */}
                           {isBestSeller && (
-                            <div className="absolute -top-2.5 right-2 px-1.5 py-0.5 rounded text-[8px] font-bold text-white flex items-center gap-0.5 z-10" style={{ backgroundColor: '#eab308' }}>
-                              ★ BÁN CHẠY
+                            <div 
+                              className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-[9px] md:text-[11px] font-black text-white flex items-center gap-1 z-10 shadow-sm uppercase tracking-wider whitespace-nowrap"
+                              style={{ 
+                                backgroundColor: comboColor,
+                                borderRadius: '999px',
+                                lineHeight: '1.2'
+                              }}
+                            >
+                              <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-current" />
+                              BÁN CHẠY NHẤT
                             </div>
                           )}
-                          <div>
+
+                          {isSelected && (
                             <div
-                              className="inline-block px-2.5 py-0.5 text-[11px] font-bold rounded-md text-white leading-none uppercase"
-                              style={{ backgroundColor: isBestSeller ? '#eab308' : brandColor }}
+                              className="absolute top-2 right-2 z-20 h-5 w-5 md:h-6 md:w-6 rounded-full flex items-center justify-center text-white shadow-sm"
+                              style={{ backgroundColor: comboColor }}
+                              aria-hidden="true"
                             >
-                              {cleanName}
+                              <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={3} />
                             </div>
-                            {combo.description && (
-                              <p className="text-[10px] mt-1.5 line-clamp-1" style={{ color: tokens.metaText }}>
-                                {combo.description}
-                              </p>
-                            )}
-                            <p className="text-sm font-bold mt-2" style={{ color: tokens.headingColor }}>
-                              {combo.price ? formatPrice(combo.price) : 'Liên hệ'}
+                          )}
+
+                          <div className="pt-6 pb-3 px-2 md:pt-6 md:pb-3 md:px-2.5 flex flex-col items-center justify-center relative flex-1 text-center min-w-0">
+                            <h3 className="text-[12px] xs:text-[13px] md:text-[15px] font-black uppercase tracking-wide leading-tight text-slate-900 dark:text-white">
+                              {comboTitle}
+                            </h3>
+                            <p className="mt-0.5 text-[9px] xs:text-[10px] md:text-[11px] leading-snug font-medium text-slate-500 line-clamp-1">
+                              {comboSubtitle}
                             </p>
-                            {avgPricePerBottle > 0 && (
-                              <p className="text-[10px] font-semibold" style={{ color: tokens.priceColor }}>
-                                Chi ~{formatPrice(avgPricePerBottle)} / chai
-                              </p>
-                            )}
-                          </div>
-                          {combo.price && (
-                            <div className="border-t pt-2 mt-3 flex items-center justify-between text-[9px] font-medium" style={{ borderColor: tokens.divider, color: tokens.priceColor }}>
-                              <span className="flex items-center gap-1">
-                                <Gift size={10} />
-                                <span>{combo.type === 'mix' ? 'Xem chi tiết bộ sản phẩm' : 'Tiết kiệm nhiều hơn'}</span>
+
+                            <div className="mt-3 w-full border-t pt-3" style={{ borderColor: tokens.divider }}>
+                              <span className="text-[18px] xs:text-[20px] md:text-[23px] font-black tracking-tight leading-none whitespace-nowrap" style={{ color: comboColor }}>
+                                {comboPrice ? formatPrice(comboPrice) : 'Liên hệ'}
                               </span>
-                              {combo.type === 'mix' && <ChevronRight size={10} />}
-                            </div>
-                          )}
-                          {combo.type !== 'mix' && (
-                            <div
-                              className={cn(
-                                "absolute right-2 top-2 h-4 w-4 rounded-full flex items-center justify-center",
-                                isBestSeller ? "border-2" : "border"
+
+                              {avgPricePerBottle > 0 && (
+                                <div 
+                                  className="mx-auto mt-2 inline-flex max-w-full items-center justify-center rounded-md px-2 py-0.5 text-[8.5px] xs:text-[9px] md:text-[10px] font-bold whitespace-nowrap"
+                                  style={{ 
+                                    backgroundColor: `${comboColor}10`,
+                                    color: comboColor
+                                  }}
+                                >
+                                  Chỉ <span className="mx-1 font-black">{formatPrice(avgPricePerBottle)}</span> / chai
+                                </div>
                               )}
-                              style={{ borderColor: isBestSeller ? brandColor : tokens.border }}
-                            >
-                              <div
-                                className="h-2.5 w-2.5 rounded-full"
-                                style={{ backgroundColor: quantity === totalBottles ? brandColor : 'transparent' }}
-                              />
                             </div>
-                          )}
+                          </div>
+
+                          {/* Footer của Card (Phần dưới: Tiết kiệm) */}
+                          <div 
+                            className={cn(
+                              "px-2 py-2 md:px-2 md:py-2 border-t text-[9px] xs:text-[10px] font-medium",
+                              cornerRadius === 'none' ? 'rounded-b-none' : cornerRadius === 'sm' ? 'rounded-b-[6px]' : 'rounded-b-[10px]'
+                            )} 
+                            style={{ 
+                              borderColor: `${comboColor}14`,
+                              backgroundColor: `${comboColor}08`,
+                              color: tokens.bodyText
+                            }}
+                          >
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-1.5">
+                              <div className="flex items-center justify-center md:justify-start gap-2 md:gap-1.5 min-w-0">
+                                <span className="h-7 w-7 md:h-6 md:w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${comboColor}12` }}>
+                                {isBestSeller ? (
+                                  <PiggyBank className="h-3.5 w-3.5 md:h-3 md:w-3 shrink-0" style={{ color: comboColor }} />
+                                ) : (
+                                  <Gift className="h-3.5 w-3.5 md:h-3 md:w-3 shrink-0" style={{ color: comboColor }} />
+                                )}
+                                </span>
+                                <div className="text-left space-y-0.5 min-w-0">
+                                  <p className="text-[8.5px] md:text-[10px] leading-tight font-medium text-slate-600 dark:text-slate-300">
+                                    Tiết kiệm
+                                  </p>
+                                  <p className="font-extrabold text-[11px] xs:text-[12px] md:text-[12px] leading-tight whitespace-nowrap" style={{ color: comboColor }}>
+                                    {savingAmount > 0 ? formatPrice(savingAmount) : 'nhiều hơn'}
+                                  </p>
+                                  <p className="text-[7.5px] xs:text-[8px] md:text-[10px] opacity-75 leading-none font-medium text-slate-500 whitespace-nowrap">so với mua lẻ</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleComboClick();
+                                }}
+                                className="h-7 md:h-7 w-full md:w-auto md:min-w-[62px] rounded-full px-3 md:px-2 inline-flex items-center justify-center gap-1 md:gap-0.5 text-[9px] md:text-[10px] font-bold text-white shadow-sm transition-all hover:shadow-md active:scale-95 shrink-0"
+                                style={{ backgroundColor: comboColor }}
+                              >
+                                <span>Chọn</span>
+                                <ChevronRight className="h-3.5 w-3.5 md:h-4 md:w-4" strokeWidth={3} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -3280,7 +3622,8 @@ function PremiumStyle({
                 <div className="flex gap-2">
                   <button
                     className={cn(
-                      "flex-1 py-2 px-2.5 md:py-3.5 md:px-4 rounded-xl font-bold flex items-center justify-center gap-1.5 text-white transition-all hover:shadow-lg hover:scale-[1.01]",
+                      "flex-1 py-2 px-2.5 md:py-3.5 md:px-4 font-bold flex items-center justify-center gap-1.5 text-white transition-all hover:shadow-lg hover:scale-[1.01]",
+                      getRadiusClass(cornerRadius, 'button'),
                       mobileFontSize === 'xs' ? 'text-[10px]' : mobileFontSize === 'sm' ? 'text-xs' : 'text-sm',
                       "md:text-sm"
                     )}
@@ -3298,7 +3641,8 @@ function PremiumStyle({
                   </button>
                   <button
                     className={cn(
-                      "flex-1 py-2 px-2.5 md:py-3.5 md:px-4 rounded-xl font-bold border flex items-center justify-center gap-1.5 transition-all hover:shadow-md hover:scale-[1.01]",
+                      "flex-1 py-2 px-2.5 md:py-3.5 md:px-4 font-bold border flex items-center justify-center gap-1.5 transition-all hover:shadow-md hover:scale-[1.01]",
+                      getRadiusClass(cornerRadius, 'button'),
                       mobileFontSize === 'xs' ? 'text-[10px]' : mobileFontSize === 'sm' ? 'text-xs' : 'text-sm',
                       "md:text-sm"
                     )}
@@ -3317,7 +3661,10 @@ function PremiumStyle({
                 </div>
                 {showAddToCart && (
                   <button
-                    className={`py-3.5 px-8 rounded-xl font-semibold flex items-center justify-center gap-2 border transition-all ${inStock ? 'hover:shadow-lg hover:scale-[1.01]' : 'opacity-50 cursor-not-allowed'}`}
+                    className={cn(
+                      `py-3.5 px-8 font-semibold flex items-center justify-center gap-2 border transition-all ${inStock ? 'hover:shadow-lg hover:scale-[1.01]' : 'opacity-50 cursor-not-allowed'}`,
+                      getRadiusClass(cornerRadius, 'button')
+                    )}
                     style={{
                       borderColor: primaryButtonColors.border,
                       color: primaryButtonColors.text,
@@ -3340,7 +3687,18 @@ function PremiumStyle({
               />
             )}
 
-
+            {highlightsEnabled && highlights && highlights.length > 0 && highlightsPosition === 'info_column' && (
+              <div className={`${getHighlightsSpacingClass(highlightsSpacing)}`}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="premium"
+                  isSingleImage={images.length <= 1}
+                  position="info_column"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -3378,7 +3736,7 @@ function PremiumStyle({
           return (
             <div className="border-t pt-6 mt-8" style={{ borderColor: tokens.divider }}>
               <div 
-                className="rounded-2xl py-3 px-2 md:p-5 relative border"
+                className={cn("py-3 px-2 md:p-5 relative border", getRadiusClass(cornerRadius, 'box'))}
                 style={{ 
                   backgroundColor: tokens.surfaceMuted || '#f8fafc',
                   borderColor: tokens.border || '#e2e8f0'
@@ -3569,7 +3927,7 @@ function PremiumStyle({
                   onClick={() => setActiveAttrModal(null)}
                 >
                   <div 
-                    className="rounded-2xl p-6 max-w-sm w-full border text-center relative shadow-2xl"
+                    className={cn("p-6 max-w-sm w-full border text-center relative shadow-2xl", getRadiusClass(cornerRadius, 'box'))}
                     style={{ 
                       backgroundColor: tokens.surface || '#ffffff',
                       borderColor: tokens.border || '#e2e8f0'
@@ -3607,10 +3965,18 @@ function PremiumStyle({
           const bgColor = BANNER_COLOR_MAP[premiumBannerBg] ?? tokens.primary;
           const textColor = BANNER_COLOR_MAP[premiumBannerText] ?? '#ffffff';
           return (
-            <div className="rounded-2xl p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-center mt-8" style={{ backgroundColor: bgColor, color: textColor }}>
+            <div className={cn("p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-center mt-8", getRadiusClass(cornerRadius, 'box'))} style={{ backgroundColor: bgColor, color: textColor }}>
               {premiumBannerItems.map((item, idx) => (
-                <div key={idx} className={`space-y-0.5${idx > 0 ? ' border-l' : ''}`} style={{ borderColor: `${textColor}33` }}>
-                  <p className="text-sm font-extrabold uppercase tracking-wide">{item.title}</p>
+                <div
+                  key={idx}
+                  className={cn(
+                    "space-y-0.5 min-w-0 px-2 md:px-0",
+                    idx % 2 === 1 && "border-l",
+                    idx % 4 !== 0 && "md:border-l"
+                  )}
+                  style={{ borderColor: `${textColor}33` }}
+                >
+                  <p className="min-h-[34px] flex items-center justify-center text-sm font-extrabold uppercase tracking-wide leading-tight text-center">{item.title}</p>
                   <p className="text-[11px] opacity-80">{item.subtitle}</p>
                 </div>
               ))}
@@ -3652,6 +4018,14 @@ function PremiumStyle({
                   style={{ color: tokens.bodyText }}
                 />
               )}
+              {productTerms.filter(term => term.description && term.description.trim()).map(term => (
+                <RichContent
+                  key={term._id}
+                  content={toRichTextContent(term.description!)}
+                  className="max-w-none mt-4 pt-4 border-t border-dashed border-slate-100 dark:border-slate-800"
+                  style={{ color: tokens.bodyText }}
+                />
+              ))}
               {supplementalContent?.postContent ? (
                 <RichContent
                   content={toRichTextContent(supplementalContent.postContent)}
@@ -3762,7 +4136,7 @@ function PremiumStyle({
                   <h3 className="text-xl font-extrabold" style={{ color: tokens.headingColor }}>
                     {activeMixCombo.name || 'Combo Trọn Bộ'}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-[#86868b] mt-1">
                     {activeMixCombo.description || 'Sự kết hợp hoàn hảo từ chuyên gia Thiên Kim Wine.'}
                   </p>
                 </div>
@@ -3774,7 +4148,7 @@ function PremiumStyle({
                   <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ backgroundColor: tokens.surfaceMuted, borderColor: tokens.border }}>
                     <div className="flex items-center gap-3 min-w-0">
                       {product.image ? (
-                        <img src={product.image} alt={product.name} className="h-10 w-10 object-cover rounded-lg border shrink-0 bg-white" />
+                        <img src={product.image} alt={product.name} className="h-10 w-10 object-cover rounded-lg border shrink-0 bg-white dark:bg-[#2c2c2e]" />
                       ) : (
                         <div className="h-10 w-10 rounded-lg border shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                           <Package size={16} />
@@ -3785,7 +4159,7 @@ function PremiumStyle({
                         <p className="text-[10px] text-slate-400">Sản phẩm chính</p>
                       </div>
                     </div>
-                    <span className="shrink-0 text-slate-600 font-extrabold px-2.5 py-1 bg-slate-200/50 dark:bg-slate-800 rounded-lg text-xs">x{curQty}</span>
+                    <span className="shrink-0 text-slate-600 dark:text-[#86868b] font-extrabold px-2.5 py-1 bg-slate-200/50 dark:bg-slate-800 rounded-lg text-xs">x{curQty}</span>
                   </div>
 
                   {/* Các sản phẩm mua kèm thêm */}
@@ -3796,7 +4170,7 @@ function PremiumStyle({
                         {pInfo ? (
                           <div className="flex items-center gap-3 min-w-0">
                             {pInfo.image ? (
-                              <img src={pInfo.image} alt={pInfo.name} className="h-10 w-10 object-cover rounded-lg border shrink-0 bg-white" />
+                              <img src={pInfo.image} alt={pInfo.name} className="h-10 w-10 object-cover rounded-lg border shrink-0 bg-white dark:bg-[#2c2c2e]" />
                             ) : (
                               <div className="h-10 w-10 rounded-lg border shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                                 <Package size={16} />
@@ -3815,7 +4189,7 @@ function PremiumStyle({
                             <span className="font-medium text-slate-400 text-xs truncate">Sản phẩm đi kèm</span>
                           </div>
                         )}
-                        <span className="shrink-0 text-slate-600 font-extrabold px-2.5 py-1 bg-slate-200/50 dark:bg-slate-800 rounded-lg text-xs">x{item.quantity}</span>
+                        <span className="shrink-0 text-slate-600 dark:text-[#86868b] font-extrabold px-2.5 py-1 bg-slate-200/50 dark:bg-slate-800 rounded-lg text-xs">x{item.quantity}</span>
                       </div>
                     );
                   })}
@@ -3837,7 +4211,7 @@ function PremiumStyle({
                 <div className="flex gap-2">
                   <button 
                     type="button"
-                    className="flex-1 py-3 px-4 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all hover:bg-slate-50"
+                    className="flex-1 py-3 px-4 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all hover:bg-slate-50 dark:hover:bg-[#2c2c2e]"
                     style={{ color: tokens.bodyText, borderColor: tokens.border }}
                     onClick={() => setActiveMixCombo(null)}
                   >
@@ -4026,6 +4400,9 @@ function ModernStyle({
   productTypeId,
   enableProductTypes,
   productTypeSlugMap,
+  highlightsPosition,
+  highlightsSpacing,
+  productTerms,
 }: StyleProps & ExperienceBlocksProps & HighlightBlockProps & { heroStyle: ModernHeroStyle }) {
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -4096,7 +4473,7 @@ function ModernStyle({
         }
         const selected = selectedOptions[optionValue.optionId];
         return !selected || selected === optionValue.valueId;
-      })
+      }) && (!showStock || (variant.stock ?? product.stock ?? 0) > 0)
     );
 
   const showPrice = enabledFields.has('price') || enabledFields.size === 0;
@@ -4186,23 +4563,29 @@ function ModernStyle({
         <div className="max-w-6xl mx-auto px-4 py-3 md:py-4">
           <nav className="flex items-center justify-between gap-4">
             <div className="md:hidden flex items-center gap-1 text-[11px] truncate" style={{ color: tokens.breadcrumbText }}>
-              {product.categorySlug && product.categoryName ? (
-                <>
-                  <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                  <ChevronRight size={10} />
-                </>
-              ) : (
-                <>
-                  <Link href="/products" className="transition-colors">Sản phẩm</Link>
-                  <ChevronRight size={10} />
-                </>
-              )}
+              <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={10} />
               <span className="truncate" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
             </div>
             <div className="hidden md:block text-sm truncate" style={{ color: tokens.breadcrumbText }}>
               <Link href="/" className="transition-colors">Trang chủ</Link>
               {' / '}
               <Link href="/products" className="transition-colors">Sản phẩm</Link>
+              {(product.categoryPath?.length
+                ? product.categoryPath
+                : product.categorySlug
+                  ? [{ _id: product.categoryId, name: product.categoryName, slug: product.categorySlug }]
+                  : []
+              ).map((category) => (
+                <React.Fragment key={category._id}>
+                  {' / '}
+                  <Link
+                    href={buildCategoryPath({ categorySlug: category.slug ?? '', mode: routeMode, moduleKey: 'products' })}
+                    className="transition-colors"
+                  >
+                    {category.name}
+                  </Link>
+                </React.Fragment>
+              ))}
               {' / '}
               <span style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
             </div>
@@ -4227,9 +4610,17 @@ function ModernStyle({
             {heroStyle === 'split' ? (
               <div className={`overflow-hidden ${heroContainerClass}`} style={heroContainerStyle}>
                 <div className="grid md:grid-cols-2 gap-3 items-center p-3 md:p-5">
-                  <div className={imageFrame.frameWidthClassName}>
+                  <div className={`${imageFrame.frameWidthClassName} ${
+                    showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                      ? 'mb-0'
+                      : ''
+                  }`}>
                     <div
-                      className={`relative rounded-xl overflow-hidden group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                      className={`relative overflow-hidden ${
+                        showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'rounded-t-xl rounded-b-none'
+                          : 'rounded-xl'
+                      } group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                       style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                       role={canOpenLightbox ? 'button' : undefined}
                       tabIndex={canOpenLightbox ? 0 : -1}
@@ -4266,7 +4657,7 @@ function ModernStyle({
                             type="button"
                             disabled={!canScrollPrev}
                             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollPrev(); }}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                             aria-label="Ảnh trước"
                           >
                             <ChevronLeft size={16} />
@@ -4275,7 +4666,7 @@ function ModernStyle({
                             type="button"
                             disabled={!canScrollNext}
                             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollNext(); }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                             aria-label="Ảnh sau"
                           >
                             <ChevronRight size={16} />
@@ -4288,15 +4679,34 @@ function ModernStyle({
                         </span>
                       )}
                     </div>
+
+                    {showHighlights && highlightsPosition === 'image_column' && (images.length <= 1 || highlightsSpacing === 'none') && (
+                      <HighlightsGrid
+                        highlights={highlights}
+                        tokens={tokens}
+                        spacing={highlightsSpacing}
+                        layoutStyle="modern"
+                        isSingleImage={images.length <= 1}
+                        position="image_column"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
             ) : (
               <div className={`overflow-hidden ${heroContainerClass}`} style={heroContainerStyle}>
                 <div className={heroImageWrapperClass}>
-                  <div className={imageFrame.frameWidthClassName}>
+                  <div className={`${imageFrame.frameWidthClassName} ${
+                    showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                      ? 'mb-0'
+                      : ''
+                  }`}>
                     <div
-                      className={`relative overflow-hidden rounded-xl group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                      className={`relative overflow-hidden ${
+                        showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                          ? 'rounded-t-xl rounded-b-none'
+                          : 'rounded-xl'
+                      } group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                       style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                       role={canOpenLightbox ? 'button' : undefined}
                       tabIndex={canOpenLightbox ? 0 : -1}
@@ -4333,7 +4743,7 @@ function ModernStyle({
                             type="button"
                             disabled={!canScrollPrev}
                             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollPrev(); }}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                             aria-label="Ảnh trước"
                           >
                             <ChevronLeft size={16} />
@@ -4342,7 +4752,7 @@ function ModernStyle({
                             type="button"
                             disabled={!canScrollNext}
                             onClick={(e) => { e.stopPropagation(); emblaApi?.scrollNext(); }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                             aria-label="Ảnh sau"
                           >
                             <ChevronRight size={16} />
@@ -4355,6 +4765,17 @@ function ModernStyle({
                         </span>
                       )}
                     </div>
+
+                    {showHighlights && highlightsPosition === 'image_column' && (images.length <= 1 || highlightsSpacing === 'none') && (
+                      <HighlightsGrid
+                        highlights={highlights}
+                        tokens={tokens}
+                        spacing={highlightsSpacing}
+                        layoutStyle="modern"
+                        isSingleImage={images.length <= 1}
+                        position="image_column"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -4376,6 +4797,18 @@ function ModernStyle({
                   />
                 </div>
               </>
+            )}
+            {showHighlights && highlightsPosition === 'image_column' && !(images.length <= 1 || highlightsSpacing === 'none') && (
+              <div className={imageFrame.frameWidthClassName}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="modern"
+                  isSingleImage={images.length <= 1}
+                  position="image_column"
+                />
+              </div>
             )}
           </div>
 
@@ -4533,7 +4966,18 @@ function ModernStyle({
               />
             )}
 
-            {showHighlights && <HighlightsGrid highlights={highlights} tokens={tokens} />}
+            {showHighlights && highlightsPosition !== 'image_column' && (
+              <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-6`}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="modern"
+                  isSingleImage={images.length <= 1}
+                  position="info_column"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -4573,6 +5017,14 @@ function ModernStyle({
                       style={{ color: tokens.bodyText }}
                     />
                   )}
+                  {productTerms.filter(term => term.description && term.description.trim()).map(term => (
+                    <RichContent
+                      key={term._id}
+                      content={toRichTextContent(term.description!)}
+                      className="max-w-none mt-4 pt-4 border-t border-dashed border-slate-100 dark:border-slate-800"
+                      style={{ color: tokens.bodyText }}
+                    />
+                  ))}
                   {supplementalContent?.postContent ? (
                     <RichContent
                       content={toRichTextContent(supplementalContent.postContent)}
@@ -4697,6 +5149,9 @@ function MinimalStyle({
   productTypeId,
   enableProductTypes,
   productTypeSlugMap,
+  highlightsPosition,
+  highlightsSpacing,
+  productTerms,
 }: StyleProps & ExperienceBlocksProps & HighlightBlockProps & { contentWidth: MinimalContentWidth }) {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState<VariantSelectionMap>({});
@@ -4786,7 +5241,7 @@ function MinimalStyle({
         }
         const selected = selectedOptions[optionValue.optionId];
         return !selected || selected === optionValue.valueId;
-      })
+      }) && (!showStock || (variant.stock ?? product.stock ?? 0) > 0)
     );
 
   const showPrice = enabledFields.has('price') || enabledFields.size === 0;
@@ -4879,24 +5334,13 @@ function MinimalStyle({
       <main className={`${contentWidthClass} mx-auto px-0 md:px-6 py-6 md:py-10`}>
         <div className="px-4 md:px-0 mb-3 md:mb-6">
           <nav className="flex items-center gap-1 text-[11px] md:hidden" style={{ color: tokens.breadcrumbText }}>
-            {product.categorySlug && product.categoryName ? (
-              <>
-                <Link href={buildCategoryPath({ categorySlug: product.categorySlug, mode: routeMode, moduleKey: 'products' })} className="transition-colors">{product.categoryName}</Link>
-                <ChevronRight size={10} />
-              </>
-            ) : (
-              <>
-                <Link href="/products" className="transition-colors">Sản phẩm</Link>
-                <ChevronRight size={10} />
-              </>
-            )}
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={10} />
             <span className="truncate max-w-[180px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
           <nav className="hidden md:flex items-center gap-2 text-xs" style={{ color: tokens.breadcrumbText }}>
             <Link href="/" className="transition-colors">Trang chủ</Link>
             <ChevronRight size={12} />
-            <Link href="/products" className="transition-colors">Sản phẩm</Link>
-            <ChevronRight size={12} />
+            <ProductCategoryBreadcrumbLinks product={product} routeMode={routeMode} iconSize={12} includeProductsLink />
             <span className="truncate max-w-[160px]" style={{ color: tokens.breadcrumbActive }}>{product.name}</span>
           </nav>
         </div>
@@ -4921,10 +5365,18 @@ function MinimalStyle({
                   </div>
                 )}
 
-                <div className={`flex-1 ${imageFrame.frameWidthClassName}`}>
+                <div className={`flex-1 ${imageFrame.frameWidthClassName} ${
+                  showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                    ? 'mb-0'
+                    : ''
+                }`}>
                   <div
                     ref={mainImageRef}
-                    className={`relative w-full rounded-sm overflow-hidden group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
+                    className={`relative w-full overflow-hidden ${
+                      showHighlights && highlightsPosition === 'image_column' && highlightsSpacing === 'none'
+                        ? 'rounded-t-sm rounded-b-none'
+                        : 'rounded-sm'
+                    } group/carousel ${canOpenLightbox ? 'cursor-zoom-in' : ''}`.trim()}
                     style={{ ...mainImageFrameStyle, backgroundColor: tokens.surfaceMuted }}
                     role={canOpenLightbox ? 'button' : undefined}
                     tabIndex={canOpenLightbox ? 0 : -1}
@@ -4961,7 +5413,7 @@ function MinimalStyle({
                           type="button"
                           disabled={!canScrollPrev}
                           onClick={(e) => { e.stopPropagation(); emblaApi?.scrollPrev(); }}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                           aria-label="Ảnh trước"
                         >
                           <ChevronLeft size={16} />
@@ -4970,7 +5422,7 @@ function MinimalStyle({
                           type="button"
                           disabled={!canScrollNext}
                           onClick={(e) => { e.stopPropagation(); emblaApi?.scrollNext(); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white dark:bg-[#2c2c2e]/90 dark:hover:bg-[#2c2c2e] text-slate-800 dark:text-[#f5f5f7] flex items-center justify-center shadow transition-all opacity-0 group-hover/carousel:opacity-100 disabled:opacity-0 pointer-events-auto z-30"
                           aria-label="Ảnh sau"
                         >
                           <ChevronRight size={16} />
@@ -4983,6 +5435,17 @@ function MinimalStyle({
                       </span>
                     )}
                   </div>
+
+                  {showHighlights && highlightsPosition === 'image_column' && (
+                    <HighlightsGrid
+                      highlights={highlights}
+                      tokens={tokens}
+                      spacing={highlightsSpacing}
+                      layoutStyle="minimal"
+                      isSingleImage={images.length <= 1}
+                      position="image_column"
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -5115,7 +5578,18 @@ function MinimalStyle({
               />
             )}
 
-            {showHighlights && <HighlightsGrid highlights={highlights} tokens={tokens} />}
+            {showHighlights && highlightsPosition !== 'image_column' && (
+              <div className={`${getHighlightsSpacingClass(highlightsSpacing)} mb-6`}>
+                <HighlightsGrid
+                  highlights={highlights}
+                  tokens={tokens}
+                  spacing={highlightsSpacing}
+                  layoutStyle="minimal"
+                  isSingleImage={images.length <= 1}
+                  position="info_column"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -5154,6 +5628,14 @@ function MinimalStyle({
                   style={{ color: tokens.bodyText }}
                 />
               )}
+              {productTerms.filter(term => term.description && term.description.trim()).map(term => (
+                <RichContent
+                  key={term._id}
+                  content={toRichTextContent(term.description!)}
+                  className="leading-relaxed font-light text-justify mt-4 pt-4 border-t border-dashed border-slate-100 dark:border-slate-800"
+                  style={{ color: tokens.bodyText }}
+                />
+              ))}
               {supplementalContent?.postContent ? (
                 <RichContent
                   content={toRichTextContent(supplementalContent.postContent)}
@@ -5883,7 +6365,7 @@ function ProductCombosBlock({
   // Luôn áp dụng màu hiệu ứng để mọi hiệu ứng chữ đều nhận màu
   applyEffectColor();
 
-  if (comboAnimateType === 'luxury-sheen' || comboAnimateType === 'pulse' || comboAnimateType === 'bounce') {
+  if (comboAnimateType === 'luxury-sheen') {
     animateClass = 'animate-combo-luxury-sheen';
   } else if (comboAnimateType === 'typing') {
     titleEffectClass = 'animate-combo-typing-text';
@@ -5892,7 +6374,7 @@ function ProductCombosBlock({
   } else if (comboAnimateType === 'fire') {
     animateClass = 'animate-combo-fire';
     titleEffectClass = 'animate-combo-fire-text';
-  } else if (comboAnimateType === 'sparkle' || comboAnimateType.startsWith('sparkle-')) {
+  } else if (comboAnimateType === 'sparkle') {
     animateClass = 'animate-combo-sparkle';
     titleEffectClass = 'animate-combo-sparkle-text';
   } else if (comboAnimateType === 'text-highlight') {
@@ -6090,7 +6572,7 @@ function ProductCombosBlock({
                   <div className="flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50 p-1.5 rounded gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       {currentProductImage ? (
-                        <img src={currentProductImage} alt={currentProductName} className="h-7 w-7 object-cover rounded border shrink-0 bg-white" />
+                        <img src={currentProductImage} alt={currentProductName} className="h-7 w-7 object-cover rounded border shrink-0 bg-white dark:bg-[#2c2c2e]" />
                       ) : (
                         <div className="h-7 w-7 rounded border shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                           <Package size={12} />
@@ -6109,7 +6591,7 @@ function ProductCombosBlock({
                         {pInfo ? (
                           <Link href={`/products/${pInfo.slug}`} className="flex items-center gap-2 min-w-0 group/item hover:opacity-90">
                             {pInfo.image ? (
-                              <img src={pInfo.image} alt={pInfo.name} className="h-7 w-7 object-cover rounded border shrink-0 bg-white" />
+                              <img src={pInfo.image} alt={pInfo.name} className="h-7 w-7 object-cover rounded border shrink-0 bg-white dark:bg-[#2c2c2e]" />
                             ) : (
                               <div className="h-7 w-7 rounded border shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                                 <Package size={12} />
@@ -6230,7 +6712,7 @@ function ProductSocialButtons({
   if (activeButtons.length === 0) return null;
 
   return (
-    <div className="mt-4 pt-4 border-t" style={{ borderColor: tokens.divider }}>
+    <div className="mt-4 pt-4 border-t pb-2" style={{ borderColor: tokens.divider }}>
       <p className="text-xs font-semibold mb-2" style={{ color: tokens.headingColor }}>
         Liên hệ & Mua hàng:
       </p>

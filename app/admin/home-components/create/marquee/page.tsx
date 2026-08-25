@@ -108,6 +108,10 @@ export default function MarqueeCreatePage() {
         subtitleAboveTitle={subtitleAboveTitle} uppercaseText={uppercaseText} showBadge={showBadge} badgeText={badgeText}
         spacing={spacing}
         cornerRadius={cornerRadius}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
+        onItemsChange={setItems}
       />
     </ComponentFormWrapper>
   );

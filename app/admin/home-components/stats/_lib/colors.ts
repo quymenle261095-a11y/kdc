@@ -99,14 +99,15 @@ const ensureAPCATextColor = (
 
 export const getHorizontalColors = (primary: string, secondary: string, mode: StatsBrandMode) => {
   const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
+  const sectionBg = getTint(primary, 0.46, '#ffffff');
 
   return {
     border: getTint(secondaryResolved, 0.35, primary),
-    sectionBg: '#f5f1ed',
+    sectionBg,
     iconBg: getTint(secondaryResolved, 0.22, primary),
     iconColor: secondaryResolved,
-    valueColor: '#1e3a5f',
-    labelColor: '#4a5568',
+    valueColor: ensureAPCATextColor(primary, sectionBg, 26, 700),
+    labelColor: ensureAPCATextColor('#4a5568', sectionBg, 13, 500),
   };
 };
 
@@ -114,11 +115,12 @@ export const getCardsColors = (primary: string, secondary: string, mode: StatsBr
   const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
 
   return {
+    sectionBg: '#ffffff',
     border: '#e5e7eb',
     accent: secondaryResolved,
     iconColor: secondaryResolved,
-    valueColor: secondaryResolved,
-    labelColor: '#1f2937',
+    valueColor: ensureAPCATextColor(primary, '#ffffff', 26, 700),
+    labelColor: ensureAPCATextColor('#1f2937', '#ffffff', 13, 500),
     dividerColor: '#e5e7eb',
   };
 };
@@ -126,12 +128,14 @@ export const getCardsColors = (primary: string, secondary: string, mode: StatsBr
 export const getIconsColors = (primary: string, secondary: string, mode: StatsBrandMode) => {
   const secondaryResolved = resolveStatsSecondary(primary, secondary, mode);
   const secondaryStrong = getTint(secondaryResolved, -0.18, primary);
+  const sectionBg = '#ffffff';
 
   return {
+    sectionBg,
     circleBg: primary,
     textOnCircle: getAPCATextColor(primary, 20, 700),
     ring: getTint(secondaryResolved, -0.12, primary),
-    label: ensureAPCATextColor(secondaryStrong, '#ffffff', 14, 600),
+    label: ensureAPCATextColor(secondaryStrong, sectionBg, 14, 600),
   };
 };
 
@@ -151,8 +155,10 @@ export const getMinimalColors = (primary: string, secondary: string, mode: Stats
   const secondaryStrong = getTint(secondaryResolved, -0.18, primary);
 
   return {
+    sectionBg: '#f8fafc',
     accent: secondaryStrong,
     value: ensureAPCATextColor(primary, '#ffffff', 32, 700),
+    label: '#64748b',
   };
 };
 

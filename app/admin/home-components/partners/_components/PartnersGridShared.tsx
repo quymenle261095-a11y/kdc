@@ -33,6 +33,8 @@ export const PartnersGridShared = ({
   renderImage,
   className,
   skipHeader = false,
+  visualEditEnabled,
+  onItemNameChange,
 }: {
   items: PartnerGridItem[];
   title?: string;
@@ -52,6 +54,8 @@ export const PartnersGridShared = ({
   renderImage: (item: PartnerGridItem, className: string) => React.ReactNode;
   className?: string;
   skipHeader?: boolean;
+  visualEditEnabled?: boolean;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   if (items.length === 0) {return null;}
 
@@ -142,8 +146,24 @@ export const PartnersGridShared = ({
 
                 {/* Partner name */}
                 {showName && (
-                  <span className="w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm">
-                    {item.name ?? `Đối tác ${idx + 1}`}
+                  <span
+                    contentEditable={visualEditEnabled}
+                    suppressContentEditableWarning={visualEditEnabled}
+                    onClick={(e) => {
+                      if (visualEditEnabled) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                    onBlur={visualEditEnabled ? (e) => {
+                      onItemNameChange?.(idx, e.currentTarget.textContent ?? '');
+                    } : undefined}
+                    className={cn(
+                      "w-full truncate text-center text-xs font-medium text-slate-500 md:text-sm",
+                      visualEditEnabled && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text"
+                    )}
+                  >
+                    {item.name || (visualEditEnabled ? 'Nhập tên...' : `Đối tác ${idx + 1}`)}
                   </span>
                 )}
               </a>

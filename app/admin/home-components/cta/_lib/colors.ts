@@ -67,6 +67,7 @@ export interface CTAAccentBalance {
 }
 
 const clampLightness = (value: number) => Math.min(Math.max(value, 0.08), 0.98);
+const clampChroma = (value: number) => Math.min(Math.max(value, 0.02), 0.35);
 
 const isNonEmptyColor = (value: string) => value.trim().length > 0;
 
@@ -110,6 +111,26 @@ const getOKLCH = (hex: string, fallback = DEFAULT_BRAND_COLOR) => {
     h: parsed.h ?? 0,
     mode: 'oklch' as const,
   };
+};
+
+const getDarkModeAccent = (hex: string, fallback = DEFAULT_BRAND_COLOR) => {
+  const color = getOKLCH(hex, fallback);
+
+  return formatHex(oklch({
+    ...color,
+    l: color.l < 0.62 ? 0.68 : Math.min(color.l, 0.82),
+    c: color.h == null ? Math.min(color.c, 0.02) : clampChroma(Math.max(color.c * 0.9, Math.min(color.c + 0.02, 0.14))),
+  }));
+};
+
+const getDarkSurfaceAccent = (hex: string, fallback = DEFAULT_BRAND_COLOR) => {
+  const color = getOKLCH(hex, fallback);
+
+  return formatHex(oklch({
+    ...color,
+    l: 0.2,
+    c: color.h == null ? Math.min(color.c, 0.02) : Math.min(color.c * 0.35, 0.055),
+  }));
 };
 
 const getAPCAThreshold = (fontSize = 16, fontWeight = 500) => (
@@ -253,27 +274,30 @@ export const getCTAValidationResult = ({
   secondary,
   mode,
   style,
+  isDark = false,
 }: {
   config: CTAConfig;
   primary: string;
   secondary: string;
   mode: BrandMode;
   style: CTAStyle;
+  isDark?: boolean;
 }) => {
   const primaryNormalized = normalizeHex(primary, DEFAULT_BRAND_COLOR);
   const styleNormalized = normalizeCTAStyle(style);
 
-  const tokens = getCTAColors({
+  const tokens = getCTAThemeTokens({
     primary: primaryNormalized,
     secondary,
     mode,
     style: styleNormalized,
+    isDark,
   });
 
   const resolvedSecondary = resolveSecondaryColor(primaryNormalized, secondary, mode);
   const harmonyStatus = getHarmonyStatus(primaryNormalized, resolvedSecondary);
   const sectionBgForCheck = tokens.sectionBg.startsWith('linear-gradient')
-    ? getGradientTints(primaryNormalized, resolvedSecondary).fromTint
+    ? isDark ? '#111827' : getGradientTints(primaryNormalized, resolvedSecondary).fromTint
     : tokens.sectionBg;
   const secondaryButtonBgForCheck = !tokens.secondaryButtonBg || tokens.secondaryButtonBg === 'transparent'
     ? sectionBgForCheck
@@ -350,6 +374,145 @@ const _getGradientBg = (from: string, to: string) => {
   return `linear-gradient(135deg, ${fromTint} 0%, ${toTint} 100%)`;
 };
 
+export const getCTADarkColors = ({
+  primary,
+  secondary,
+  mode,
+  style,
+}: {
+  primary: string;
+  secondary: string;
+  mode: BrandMode;
+  style: CTAStyle;
+}): CTAStyleTokens => {
+  const primaryNormalized = normalizeHex(primary, DEFAULT_BRAND_COLOR);
+  const styleNormalized = normalizeCTAStyle(style);
+  const secondaryResolved = resolveSecondaryColor(primaryNormalized, secondary, mode);
+  const primaryAccent = getDarkModeAccent(primaryNormalized, DEFAULT_BRAND_COLOR);
+  const secondaryAccent = mode === 'single'
+    ? primaryAccent
+    : getDarkModeAccent(secondaryResolved, primaryNormalized);
+
+  const darkBackground = '#020617';
+  const darkSurface = '#0f172a';
+  const darkElevatedSurface = '#111827';
+  const darkBorder = '#334155';
+  const darkText = '#f8fafc';
+  const darkMutedText = '#cbd5e1';
+
+  const badgeAccent = mode === 'dual' ? secondaryAccent : primaryAccent;
+
+  const base: CTAStyleTokens = {
+    sectionBg: darkBackground,
+    sectionBorder: darkBorder,
+    title: darkText,
+    description: darkMutedText,
+    badgeBg: darkElevatedSurface,
+    badgeText: ensureAPCATextColor(badgeAccent, darkElevatedSurface, 12, 600),
+    badgeBorder: darkBorder,
+    primaryButtonBg: primaryAccent,
+    primaryButtonText: getAPCATextColor(primaryAccent, 14, 700),
+    primaryButtonBorder: primaryAccent,
+    secondaryButtonBg: darkSurface,
+    secondaryButtonText: ensureAPCATextColor(secondaryAccent, darkSurface, 14, 700),
+    secondaryButtonBorder: darkBorder,
+    cardBg: darkSurface,
+    cardBorder: darkBorder,
+    cardShadow: undefined,
+    accentLine: secondaryAccent,
+  };
+
+  if (styleNormalized === 'banner') {
+    return {
+      ...base,
+      sectionBg: darkSurface,
+      cardBg: darkSurface,
+      cardBorder: darkBorder,
+      accentLine: undefined,
+    };
+  }
+
+  if (styleNormalized === 'centered') {
+    return {
+      ...base,
+      sectionBorder: undefined,
+      cardBg: undefined,
+      cardBorder: undefined,
+      accentLine: undefined,
+    };
+  }
+
+  if (styleNormalized === 'split') {
+    return {
+      ...base,
+      sectionBg: darkBackground,
+      cardBg: darkSurface,
+      cardBorder: darkBorder,
+      accentLine: primaryAccent,
+    };
+  }
+
+  if (styleNormalized === 'floating') {
+    return {
+      ...base,
+      sectionBg: darkBackground,
+      cardBg: darkSurface,
+      cardBorder: darkBorder,
+    };
+  }
+
+  if (styleNormalized === 'gradient') {
+    const from = getDarkSurfaceAccent(primaryAccent, DEFAULT_BRAND_COLOR);
+    const to = getDarkSurfaceAccent(secondaryAccent, primaryAccent);
+
+    return {
+      ...base,
+      sectionBg: `linear-gradient(135deg, ${darkBackground} 0%, ${from} 48%, ${to} 100%)`,
+      sectionBorder: darkBorder,
+      title: darkText,
+      description: darkMutedText,
+      badgeBg: darkElevatedSurface,
+      badgeText: ensureAPCATextColor(badgeAccent, darkElevatedSurface, 12, 600),
+      badgeBorder: darkBorder,
+      primaryButtonBg: primaryAccent,
+      primaryButtonText: getAPCATextColor(primaryAccent, 14, 700),
+      primaryButtonBorder: primaryAccent,
+      secondaryButtonBg: darkSurface,
+      secondaryButtonText: darkText,
+      secondaryButtonBorder: darkBorder,
+      cardBg: undefined,
+      cardBorder: undefined,
+      accentLine: undefined,
+    };
+  }
+
+  return {
+    ...base,
+    sectionBg: darkBackground,
+    sectionBorder: darkBorder,
+    cardBg: undefined,
+    cardBorder: undefined,
+  };
+};
+
+export const getCTAThemeTokens = ({
+  primary,
+  secondary,
+  mode,
+  style,
+  isDark = false,
+}: {
+  primary: string;
+  secondary: string;
+  mode: BrandMode;
+  style: CTAStyle;
+  isDark?: boolean;
+}) => (
+  isDark
+    ? getCTADarkColors({ primary, secondary, mode, style })
+    : getCTAColors({ primary, secondary, mode, style })
+);
+
 export const getCTAColors = ({
   primary,
   secondary,
@@ -367,14 +530,16 @@ export const getCTAColors = ({
   const primaryPalette = generatePalette(primaryNormalized);
   const secondaryPalette = generatePalette(secondaryColor, primaryPalette.solid);
 
+  const badgeBgSolid = getSolidTint(secondaryPalette.solid, 0.42);
+
   const base: CTAStyleTokens = {
     sectionBg: '#ffffff',
     sectionBorder: '#e2e8f0',
     title: primaryPalette.solid,
     description: '#475569',
-    badgeBg: secondaryPalette.surface,
-    badgeText: secondaryPalette.textInteractive,
-    badgeBorder: '#e2e8f0',
+    badgeBg: badgeBgSolid,
+    badgeText: getAPCATextColor(badgeBgSolid, 12, 600),
+    badgeBorder: secondaryPalette.border,
     primaryButtonBg: primaryPalette.solid,
     primaryButtonText: primaryPalette.textOnSolid,
     primaryButtonBorder: primaryPalette.active,
@@ -388,7 +553,6 @@ export const getCTAColors = ({
   };
 
   if (styleNormalized === 'banner') {
-    const badgeBgSolid = getSolidTint(secondaryPalette.solid, 0.42);
     return {
       ...base,
       sectionBg: primaryPalette.solid,
@@ -400,9 +564,6 @@ export const getCTAColors = ({
         16,
         500,
       ),
-      badgeBg: badgeBgSolid,
-      badgeText: getAPCATextColor(badgeBgSolid, 12, 600),
-      badgeBorder: secondaryPalette.border,
       primaryButtonBg: '#ffffff',
       primaryButtonText: ensureAPCATextColor(primaryPalette.textInteractive, '#ffffff', 14, 700),
       primaryButtonBorder: primaryPalette.active,

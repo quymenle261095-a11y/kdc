@@ -7,6 +7,7 @@ import { CartProvider } from '@/lib/cart';
 import { useSnapshotDemoContext } from './SnapshotDemoProvider';
 import type { SnapshotMenuItem } from './snapshot-demo-types';
 import type { Id } from '@/convex/_generated/dataModel';
+import { useSnapshotDocumentTheme, useSnapshotTheme } from './snapshot-theme';
 
 /**
  * Lightweight shell for /demo/[slug] route.
@@ -14,6 +15,9 @@ import type { Id } from '@/convex/_generated/dataModel';
  */
 export function DemoSiteShell({ children }: { children: React.ReactNode }) {
   const ctx = useSnapshotDemoContext();
+  const snapshotThemeMode = ctx?.getSiteSettings().site_dark_mode ?? 'light';
+  const [theme, setTheme] = useSnapshotTheme(snapshotThemeMode);
+  useSnapshotDocumentTheme(theme);
 
   const initialHeaderData = React.useMemo<HeaderInitialData | undefined>(() => {
     if (!ctx) return undefined;
@@ -63,9 +67,14 @@ export function DemoSiteShell({ children }: { children: React.ReactNode }) {
   return (
     <CustomerAuthProvider>
       <CartProvider>
-        <div data-theme="light" style={{ colorScheme: 'light' }}>
+        <div className={theme === 'dark' ? 'dark' : undefined} data-snapshot-demo-root data-theme={theme} style={{ colorScheme: theme }}>
           <div className="min-h-screen flex flex-col">
-            <Header initialData={initialHeaderData} staticMode />
+            <Header
+              initialData={initialHeaderData}
+              onStaticThemeChange={setTheme}
+              staticMode
+              staticTheme={theme}
+            />
             <main className="flex-1 overflow-x-hidden">
               {children}
             </main>

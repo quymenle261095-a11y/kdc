@@ -11,7 +11,8 @@ import {
   LayoutGrid, Loader2, Phone, Save, Users
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Card, Input, Label } from '../../../components/ui';
+import { Button, Card, Label } from '../../../components/ui';
+import { CopyableInput } from '../../../components/CopyTextButton';
 import { ModuleGuard } from '../../../components/ModuleGuard';
 
 const MODULE_KEY = 'homepage';
@@ -156,10 +157,11 @@ function EditContent() {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="title">Tên section *</Label>
-                  <Input
+                  <CopyableInput
                     id="title"
                     value={formData.title}
                     onChange={(e) =>{  setFormData(prev => ({ ...prev, title: e.target.value })); }}
+                    copyLabel="tên section"
                     placeholder="VD: Hero Banner, Giới thiệu..."
                     className={errors.title ? 'border-red-500' : ''}
                   />

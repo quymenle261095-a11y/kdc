@@ -24,7 +24,7 @@ import { ImageSourceActions } from './ImageSourceActions';
 export interface ImageItem {
   id: string | number;
   url: string;
-  storageId?: Id<'_storage'>;
+  storageId?: Id<'_storage'> | null;
   [key: string]: unknown; // Allow extra fields like link, title, etc.
 }
 
@@ -92,9 +92,14 @@ export function MultiImageUploader<T extends ImageItem>({
   imageFit = 'cover',
 }: MultiImageUploaderProps<T>) {
   const itemsRef = useRef(items);
+  const reactInputId = React.useId();
+  const applyItems = useCallback((nextItems: T[]) => {
+    itemsRef.current = nextItems;
+    onChange(nextItems);
+  }, [onChange]);
   const [uploadingIds, setUploadingIds] = useState<Set<string | number>>(new Set());
   const [urlModeIds, setUrlModeIds] = useState<Set<string | number>>(new Set());
-  const [brokenIds, setBrokenIds] = useState<Set<string | number>>(new Set());
+  const [brokenImageUrls, setBrokenImageUrls] = useState<Map<string | number, string>>(new Map());
   const [isDragging, setIsDragging] = useState(false);
   const [dragOverItemId, setDragOverItemId] = useState<string | number | null>(null);
   const [draggedItemId, setDraggedItemId] = useState<string | number | null>(null);
@@ -111,16 +116,16 @@ export function MultiImageUploader<T extends ImageItem>({
   const deleteImage = useMutation(api.storage.deleteImage);
   const { trackDraftUpload } = useFileDraftUploads(`multi-image-uploader:${folder}`);
 
-  const markBroken = useCallback((itemId: string | number) => {
-    setBrokenIds(prev => new Set(prev).add(itemId));
+  const markBroken = useCallback((itemId: string | number, imageUrl: string) => {
+    setBrokenImageUrls(prev => new Map(prev).set(itemId, imageUrl));
   }, []);
 
   const clearBroken = useCallback((itemId: string | number) => {
-    setBrokenIds(prev => {
+    setBrokenImageUrls(prev => {
       if (!prev.has(itemId)) {
         return prev;
       }
-      const next = new Set(prev);
+      const next = new Map(prev);
       next.delete(itemId);
       return next;
     });
@@ -148,7 +153,7 @@ export function MultiImageUploader<T extends ImageItem>({
   const columnClasses = {
     1: 'grid-cols-1',
     2: 'grid-cols-1 sm:grid-cols-2',
-    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    3: 'grid-cols-2 sm:grid-cols-3',
     4: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
   };
 
@@ -210,7 +215,7 @@ export function MultiImageUploader<T extends ImageItem>({
       });
       await trackDraftUpload(storageId as Id<'_storage'>, folder);
 
-      onChange(itemsRef.current.map(item => 
+      applyItems(itemsRef.current.map(item => 
         item.id === itemId 
           ? { ...item, [imageKey]: result.url ?? '', storageId: storageId as Id<'_storage'> } as T
           : item
@@ -301,50 +306,59 @@ export function MultiImageUploader<T extends ImageItem>({
     return typeof cropAspectRatio === 'function' ? DEFAULT_PRODUCT_IMAGE_ASPECT_RATIO : cropAspectRatio;
   }, [cropAspectRatio]);
 
+  const createUploaderItemId = useCallback((index = 0) => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`;
+  }, []);
+
   const handleMultipleFiles = useCallback(async (files: FileList) => {
     const filesToUpload = [...files];
     if (filesToUpload.length === 0) {
       return;
     }
 
+    const currentItems = itemsRef.current;
+
     if (enableCrop && cropOnUpload) {
       if (filesToUpload.length > 1) {
         toast.message('Đang bật cắt ảnh theo tỉ lệ: vui lòng chọn từng ảnh để cắt chính xác.');
       }
-      const targetItem = items.find(item => !item[imageKey]);
+      const targetItem = currentItems.find(item => !item[imageKey]);
       if (targetItem) {
         handleSelectedFile(targetItem.id, filesToUpload[0]);
         return;
       }
 
-      if (items.length >= maxItems) {
+      if (currentItems.length >= maxItems) {
         toast.error(`Đã đạt giới hạn ${maxItems} ảnh`);
         return;
       }
 
       const newItem = {
-        id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 4)}`,
+        id: createUploaderItemId(0),
         [imageKey]: '',
       } as unknown as T;
-      onChange([...items, newItem]);
+      applyItems([...currentItems, newItem]);
       handleSelectedFile(newItem.id, filesToUpload[0]);
       return;
     }
 
-    const firstEmptyItem = items.find(item => !item[imageKey]);
+    const firstEmptyItem = currentItems.find(item => !item[imageKey]);
     if (firstEmptyItem) {
       const firstUploadPromise = handleFileUpload(firstEmptyItem.id, filesToUpload[0]);
       const remainingFiles = filesToUpload.slice(1);
       if (remainingFiles.length > 0) {
-        const remainingSlots = maxItems - items.length;
+        const remainingSlots = maxItems - currentItems.length;
         const filesToAdd = remainingFiles.slice(0, remainingSlots);
 
         if (filesToAdd.length > 0) {
           const newItems: T[] = filesToAdd.map((_, index) => ({
-            id: `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 4)}`,
+            id: createUploaderItemId(index),
             [imageKey]: '',
           } as unknown as T));
-          onChange([...items, ...newItems]);
+          applyItems([...currentItems, ...newItems]);
 
           await Promise.all([firstUploadPromise, ...filesToAdd.map(async (file, i) => handleFileUpload(newItems[i].id, file))]);
           return;
@@ -354,7 +368,7 @@ export function MultiImageUploader<T extends ImageItem>({
       return;
     }
 
-    const remainingSlots = maxItems - items.length;
+    const remainingSlots = maxItems - currentItems.length;
     const filesToAdd = filesToUpload.slice(0, remainingSlots);
 
     if (filesToAdd.length < filesToUpload.length) {
@@ -367,13 +381,13 @@ export function MultiImageUploader<T extends ImageItem>({
     }
 
     const newItems: T[] = filesToAdd.map((_, index) => ({
-      id: `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 4)}`,
+      id: createUploaderItemId(index),
       [imageKey]: '',
     } as unknown as T));
 
-    onChange([...items, ...newItems]);
+    applyItems([...currentItems, ...newItems]);
     await Promise.all(filesToAdd.map(async (file, i) => handleFileUpload(newItems[i].id, file)));
-  }, [items, maxItems, imageKey, onChange, handleFileUpload, enableCrop, cropOnUpload, handleSelectedFile]);
+  }, [maxItems, imageKey, applyItems, handleFileUpload, enableCrop, cropOnUpload, handleSelectedFile, createUploaderItemId]);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -455,35 +469,41 @@ export function MultiImageUploader<T extends ImageItem>({
   }, [handleSelectedFile]);
 
   const handleUrlChange = useCallback((itemId: string | number, url: string) => {
-    onChange(items.map(item => 
-      item.id === itemId ? { ...item, [imageKey]: url, storageId: undefined } as T : item
+    applyItems(itemsRef.current.map(item => 
+      item.id === itemId ? { ...item, [imageKey]: url, storageId: null } as T : item
     ));
     clearBroken(itemId);
-  }, [items, imageKey, onChange, clearBroken]);
+  }, [imageKey, applyItems, clearBroken]);
 
   const handleExtraFieldChange = useCallback((itemId: string | number, fieldKey: keyof T, value: string) => {
-    onChange(items.map(item => 
+    applyItems(itemsRef.current.map(item => 
       item.id === itemId ? { ...item, [fieldKey]: value } as T : item
     ));
-  }, [items, onChange]);
+  }, [applyItems]);
 
   const handleRemove = useCallback(async (itemId: string | number) => {
-    if (items.length <= minItems) {
+    const currentItems = itemsRef.current;
+    if (currentItems.length <= minItems) {
       toast.error(`Cần tối thiểu ${minItems} mục`);
       return;
     }
 
-    const item = items.find(i => i.id === itemId);
+    const item = currentItems.find(i => i.id === itemId);
     if (deleteMode === 'immediate' && item?.storageId) {
       try {
         await deleteImage({ storageId: item.storageId as Id<"_storage"> });
       } catch (error) {
         console.error('Delete error:', error);
+        toast.error(error instanceof Error ? error.message : 'Không thể xóa ảnh vì đang được sử dụng ở nơi khác');
+        return; // Dừng lại, không xóa khỏi UI
       }
     }
 
-    onChange(items.filter(i => i.id !== itemId));
-  }, [items, minItems, deleteImage, onChange, deleteMode]);
+    const nextItems = currentItems.filter(i => i.id !== itemId);
+    itemsRef.current = nextItems;
+    clearBroken(itemId);
+    applyItems(nextItems);
+  }, [minItems, deleteImage, applyItems, deleteMode, clearBroken]);
 
   const handleItemDragStart = useCallback((e: React.DragEvent, itemId: string | number) => {
     e.dataTransfer.effectAllowed = 'move';
@@ -522,14 +542,15 @@ export function MultiImageUploader<T extends ImageItem>({
     const newItems = [...itemsRef.current];
     const [draggedItem] = newItems.splice(dragIndex, 1);
     newItems.splice(dropIndex, 0, draggedItem);
-    onChange(newItems);
+    applyItems(newItems);
 
     setDraggedItemId(null);
     setDragOverItemId(null);
-  }, [draggedItemId, onChange]);
+  }, [draggedItemId, applyItems]);
 
   const handleAdd = useCallback(() => {
-    if (items.length >= maxItems) {
+    const currentItems = itemsRef.current;
+    if (currentItems.length >= maxItems) {
       toast.error(`Tối đa ${maxItems} mục`);
       return;
     }
@@ -538,11 +559,12 @@ export function MultiImageUploader<T extends ImageItem>({
       [imageKey]: '',
       ...extraFields.reduce((acc, field) => ({ ...acc, [field.key]: '' }), {}),
     } as unknown as T;
-    onChange([...items, newItem]);
-  }, [items, maxItems, imageKey, extraFields, onChange]);
+    applyItems([...currentItems, newItem]);
+  }, [maxItems, imageKey, extraFields, applyItems]);
 
   const handleAddUrl = useCallback(() => {
-    if (items.length >= maxItems) {
+    const currentItems = itemsRef.current;
+    if (currentItems.length >= maxItems) {
       toast.error(`Tối đa ${maxItems} mục`);
       return;
     }
@@ -552,13 +574,13 @@ export function MultiImageUploader<T extends ImageItem>({
       [imageKey]: '',
       ...extraFields.reduce((acc, field) => ({ ...acc, [field.key]: '' }), {}),
     } as unknown as T;
-    onChange([...items, newItem]);
+    applyItems([...currentItems, newItem]);
     setUrlModeIds(prev => {
       const next = new Set(prev);
       next.add(itemId);
       return next;
     });
-  }, [items, maxItems, imageKey, extraFields, onChange]);
+  }, [maxItems, imageKey, extraFields, applyItems]);
 
   const toggleUrlMode = useCallback((itemId: string | number) => {
     setUrlModeIds(prev => {
@@ -572,7 +594,7 @@ export function MultiImageUploader<T extends ImageItem>({
     });
   }, []);
 
-  const inputId = `multi-image-input-${Math.random().toString(36).slice(2, 9)}`;
+  const inputId = `multi-image-input-${reactInputId.replace(/:/g, '')}`;
   const isCropOpen = Boolean(cropItemId !== null && cropFile && cropPreviewUrl);
   const cropItemIndex = cropItemId === null ? -1 : items.findIndex(item => item.id === cropItemId);
   const activeCropAspectRatio = cropItemIndex >= 0 ? resolveCropAspectRatio(items[cropItemIndex], cropItemIndex) : resolveCropAspectRatio(undefined, 0);
@@ -704,7 +726,7 @@ export function MultiImageUploader<T extends ImageItem>({
             const isDraggedItem = draggedItemId === item.id;
             const isDragOverItem = dragOverItemId === item.id && draggedItemId !== null;
             const isFileDragOver = fileDragOverItemId === item.id;
-            const isBroken = brokenIds.has(item.id);
+            const isBroken = brokenImageUrls.get(item.id) === imageUrl;
             const itemCropAspectRatio = resolveCropAspectRatio(item, _idx);
             const itemCropRatioLabel = getProductImageAspectRatioLabel(itemCropAspectRatio);
 
@@ -753,12 +775,19 @@ export function MultiImageUploader<T extends ImageItem>({
                         fill
                         sizes="(max-width: 768px) 100vw, 320px"
                         className={cn(imageClassName, isFileDragOver && "opacity-50")}
-                        onError={() => markBroken(item.id)}
+                        onError={() => markBroken(item.id, imageUrl)}
                       />
                       )
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-700">
-                        <ImageIcon size={32} className="text-slate-400" />
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-700 p-2 text-center text-slate-400">
+                        {isBroken ? (
+                          <div className="text-red-500 flex flex-col items-center gap-1">
+                            <span className="text-xs font-semibold">Lỗi tải ảnh</span>
+                            <span className="text-[9px] break-all max-w-[100px] line-clamp-1">{imageUrl ? new URL(imageUrl).hostname : ''}</span>
+                          </div>
+                        ) : (
+                          <ImageIcon size={32} />
+                        )}
                       </div>
                     )}
                     {isFileDragOver && (
@@ -915,12 +944,19 @@ export function MultiImageUploader<T extends ImageItem>({
                         fill
                         sizes="(max-width: 768px) 100vw, 320px"
                         className={cn(imageClassName, isFileDragOver && "opacity-50")}
-                        onError={() => markBroken(item.id)}
+                        onError={() => markBroken(item.id, imageUrl)}
                       />
                       )
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-700">
-                        <ImageIcon size={24} className="text-slate-400" />
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-700 p-2 text-center text-slate-400">
+                        {isBroken ? (
+                          <div className="text-red-500 flex flex-col items-center gap-0.5">
+                            <span className="text-[10px] font-semibold leading-tight">Lỗi tải ảnh</span>
+                            <span className="text-[8px] break-all max-w-[80px] line-clamp-1">{imageUrl ? new URL(imageUrl).hostname : ''}</span>
+                          </div>
+                        ) : (
+                          <ImageIcon size={24} />
+                        )}
                       </div>
                     )}
                     {/* File drag overlay */}

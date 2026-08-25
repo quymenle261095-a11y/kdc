@@ -14,14 +14,14 @@ import {
 import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const TEAM_STYLES: Array<{ id: TeamStyle; label: string }> = [
-  { id: 'grid', label: 'Layout 1' },
-  { id: 'cards', label: 'Layout 2' },
-  { id: 'carousel', label: 'Layout 3' },
-  { id: 'bento', label: 'Layout 4' },
-  { id: 'timeline', label: 'Layout 5' },
-  { id: 'spotlight', label: 'Layout 6' },
-  { id: 'construction', label: 'Layout 7' },
-  { id: 'layout8', label: 'Layout 8' },
+  { id: 'grid', label: '(1) Dạng lưới' },
+  { id: 'cards', label: '(2) Dạng thẻ' },
+  { id: 'carousel', label: '(3) Trượt ngang' },
+  { id: 'bento', label: '(4) Ô ghép' },
+  { id: 'timeline', label: '(5) Tiến trình' },
+  { id: 'spotlight', label: '(6) Tiêu điểm' },
+  { id: 'construction', label: '(7) Góc cạnh' },
+  { id: 'layout8', label: '(8) Tối giản' },
 ];
 
 const TEAM_STYLE_SET = new Set<TeamStyle>(TEAM_STYLES.map((item) => item.id));

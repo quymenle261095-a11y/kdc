@@ -30,6 +30,24 @@ export function useExampleServiceSlug(): string | null {
   return services?.[0]?.slug ?? null;
 }
 
+export function useExampleProjectSlug(): string | null {
+  const projects = useQuery(api.projects.searchPublished, { limit: 1 });
+  return projects?.[0]?.slug ?? null;
+}
+
+/**
+ * Hook to get example course slug for preview links
+ */
+export function useExampleCourseSlug(): string | null {
+  const courses = useQuery(api.courses.searchPublished, { limit: 1 });
+  return courses?.[0]?.slug ?? null;
+}
+
+export function useExampleResourceSlug(): string | null {
+  const resources = useQuery(api.resources.searchPublished, { limit: 1 });
+  return resources?.[0]?.slug ?? null;
+}
+
 /**
  * Hook to get example post category slug for preview links
  */

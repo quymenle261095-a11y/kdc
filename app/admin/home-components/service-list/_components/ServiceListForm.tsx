@@ -295,7 +295,11 @@ export const ServiceListForm = ({
                   <SettingsImageUploader
                     label="Ảnh thumbnail"
                     value={item.image ?? ''}
-                    onChange={(url) => updateDemoService(item.id, { image: url ?? '' })}
+                    storageId={item.storageId as any}
+                    onChange={(url, storageId) => updateDemoService(item.id, {
+                      image: url ?? '',
+                      storageId: storageId ? String(storageId) : null
+                    })}
                     folder="home-components/service-list"
                     naming={{ entityName: item.name || 'demo-service', field: 'thumbnail', index: index + 1 }}
                     previewSize="sm"

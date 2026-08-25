@@ -3,6 +3,7 @@ export const RESERVED_SLUGS = [
   'account',
   'admin',
   'api',
+  'apps',
   'book',
   'cart',
   'checkout',

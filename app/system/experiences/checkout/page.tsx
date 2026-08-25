@@ -128,15 +128,18 @@ export default function CheckoutExperiencePage() {
   const cartModule = useQuery(api.admin.modules.getModuleByKey, { key: 'cart' });
   const paymentFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enablePayment', moduleKey: 'orders' });
   const shippingFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableShipping', moduleKey: 'orders' });
+  const darkModeSetting = useQuery(api.settings.getByKey, { key: 'site_dark_mode' });
   const exampleProduct = useExampleProduct();
   const brandColors = useBrandColors();
   const [brandColor, setBrandColor] = useState(brandColors.primary);
   const [secondaryColor, setSecondaryColor] = useState(brandColors.secondary || '');
   const [colorMode, setColorMode] = useState<'single' | 'dual'>(brandColors.mode || 'single');
   const [previewDevice, setPreviewDevice] = useState<DeviceType>('desktop');
+  const siteDarkMode = (darkModeSetting?.value as string) || 'light';
+  const isDark = siteDarkMode === 'dark' || (siteDarkMode === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const tokens = useMemo(
-    () => getCheckoutColors(brandColor, secondaryColor, colorMode),
-    [brandColor, secondaryColor, colorMode]
+    () => getCheckoutColors(brandColor, secondaryColor, colorMode, isDark),
+    [brandColor, secondaryColor, colorMode, isDark]
   );
 
   const serverConfig = useMemo<CheckoutExperienceConfig>(() => {
@@ -376,6 +379,7 @@ export default function CheckoutExperiencePage() {
                 brandColor={brandColor}
                 secondaryColor={secondaryColor}
                 colorMode={colorMode}
+                isDark={isDark}
               />
             </BrowserFrame>
           </div>

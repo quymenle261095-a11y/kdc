@@ -5,7 +5,7 @@ import { useBrandColor } from '@/components/site/hooks';
 
 export function BrandColorProvider() {
   const brandColor = useBrandColor();
-  
+
   useEffect(() => {
     document.documentElement.style.setProperty('--scrollbar-color', brandColor);
   }, [brandColor]);

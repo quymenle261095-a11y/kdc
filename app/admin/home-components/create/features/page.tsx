@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { GripVertical, Plus, Trash2, ListChecks } from 'lucide-react';
 import { Button, Input, Label, cn } from '../../../components/ui';
 import { ImageFieldWithUpload } from '../../../components/ImageFieldWithUpload';
@@ -47,6 +49,8 @@ const DEMO_FEATURE_IMAGES = [
 
 export default function FeaturesCreatePage() {
   const COMPONENT_TYPE = 'Features';
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Tính năng nổi bật', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -374,6 +378,19 @@ export default function FeaturesCreatePage() {
         spacing={headerState.spacing}
         desktopColumns={desktopColumns}
         cornerRadius={cornerRadius}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
+        onItemsChange={(nextItems) => {
+          setFeaturesItems(nextItems.map((item, idx) => ({
+            id: featuresItems[idx]?.id ?? item.id,
+            title: item.title,
+            description: item.description,
+            icon: item.icon,
+            image: item.image,
+          })));
+        }}
       />
     </ComponentFormWrapper>
   );

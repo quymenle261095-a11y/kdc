@@ -33,6 +33,18 @@ const normalizeHex = (input: string, fallback = DEFAULT_BRAND_COLOR) => (
   formatHex(oklch(safeParseOklch(input, fallback)))
 );
 
+const getDarkModeAccent = (input: string, fallback = DEFAULT_BRAND_COLOR) => {
+  const color = safeParseOklch(input, fallback);
+  const lightness = color.l ?? 0.62;
+  const chroma = color.c ?? 0.14;
+
+  return formatHex(oklch({
+    ...color,
+    l: lightness < 0.62 ? 0.68 : Math.min(lightness, 0.82),
+    c: color.h == null ? Math.min(chroma, 0.02) : clampChroma(Math.max(chroma * 0.9, Math.min(chroma + 0.02, 0.14))),
+  }));
+};
+
 const oklchShift = (
   input: string,
   fallback: string,
@@ -282,3 +294,92 @@ export const getFooterLayoutColors = (
     magazineLinkHover,
   };
 };
+
+export const getFooterDarkLayoutColors = (
+  style: FooterStyle,
+  primary: string,
+  secondary: string,
+  mode: FooterBrandMode,
+): FooterLayoutColors => {
+  const primaryResolved = normalizeHex(primary);
+  const secondaryResolved = resolveSecondaryForMode(primaryResolved, secondary, mode);
+  const primaryAccent = getDarkModeAccent(primaryResolved);
+  const secondaryAccent = mode === 'single'
+    ? primaryAccent
+    : getDarkModeAccent(secondaryResolved, primaryResolved);
+
+  const bg = '#020617';
+  const surface = '#0f172a';
+  const elevatedSurface = '#111827';
+  const border = '#334155';
+  const borderSoft = '#1e293b';
+  const textPrimary = '#f8fafc';
+  const textMuted = '#cbd5e1';
+  const textSubtle = '#94a3b8';
+  const accent = mode === 'dual' ? secondaryAccent : primaryAccent;
+  const link = ensureTextContrast(accent, bg, 12, 600, textMuted);
+  const linkHover = ensureTextContrast(primaryAccent, bg, 12, 700, textPrimary);
+  const socialBg = elevatedSurface;
+  const socialText = textPrimary;
+  const magazineBg = style === 'centered' ? '#050816' : bg;
+  const stackedTopBorder = style === 'stacked' ? surface : bg;
+  const textOnPrimary = getAPCATextColor(primaryAccent, 12, 700);
+  const textOnAccent = getAPCATextColor(accent, 12, 700);
+
+  return {
+    primary: primaryAccent,
+    secondary: secondaryAccent,
+    bg,
+    surface,
+    border,
+    borderSoft,
+    accent,
+    link,
+    heading: textPrimary,
+    textOnPrimary,
+    textOnAccent,
+    textPrimary,
+    textMuted,
+    textSubtle,
+    linkHover,
+    socialBg,
+    socialText,
+    socialIconFallback: socialText,
+    socialOriginalBg: socialBg,
+    socialOriginalIcon: socialText,
+    brandGradient: surface,
+    dividerGradient: accent,
+    centeredBrandBg: surface,
+    centeredBrandBorder: border,
+    centeredSocialBg: elevatedSurface,
+    centeredSocialBorder: border,
+    centeredSocialHoverBg: accent,
+    centeredSocialHoverBorder: accent,
+    centeredSocialText: socialText,
+    stackedTopBorder,
+    stackedSocialBg: elevatedSurface,
+    stackedSocialHoverBg: accent,
+    stackedSocialText: socialText,
+    stackedTextOnBg: textPrimary,
+    classicBg: surface,
+    magazineBg,
+    magazineHeading: textPrimary,
+    magazineText: textPrimary,
+    magazineTextMuted: textMuted,
+    magazineTextSubtle: textSubtle,
+    magazineLink: textMuted,
+    magazineLinkHover: linkHover,
+  };
+};
+
+export const getFooterThemeColors = (
+  style: FooterStyle,
+  primary: string,
+  secondary: string,
+  mode: FooterBrandMode,
+  isDark = false,
+) => (
+  isDark
+    ? getFooterDarkLayoutColors(style, primary, secondary, mode)
+    : getFooterLayoutColors(style, primary, secondary, mode)
+);

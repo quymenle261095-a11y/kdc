@@ -7,16 +7,22 @@ async function resolveUnifiedCategoryInternal(ctx: QueryCtx, args: { slug: strin
   const slug = args.slug.trim().toLowerCase();
   if (!slug) {return null;}
 
-  const [postCategory, productCategory, serviceCategory] = await Promise.all([
+  const [postCategory, productCategory, serviceCategory, courseCategory, projectCategory, resourceCategory] = await Promise.all([
     ctx.db.query("postCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
     ctx.db.query("productCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
     ctx.db.query("serviceCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
+    ctx.db.query("courseCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
+    ctx.db.query("projectCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
+    ctx.db.query("resourceCategories").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
   ]);
 
   const matches = [
     postCategory && { moduleKey: "posts" as const, category: postCategory },
     productCategory && { moduleKey: "products" as const, category: productCategory },
     serviceCategory && { moduleKey: "services" as const, category: serviceCategory },
+    courseCategory && { moduleKey: "courses" as const, category: courseCategory },
+    projectCategory && { moduleKey: "projects" as const, category: projectCategory },
+    resourceCategory && { moduleKey: "resources" as const, category: resourceCategory },
   ].filter(Boolean);
 
   if (matches.length !== 1) {
@@ -38,16 +44,22 @@ async function resolveUnifiedDetailInternal(ctx: QueryCtx, args: { categorySlug:
   const recordSlug = args.recordSlug.trim().toLowerCase();
   if (!categorySlug || !recordSlug) {return null;}
 
-  const [postCategory, productCategory, serviceCategory] = await Promise.all([
+  const [postCategory, productCategory, serviceCategory, courseCategory, projectCategory, resourceCategory] = await Promise.all([
     ctx.db.query("postCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
     ctx.db.query("productCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
     ctx.db.query("serviceCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
+    ctx.db.query("courseCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
+    ctx.db.query("projectCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
+    ctx.db.query("resourceCategories").withIndex("by_slug", (q) => q.eq("slug", categorySlug)).unique(),
   ]);
 
   const matches = [
     postCategory && { moduleKey: "posts" as const, category: postCategory },
     productCategory && { moduleKey: "products" as const, category: productCategory },
     serviceCategory && { moduleKey: "services" as const, category: serviceCategory },
+    courseCategory && { moduleKey: "courses" as const, category: courseCategory },
+    projectCategory && { moduleKey: "projects" as const, category: projectCategory },
+    resourceCategory && { moduleKey: "resources" as const, category: resourceCategory },
   ].filter(Boolean);
 
   if (matches.length !== 1) {
@@ -118,6 +130,66 @@ async function resolveUnifiedDetailInternal(ctx: QueryCtx, args: { categorySlug:
       recordSlug: service.slug,
     };
   }
+  if (match.moduleKey === "courses") {
+    const course = await ctx.db.query("courses").withIndex("by_slug", (q) => q.eq("slug", recordSlug)).unique();
+    if (!course || course.status !== "Published") {return null;}
+    if (course.categoryId !== match.category._id) {
+      const assignment = await ctx.db
+        .query("courseCategoryAssignments")
+        .withIndex("by_course_category", (q) => q.eq("courseId", course._id).eq("categoryId", match.category._id))
+        .unique();
+      if (!assignment || !await isMultiCategoryEnabled(ctx, "courses")) {return null;}
+    }
+    const primaryCategory = await ctx.db.get(course.categoryId);
+    if (!primaryCategory) {return null;}
+    return {
+      moduleKey: "courses" as const,
+      categoryId: primaryCategory._id,
+      categorySlug: primaryCategory.slug,
+      recordId: course._id,
+      recordSlug: course.slug,
+    };
+  }
+  if (match.moduleKey === "projects") {
+    const project = await ctx.db.query("projects").withIndex("by_slug", (q) => q.eq("slug", recordSlug)).unique();
+    if (!project || project.status !== "Published") {return null;}
+    if (project.categoryId !== match.category._id) {
+      const assignment = await ctx.db
+        .query("projectCategoryAssignments")
+        .withIndex("by_project_category", (q) => q.eq("projectId", project._id).eq("categoryId", match.category._id))
+        .unique();
+      if (!assignment || !await isMultiCategoryEnabled(ctx, "projects")) {return null;}
+    }
+    const primaryCategory = await ctx.db.get(project.categoryId);
+    if (!primaryCategory) {return null;}
+    return {
+      moduleKey: "projects" as const,
+      categoryId: primaryCategory._id,
+      categorySlug: primaryCategory.slug,
+      recordId: project._id,
+      recordSlug: project.slug,
+    };
+  }
+  if (match.moduleKey === "resources") {
+    const resource = await ctx.db.query("resources").withIndex("by_slug", (q) => q.eq("slug", recordSlug)).unique();
+    if (!resource || resource.status !== "Published") {return null;}
+    if (resource.categoryId !== match.category._id) {
+      const assignment = await ctx.db
+        .query("resourceCategoryAssignments")
+        .withIndex("by_resource_category", (q) => q.eq("resourceId", resource._id).eq("categoryId", match.category._id))
+        .unique();
+      if (!assignment || !await isMultiCategoryEnabled(ctx, "resources")) {return null;}
+    }
+    const primaryCategory = await ctx.db.get(resource.categoryId);
+    if (!primaryCategory) {return null;}
+    return {
+      moduleKey: "resources" as const,
+      categoryId: primaryCategory._id,
+      categorySlug: primaryCategory.slug,
+      recordId: resource._id,
+      recordSlug: resource.slug,
+    };
+  }
   return null;
 }
 
@@ -127,8 +199,8 @@ export const resolveUnifiedCategory = query({
     return resolveUnifiedCategoryInternal(ctx, args);
   },
   returns: v.union(v.object({
-    moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services")),
-    categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories")),
+    moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services"), v.literal("courses"), v.literal("projects"), v.literal("resources")),
+    categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories"), v.id("courseCategories"), v.id("projectCategories"), v.id("resourceCategories")),
     categorySlug: v.string(),
     categoryName: v.string(),
     categoryDescription: v.string(),
@@ -141,10 +213,10 @@ export const resolveUnifiedDetail = query({
     return resolveUnifiedDetailInternal(ctx, args);
   },
   returns: v.union(v.object({
-    moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services")),
-    categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories")),
+    moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services"), v.literal("courses"), v.literal("projects"), v.literal("resources")),
+    categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories"), v.id("courseCategories"), v.id("projectCategories"), v.id("resourceCategories")),
     categorySlug: v.string(),
-    recordId: v.union(v.id("posts"), v.id("products"), v.id("services")),
+    recordId: v.union(v.id("posts"), v.id("products"), v.id("services"), v.id("courses"), v.id("projects"), v.id("resources")),
     recordSlug: v.string(),
   }), v.null()),
 });
@@ -157,15 +229,40 @@ export const listConflicts = query({
     slug: v.string(),
     reserved: v.boolean(),
     items: v.array(v.object({
-      id: v.union(v.id("posts"), v.id("products"), v.id("services"), v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories")),
+      id: v.union(
+        v.id("posts"),
+        v.id("products"),
+        v.id("services"),
+        v.id("courses"),
+        v.id("projects"),
+        v.id("resources"),
+        v.id("postCategories"),
+        v.id("productCategories"),
+        v.id("serviceCategories"),
+        v.id("courseCategories"),
+        v.id("projectCategories"),
+        v.id("resourceCategories"),
+        v.id("productTypes"),
+        v.id("attributeGroups"),
+        v.id("attributeTerms")
+      ),
       label: v.string(),
       table: v.union(
         v.literal("posts"),
         v.literal("products"),
         v.literal("services"),
+        v.literal("courses"),
+        v.literal("projects"),
+        v.literal("resources"),
         v.literal("postCategories"),
         v.literal("productCategories"),
-        v.literal("serviceCategories")
+        v.literal("serviceCategories"),
+        v.literal("courseCategories"),
+        v.literal("projectCategories"),
+        v.literal("resourceCategories"),
+        v.literal("productTypes"),
+        v.literal("attributeGroups"),
+        v.literal("attributeTerms")
       ),
     })),
   })),
@@ -488,18 +585,18 @@ export const resolveProductLandingContext = query({
   returns: v.union(
     v.object({
       type: v.literal("category"),
-      moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services")),
-      categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories")),
+      moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services"), v.literal("courses"), v.literal("projects"), v.literal("resources")),
+      categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories"), v.id("courseCategories"), v.id("projectCategories"), v.id("resourceCategories")),
       categorySlug: v.string(),
       categoryName: v.string(),
       categoryDescription: v.string(),
     }),
     v.object({
       type: v.literal("detail"),
-      moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services")),
-      categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories")),
+      moduleKey: v.union(v.literal("posts"), v.literal("products"), v.literal("services"), v.literal("courses"), v.literal("projects"), v.literal("resources")),
+      categoryId: v.union(v.id("postCategories"), v.id("productCategories"), v.id("serviceCategories"), v.id("courseCategories"), v.id("projectCategories"), v.id("resourceCategories")),
       categorySlug: v.string(),
-      recordId: v.union(v.id("posts"), v.id("products"), v.id("services")),
+      recordId: v.union(v.id("posts"), v.id("products"), v.id("services"), v.id("courses"), v.id("projects"), v.id("resources")),
       recordSlug: v.string(),
     }),
     v.object({

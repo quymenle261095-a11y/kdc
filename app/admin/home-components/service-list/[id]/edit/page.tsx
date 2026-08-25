@@ -563,6 +563,17 @@ export default function ServiceListEditPage({
               desktopColumns={desktopColumns}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              onItemChange={(index, updatedItem) => {
+                if (serviceSelectionMode === 'demo') {
+                  setDemoServices((prev) => {
+                    const next = [...prev];
+                    if (next[index]) {
+                      next[index] = { ...next[index], ...updatedItem } as any;
+                    }
+                    return next;
+                  });
+                }
+              }}
             />
           </div>
         </div>

@@ -1,10 +1,12 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { CASE_STUDY_STYLES } from '../_lib/constants';
 import { getCaseStudyColors } from '../_lib/colors';
@@ -15,6 +17,7 @@ import {
   DEFAULT_CASE_STUDY_DESKTOP_COLUMNS,
   DEFAULT_CASE_STUDY_SPACING,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 interface CaseStudyPreviewProps {
   projects: CaseStudyProject[];
@@ -39,6 +42,10 @@ interface CaseStudyPreviewProps {
   spacing?: CaseStudySpacing;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onProjectsChange?: (projects: CaseStudyProject[]) => void;
 }
 
 const getImageSizeInfo = (count: number, style: CaseStudyStyle) => {
@@ -69,7 +76,7 @@ const getImageSizeInfo = (count: number, style: CaseStudyStyle) => {
 };
 
 export const CaseStudyPreview = ({
-  projects,
+  projects = [],
   brandColor,
   secondary,
   mode = 'dual',
@@ -91,14 +98,26 @@ export const CaseStudyPreview = ({
   spacing = DEFAULT_CASE_STUDY_SPACING,
   fontStyle,
   fontClassName,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onProjectsChange,
 }: CaseStudyPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
   const previewStyle = selectedStyle ?? 'grid';
   const setPreviewStyle = (value: string) => onStyleChange?.(value as CaseStudyStyle);
+  const isVisualEditAllowed = Boolean(onProjectsChange || onTitleChange || onSubtitleChange || onBadgeTextChange);
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
 
   const colors = React.useMemo(
-    () => getCaseStudyColors(brandColor, secondary, mode),
-    [brandColor, secondary, mode],
+    () => adaptTokensForDarkMode(getCaseStudyColors(brandColor, secondary, mode), isDark),
+    [brandColor, secondary, mode, isDark],
   );
 
   return (
@@ -114,6 +133,9 @@ export const CaseStudyPreview = ({
         info={getImageSizeInfo(projects.length, previewStyle)}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
       >
         <BrowserFrame url="yoursite.com/projects">
           <CaseStudySectionShared
@@ -137,6 +159,15 @@ export const CaseStudyPreview = ({
             cornerRadius={cornerRadius}
             desktopColumns={desktopColumns}
             spacing={spacing}
+            visualEditEnabled={isVisualEditActive}
+            onTitleChange={onTitleChange}
+            onSubtitleChange={onSubtitleChange}
+            onBadgeTextChange={onBadgeTextChange}
+            onProjectTextChange={(id, field, value) => {
+              onProjectsChange?.(projects.map((project) => (
+                project.id === id ? { ...project, [field]: value } : project
+              )));
+            }}
           />
         </BrowserFrame>
 

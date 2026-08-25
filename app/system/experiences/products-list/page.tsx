@@ -35,6 +35,7 @@ type ProductListCornerRadius = 'none' | 'sm' | 'lg';
 
 type ProductsListExperienceConfig = {
   layoutStyle: ListLayoutStyle;
+  gridColumns: number;
   layouts: {
     grid: LayoutConfig;
     sidebar: LayoutConfig;
@@ -47,6 +48,9 @@ type ProductsListExperienceConfig = {
   enableQuickAddVariant: boolean;
   hideEmptyCategories: boolean;
   cornerRadius: ProductListCornerRadius;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  priceFilterMode: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
+  showContextIntro: boolean;
 };
 
 type LayoutConfig = {
@@ -73,6 +77,7 @@ const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
 
 const DEFAULT_CONFIG: ProductsListExperienceConfig = {
   layoutStyle: 'grid',
+  gridColumns: 3,
   layouts: {
     grid: { ...DEFAULT_LAYOUT_CONFIG },
     sidebar: { ...DEFAULT_LAYOUT_CONFIG },
@@ -85,6 +90,9 @@ const DEFAULT_CONFIG: ProductsListExperienceConfig = {
   enableQuickAddVariant: true,
   hideEmptyCategories: true,
   cornerRadius: 'lg',
+  cartButtonsLayout: 'stack',
+  priceFilterMode: 'custom',
+  showContextIntro: true,
 };
 
 const HINTS = [
@@ -138,6 +146,7 @@ export default function ProductsListExperiencePage() {
   const ordersModule = useQuery(api.admin.modules.getModuleByKey, { key: 'orders' });
   const promotionsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'promotions' });
   const variantsSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'variantEnabled' });
+  const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
   const brandColors = useBrandColors();
   const [brandColor, setBrandColor] = useState(brandColors.primary);
   const [secondaryColor, setSecondaryColor] = useState(brandColors.secondary || '');
@@ -146,8 +155,9 @@ export default function ProductsListExperiencePage() {
 
   const serverConfig = useMemo<ProductsListExperienceConfig>(() => {
     const raw = experienceSetting?.value as {
-      layoutStyle?: ListLayoutStyle | 'masonry';
-      layouts?: Partial<Record<'grid' | 'list' | 'sidebar' | 'masonry', Partial<LayoutConfig & { showPagination?: boolean }>>>;
+      layoutStyle?: ListLayoutStyle;
+      gridColumns?: number;
+      layouts?: Partial<Record<ListLayoutStyle, Partial<LayoutConfig>>>;
       showWishlistButton?: boolean;
       showAddToCartButton?: boolean;
       showBuyNowButton?: boolean;
@@ -155,31 +165,33 @@ export default function ProductsListExperiencePage() {
       enableQuickAddVariant?: boolean;
       hideEmptyCategories?: boolean;
       cornerRadius?: ProductListCornerRadius;
+      cartButtonsLayout?: 'stack' | 'grid-2';
+      priceFilterMode?: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
+      showContextIntro?: boolean;
     } | undefined;
     
-    const normalizePaginationType = (value?: string | boolean): PaginationType => {
+    const normalizePaginationType = (value?: string): PaginationType => {
       if (value === 'infiniteScroll') return 'infiniteScroll';
       if (value === 'pagination') return 'pagination';
-      if (value === false) return 'infiniteScroll';
       return 'pagination';
     };
     
-    const normalizeLayoutConfig = (cfg?: Partial<LayoutConfig & { showPagination?: boolean }>): LayoutConfig => ({
-      paginationType: normalizePaginationType(cfg?.paginationType ?? cfg?.showPagination),
+    const normalizeLayoutConfig = (cfg?: Partial<LayoutConfig>): LayoutConfig => ({
+      paginationType: normalizePaginationType(cfg?.paginationType),
       showSearch: cfg?.showSearch ?? true,
       showCategories: cfg?.showCategories ?? true,
       postsPerPage: cfg?.postsPerPage ?? 12,
     });
     
-    const layoutStyle: ListLayoutStyle = raw?.layoutStyle === 'masonry' ? 'sidebar' : (raw?.layoutStyle ?? 'grid');
-    const sidebarConfig = raw?.layouts?.sidebar ?? raw?.layouts?.masonry;
+    const layoutStyle: ListLayoutStyle = raw?.layoutStyle ?? 'grid';
 
     return {
       layoutStyle,
+      gridColumns: raw?.gridColumns ?? 3,
       layouts: {
-        grid: normalizeLayoutConfig(raw?.layouts?.grid as Partial<LayoutConfig & { showPagination?: boolean }>),
-        sidebar: normalizeLayoutConfig(sidebarConfig as Partial<LayoutConfig & { showPagination?: boolean }>),
-        list: normalizeLayoutConfig(raw?.layouts?.list as Partial<LayoutConfig & { showPagination?: boolean }>),
+        grid: normalizeLayoutConfig(raw?.layouts?.grid),
+        sidebar: normalizeLayoutConfig(raw?.layouts?.sidebar),
+        list: normalizeLayoutConfig(raw?.layouts?.list),
       },
       showWishlistButton: raw?.showWishlistButton ?? true,
       showAddToCartButton: raw?.showAddToCartButton ?? true,
@@ -188,12 +200,16 @@ export default function ProductsListExperiencePage() {
       enableQuickAddVariant: raw?.enableQuickAddVariant ?? true,
       hideEmptyCategories: raw?.hideEmptyCategories ?? true,
       cornerRadius: raw?.cornerRadius ?? 'lg',
+      cartButtonsLayout: raw?.cartButtonsLayout ?? 'stack',
+      priceFilterMode: raw?.priceFilterMode ?? 'custom',
+      showContextIntro: raw?.showContextIntro ?? true,
     };
   }, [experienceSetting?.value]);
 
-  const isLoading = experienceSetting === undefined || productsModule === undefined || wishlistModule === undefined || cartModule === undefined || ordersModule === undefined || promotionsModule === undefined || variantsSetting === undefined;
+  const isLoading = experienceSetting === undefined || productsModule === undefined || wishlistModule === undefined || cartModule === undefined || ordersModule === undefined || promotionsModule === undefined || variantsSetting === undefined || saleModeSetting === undefined;
 
   const { config, setConfig, hasChanges } = useExperienceConfig(serverConfig, DEFAULT_CONFIG, isLoading);
+  const saleMode = (saleModeSetting?.value as string | undefined) ?? 'cart';
   const canUseProducts = productsModule?.enabled ?? false;
   const canUseWishlist = wishlistModule?.enabled ?? false;
   const canUseCart = (cartModule?.enabled ?? false) && (ordersModule?.enabled ?? false);
@@ -314,7 +330,7 @@ export default function ProductsListExperiencePage() {
               disabled={!canUseOrders}
             />
             <ToggleRow
-              label="Danh mục"
+              label="Danh mục sản phẩm"
               checked={currentLayoutConfig.showCategories && canUseProducts}
               onChange={(v) => updateLayoutConfig('showCategories', v)}
               accentColor={brandColor}
@@ -322,7 +338,7 @@ export default function ProductsListExperiencePage() {
             />
             <ToggleRow
               label="Ẩn danh mục rỗng"
-              description="Ngoài public chỉ hiện danh mục có sản phẩm"
+              description="Ngoài public chỉ hiện danh mục có sản phẩm, tính cả danh mục con"
               checked={config.hideEmptyCategories}
               onChange={(v) => setConfig(prev => ({ ...prev, hideEmptyCategories: v }))}
               accentColor={brandColor}
@@ -336,6 +352,16 @@ export default function ProductsListExperiencePage() {
                 { value: 'lg', label: 'Bo góc nhiều' },
               ]}
               onChange={(v) => setConfig(prev => ({ ...prev, cornerRadius: v as ProductListCornerRadius }))}
+              disabled={!canUseProducts}
+            />
+            <SelectRow
+              label="Số cột hiển thị (Desktop)"
+              value={String(config.gridColumns ?? 3)}
+              options={[
+                { value: '3', label: '3 cột' },
+                { value: '4', label: '4 cột' },
+              ]}
+              onChange={(v) => setConfig(prev => ({ ...prev, gridColumns: Number(v) }))}
               disabled={!canUseProducts}
             />
           </ControlCard>
@@ -398,6 +424,17 @@ export default function ProductsListExperiencePage() {
               accentColor={brandColor}
               disabled={!canUsePromotions}
             />
+            {config.showAddToCartButton && saleMode === 'cart' && (
+              <SelectRow
+                label="Bố cục nút"
+                value={config.cartButtonsLayout ?? 'stack'}
+                options={[
+                  { value: 'stack', label: 'Xếp dọc (Stack)' },
+                  { value: 'grid-2', label: 'Xếp ngang (Grid 2)' },
+                ]}
+                onChange={(v) => setConfig(prev => ({ ...prev, cartButtonsLayout: v as 'stack' | 'grid-2' }))}
+              />
+            )}
           </ControlCard>
 
           <ControlCard title="Bảo trì hệ thống">
@@ -425,6 +462,25 @@ export default function ProductsListExperiencePage() {
                   </>
                 )}
               </Button>
+            </div>
+          </ControlCard>
+
+          <ControlCard title="Bộ lọc khoảng giá">
+            <div className="space-y-3">
+              <SelectRow
+                label="Chế độ lọc"
+                value={config.priceFilterMode ?? 'custom'}
+                options={[
+                  { value: 'disabled', label: 'Tắt bộ lọc' },
+                  { value: 'custom', label: 'Tự nhập (Từ - Đến)' },
+                  { value: 'smart_dropdown', label: 'Dropdown thông minh (SaaS)' },
+                  { value: 'slider', label: 'Slider 2 đầu (Range Slider)' },
+                ]}
+                onChange={(v) => setConfig(prev => ({ ...prev, priceFilterMode: v as any }))}
+              />
+              <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
+                Lọc khoảng giá thông minh và Slider sẽ tự động tính toán khoảng biên từ cơ sở dữ liệu thực tế bằng index tối ưu O(1).
+              </p>
             </div>
           </ControlCard>
         </CardContent>
@@ -538,6 +594,7 @@ export default function ProductsListExperiencePage() {
             <BrowserFrame url="yoursite.com/products">
               <ProductsListPreview
                 layoutStyle={config.layoutStyle}
+                gridColumns={config.gridColumns}
                 paginationType={currentLayoutConfig.paginationType}
                 showSearch={currentLayoutConfig.showSearch}
                 showCategories={currentLayoutConfig.showCategories}
@@ -550,6 +607,8 @@ export default function ProductsListExperiencePage() {
                 showBuyNowButton={config.showBuyNowButton && (ordersModule?.enabled ?? false)}
                 showPromotionBadge={config.showPromotionBadge && (promotionsModule?.enabled ?? false)}
                 cornerRadius={config.cornerRadius}
+                cartButtonsLayout={config.cartButtonsLayout}
+                priceFilterMode={config.priceFilterMode}
               />
             </BrowserFrame>
           </div>

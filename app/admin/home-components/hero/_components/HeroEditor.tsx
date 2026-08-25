@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { LayoutTemplate } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Label } from '../../../components/ui';
+import { CopyableInput } from '../../../components/CopyTextButton';
 import { HomeComponentStickyFooter } from '../../_shared/components/HomeComponentStickyFooter';
 import { TypeColorOverrideCard } from '../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../_shared/components/TypeFontOverrideCard';
@@ -108,6 +109,7 @@ export function HeroEditor({
   showSnapshotLabel,
   colorOverride,
   fontOverride,
+  isVisualEditAllowed = true,
 }: {
   backHref: string;
   draftOwnerKey: string;
@@ -119,6 +121,7 @@ export function HeroEditor({
   showSnapshotLabel?: string;
   colorOverride?: ReturnType<typeof useTypeColorOverrideState>;
   fontOverride?: ReturnType<typeof useTypeFontOverrideState>;
+  isVisualEditAllowed?: boolean;
 }) {
   const router = useRouter();
   const { commitUploads, trackUpload } = useDraftFileCleanup(draftOwnerKey);
@@ -275,9 +278,10 @@ export function HeroEditor({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
+              <CopyableInput
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
+                copyLabel="tiêu đề hiển thị"
                 required
                 placeholder="Nhập tiêu đề component..."
               />
@@ -366,6 +370,8 @@ export function HeroEditor({
               spacing={spacing}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              isVisualEditAllowed={isVisualEditAllowed}
+              onContentChange={setHeroContent}
             />
           </div>
         </div>

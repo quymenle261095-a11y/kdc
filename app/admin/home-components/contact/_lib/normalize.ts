@@ -5,6 +5,7 @@ import {
   normalizeContactDesktopColumns,
   normalizeContactSpacing,
 } from './constants';
+import { normalizeContactIconValue } from './iconOptions';
 import type {
   ContactConfig,
   ContactConfigState,
@@ -20,6 +21,7 @@ const CONTACT_STYLE_SET = new Set<ContactStyle>([
   'elegant',
   'minimal',
   'centered',
+  'kanban',
 ]);
 
 const coerceText = (value: unknown) => {
@@ -69,7 +71,7 @@ const normalizeSocialLinks = (input: unknown): ContactSocialLink[] => {
   });
 };
 
-const normalizeContactItems = (input: unknown, legacy: Record<string, string>): ContactInfoItem[] => {
+const normalizeContactItems = (input: unknown): ContactInfoItem[] => {
   if (Array.isArray(input) && input.length > 0) {
     return input.map((raw, index) => {
       const record = toItemRecord(raw);
@@ -80,7 +82,7 @@ const normalizeContactItems = (input: unknown, legacy: Record<string, string>): 
 
       return {
         id: Number.isFinite(id) ? id : index + 1,
-        icon: coerceText(record.icon) || 'circle-help',
+        icon: normalizeContactIconValue(coerceText(record.icon) || coerceText(record.fieldKey) || 'help-circle'),
         label: coerceText(record.label),
         value: coerceText(record.value),
         href: coerceText(record.href),
@@ -89,22 +91,7 @@ const normalizeContactItems = (input: unknown, legacy: Record<string, string>): 
     });
   }
 
-  return buildDefaultContactItems().map((item) => {
-    const legacyValue = item.fieldKey ? legacy[item.fieldKey] : '';
-    let href = item.href || '';
-    if (item.fieldKey === 'contact_phone' && legacyValue) {
-      href = `tel:${legacyValue}`;
-    }
-    if (item.fieldKey === 'contact_email' && legacyValue) {
-      href = `mailto:${legacyValue}`;
-    }
-
-    return {
-      ...item,
-      value: legacyValue || item.value,
-      href,
-    };
-  });
+  return buildDefaultContactItems();
 };
 
 const normalizeTexts = (input: unknown): Record<string, string> => {
@@ -125,7 +112,7 @@ export const normalizeContactConfig = (rawConfig: unknown): ContactConfigState =
     : {};
 
   const defaultConfig = DEFAULT_CONTACT_CONFIG;
-  const legacy = {
+  const contactFields = {
     contact_address: coerceText(config.address) || defaultConfig.address || '',
     contact_phone: coerceText(config.phone) || defaultConfig.phone || '',
     contact_email: coerceText(config.email) || defaultConfig.email || '',
@@ -133,22 +120,22 @@ export const normalizeContactConfig = (rawConfig: unknown): ContactConfigState =
   };
 
   return {
-    contactItems: normalizeContactItems(config.contactItems, legacy),
-    address: legacy.contact_address,
-    email: legacy.contact_email,
+    contactItems: normalizeContactItems(config.contactItems),
+    address: contactFields.contact_address,
+    email: contactFields.contact_email,
     formDescription: coerceText(config.formDescription) || defaultConfig.formDescription,
     formFields: Array.isArray(config.formFields)
       ? config.formFields.map((field) => coerceText(field)).filter((field) => field.trim().length > 0)
       : [...defaultConfig.formFields],
     formTitle: coerceText(config.formTitle) || defaultConfig.formTitle,
     mapEmbed: coerceText(config.mapEmbed) || defaultConfig.mapEmbed,
-    phone: legacy.contact_phone,
+    phone: contactFields.contact_phone,
     responseTimeText: coerceText(config.responseTimeText) || defaultConfig.responseTimeText,
     showMap: typeof config.showMap === 'boolean' ? config.showMap : defaultConfig.showMap,
     socialLinks: normalizeSocialLinks(config.socialLinks),
     useOriginalSocialIconColors: config.useOriginalSocialIconColors !== false,
     submitButtonText: coerceText(config.submitButtonText) || defaultConfig.submitButtonText,
-    workingHours: legacy.working_hours,
+    workingHours: contactFields.working_hours,
     style: normalizeStyle(config.style),
     showForm: typeof config.showForm === 'boolean' ? config.showForm : defaultConfig.showForm,
     texts: normalizeTexts(config.texts),
@@ -174,20 +161,16 @@ export const normalizeContactConfig = (rawConfig: unknown): ContactConfigState =
 export const toContactConfigPayload = (config: ContactConfigState): ContactConfig => {
   const normalized = normalizeContactConfig(config);
   return {
-    address: normalized.address,
     contactItems: normalized.contactItems.map((item) => ({ ...item })),
-    email: normalized.email,
     formDescription: normalized.formDescription,
     formFields: [...normalized.formFields],
     formTitle: normalized.formTitle,
     mapEmbed: normalized.mapEmbed,
-    phone: normalized.phone,
     responseTimeText: normalized.responseTimeText,
     showMap: normalized.showMap,
     socialLinks: normalized.socialLinks.map((item) => ({ ...item })),
     useOriginalSocialIconColors: normalized.useOriginalSocialIconColors !== false,
     submitButtonText: normalized.submitButtonText,
-    workingHours: normalized.workingHours,
     showForm: normalized.showForm,
     texts: normalized.texts,
     // Shared header config
@@ -218,14 +201,11 @@ export const toContactSnapshot = (payload: {
     title: payload.title,
     active: payload.active,
     config: {
-      address: normalized.address,
       contactItems: normalized.contactItems.map((item) => ({ ...item })),
-      email: normalized.email,
       formDescription: normalized.formDescription,
       formFields: [...normalized.formFields],
       formTitle: normalized.formTitle,
       mapEmbed: normalized.mapEmbed,
-      phone: normalized.phone,
       responseTimeText: normalized.responseTimeText,
       showMap: normalized.showMap,
       socialLinks: normalized.socialLinks.map((link) => ({
@@ -236,7 +216,6 @@ export const toContactSnapshot = (payload: {
       })),
       useOriginalSocialIconColors: normalized.useOriginalSocialIconColors !== false,
       submitButtonText: normalized.submitButtonText,
-      workingHours: normalized.workingHours,
       style: normalized.style,
       showForm: normalized.showForm,
       texts: normalized.texts,

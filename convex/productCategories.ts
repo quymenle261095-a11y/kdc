@@ -2,6 +2,12 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUniqueSlug } from "./lib/iaSlugs";
 import type { Doc, Id } from "./_generated/dataModel";
+import {
+  buildProductCategoryChildrenMap,
+  collectDescendantIdsFromMap,
+  isProductCategoryHierarchyEnabled,
+  listProductCategoryScopeIds,
+} from "./lib/productCategoryHierarchy";
 
 const categoryDoc = v.object({
   _creationTime: v.number(),
@@ -78,9 +84,8 @@ export const listAdminWithOffset = query({
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 20, 100);
     const offset = args.offset ?? 0;
-    const fetchLimit = Math.min(offset + limit + 50, 1000);
 
-    let categories = await ctx.db.query("productCategories").order("desc").take(fetchLimit);
+    let categories = await ctx.db.query("productCategories").take(1000);
 
     if (args.search?.trim()) {
       const searchLower = args.search.toLowerCase().trim();
@@ -89,6 +94,8 @@ export const listAdminWithOffset = query({
         category.slug.toLowerCase().includes(searchLower)
       );
     }
+
+    categories.sort((a, b) => a.order - b.order);
 
     return categories.slice(offset, offset + limit);
   },
@@ -423,11 +430,37 @@ export const listNonEmptyCategoryIds = query({
 
     const results = await Promise.all(
       categories.map(async (category) => {
-        const preview = await ctx.db
-          .query("products")
-          .withIndex("by_category_status", (q) => q.eq("categoryId", category._id).eq("status", "Active"))
-          .take(1);
-        return preview.length > 0 ? category._id : null;
+        const scopeIds = await listProductCategoryScopeIds(ctx, category._id, {
+          activeDescendantsOnly: true,
+        });
+
+        const hasActiveProduct = await Promise.all(
+          scopeIds.map(async (scopeId) => {
+            const primaryPreview = await ctx.db
+              .query("products")
+              .withIndex("by_category_status", (q) => q.eq("categoryId", scopeId).eq("status", "Active"))
+              .take(1);
+            if (primaryPreview.length > 0) {
+              return true;
+            }
+
+            const assignments = await ctx.db
+              .query("productCategoryAssignments")
+              .withIndex("by_category", (q) => q.eq("categoryId", scopeId))
+              .take(20);
+
+            if (assignments.length === 0) {
+              return false;
+            }
+
+            const products = await Promise.all(
+              assignments.map((assign) => ctx.db.get(assign.productId))
+            );
+            return products.some((prod) => prod && prod.status === "Active");
+          })
+        );
+
+        return hasActiveProduct.some(Boolean) ? category._id : null;
       })
     );
 
@@ -720,4 +753,83 @@ export const reorder = mutation({
     return null;
   },
   returns: v.null(),
+});
+
+export const listActiveCategoriesWithProductCounts = query({
+  args: {},
+  handler: async (ctx) => {
+    // 1. Lấy tất cả danh mục active
+    const categories = await ctx.db
+      .query("productCategories")
+      .withIndex("by_active", (q) => q.eq("active", true))
+      .collect();
+
+    if (categories.length === 0) {
+      return [];
+    }
+
+    // 2. Lấy toàn bộ sản phẩm Active
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_status_order", (q) => q.eq("status", "Active"))
+      .collect();
+
+    // 3. Lấy toàn bộ assignments
+    const assignments = await ctx.db
+      .query("productCategoryAssignments")
+      .collect();
+
+    const hierarchyEnabled = await isProductCategoryHierarchyEnabled(ctx);
+    const childrenMap = buildProductCategoryChildrenMap(categories);
+
+    // Tạo tập hợp các productId có status Active để lọc assignments nhanh O(1)
+    const activeProductIds = new Set(products.map((p) => p._id as string));
+
+    const categoryProductIdsMap = new Map<Id<"productCategories">, Set<string>>();
+    const addProductToCategory = (categoryId: Id<"productCategories">, productId: Id<"products">) => {
+      if (!categoryProductIdsMap.has(categoryId)) {
+        categoryProductIdsMap.set(categoryId, new Set());
+      }
+      categoryProductIdsMap.get(categoryId)!.add(productId);
+    };
+
+    categories.forEach((cat) => categoryProductIdsMap.set(cat._id, new Set()));
+
+    products.forEach((prod) => {
+      if (categoryProductIdsMap.has(prod.categoryId)) {
+        addProductToCategory(prod.categoryId, prod._id);
+      }
+    });
+
+    assignments.forEach((assign) => {
+      if (activeProductIds.has(assign.productId as string) && categoryProductIdsMap.has(assign.categoryId)) {
+        addProductToCategory(assign.categoryId, assign.productId);
+      }
+    });
+
+    return categories.map((cat) => {
+      const scopedCategoryIds = hierarchyEnabled
+        ? collectDescendantIdsFromMap(cat._id, childrenMap)
+        : [cat._id];
+      const productIds = new Set<string>();
+      scopedCategoryIds.forEach((categoryId) => {
+        categoryProductIdsMap.get(categoryId)?.forEach((productId) => productIds.add(productId));
+      });
+
+      return {
+        _id: cat._id,
+        name: cat.name,
+        _creationTime: cat._creationTime,
+        productCount: productIds.size,
+      };
+    });
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("productCategories"),
+      name: v.string(),
+      _creationTime: v.number(),
+      productCount: v.number(),
+    })
+  ),
 });

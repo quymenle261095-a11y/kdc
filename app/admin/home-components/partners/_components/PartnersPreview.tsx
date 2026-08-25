@@ -1,15 +1,16 @@
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
 import React from 'react';
 import { Building2 } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { Button, cn } from '../../../components/ui';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { getPreviewDeviceClass } from '../../_shared/lib/previewResponsive';
 import { PARTNERS_STYLES } from '../_lib/constants';
-import { DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, getPartnersSectionSpacingClassName, type PartnerItem, type PartnersAlign, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle } from '../_types';
+import { DEFAULT_PARTNERS_DISPLAY_MODE, DEFAULT_PARTNERS_LOGO_SIZE, DEFAULT_PARTNERS_SHOW_BORDER, DEFAULT_PARTNERS_SPACING, getPartnersSectionSpacingClassName, type PartnerItem, type PartnersAlign, type PartnersCornerRadius, type PartnersDisplayMode, type PartnersLogoSize, type PartnersSpacing, type PartnersStyle, type PartnersLogoColorMode } from '../_types';
 import { getPartnersColors, type PartnersBrandMode } from '../_lib/colors';
 import { PartnersMarqueeShared } from './PartnersMarqueeShared';
 import { PartnersBadgeShared } from './PartnersBadgeShared';
@@ -18,6 +19,8 @@ import { PartnersCleanShared } from './PartnersCleanShared';
 import { PartnersDividerShared } from './PartnersDividerShared';
 import { PartnersGridShared } from './PartnersGridShared';
 import { PartnersLogoCloudShared } from './PartnersLogoCloudShared';
+import { PartnersGlassLogoCloudShared } from './PartnersGlassLogoCloudShared';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 export const PartnersPreview = ({
   items,
@@ -37,6 +40,8 @@ export const PartnersPreview = ({
   onDisplayModeChange,
   fontStyle,
   fontClassName,
+  logoColorMode = 'grayscale',
+  logoColorIntensity,
   // Shared header config
   hideHeader,
   showTitle,
@@ -47,6 +52,11 @@ export const PartnersPreview = ({
   uppercaseText,
   showBadge,
   badgeText,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemNameChange,
 }: {
   items: PartnerItem[];
   brandColor: string;
@@ -65,6 +75,8 @@ export const PartnersPreview = ({
   onDisplayModeChange?: (mode: PartnersDisplayMode) => void;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  logoColorMode?: PartnersLogoColorMode;
+  logoColorIntensity?: number;
   // Shared header config
   hideHeader?: boolean;
   showTitle?: boolean;
@@ -75,23 +87,46 @@ export const PartnersPreview = ({
   uppercaseText?: boolean;
   showBadge?: boolean;
   badgeText?: string;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemNameChange?: (index: number, name: string) => void;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
   const previewStyle = selectedStyle ?? 'grid';
   const setPreviewStyle = (style: string) => onStyleChange?.(style as PartnersStyle);
-  const colors = React.useMemo(() => getPartnersColors(brandColor, secondary, mode), [brandColor, secondary, mode]);
+  const colors = React.useMemo(
+    () => adaptTokensForDarkMode(getPartnersColors(brandColor, secondary, mode), isDark),
+    [brandColor, secondary, mode, isDark]
+  );
 
   // Determine if we should use shared SectionHeader (when header config props are provided)
   const hasSharedHeaderConfig = hideHeader !== undefined || showBadge !== undefined;
 
   const renderEmptyState = () => (
-    <section className={cn('w-full bg-white dark:bg-slate-900', getPartnersSectionSpacingClassName(spacing, 'empty'))}>
+    <section className={cn('w-full', getPartnersSectionSpacingClassName(spacing, 'empty'))} style={{ backgroundColor: colors.neutralSurface }}>
       <div className={cn('flex flex-col items-center justify-center text-center', getPartnersSectionSpacingClassName(spacing, 'empty'))}>
         <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: colors.iconBg }}>
           <Building2 size={28} style={{ color: colors.iconColor }} />
         </div>
-        <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-1">Chưa có đối tác nào</h3>
-        <p className="text-sm text-slate-500">Thêm logo đối tác đầu tiên</p>
+        <h3 className="font-medium mb-1" style={{ color: colors.headingText }}>Chưa có đối tác nào</h3>
+        <p className="text-sm" style={{ color: colors.neutralMuted }}>Thêm logo đối tác đầu tiên</p>
       </div>
     </section>
   );
@@ -128,6 +163,8 @@ export const PartnersPreview = ({
         )}
         className="dark:bg-slate-900 dark:border-slate-700"
         skipHeader={hasSharedHeaderConfig}
+        visualEditEnabled={isVisualEditActive}
+        onItemNameChange={onItemNameChange}
       />
     );
   };
@@ -143,7 +180,11 @@ export const PartnersPreview = ({
         mode={mode}
         title={title ?? 'Đối tác'}
         subheading={subheading}
-        align={align}
+        badgeText={badgeText}
+        showTitle={showTitle}
+        showSubtitle={showSubtitle}
+        showBadge={showBadge}
+        align={headerAlign ?? align}
         displayMode={displayMode}
         logoSize={logoSize}
         spacing={spacing}
@@ -153,7 +194,12 @@ export const PartnersPreview = ({
           <PreviewImage src={item.url} alt={item.name ?? ''} className={className} />
         )}
         className="dark:bg-slate-900 dark:border-slate-700/40"
-        skipHeader={false}
+        skipHeader={hideHeader}
+        visualEditEnabled={isVisualEditActive}
+        onTitleChange={onTitleChange}
+        onSubtitleChange={onSubtitleChange}
+        onBadgeTextChange={onBadgeTextChange}
+        onItemNameChange={onItemNameChange}
       />
     );
   };
@@ -179,6 +225,8 @@ export const PartnersPreview = ({
         )}
         className="dark:bg-slate-900 dark:border-slate-700/40"
         skipHeader={hasSharedHeaderConfig}
+        visualEditEnabled={isVisualEditActive}
+        onItemNameChange={onItemNameChange}
       />
     );
   };
@@ -206,6 +254,8 @@ export const PartnersPreview = ({
           <PreviewImage src={item.url} alt={item.name ?? ''} className={className} />
         )}
         skipHeader={hasSharedHeaderConfig}
+        visualEditEnabled={isVisualEditActive}
+        onItemNameChange={onItemNameChange}
       />
     );
   };
@@ -230,6 +280,8 @@ export const PartnersPreview = ({
       )}
       className="dark:bg-slate-900 dark:border-slate-700/40"
       skipHeader={hasSharedHeaderConfig}
+      visualEditEnabled={isVisualEditActive}
+      onItemNameChange={onItemNameChange}
     />
   );
 
@@ -252,6 +304,35 @@ export const PartnersPreview = ({
             <PreviewImage src={item.url} alt={item.name ?? 'Hình ảnh'} className={className} />
           )}
         />
+      </div>
+    );
+  };
+
+  const renderGlassLogoCloudStyle = () => {
+    if (items.length === 0) {return renderEmptyState();}
+
+    return (
+      <div className="w-full bg-white dark:bg-slate-900">
+        <div className={cn('w-full bg-gradient-to-r from-zinc-950 via-zinc-900/90 to-zinc-950 border-t border-b border-zinc-800/80 z-20', getPartnersSectionSpacingClassName(spacing, 'glassLogoCloud'))}>
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+            <PartnersGlassLogoCloudShared
+              items={items}
+              brandColor={brandColor}
+              secondary={secondary}
+              mode={mode}
+              cornerRadius={cornerRadius}
+              logoSize={logoSize}
+              showBorder={showBorder}
+              spacing={spacing}
+              logoColorMode={logoColorMode}
+              logoColorIntensity={logoColorIntensity}
+              openInNewTab
+              renderImage={(item, className) => (
+                <PreviewImage src={item.url} alt={item.name ?? 'Hình ảnh'} className={className} />
+              )}
+            />
+          </div>
+        </div>
       </div>
     );
   };
@@ -286,6 +367,8 @@ export const PartnersPreview = ({
         )}
         className="dark:bg-slate-900 dark:border-slate-700/40"
         skipHeader={hasSharedHeaderConfig}
+        visualEditEnabled={isVisualEditActive}
+        onItemNameChange={onItemNameChange}
       />
     );
   };
@@ -308,6 +391,10 @@ export const PartnersPreview = ({
           uppercaseText={uppercaseText}
           brandColor={brandColor}
           className={cn('mb-0', spacing === 'none' && 'gap-0')}
+          visualEditEnabled={isVisualEditActive}
+          onTitleChange={onTitleChange}
+          onSubtitleChange={onSubtitleChange}
+          onBadgeTextChange={onBadgeTextChange}
         />
       </div>
     );
@@ -326,35 +413,42 @@ export const PartnersPreview = ({
         info={`${items.length} logo • ${mode === 'dual' ? '2 màu' : '1 màu'}`}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <div className="mb-3 flex justify-end gap-2">
-          <Button
-            type="button"
-            variant={displayMode === 'withName' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onDisplayModeChange?.('withName')}
-          >
-            Hiện tên logo
-          </Button>
-          <Button
-            type="button"
-            variant={displayMode === 'logoOnly' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onDisplayModeChange?.('logoOnly')}
-          >
-            Chỉ logo
-          </Button>
+        <div className="space-y-3">
+
+          <div className="mb-3 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant={displayMode === 'withName' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onDisplayModeChange?.('withName')}
+            >
+              Hiện tên logo
+            </Button>
+            <Button
+              type="button"
+              variant={displayMode === 'logoOnly' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onDisplayModeChange?.('logoOnly')}
+            >
+              Chỉ logo
+            </Button>
+          </div>
+          <BrowserFrame>
+            {previewStyle !== 'marquee' && renderSharedHeader()}
+            {previewStyle === 'grid' && renderGridStyle()}
+            {previewStyle === 'marquee' && renderMarqueeStyle()}
+            {previewStyle === 'badge' && renderBadgeStyle()}
+            {previewStyle === 'carousel' && renderCarouselStyle()}
+            {previewStyle === 'logoCloud' && renderLogoCloudStyle()}
+            {previewStyle === 'glassLogoCloud' && renderGlassLogoCloudStyle()}
+            {previewStyle === 'clean' && renderCleanStyle()}
+            {previewStyle === 'divider' && renderDividerStyle()}
+          </BrowserFrame>
         </div>
-        <BrowserFrame>
-          {previewStyle !== 'marquee' && renderSharedHeader()}
-          {previewStyle === 'grid' && renderGridStyle()}
-          {previewStyle === 'marquee' && renderMarqueeStyle()}
-          {previewStyle === 'badge' && renderBadgeStyle()}
-          {previewStyle === 'carousel' && renderCarouselStyle()}
-          {previewStyle === 'logoCloud' && renderLogoCloudStyle()}
-          {previewStyle === 'clean' && renderCleanStyle()}
-          {previewStyle === 'divider' && renderDividerStyle()}
-        </BrowserFrame>
       </PreviewWrapper>
       <ColorInfoPanel brandColor={brandColor} secondary={secondary} />
     </>

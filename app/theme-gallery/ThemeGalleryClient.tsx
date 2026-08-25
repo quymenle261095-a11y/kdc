@@ -8,6 +8,7 @@ import {
   Eye, Layers, Search, LayoutGrid, List, Phone,
   Globe, Palette, FileText,
 } from 'lucide-react';
+import type { SnapshotCustomThumbnail } from '@/lib/homepage-snapshot/types';
 
 type ViewMode = 'grid' | 'list';
 
@@ -30,15 +31,26 @@ type PublicSnapshot = {
   address: string;
   componentCount: number;
   componentTypes: string[];
+  customThumbnail?: SnapshotCustomThumbnail | null;
   sectionTitles: string[];
   thumbnails: string[];
 };
 
+const getThumbnailObjectStyle = (customThumbnail?: SnapshotCustomThumbnail | null): React.CSSProperties => ({
+  objectFit: customThumbnail?.config?.objectFit ?? 'cover',
+  objectPosition: `${customThumbnail?.config?.positionX ?? 50}% ${customThumbnail?.config?.positionY ?? 50}%`,
+});
+
+const getThumbnailFrameStyle = (customThumbnail?: SnapshotCustomThumbnail | null): React.CSSProperties => ({
+  backgroundColor: customThumbnail?.config?.backgroundColor || undefined,
+});
+
 /* ─────────────── Thumbnail component ─────────────── */
 function TemplateThumbnail({ item }: { item: PublicSnapshot }) {
-  const hasImages = item.thumbnails.length > 0;
-  const heroImage = item.thumbnails[0];
-  const productImages = item.thumbnails.slice(1, 5);
+  const customThumbnail = item.customThumbnail;
+  const heroImage = customThumbnail?.url || item.thumbnails[0];
+  const hasImages = Boolean(heroImage);
+  const productImages = item.thumbnails.filter((thumbnail) => thumbnail !== heroImage).slice(0, 4);
 
   if (!hasImages) {
     // Fallback: color wireframe (only if no images at all)
@@ -68,11 +80,12 @@ function TemplateThumbnail({ item }: { item: PublicSnapshot }) {
 
       {/* Main hero image */}
       {heroImage && (
-        <div className="relative flex-1 min-h-0">
+        <div className="relative flex-1 min-h-0" style={getThumbnailFrameStyle(customThumbnail)}>
           <img
             src={heroImage}
-            alt=""
-            className="w-full h-full object-cover"
+            alt={customThumbnail?.alt ?? ''}
+            className="w-full h-full"
+            style={getThumbnailObjectStyle(customThumbnail)}
           />
           {/* Gradient overlay for readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
@@ -234,14 +247,20 @@ function TemplateCard({ item }: { item: PublicSnapshot }) {
 function TemplateListItem({ item }: { item: PublicSnapshot }) {
   const demoUrl = `/demo/${item.slug}`;
   const detailUrl = `${demoUrl}/thong-tin-chi-tiet`;
-  const heroImage = item.thumbnails[0];
+  const customThumbnail = item.customThumbnail;
+  const heroImage = customThumbnail?.url || item.thumbnails[0];
 
   return (
     <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-3 hover:border-slate-300 hover:shadow-md transition-all">
       {/* Thumbnail */}
-      <div className="w-28 h-20 rounded-lg shrink-0 overflow-hidden bg-slate-50 relative">
+      <div className="w-28 h-20 rounded-lg shrink-0 overflow-hidden bg-slate-50 relative" style={getThumbnailFrameStyle(customThumbnail)}>
         {heroImage ? (
-          <img src={heroImage} alt="" className="w-full h-full object-cover" />
+          <img
+            src={heroImage}
+            alt={customThumbnail?.alt ?? ''}
+            className="w-full h-full"
+            style={getThumbnailObjectStyle(customThumbnail)}
+          />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center"
@@ -366,12 +385,12 @@ export function ThemeGalleryClient({ initialSnapshots }: { initialSnapshots: Pub
 
       {/* Hero */}
       <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 border-b border-slate-100">
-        <div className="max-w-6xl mx-auto px-4 py-10 text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Chọn giao diện cho website
+        <div className="max-w-6xl mx-auto px-4 py-6 text-center">
+          <h1 className="text-3xl font-bold text-slate-900 mb-1">
+            Chọn giao diện website
           </h1>
           <p className="text-slate-500 max-w-lg mx-auto text-sm leading-relaxed">
-            Duyệt qua các mẫu giao diện đã được thiết kế sẵn. Bấm &quot;Xem thử&quot; để trải nghiệm trực tiếp trên trình duyệt.
+            Duyệt và xem thử trực tiếp các mẫu giao diện thiết kế sẵn.
           </p>
         </div>
       </div>

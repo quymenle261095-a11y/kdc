@@ -39,7 +39,7 @@ function SeparatorPicker({ value, onChange }: { value: string; onChange: (v: str
         className="h-8 w-10 rounded border border-slate-200 bg-white flex items-center justify-center text-base hover:bg-slate-50 transition-colors dark:border-slate-700 dark:bg-slate-900"
         title="Ký tự phân cách"
       >
-        {value}
+        {value === '  ' ? '␣' : value}
       </button>
       {open && (
         <div className="absolute right-0 top-9 z-50 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900 animate-in fade-in-0 zoom-in-95"
@@ -56,7 +56,7 @@ function SeparatorPicker({ value, onChange }: { value: string; onChange: (v: str
                 )}
                 title={opt.label}
               >
-                {opt.value}
+                {opt.value === '  ' ? '␣' : opt.value}
               </button>
             ))}
           </div>

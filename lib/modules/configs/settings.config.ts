@@ -1,4 +1,4 @@
-import { Globe, LayoutTemplate, Mail, MapPin, Settings, Share2, Sparkles } from 'lucide-react';
+import { FileImage, Frame, Globe, LayoutTemplate, Link2, Mail, MapPin, Settings, Share2, Sparkles, Type } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
  
 export const settingsModule = defineModuleWithRuntime({
@@ -12,10 +12,16 @@ export const settingsModule = defineModuleWithRuntime({
      { key: 'enableContact', label: 'Thông tin liên hệ', icon: MapPin },
      { key: 'enableSEO', label: 'SEO cơ bản', icon: Globe },
      { key: 'enableSocial', label: 'Mạng xã hội', icon: Share2 },
-     { key: 'enableMail', label: 'Cấu hình Email', icon: Mail },
-     { key: 'enableHeaderMenuAdvanced', label: 'Admin chỉnh Header Menu', icon: LayoutTemplate, enabled: true },
+     { key: 'enableProductImageAdvanced', label: 'Ảnh sản phẩm', description: 'Bật tab Ảnh sản phẩm trong Admin > Cài đặt nâng cao', icon: FileImage, enabled: true },
+     { key: 'enableProductFrameAdvanced', label: 'Khung viền sản phẩm', description: 'Bật tab Khung viền sản phẩm trong Admin > Cài đặt nâng cao', icon: Frame, enabled: true },
+     { key: 'enableProductWatermarkAdvanced', label: 'Watermark', description: 'Bật tab Watermark trong Admin > Cài đặt nâng cao', icon: Type, enabled: true },
+     { key: 'enableMail', label: 'Cấu hình email', description: 'Bật tab Cấu hình email trong Admin > Cài đặt nâng cao', icon: Mail },
+     { key: 'enableHeaderMenuAdvanced', label: 'Header', description: 'Bật tab Header trong Admin > Cài đặt nâng cao', icon: LayoutTemplate, enabled: true },
+     { key: 'enableProductSupplementalAdvanced', label: 'Nội dung mô tả SP', description: 'Bật tab Nội dung mô tả SP trong Admin > Cài đặt nâng cao', icon: Type, enabled: true },
+     { key: 'enableShopConfigAdvanced', label: 'Cấu hình cửa hàng', description: 'Bật tab Cấu hình cửa hàng trong Admin > Cài đặt nâng cao', icon: Settings, enabled: true },
+     { key: 'enableProductContactLinkAdvanced', label: 'Liên hệ', description: 'Bật tab chọn đường dẫn cho nút bán hàng qua liên hệ', icon: Link2, enabled: true },
      { key: 'enableTrustPages', label: 'Trang tin cậy', icon: Globe },
-     { key: 'enableTrustPagesAutoGenerate', label: 'Tự sinh Trust Pages', icon: Sparkles },
+     { key: 'enableTrustPagesAutoGenerate', label: 'Tự sinh Trust Pages', icon: Sparkles, enabled: true },
    ],
  
   settings: [
@@ -41,8 +47,8 @@ export const settingsModule = defineModuleWithRuntime({
       { enabled: true, fieldKey: 'site_url', group: 'site', isSystem: true, name: 'URL Website', order: 2, required: false, type: 'text' },
       { enabled: true, fieldKey: 'site_logo', group: 'site', isSystem: true, name: 'Logo', order: 3, required: false, type: 'image' },
       { enabled: true, fieldKey: 'site_favicon', group: 'site', isSystem: true, name: 'Favicon', order: 4, required: false, type: 'image' },
-      { enabled: true, fieldKey: 'site_timezone', group: 'site', isSystem: false, name: 'Múi giờ', order: 5, required: false, type: 'select' },
-      { enabled: true, fieldKey: 'site_language', group: 'site', isSystem: false, name: 'Ngôn ngữ', order: 6, required: false, type: 'select' },
+      { enabled: false, fieldKey: 'site_timezone', group: 'site', isSystem: false, name: 'Múi giờ', order: 5, required: false, type: 'select' },
+      { enabled: false, fieldKey: 'site_language', group: 'site', isSystem: false, name: 'Ngôn ngữ', order: 6, required: false, type: 'select' },
       { enabled: true, fieldKey: 'site_brand_primary', group: 'site', isSystem: false, name: 'Màu thương hiệu (chính)', order: 7, required: false, type: 'color' },
       { enabled: true, fieldKey: 'site_brand_secondary', group: 'site', isSystem: false, name: 'Màu thương hiệu (phụ)', order: 8, required: false, type: 'color' },
       { enabled: true, fieldKey: 'contact_email', group: 'contact', linkedFeature: 'enableContact', isSystem: false, name: 'Email', order: 6, required: false, type: 'email' },
@@ -57,11 +63,24 @@ export const settingsModule = defineModuleWithRuntime({
       { enabled: true, fieldKey: 'seo_og_image', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'OG Image', order: 13, required: false, type: 'image' },
       { enabled: true, fieldKey: 'seo_google_verification', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Google Verification', order: 14, required: false, type: 'text' },
       { enabled: true, fieldKey: 'seo_bing_verification', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Bing Verification', order: 15, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'seo_brand_aliases', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Tên gọi khác', order: 20, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'seo_brand_summary', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Giới thiệu ngắn', order: 21, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'seo_brand_entity_type', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Loại website/thương hiệu', order: 22, required: false, type: 'select' },
+      { enabled: true, fieldKey: 'seo_brand_search_queries', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Cách khách tìm thương hiệu', order: 23, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'seo_brand_topics', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Chủ đề chính', order: 24, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'seo_brand_services', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Sản phẩm, dịch vụ chính', order: 25, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'seo_brand_audience', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Khách hàng chính', order: 26, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'seo_brand_differentiators', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Điểm khác biệt', order: 27, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'seo_brand_proof_points', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Bằng chứng tin cậy', order: 28, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'seo_brand_same_as', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Kênh chính thức', order: 29, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'seo_site_search_path', group: 'seo', linkedFeature: 'enableSEO', isSystem: false, name: 'Đường dẫn tìm kiếm', order: 30, required: false, type: 'text' },
       { enabled: true, fieldKey: 'product_image_placeholder', group: 'advanced', isSystem: false, name: 'Ảnh placeholder sản phẩm', order: 20, required: false, type: 'image' },
       { enabled: true, fieldKey: 'social_facebook', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Facebook', order: 16, required: false, type: 'text' },
       { enabled: true, fieldKey: 'social_instagram', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Instagram', order: 17, required: false, type: 'text' },
       { enabled: true, fieldKey: 'social_youtube', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Youtube', order: 18, required: false, type: 'text' },
       { enabled: false, fieldKey: 'social_tiktok', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'TikTok', order: 19, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'social_pinterest', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'Pinterest', order: 20, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'social_twitter', group: 'social', linkedFeature: 'enableSocial', isSystem: false, name: 'X (Twitter)', order: 21, required: false, type: 'text' },
     ],
   },
 

@@ -18,12 +18,19 @@ import { AiDemoProcessImport } from '../../product-list/_components/AiDemoProduc
 import { CollapsibleSubSection as SubSection } from '../../_shared/components/CollapsibleSubSection';
 import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
+import type { ProcessStyle } from '../_types';
+import { QuickRouteInput } from '../../_shared/components/QuickRouteInput';
 
 interface ProcessFormProps {
   steps: ProcessFormStep[];
   onChange: (steps: ProcessFormStep[]) => void;
   secondary: string;
   defaultExpanded?: boolean;
+  style?: ProcessStyle;
+  circularCtaText?: string;
+  circularCtaLink?: string;
+  onChangeCircularCtaText?: (value: string) => void;
+  onChangeCircularCtaLink?: (value: string) => void;
 }
 
 const ProcessIconUpload = ({
@@ -182,19 +189,29 @@ const ProcessIconUpload = ({
   );
 };
 
-export const ProcessForm = ({ steps, onChange, secondary, defaultExpanded = true }: ProcessFormProps) => {
+export const ProcessForm = ({
+  steps,
+  onChange,
+  secondary,
+  defaultExpanded = true,
+  style,
+  circularCtaText = '',
+  circularCtaLink = '',
+  onChangeCircularCtaText,
+  onChangeCircularCtaLink,
+}: ProcessFormProps) => {
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
   const [dragOverId, setDragOverId] = React.useState<string | null>(null);
 
   const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(
-    ['steps'],
+    ['steps', 'circular'],
     defaultExpanded
   );
 
   const safeSecondary = secondary.trim().length > 0 ? secondary : '#3b82f6';
 
   const handleAdd = () => {
-    if (steps.length >= 4) { return; }
+    if (steps.length >= 8) { return; }
     onChange([...steps, createProcessFormStep({ icon: String(steps.length + 1) })]);
   };
 
@@ -256,7 +273,7 @@ export const ProcessForm = ({ steps, onChange, secondary, defaultExpanded = true
         actions={(
           <>
             <AiDemoProcessImport onApply={(items) => onChange(items as ProcessFormStep[])} />
-            {steps.length < 4 && (
+            {steps.length < 8 && (
               <Button type="button" variant="outline" size="sm" onClick={handleAdd} className="gap-2">
                 <Plus size={14} /> Thêm bước
               </Button>
@@ -372,6 +389,34 @@ export const ProcessForm = ({ steps, onChange, secondary, defaultExpanded = true
         )}
       </div>
       </SubSection>
+
+      {style === 'circular' && (
+        <SubSection
+          icon={Layers}
+          title="Cấu hình Circular (Builder.io)"
+          open={openSections.circular}
+          onOpenChange={(open) => toggleSection('circular', open)}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Nút CTA (Text)</Label>
+              <Input
+                placeholder="Nhãn nút CTA (mặc định: BẮT ĐẦU DỰ ÁN)"
+                value={circularCtaText}
+                onChange={(e) => onChangeCircularCtaText?.(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-500">Đường dẫn CTA (Link)</Label>
+              <QuickRouteInput
+                value={circularCtaLink}
+                onChangeValue={(value) => onChangeCircularCtaLink?.(value)}
+                placeholder="Đường dẫn nút (mặc định: #contact)"
+              />
+            </div>
+          </div>
+        </SubSection>
+      )}
     </div>
   );
 };

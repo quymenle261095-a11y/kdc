@@ -4,16 +4,16 @@ import type { CustomImageAspectRatio } from '@/lib/products/image-aspect-ratio';
 import type { HeroContent, HeroStyle } from '../_types';
 
 export const HERO_STYLES = [
-  { id: 'slider' as const, label: 'Slider' },
-  { id: 'fade' as const, label: 'Fade' },
-  { id: 'builderCoffee' as const, label: 'Builder Coffee' },
-  { id: 'bento' as const, label: 'Bento' },
-  { id: 'triple' as const, label: 'Triple' },
-  { id: 'triple2' as const, label: 'Triple 2' },
-  { id: 'fullscreen' as const, label: 'Fullscreen' },
-  { id: 'conquest' as const, label: 'Conquest' },
-  { id: 'split' as const, label: 'Split' },
-  { id: 'parallax' as const, label: 'Parallax' },
+  { id: 'slider' as const, label: '(1) Trượt ảnh' },
+  { id: 'fade' as const, label: '(2) Mờ dần' },
+  { id: 'builderCoffee' as const, label: '(3) Khối trái' },
+  { id: 'bento' as const, label: '(4) Ô ghép' },
+  { id: 'triple' as const, label: '(5) Ba ảnh' },
+  { id: 'triple2' as const, label: '(6) Ba ảnh 2' },
+  { id: 'fullscreen' as const, label: '(7) Tràn màn' },
+  { id: 'conquest' as const, label: '(8) Khối bo' },
+  { id: 'split' as const, label: '(9) Chia đôi' },
+  { id: 'parallax' as const, label: '(10) Cuộn nền' },
 ];
 
 export const DEFAULT_HERO_CONTENT: HeroContent = {

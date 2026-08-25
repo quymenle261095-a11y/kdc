@@ -95,7 +95,6 @@ export default function PostDetailPage({ params }: PageProps) {
   const commentsModule = useQuery(api.admin.modules.getModuleByKey, { key: 'comments' });
   const commentsLikesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableLikes', moduleKey: 'comments' });
   const commentsRepliesFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableReplies', moduleKey: 'comments' });
-  const tagsFeature = useQuery(api.admin.modules.getModuleFeature, { featureKey: 'enableTags', moduleKey: 'posts' });
   const commentsSettings = useQuery(api.admin.modules.listModuleSettings, { moduleKey: 'comments' });
   const post = useQuery(api.posts.getBySlug, { slug });
   const category = useQuery(
@@ -122,8 +121,7 @@ export default function PostDetailPage({ params }: PageProps) {
     if (!Array.isArray(tags)) {return [];}
     return tags.filter(Boolean);
   }, [post]);
-  const tagsFieldEnabled = enabledFields.has('tags');
-  const shouldShowTags = tagsFieldEnabled && (tagsFeature?.enabled ?? false) && postDetailConfig.showTags && postTags.length > 0;
+  const shouldShowTags = false;
   const commentsPerPageSetting = useMemo(() => {
     const perPage = commentsSettings?.find(setting => setting.settingKey === 'commentsPerPage')?.value as number | undefined;
     return perPage ?? 20;
@@ -398,6 +396,7 @@ interface PostData {
   excerpt?: string;
   thumbnail?: string;
   tags?: string[];
+  faqItems?: { question: string; answer: string }[];
   categoryId: Id<"postCategories">;
   categoryName: string;
   views: number;

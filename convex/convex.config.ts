@@ -2,11 +2,13 @@ import { defineApp } from "convex/server";
 import aggregate from "@convex-dev/aggregate/convex.config.js";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config.js";
 import convexFilesControl from "@gilhrpenner/convex-files-control/convex.config";
+import resend from "@convex-dev/resend/convex.config";
 
 const app = defineApp();
 
 app.use(rateLimiter);
 app.use(convexFilesControl);
+app.use(resend);
 app.use(aggregate, { name: "pageViewsByTime" });
 app.use(aggregate, { name: "pageViewsByPath" });
 app.use(aggregate, { name: "pageViewsBySource" });

@@ -1,4 +1,6 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
@@ -11,6 +13,8 @@ import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { STATS_STYLES } from '../_lib/constants';
 import { AnimatedValue } from './AnimatedValue';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+import { usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import {
   getCardsColors,
   getBuilderOverlayColors,
@@ -95,6 +99,11 @@ export const StatsPreview = ({
   badgeText,
   enableAnimation,
   hideHeader,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
+  isVisualEditAllowed = true,
 }: {
   items: StatsItem[];
   brandColor: string;
@@ -123,8 +132,25 @@ export const StatsPreview = ({
   showBadge?: boolean;
   badgeText?: string;
   enableAnimation?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (value: StatsItem[]) => void;
+  isVisualEditAllowed?: boolean;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+
   const previewStyle = selectedStyle ?? 'horizontal';
   const setPreviewStyle = (style: string) => onStyleChange?.(style as StatsStyle);
   const modeLabel = mode === 'dual' ? '2 màu' : '1 màu';
@@ -134,6 +160,24 @@ export const StatsPreview = ({
   const cardRadiusClassName = getStatsCornerRadiusClassName(cornerRadius);
   const cardTopRadiusClassName = getStatsTopCornerRadiusClassName(cornerRadius);
   const cardBottomRadiusClassName = getStatsBottomCornerRadiusClassName(cornerRadius);
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
+  const handleItemTextUpdate = (idx: number, field: 'value' | 'label' | 'description', nextText: string) => {
+    if (!onItemsChange) return;
+    const nextItems = items.map((item, i) => {
+      if (i === idx) {
+        return {
+          ...item,
+          [field]: nextText,
+        };
+      }
+      return item;
+    });
+    onItemsChange(nextItems);
+  };
 
   const sharedHeader = (
     <SectionHeader
@@ -149,18 +193,22 @@ export const StatsPreview = ({
       badgeText={badgeText}
       hideHeader={hideHeader}
       brandColor={brandColor}
+      visualEditEnabled={isVisualEditActive}
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
     />
   );
 
   const containerClass = fullWidth ? 'w-full' : 'max-w-7xl mx-auto';
 
   const renderHorizontalStyle = () => {
-    const colors = getHorizontalColors(brandColor, secondary, mode);
-    
+    const colors = adaptTokensForDarkMode(getHorizontalColors(brandColor, secondary, mode), isDark);
+
     // Responsive logic based on device state and desktopColumns
     let displayCount: number = desktopColumns ?? 4;
     let layoutClass = 'flex-row justify-around';
-    
+
     if (device === 'mobile') {
       displayCount = desktopColumns === 3 ? 1 : 2;
       layoutClass = desktopColumns === 3 ? 'flex-col' : 'flex-row flex-wrap justify-center';
@@ -168,13 +216,13 @@ export const StatsPreview = ({
       displayCount = desktopColumns === 3 ? 3 : 2;
       layoutClass = 'flex-row flex-wrap justify-around';
     }
-    
+
     // Font sizes: mobile/tablet -10%, desktop +10%
     const valueFontSize = device === 'desktop' ? 'text-[26px]' : device === 'tablet' ? 'text-[19px]' : 'text-[18px]';
     const labelFontSize = device === 'desktop' ? 'text-[13px]' : 'text-[10px]';
     const iconSize = device === 'mobile' ? 18 : device === 'tablet' ? 20 : 26;
     const circleSize = device === 'mobile' ? 'w-11 h-11' : device === 'tablet' ? 'w-12 h-12' : 'w-[60px] h-[60px]';
-    
+
     return (
       <div>
         {sharedHeader}
@@ -201,33 +249,43 @@ export const StatsPreview = ({
                 return (
                   <div
                     key={idx}
-                    className="flex items-center gap-3"
+                    className={cn(getItemContainerClass(mediaPlacement, mediaAlign))}
                   >
                     {iconElement && (
                       <div 
                         className={cn(
                           "rounded-full flex items-center justify-center shrink-0 overflow-hidden",
-                          circleSize
+                          circleSize,
+                          mediaPlacement === 'left' ? 'mb-0' : 'mb-2',
+                          getMediaWrapperClass(mediaPlacement, mediaAlign)
                         )}
                         style={{ backgroundColor: colors.iconBg }}
                       >
                         {iconElement}
                       </div>
                     )}
-                    <div className="flex flex-col">
+                    <div className={cn("flex flex-col", mediaPlacement === 'left' ? '' : getItemAlignClass(mediaAlign))}>
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-bold tracking-tight tabular-nums leading-none mb-0.5",
-                          valueFontSize
+                          valueFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.valueColor }}
                       />
                       <h3 
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-medium leading-tight",
-                          labelFontSize
+                          labelFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.labelColor }}
                       >
@@ -245,12 +303,12 @@ export const StatsPreview = ({
   };
 
   const renderCardsStyle = () => {
-    const colors = getCardsColors(brandColor, secondary, mode);
-    
+    const colors = adaptTokensForDarkMode(getCardsColors(brandColor, secondary, mode), isDark);
+
     // Responsive logic
     let displayCount: number = desktopColumns ?? 4;
     let gridClass = '';
-    
+
     if (device === 'mobile') {
       displayCount = desktopColumns === 3 ? 1 : 4; // Show all 4 items in 2x2 grid
       gridClass = desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
@@ -261,17 +319,17 @@ export const StatsPreview = ({
       displayCount = desktopColumns ?? 4;
       gridClass = desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
     }
-    
+
     // Font sizes
     const valueFontSize = device === 'desktop' ? 'text-[26px]' : device === 'tablet' ? 'text-[19px]' : 'text-[18px]';
     const labelFontSize = device === 'desktop' ? 'text-[13px]' : 'text-[10px]';
     const iconSize = device === 'mobile' ? 28 : device === 'tablet' ? 32 : 36;
-    
+
     return (
       <div>
         <div className={containerClass}>
           {sharedHeader}
-          <section className={cn('w-full overflow-hidden border bg-white', cardRadiusClassName, device === 'mobile' ? 'p-2' : 'p-3')}>
+          <section className={cn('w-full overflow-hidden border', cardRadiusClassName, device === 'mobile' ? 'p-2' : 'p-3')} style={{ backgroundColor: colors.sectionBg, borderColor: colors.border }}>
             <div className={cn('grid divide-x divide-y divide-gray-200', gridClass, device === 'desktop' && 'divide-y-0')}>
               {items.slice(0, displayCount).map((item, idx) => {
                 const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveIconComponent(item.iconName) : null;
@@ -286,27 +344,39 @@ export const StatsPreview = ({
                 return (
                   <div
                     key={idx}
-                    className={cn("flex items-center gap-3 justify-center", device === 'mobile' ? 'py-3 px-4' : 'py-4 px-4')}
+                    className={cn(
+                      getItemContainerClass(mediaPlacement, mediaAlign),
+                      "justify-center",
+                      device === 'mobile' ? 'py-3 px-4' : 'py-4 px-4'
+                    )}
                   >
                     {iconElement && (
-                      <div className="shrink-0">
+                      <div className={cn("shrink-0", mediaPlacement === 'left' ? 'mb-0' : 'mb-2', getMediaWrapperClass(mediaPlacement, mediaAlign))}>
                         {iconElement}
                       </div>
                     )}
-                    <div className="flex flex-col">
+                    <div className={cn("flex flex-col", mediaPlacement === 'left' ? '' : getItemAlignClass(mediaAlign))}>
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-bold tracking-tight tabular-nums leading-none mb-0.5",
-                          valueFontSize
+                          valueFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.valueColor }}
                       />
                       <h3 
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-medium leading-tight",
-                          labelFontSize
+                          labelFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.labelColor }}
                       >
@@ -324,7 +394,7 @@ export const StatsPreview = ({
   };
 
   const renderIconsStyle = () => {
-    const colors = getIconsColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getIconsColors(brandColor, secondary, mode), isDark);
     let gridClass = '';
     if (device === 'mobile') {
       gridClass = desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
@@ -343,12 +413,12 @@ export const StatsPreview = ({
       <div>
         <div className={containerClass}>
           {sharedHeader}
-          <section className={cn("w-full", device === 'mobile' ? 'py-3 px-2' : 'py-4 px-3')}>
+          <section className={cn("w-full", device === 'mobile' ? 'py-3 px-2' : 'py-4 px-3')} style={{ backgroundColor: colors.sectionBg }}>
             <div className={cn('grid gap-4', device === 'mobile' ? 'gap-3' : '', gridClass)}>
               {items.slice(0, desktopColumns).map((item, idx) => {
                 const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveIconComponent(item.iconName) : null;
                 const hasIcon = item.iconType === 'lucide' || item.iconType === 'url' || item.iconType === 'upload';
-                
+
                 const circleElement = (
                   <div
                     className={cn(
@@ -370,10 +440,14 @@ export const StatsPreview = ({
                     ) : (
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-bold tracking-tight z-10 tabular-nums",
-                          valueTextClass
+                          valueTextClass,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.textOnCircle }}
                       />
@@ -390,9 +464,13 @@ export const StatsPreview = ({
                     {circleElement}
                     <div className={cn(mediaPlacement === 'left' ? 'w-[76px] min-w-0 shrink-0' : '')}>
                       <h3
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-semibold text-slate-800 dark:text-slate-200",
-                          labelTextClass
+                          labelTextClass,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.label }}
                       >
@@ -401,8 +479,15 @@ export const StatsPreview = ({
                       {hasIcon && (
                         <AnimatedValue
                           value={item.value || '0'}
-                          enabled={enableAnimation || false}
-                          className={cn("font-bold tabular-nums", device === 'mobile' ? 'mt-0.5 text-base' : 'mt-1 text-lg')}
+                          enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
+                          className={cn(
+                            "font-bold tabular-nums", 
+                            device === 'mobile' ? 'mt-0.5 text-base' : 'mt-1 text-lg',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
                           style={{ color: brandColor }}
                         />
                       )}
@@ -418,7 +503,7 @@ export const StatsPreview = ({
   };
 
   const renderGradientStyle = () => {
-    const colors = getGradientColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getGradientColors(brandColor, secondary, mode), isDark);
     let gridClass = '';
     if (device === 'mobile') {
       gridClass = desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
@@ -469,17 +554,25 @@ export const StatsPreview = ({
                       <div className={cn(mediaPlacement === 'left' ? 'flex-1' : '')}>
                         <AnimatedValue
                           value={item.value || '0'}
-                          enabled={enableAnimation || false}
+                          enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                           className={cn(
                             "font-extrabold tracking-tight tabular-nums leading-none mb-1",
-                            device === 'mobile' ? 'text-2xl' : 'text-3xl'
+                            device === 'mobile' ? 'text-2xl' : 'text-3xl',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                           )}
                           style={{ color: colors.text }}
                         />
                         <h3
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
                           className={cn(
                             "font-medium opacity-90 relative z-10",
-                            device === 'mobile' ? 'text-[10px]' : 'text-xs'
+                            device === 'mobile' ? 'text-[10px]' : 'text-xs',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                           )}
                           style={{ color: colors.label }}
                         >
@@ -498,7 +591,7 @@ export const StatsPreview = ({
   };
 
   const renderMinimalStyle = () => {
-    const colors = getMinimalColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getMinimalColors(brandColor, secondary, mode), isDark);
     let gridClass = '';
     if (device === 'mobile') {
       gridClass = desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
@@ -507,17 +600,17 @@ export const StatsPreview = ({
     } else {
       gridClass = desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
     }
-    
+
     // Font sizes: mobile/tablet -10%, desktop +10%
     const valueFontSize = device === 'desktop' ? 'text-[33px]' : device === 'tablet' ? 'text-[27px]' : 'text-[22px]';
     const labelFontSize = device === 'desktop' ? 'text-[15px]' : device === 'tablet' ? 'text-[11px]' : 'text-[11px]';
     const iconSize = device === 'mobile' ? 16 : device === 'tablet' ? 18 : 22;
-    
+
     return (
       <div>
         <div className={containerClass}>
           {sharedHeader}
-          <section className={cn('w-full bg-slate-50 dark:bg-slate-900', cardRadiusClassName, device === 'mobile' ? 'py-6 px-3' : 'py-8 px-4')}>
+          <section className={cn('w-full', cardRadiusClassName, device === 'mobile' ? 'py-6 px-3' : 'py-8 px-4')} style={{ backgroundColor: colors.sectionBg }}>
             <div className={cn('grid gap-4', device === 'mobile' ? '' : '', gridClass)}>
               {items.slice(0, desktopColumns).map((item, idx) => {
                 const IconCmp = item.iconType === 'lucide' && item.iconName ? resolveIconComponent(item.iconName) : null;
@@ -548,17 +641,27 @@ export const StatsPreview = ({
                       )}
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-bold tracking-tight tabular-nums leading-none text-slate-900 dark:text-white",
-                          valueFontSize
+                          valueFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.value }}
                       />
-                      <h3 className={cn(
-                        "font-medium text-slate-500 dark:text-slate-400 mt-1",
-                        labelFontSize
-                      )}>
+                      <h3 
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "font-medium text-slate-500 dark:text-slate-400 mt-1",
+                          labelFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                      >
                         {item.label || 'Label'}
                       </h3>
                     </div>
@@ -573,7 +676,7 @@ export const StatsPreview = ({
   };
 
   const renderCounterStyle = () => {
-    const colors = getCounterColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getCounterColors(brandColor, secondary, mode), isDark);
     let gridClass = '';
     if (device === 'mobile') {
       gridClass = desktopColumns === 3 ? 'grid-cols-1' : 'grid-cols-2';
@@ -582,12 +685,12 @@ export const StatsPreview = ({
     } else {
       gridClass = desktopColumns === 3 ? 'grid-cols-3' : 'grid-cols-4';
     }
-    
+
     // Font sizes: mobile/tablet -10%, desktop +10%
     const valueFontSize = device === 'desktop' ? 'text-[33px]' : device === 'tablet' ? 'text-[27px]' : 'text-[22px]';
     const labelFontSize = device === 'desktop' ? 'text-[15px]' : device === 'tablet' ? 'text-[11px]' : 'text-[11px]';
     const iconSize = device === 'mobile' ? 16 : device === 'tablet' ? 18 : 22;
-    
+
     return (
       <div>
         <div className={containerClass}>
@@ -623,18 +726,27 @@ export const StatsPreview = ({
                       )}
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
                         className={cn(
                           "font-bold tracking-tight tabular-nums leading-none",
-                          valueFontSize
+                          valueFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
                         )}
                         style={{ color: colors.value }}
                       />
-                      <h3 className={cn(
-                        "font-medium mt-1",
-                        labelFontSize
-                      )}
-                      style={{ color: colors.label }}
+                      <h3 
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "font-medium mt-1",
+                          labelFontSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: colors.label }}
                       >
                         {item.label || 'Label'}
                       </h3>
@@ -650,7 +762,7 @@ export const StatsPreview = ({
   };
 
   const renderSolarHeroStyle = () => {
-    const colors = getSolarHeroColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getSolarHeroColors(brandColor, secondary, mode), isDark);
     const gridClass = desktopColumns === 3
       ? device === 'mobile' ? 'grid-cols-1' : 'grid-cols-3'
       : device === 'desktop' ? 'grid-cols-4' : 'grid-cols-2';
@@ -681,16 +793,41 @@ export const StatsPreview = ({
                     <div className="min-w-0">
                       <AnimatedValue
                         value={item.value || '0'}
-                        enabled={enableAnimation || false}
-                        className={cn('mb-2 font-bold leading-none tracking-tight tabular-nums', valueSize)}
+                        enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          'mb-2 font-bold leading-none tracking-tight tabular-nums', 
+                          valueSize,
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
                         style={{ color: colors.value }}
                       />
-                      <h3 className="text-sm font-medium leading-snug" style={{ color: colors.label }}>{item.label || 'Label'}</h3>
+                      <h3 
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "text-sm font-medium leading-snug",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: colors.label }}
+                      >
+                        {item.label || 'Label'}
+                      </h3>
                     </div>
                     <div className="shrink-0">{iconElement}</div>
                   </div>
                   <p
-                    className={cn('min-h-[84px] flex-1 px-3 py-3 text-sm leading-relaxed', cardBottomRadiusClassName)}
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => handleItemTextUpdate(idx, 'description', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      'min-h-[84px] flex-1 px-3 py-3 text-sm leading-relaxed', 
+                      cardBottomRadiusClassName,
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
                     style={{ backgroundColor: colors.descriptionBg, color: colors.descriptionText }}
                   >
                     {item.description || `${item.label || 'Số liệu'} nổi bật, khẳng định năng lực và uy tín của thương hiệu.`}
@@ -705,7 +842,7 @@ export const StatsPreview = ({
   };
 
   const renderBuilderOverlayStyle = () => {
-    const colors = getBuilderOverlayColors(brandColor, secondary, mode);
+    const colors = adaptTokensForDarkMode(getBuilderOverlayColors(brandColor, secondary, mode), isDark);
     const gridClass = desktopColumns === 3 ? 'md:basis-1/3 md:max-w-[33.333333%]' : 'md:basis-1/4 md:max-w-[25%]';
     const visibleItems = items.slice(0, desktopColumns ?? 4);
     const isCompact = device !== 'desktop';
@@ -765,11 +902,30 @@ export const StatsPreview = ({
                       <div className={cn('flex min-w-0 flex-col', textGapClass)}>
                         <AnimatedValue
                           value={item.value || '0'}
-                          enabled={enableAnimation || false}
-                          className={cn('font-bold tracking-normal tabular-nums', valueClass)}
+                          enabled={isVisualEditActive ? false : (enableAnimation || false)}
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleItemTextUpdate(idx, 'value', e.currentTarget.textContent ?? '')}
+                          className={cn(
+                            'font-bold tracking-normal tabular-nums', 
+                            valueClass,
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
                           style={{ color: colors.accent }}
                         />
-                        <span className={cn('capitalize', labelClass)} style={{ color: colors.label }}>{item.label || 'Label'}</span>
+                        <span 
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleItemTextUpdate(idx, 'label', e.currentTarget.textContent ?? '')}
+                          className={cn(
+                            'capitalize', 
+                            labelClass,
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )} 
+                          style={{ color: colors.label }}
+                        >
+                          {item.label || 'Label'}
+                        </span>
                       </div>
                     </div>
                   );
@@ -795,19 +951,25 @@ export const StatsPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame>
-          <div className={sectionSpacingClassName}>
-            {previewStyle === 'horizontal' && renderHorizontalStyle()}
-            {previewStyle === 'cards' && renderCardsStyle()}
-            {previewStyle === 'icons' && renderIconsStyle()}
-            {previewStyle === 'gradient' && renderGradientStyle()}
-            {previewStyle === 'minimal' && renderMinimalStyle()}
-            {previewStyle === 'counter' && renderCounterStyle()}
-            {previewStyle === 'solar-hero' && renderSolarHeroStyle()}
-            {previewStyle === 'builder-overlay' && renderBuilderOverlayStyle()}
-          </div>
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <BrowserFrame>
+            <div className={sectionSpacingClassName}>
+              {previewStyle === 'horizontal' && renderHorizontalStyle()}
+              {previewStyle === 'cards' && renderCardsStyle()}
+              {previewStyle === 'icons' && renderIconsStyle()}
+              {previewStyle === 'gradient' && renderGradientStyle()}
+              {previewStyle === 'minimal' && renderMinimalStyle()}
+              {previewStyle === 'counter' && renderCounterStyle()}
+              {previewStyle === 'solar-hero' && renderSolarHeroStyle()}
+              {previewStyle === 'builder-overlay' && renderBuilderOverlayStyle()}
+            </div>
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
       <ColorInfoPanel brandColor={brandColor} secondary={secondary} />
     </>

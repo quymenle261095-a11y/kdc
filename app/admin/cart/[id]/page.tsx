@@ -25,6 +25,13 @@ const STATUS_LABELS: Record<CartStatus, string> = {
   Converted: 'Đã đặt hàng',
 };
 
+const itemTypeLabel = (itemType?: 'product' | 'service' | 'course' | 'resource') => {
+  if (itemType === 'service') return 'Dịch vụ';
+  if (itemType === 'course') return 'Khóa học';
+  if (itemType === 'resource') return 'Tài nguyên';
+  return 'Sản phẩm';
+};
+
 export default function CartDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -88,10 +95,10 @@ export default function CartDetailPage() {
   };
 
   const handleRemoveItem = async (itemId: Id<"cartItems">) => {
-    if (confirm('Xóa sản phẩm này khỏi giỏ hàng?')) {
+    if (confirm('Xóa mục này khỏi giỏ hàng?')) {
       try {
         await removeItem({ itemId });
-        toast.success('Đã xóa sản phẩm');
+        toast.success('Đã xóa mục');
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
       }
@@ -99,7 +106,7 @@ export default function CartDetailPage() {
   };
 
   const handleClearCart = async () => {
-    if (confirm('Xóa tất cả sản phẩm trong giỏ hàng?')) {
+    if (confirm('Xóa tất cả mục trong giỏ hàng?')) {
       try {
         await clearCart({ cartId });
         toast.success('Đã xóa tất cả sản phẩm');
@@ -194,7 +201,7 @@ export default function CartDetailPage() {
           {/* Cart Items */}
           <Card>
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2"><ShoppingCart size={18}/> Sản phẩm ({cartItemsData?.length || 0})</CardTitle>
+              <CardTitle className="flex items-center gap-2"><ShoppingCart size={18}/> Mục trong giỏ ({cartItemsData?.length || 0})</CardTitle>
               {cartItemsData && cartItemsData.length > 0 && (
                 <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600 gap-1" onClick={handleClearCart}>
                   <Trash2 size={14} /> Xóa tất cả
@@ -206,7 +213,7 @@ export default function CartDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Sản phẩm</TableHead>
+                      <TableHead>Mục</TableHead>
                       <TableHead className="text-center">SL</TableHead>
                       <TableHead className="text-right">Đơn giá</TableHead>
                       <TableHead className="text-right">Thành tiền</TableHead>
@@ -225,7 +232,10 @@ export default function CartDetailPage() {
                                 <Package size={16} className="text-slate-400" />
                               </div>
                             )}
-                            <span className="font-medium">{item.productName}</span>
+                            <div>
+                              <span className="font-medium">{item.productName}</span>
+                              <p className="text-xs text-slate-500">{itemTypeLabel(item.itemType)}</p>
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
@@ -250,7 +260,7 @@ export default function CartDetailPage() {
               {/* Total */}
               {cartItemsData && cartItemsData.length > 0 && (
                 <div className="border-t mt-4 pt-4 flex justify-between items-center">
-                  <span className="font-medium">Tổng cộng ({cartData.itemsCount} sản phẩm):</span>
+                  <span className="font-medium">Tổng cộng ({cartData.itemsCount} mục):</span>
                   <span className="text-xl font-bold text-emerald-600">{formatPrice(cartData.totalAmount)}</span>
                 </div>
               )}
@@ -340,7 +350,7 @@ export default function CartDetailPage() {
             <CardHeader className="pb-3"><CardTitle>Tổng quan</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Số sản phẩm:</span>
+                <span className="text-slate-500">Số mục:</span>
                 <Badge variant="secondary">{cartData.itemsCount}</Badge>
               </div>
               <div className="flex justify-between">

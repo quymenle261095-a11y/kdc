@@ -41,6 +41,8 @@ interface SidebarLayoutProps {
   showSearch?: boolean;
   showCategories?: boolean;
   getDetailHref: (post: Post) => string;
+  displayMode?: 'grid' | 'list';
+  gridColumns?: number;
 }
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -48,6 +50,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { label: 'Cũ nhất', value: 'oldest' },
   { label: 'Xem nhiều', value: 'popular' },
   { label: 'Theo tên A-Z', value: 'title' },
+  { label: 'Theo tên Z-A', value: 'title_desc' },
 ];
 
 export function SidebarLayout({
@@ -66,6 +69,8 @@ export function SidebarLayout({
   showSearch = true,
   showCategories = true,
   getDetailHref,
+  displayMode = 'list',
+  gridColumns,
 }: SidebarLayoutProps) {
   const showExcerpt = enabledFields.has('excerpt');
   const [brokenThumbnails, setBrokenThumbnails] = React.useState<Set<string>>(new Set());
@@ -79,6 +84,9 @@ export function SidebarLayout({
       return next;
     });
   }, []);
+
+  const gridCols = gridColumns ?? 3;
+  const gridClass = gridCols === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-3';
 
   return (
     <div className="flex flex-col lg:flex-row gap-5">
@@ -191,6 +199,72 @@ export function SidebarLayout({
             <FileText size={40} className="mx-auto mb-2" style={{ color: tokens.neutralTextLight }} />
             <h2 className="text-base font-semibold mb-1" style={{ color: tokens.metaText }}>Không tìm thấy bài viết</h2>
             <p className="text-sm" style={{ color: tokens.neutralTextLight }}>Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
+          </div>
+        ) : displayMode === 'grid' ? (
+          <div className={`grid ${gridClass} gap-3`}>
+            {posts.map((post) => {
+              const showImage = Boolean(post.thumbnail) && !brokenThumbnails.has(String(post._id));
+              return (
+                <Link key={post._id} href={getDetailHref(post)} className="group block">
+                  <article
+                    className="rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 border h-full flex flex-col"
+                    style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}
+                  >
+                    <div className="aspect-video overflow-hidden relative" style={{ backgroundColor: tokens.cardBorder }}>
+                      {showImage ? (
+                        <Image
+                          src={post.thumbnail as string}
+                          alt={post.title}
+                          fill
+                          sizes="(max-width: 640px) 100vw, 50vw"
+                          className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          mode="thumb"
+                          onLoadingComplete={(img) => {
+                            if (img.naturalWidth === 0) { markThumbnailBroken(post._id); }
+                          }}
+                          onError={() => { markThumbnailBroken(post._id); }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FileText size={28} style={{ color: tokens.neutralTextLight }} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col">
+                      <div className="flex items-center gap-2 mb-1">
+                        {categoryMap.get(post.categoryId) && (
+                          <span
+                            className="text-xs font-medium px-2 py-0.5 rounded"
+                            style={{
+                              backgroundColor: tokens.categoryBadgeBg,
+                              color: tokens.categoryBadgeText,
+                              borderColor: tokens.categoryBadgeBorder,
+                            }}
+                          >
+                            {categoryMap.get(post.categoryId)}
+                          </span>
+                        )}
+                        {post.publishedAt && (
+                          <span className="text-xs" style={{ color: tokens.neutralTextLight }}>
+                            {new Date(post.publishedAt).toLocaleDateString('vi-VN')}
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="text-sm font-semibold line-clamp-2 mb-1 flex-1" style={{ color: tokens.bodyText }}>
+                        {post.title}
+                      </h2>
+                      {showExcerpt && post.excerpt && (
+                        <p className="text-xs line-clamp-2 mb-1.5" style={{ color: tokens.metaText }}>{post.excerpt}</p>
+                      )}
+                      <div className="flex items-center gap-1 text-xs" style={{ color: tokens.neutralTextLight }}>
+                        <Eye size={12} />
+                        <span>{post.views.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </article>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div className="space-y-2.5">

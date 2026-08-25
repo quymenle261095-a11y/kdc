@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
 import { useTypeFontOverrideState } from '../../_shared/hooks/useTypeFontOverride';
@@ -18,6 +20,9 @@ export default function PopupCreatePage() {
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
   const [config, setConfig] = React.useState<PopupConfig>(DEFAULT_POPUP_CONFIG);
+
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const onSubmit = (event: React.FormEvent) => {
     void handleSubmit(event, config as unknown as Record<string, unknown>);
@@ -51,6 +56,9 @@ export default function PopupCreatePage() {
         title={title}
         selectedStyle={config.style}
         onStyleChange={(style) => setConfig((current) => ({ ...current, style }))}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onConfigChange={setConfig}
+        onTitleChange={setTitle}
       />
     </ComponentFormWrapper>
   );

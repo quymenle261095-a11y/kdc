@@ -7,7 +7,7 @@ export default async function Image() {
   const [site, seo] = await Promise.all([getSiteSettings(), getSEOSettings()]);
   const title = seo.seo_title || site.site_name || 'Website';
   const description = seo.seo_description || site.site_tagline || '';
-  const brandColor = site.site_brand_primary || site.site_brand_color || '#3b82f6';
+  const brandColor = site.site_brand_primary || '#3b82f6';
 
   return new ImageResponse(
     (

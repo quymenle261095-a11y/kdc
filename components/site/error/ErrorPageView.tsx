@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Home, TriangleAlert } from 'lucide-react';
 import { ERROR_CODE_COPY, type ErrorPagesLayoutStyle } from '@/lib/experiences';
 import { getErrorPageColors, type ErrorPagesColorMode } from './colors';
+import { useSiteSettings } from '@/components/site/hooks';
 
 type ErrorPageViewProps = {
   code: number;
@@ -37,7 +38,8 @@ export function ErrorPageView({
   onGoHome,
   onGoBack,
 }: ErrorPageViewProps) {
-  const tokens = getErrorPageColors(brandColor, secondaryColor, colorMode);
+  const { isDark } = useSiteSettings();
+  const tokens = getErrorPageColors(brandColor, secondaryColor, colorMode, isDark);
   const copy = ERROR_CODE_COPY[code] ?? ERROR_CODE_COPY[404];
   const headline = customHeadline?.trim() || copy.headline;
   const message = customMessage?.trim() || copy.message;
@@ -69,7 +71,7 @@ export function ErrorPageView({
         <button
           type="button"
           onClick={handleGoBack}
-          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold"
+          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-zinc-850 transition-colors"
           style={{ borderColor: tokens.secondaryButtonBorder, color: tokens.secondaryButtonText }}
         >
           <ArrowLeft size={16} />

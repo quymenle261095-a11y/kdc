@@ -48,8 +48,11 @@ import {
   DEFAULT_PARTNERS_LOGO_SIZE,
   DEFAULT_PARTNERS_SHOW_BORDER,
   DEFAULT_PARTNERS_SPACING,
+  getPartnersLogoColorModeFromIntensity,
   normalizePartnersCornerRadius,
   normalizePartnersDisplayMode,
+  normalizePartnersLogoColorIntensity,
+  normalizePartnersLogoColorMode,
   normalizePartnersLogoSize,
   normalizePartnersShowBorder,
   normalizePartnersSpacing,
@@ -57,6 +60,8 @@ import {
   type PartnerItem,
   type PartnersCornerRadius,
   type PartnersDisplayMode,
+  type PartnersLogoColorIntensity,
+  type PartnersLogoColorMode,
   type PartnersLogoSize,
   type PartnersSpacing,
   type PartnersStyle,
@@ -115,6 +120,8 @@ type PartnersSnapshotState = {
   cornerRadius: PartnersCornerRadius;
   displayMode: PartnersDisplayMode;
   items: PartnerItem[];
+  logoColorIntensity: PartnersLogoColorIntensity;
+  logoColorMode: PartnersLogoColorMode;
   logoSize: PartnersLogoSize;
   showBorder: boolean;
   spacing: PartnersSpacing;
@@ -792,12 +799,12 @@ const productGridSnapshotAdapter: SnapshotAdapter<ProductGridSnapshotState> = {
     desktopColumns: normalizeProductGridColumns(rawConfig.desktopColumns),
     itemCount: typeof rawConfig.itemCount === 'number' ? rawConfig.itemCount : DEFAULT_PRODUCT_GRID_CONFIG.itemCount,
     productSearchTerm: '',
-    sectionTitle: typeof rawConfig.sectionTitle === 'string' ? rawConfig.sectionTitle : DEFAULT_PRODUCT_GRID_CONFIG.sectionTitle,
+    sectionTitle: typeof rawConfig.subtitle === 'string' ? rawConfig.subtitle : DEFAULT_PRODUCT_GRID_CONFIG.sectionTitle,
     selectedProductIds: Array.isArray(rawConfig.selectedProductIds) ? rawConfig.selectedProductIds.filter((id): id is string => typeof id === 'string') : [],
     selectionMode: rawConfig.selectionMode === 'manual' || rawConfig.selectionMode === 'demo' ? rawConfig.selectionMode : DEFAULT_PRODUCT_GRID_CONFIG.selectionMode,
     sortBy: rawConfig.sortBy === 'bestseller' || rawConfig.sortBy === 'random' ? rawConfig.sortBy : DEFAULT_PRODUCT_GRID_CONFIG.sortBy,
     style: resolveGridStyle(typeof rawConfig.style === 'string' ? rawConfig.style : undefined),
-    subTitle: typeof rawConfig.subTitle === 'string' ? rawConfig.subTitle : DEFAULT_PRODUCT_GRID_CONFIG.subTitle,
+    subTitle: typeof rawConfig.badgeText === 'string' ? rawConfig.badgeText : DEFAULT_PRODUCT_GRID_CONFIG.subTitle,
   }),
   toConfig: (state, headerConfig) => ({
     ...headerConfig,
@@ -806,13 +813,11 @@ const productGridSnapshotAdapter: SnapshotAdapter<ProductGridSnapshotState> = {
     demoProducts: state.selectionMode === 'demo' ? state.demoProducts : undefined,
     desktopColumns: state.desktopColumns,
     itemCount: state.itemCount,
-    sectionTitle: state.sectionTitle,
     selectedProductIds: state.selectionMode === 'manual' ? state.selectedProductIds : [],
     selectionMode: state.selectionMode,
     showCategoryTabs: true,
     sortBy: state.sortBy,
     style: state.style,
-    subTitle: state.subTitle,
     subtitle: state.sectionTitle,
   }),
   renderForm: (state, setState) => (
@@ -849,6 +854,8 @@ const partnersSnapshotAdapter: SnapshotAdapter<PartnersSnapshotState> = {
     cornerRadius: normalizePartnersCornerRadius(rawConfig.cornerRadius ?? DEFAULT_PARTNERS_CORNER_RADIUS),
     displayMode: normalizePartnersDisplayMode(rawConfig.displayMode),
     items: normalizePartnerItems(rawConfig.items),
+    logoColorIntensity: normalizePartnersLogoColorIntensity(rawConfig.logoColorIntensity, rawConfig.logoColorMode),
+    logoColorMode: getPartnersLogoColorModeFromIntensity(normalizePartnersLogoColorIntensity(rawConfig.logoColorIntensity, normalizePartnersLogoColorMode(rawConfig.logoColorMode))),
     logoSize: normalizePartnersLogoSize(rawConfig.logoSize ?? DEFAULT_PARTNERS_LOGO_SIZE),
     showBorder: normalizePartnersShowBorder(rawConfig.showBorder ?? DEFAULT_PARTNERS_SHOW_BORDER),
     spacing: normalizePartnersSpacing(rawConfig.spacing ?? DEFAULT_PARTNERS_SPACING),
@@ -863,6 +870,8 @@ const partnersSnapshotAdapter: SnapshotAdapter<PartnersSnapshotState> = {
       name: item.name ?? '',
       url: item.url ?? '',
     })),
+    logoColorIntensity: state.logoColorIntensity,
+    logoColorMode: state.logoColorMode,
     logoSize: state.logoSize,
     showBorder: state.showBorder,
     spacing: state.spacing,
@@ -880,6 +889,11 @@ const partnersSnapshotAdapter: SnapshotAdapter<PartnersSnapshotState> = {
       setShowBorder={(showBorder) => setState((current) => ({ ...current, showBorder }))}
       spacing={state.spacing}
       setSpacing={(spacing) => setState((current) => ({ ...current, spacing }))}
+      selectedStyle={state.style}
+      logoColorIntensity={state.logoColorIntensity}
+      setLogoColorIntensity={(logoColorIntensity) => setState((current) => ({ ...current, logoColorIntensity, logoColorMode: getPartnersLogoColorModeFromIntensity(logoColorIntensity) }))}
+      logoColorMode={state.logoColorMode}
+      setLogoColorMode={(logoColorMode) => setState((current) => ({ ...current, logoColorMode, logoColorIntensity: normalizePartnersLogoColorIntensity(current.logoColorIntensity, logoColorMode) }))}
     />
   ),
   renderPreview: (state, setState, title, headerConfig, colors, fontStyle, fontClassName) => (
@@ -898,6 +912,8 @@ const partnersSnapshotAdapter: SnapshotAdapter<PartnersSnapshotState> = {
       logoSize={state.logoSize}
       showBorder={state.showBorder}
       spacing={state.spacing}
+      logoColorIntensity={state.logoColorIntensity}
+      logoColorMode={state.logoColorMode}
       onDisplayModeChange={(displayMode) => setState((current) => ({ ...current, displayMode }))}
       fontStyle={fontStyle}
       fontClassName={fontClassName}

@@ -2,12 +2,12 @@
 
 import React, { useMemo, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, Database } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { toast } from 'sonner';
 import { CustomSeedDialog } from '@/components/modules/CustomSeedDialog';
 import { getSeedModuleInfo } from '@/lib/modules/seed-registry';
-import { Card, Badge } from '@/app/admin/components/ui';
+import { Card, Badge, Button } from '@/app/admin/components/ui';
 import { DependencyTree } from './DependencyTree';
 import { FactoryResetDialog } from './FactoryResetDialog';
 import { QuickActionsCard } from './QuickActionsCard';
@@ -16,10 +16,131 @@ import { TableDetailsCard } from './TableDetailsCard';
 import { MigrationBundleCard } from './import-export/MigrationBundleCard';
 
 type PresetType = 'minimal' | 'standard' | 'large' | 'demo';
+type ContractFieldIssue = {
+  count: number;
+  field: string;
+  sampleIds: string[];
+};
+type ContractTableResult = {
+  deprecatedFields: ContractFieldIssue[];
+  extraFields: ContractFieldIssue[];
+  label: string;
+  missingRecommended: ContractFieldIssue[];
+  missingRequired: ContractFieldIssue[];
+  scanned: number;
+  status: 'critical' | 'empty' | 'ok' | 'warning';
+  table: string;
+  totalIssues: number;
+};
+type ContractScanResult = {
+  runId: number;
+  sampleSize: number;
+  summary: {
+    critical: number;
+    empty: number;
+    ok: number;
+    scannedRecords: number;
+    tables: number;
+    totalIssues: number;
+    warnings: number;
+  };
+  tables: ContractTableResult[];
+};
+
+function formatIssueList(issues: ContractFieldIssue[]) {
+  return issues.map((issue) => `${issue.field} (${issue.count})`).join(', ');
+}
+
+function DataContractAuditCard({
+  isLoading,
+  onRun,
+  scan,
+}: {
+  isLoading: boolean;
+  onRun: () => void;
+  scan?: ContractScanResult;
+}) {
+  const issueTables = scan?.tables.filter((table) => table.totalIssues > 0).slice(0, 6) ?? [];
+  const hasCritical = (scan?.summary.critical ?? 0) > 0;
+  const hasWarnings = (scan?.summary.warnings ?? 0) > 0;
+  const hasEmptyTables = (scan?.summary.empty ?? 0) > 0;
+  const statusBadge = !scan
+    ? <Badge variant="secondary">Chưa quét</Badge>
+    : hasCritical
+      ? <Badge variant="destructive">Có lỗi critical</Badge>
+      : hasWarnings
+        ? <Badge variant="warning">Có cảnh báo</Badge>
+        : hasEmptyTables
+          ? <Badge variant="secondary">Có bảng rỗng</Badge>
+          : <Badge variant="success">Sạch</Badge>;
+
+  return (
+    <Card className="p-4 border border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck size={18} className="text-amber-600" />
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Data Contract Check</h3>
+            {statusBadge}
+          </div>
+          <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+            Quét dữ liệu thật theo contract hiện tại để phát hiện thiếu field, field dư, field deprecated và nợ migration trước khi code phải fallback legacy.
+          </p>
+          {scan && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="secondary">{scan.summary.tables} tables</Badge>
+              <Badge variant="secondary">{scan.summary.scannedRecords.toLocaleString()} records scanned</Badge>
+              <Badge variant={scan.summary.critical > 0 ? 'destructive' : 'secondary'}>{scan.summary.critical} critical</Badge>
+              <Badge variant={scan.summary.warnings > 0 ? 'warning' : 'secondary'}>{scan.summary.warnings} warnings</Badge>
+              <Badge variant={scan.summary.empty > 0 ? 'warning' : 'secondary'}>{scan.summary.empty} empty</Badge>
+              <Badge variant="secondary">sample {scan.sampleSize}/table</Badge>
+            </div>
+          )}
+        </div>
+
+        <Button type="button" variant="outline" onClick={onRun} disabled={isLoading}>
+          {isLoading ? <RefreshCw size={14} className="mr-2 animate-spin" /> : <CheckCircle2 size={14} className="mr-2" />}
+          {isLoading ? 'Đang quét...' : 'Check data contract'}
+        </Button>
+      </div>
+
+      {scan && issueTables.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {issueTables.map((table) => (
+            <div key={table.table} className="rounded-lg border border-amber-200 bg-white p-3 text-sm dark:border-amber-900 dark:bg-slate-950">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-slate-900 dark:text-slate-100">{table.label}</span>
+                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{table.table}</code>
+                <Badge variant={table.status === 'critical' ? 'destructive' : 'warning'}>{table.totalIssues} issues</Badge>
+              </div>
+              <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                {table.missingRequired.length > 0 && <p>Thiếu bắt buộc: {formatIssueList(table.missingRequired)}</p>}
+                {table.missingRecommended.length > 0 && <p>Thiếu migration/recommended: {formatIssueList(table.missingRecommended)}</p>}
+                {table.extraFields.length > 0 && <p>Field dư: {formatIssueList(table.extraFields)}</p>}
+                {table.deprecatedFields.length > 0 && <p>Field deprecated còn tồn tại: {formatIssueList(table.deprecatedFields)}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {scan && issueTables.length === 0 && (
+        <p className="mt-4 text-sm text-green-700 dark:text-green-300">
+          Không phát hiện lệch contract trong phạm vi quét{scan.summary.empty > 0 ? `; ${scan.summary.empty} bảng rỗng chưa đủ dữ liệu để kết luận.` : '.'}
+        </p>
+      )}
+    </Card>
+  );
+}
 
 export function DataCommandCenter() {
   const dependencyTree = useQuery(api.seedManager.getDependencyTree);
   const tableStats = useQuery(api.dataManager.getTableStats);
+  const [contractScanRunId, setContractScanRunId] = useState<number | null>(null);
+  const contractScan = useQuery(
+    api.dataManager.scanDataContracts,
+    contractScanRunId ? { runId: contractScanRunId, sampleSize: 100 } : 'skip'
+  );
 
   const seedPreset = useMutation(api.seedManager.seedPreset);
   const seedModule = useMutation(api.seedManager.seedModule);
@@ -156,6 +277,11 @@ export function DataCommandCenter() {
     }
   };
 
+  const handleRunDataContractScan = () => {
+    setContractScanRunId(Date.now());
+    toast.info('Đang quét data contract');
+  };
+
   const handleSeedModule = async (moduleKey: string) => {
     const defaultQuantity = getSeedModuleInfo(moduleKey)?.defaultQuantity ?? 10;
     setSeedingModule(moduleKey);
@@ -215,6 +341,12 @@ export function DataCommandCenter() {
       />
 
       <MigrationBundleCard />
+
+      <DataContractAuditCard
+        scan={contractScan as ContractScanResult | undefined}
+        isLoading={contractScanRunId !== null && contractScan === undefined}
+        onRun={handleRunDataContractScan}
+      />
 
       {dependencyTree && (
         <DependencyTree

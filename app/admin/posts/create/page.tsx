@@ -5,19 +5,38 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Input, Label } from '../../components/ui';
+import { Button, Input, Label } from '../../components/ui';
 import { LexicalEditor } from '../../components/LexicalEditor';
-import { ImageUploader } from '../../components/ImageUploader';
-import { QuickCreateCategoryModal } from '../../components/QuickCreateCategoryModal';
 import { stripHtml, truncateText } from '@/lib/seo';
 import { getMacroTemplate, getTemplateFieldSpec, type GeneratorFieldKey } from '@/lib/posts/generator/macro-templates';
 import type { GeneratorRequest, GeneratedArticlePayload } from '@/lib/posts/generator/types';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { AdminStickyFooter } from '@/app/admin/components/AdminStickyFooter';
 import { AiEntityImportDialog, type AiEntityImportPayload } from '@/app/admin/components/AiEntityImportDialog';
-import { CategoryTagsInput } from '@/app/admin/components/AdditionalCategoriesSelect';
+import { HeadlineGeneratorWidget } from '@/app/admin/components/HeadlineGeneratorWidget';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormPageWrapper,
+  AdminFormSidebar,
+  AdminPublishSidebarCard,
+  AdminSeoMetaCard,
+  AdminSlugInput,
+  AdminThumbnailSidebarCard,
+  AdminTitleInput,
+  QuickCreateCategoryModal,
+} from '@/app/admin/components/FormUtilities';
+import {
+  PostAdvancedSeoFields,
+  PostFormTabs,
+  type PostFaqItem,
+  type PostFormTab,
+  normalizePostFaqItems,
+  normalizePostStringList,
+} from '../components/PostAdvancedSeoFields';
 
 const MODULE_KEY = 'posts';
 const COC_TARGET_OPTIONS: Array<{ key: GeneratorRequest['templateKey']; label: string; description: string }> = [
@@ -54,6 +73,10 @@ export default function PostCreatePage() {
   const [excerpt, setExcerpt] = useState('');
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
+  const [focusKeyword, setFocusKeyword] = useState('');
+  const [postTags, setPostTags] = useState<string[]>([]);
+  const [relatedQueries, setRelatedQueries] = useState<string[]>([]);
+  const [faqItems, setFaqItems] = useState<PostFaqItem[]>([]);
   const [thumbnail, setThumbnail] = useState<string | undefined>();
   const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | undefined>();
   const [categoryId, setCategoryId] = useState('');
@@ -65,12 +88,14 @@ export default function PostCreatePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editorResetKey, setEditorResetKey] = useState(0);
+  const [activeTab, setActiveTab] = useState<PostFormTab>('content');
 
   const [generatorTemplateKey, setGeneratorTemplateKey] = useState(COC_TARGET_OPTIONS[0].key);
   const generatorProductLimit = 6;
   const [generatorBudgetMin, setGeneratorBudgetMin] = useState('');
   const [generatorBudgetMax, setGeneratorBudgetMax] = useState('');
   const [generatorKeyword, setGeneratorKeyword] = useState('');
+  const [generatorSecondaryKeyword, setGeneratorSecondaryKeyword] = useState('');
   const [generatorCompareProductAId, setGeneratorCompareProductAId] = useState<Id<'products'> | ''>('');
   const [generatorCompareProductBId, setGeneratorCompareProductBId] = useState<Id<'products'> | ''>('');
   const [generatorSelectedProductIds, setGeneratorSelectedProductIds] = useState<Array<Id<'products'> | ''>>([]);
@@ -109,6 +134,26 @@ export default function PostCreatePage() {
   const hasMarkdownRender = enabledFields.has('markdownRender');
   const hasHtmlRender = enabledFields.has('htmlRender');
   const showAdvancedRenderCard = hasMarkdownRender || hasHtmlRender;
+  const showAdvancedSeoFields = enabledFields.has('focusKeyword')
+    || enabledFields.has('tags')
+    || enabledFields.has('relatedQueries')
+    || enabledFields.has('faqItems');
+  const aiImportCurrentData = useMemo<AiEntityImportPayload>(() => ({
+    authorName: authorName.trim(),
+    content: content.trim(),
+    excerpt: excerpt.trim(),
+    faqItems: normalizePostFaqItems(faqItems),
+    focusKeyword: focusKeyword.trim(),
+    htmlRender: htmlRender.trim(),
+    markdownRender: markdownRender.trim(),
+    metaDescription: metaDescription.trim(),
+    metaTitle: metaTitle.trim(),
+    relatedQueries: normalizePostStringList(relatedQueries),
+    slug: slug.trim(),
+    tags: normalizePostStringList(postTags),
+    thumbnail: thumbnail ?? '',
+    title: title.trim(),
+  }), [authorName, content, excerpt, faqItems, focusKeyword, htmlRender, markdownRender, metaDescription, metaTitle, relatedQueries, slug, postTags, thumbnail, title]);
   const schedulingEnabled = enabledFields.has('publish_date') && (schedulingFeature?.enabled ?? false);
 
   const generatorEnabled = Boolean(settingsData?.find(s => s.settingKey === 'enableAutoPostGenerator')?.value);
@@ -141,6 +186,7 @@ export default function PostCreatePage() {
     const activeFields = new Set<GeneratorFieldKey>(templateFieldSpec.required);
     if (!activeFields.has('keyword')) {
       setGeneratorKeyword('');
+      setGeneratorSecondaryKeyword('');
     }
     if (!activeFields.has('budgetMin')) {
       setGeneratorBudgetMin('');
@@ -203,7 +249,16 @@ export default function PostCreatePage() {
       .replaceAll(/\s+/g, '-');
   };
 
+  const handleApplyHeadline = (nextTitle: string) => {
+    setTitle(nextTitle);
+    setSlug(generateSlugFromTitle(nextTitle));
+  };
+
   const handleGeneratePreview = () => {
+    const generatorKeywords = [generatorKeyword, generatorSecondaryKeyword]
+      .map((keyword) => keyword.trim().replaceAll(/\s+/g, ' '))
+      .filter(Boolean)
+      .slice(0, 2);
     if (isFieldActive('keyword') && !generatorKeyword.trim()) {
       toast.error('Vui lòng nhập nhu cầu/keyword');
       return;
@@ -279,8 +334,11 @@ export default function PostCreatePage() {
       nextRequest.budgetMax = Number.isFinite(budgetMax) ? budgetMax : undefined;
     }
     if (isFieldActive('keyword')) {
-      nextRequest.keyword = generatorKeyword.trim() || undefined;
-      nextRequest.useCase = generatorKeyword.trim() || undefined;
+      const [primaryKeyword, secondaryKeyword] = generatorKeywords;
+      nextRequest.keyword = primaryKeyword;
+      nextRequest.secondaryKeyword = secondaryKeyword;
+      nextRequest.keywords = generatorKeywords.length > 0 ? generatorKeywords : undefined;
+      nextRequest.useCase = generatorKeywords.join(' và ') || undefined;
     }
     if (isFieldActive('categoryId')) {
       nextRequest.categoryId = generatorProductCategoryId || undefined;
@@ -399,6 +457,10 @@ export default function PostCreatePage() {
     setExcerpt(item.excerpt || item.description || truncateText(stripHtml(nextContent), 180));
     setMetaTitle(item.metaTitle || truncateText(nextTitle, 60));
     setMetaDescription(item.metaDescription || truncateText(stripHtml(item.excerpt || nextContent), 160));
+    if (item.focusKeyword) {setFocusKeyword(item.focusKeyword);}
+    if (item.tags?.length) {setPostTags(normalizePostStringList(item.tags));}
+    if (item.relatedQueries?.length) {setRelatedQueries(normalizePostStringList(item.relatedQueries));}
+    if (item.faqItems?.length) {setFaqItems(normalizePostFaqItems(item.faqItems));}
     if (item.thumbnail) {
       setThumbnail(item.thumbnail);
       setThumbnailStorageId(undefined);
@@ -422,6 +484,9 @@ export default function PostCreatePage() {
       const resolvedPublishedAt = status === 'Published' && !publishImmediately
         ? toTimestamp(publishAtLocal)
         : undefined;
+      const normalizedPostTags = enabledFields.has('tags') ? normalizePostStringList(postTags) : [];
+      const normalizedRelatedQueries = enabledFields.has('relatedQueries') ? normalizePostStringList(relatedQueries) : [];
+      const normalizedFaqItems = enabledFields.has('faqItems') ? normalizePostFaqItems(faqItems) : [];
       await createPost({
         authorName: enabledFields.has('author_name') ? authorName.trim() || undefined : undefined,
         categoryId: categoryId as Id<"postCategories">,
@@ -433,16 +498,20 @@ export default function PostCreatePage() {
         markdownRender: markdownRender.trim() || undefined,
         htmlRender: htmlRender.trim() || undefined,
         excerpt: excerpt.trim() || undefined,
+        ...(enabledFields.has('faqItems') ? { faqItems: normalizedFaqItems.length > 0 ? normalizedFaqItems : undefined } : {}),
+        ...(enabledFields.has('focusKeyword') ? { focusKeyword: focusKeyword.trim() || undefined } : {}),
         metaDescription: enabledFields.has('metaDescription')
           ? (metaDescription.trim() || resolvedMetaDescription || undefined)
           : undefined,
         metaTitle: enabledFields.has('metaTitle')
           ? (metaTitle.trim() || resolvedMetaTitle || undefined)
           : undefined,
+        ...(enabledFields.has('relatedQueries') ? { relatedQueries: normalizedRelatedQueries.length > 0 ? normalizedRelatedQueries : undefined } : {}),
         slug: slug.trim() || title.toLowerCase().replaceAll(/\s+/g, '-'),
         publishImmediately: status === 'Published' ? publishImmediately : undefined,
         publishedAt: status === 'Published' ? resolvedPublishedAt : undefined,
         status,
+        ...(enabledFields.has('tags') ? { tags: normalizedPostTags.length > 0 ? normalizedPostTags : undefined } : {}),
         thumbnail,
         thumbnailStorageId: thumbnail ? (thumbnailStorageId ?? null) : null,
         title: title.trim(),
@@ -457,26 +526,70 @@ export default function PostCreatePage() {
   };
 
   return (
-    <>
-    <QuickCreateCategoryModal 
-      isOpen={showCategoryModal} 
-      onClose={() =>{  setShowCategoryModal(false); }} 
-      onCreated={(id) =>{  setCategoryId(id); }}
-    />
-    <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thêm bài viết mới</h1>
-          <div className="text-sm text-slate-500 mt-1">Tạo nội dung mới cho website</div>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+    <AdminFormPageWrapper
+      title="Thêm bài viết mới"
+      subtitle="Tạo nội dung mới cho website"
+      backHref="/admin/posts"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          submitLabel="Đăng bài"
+          disableSave={isSubmitting || !title.trim() || !categoryId}
+          onCancel={() => router.push('/admin/posts')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          aiImportNode={
+            <AiEntityImportDialog kind="post" currentData={aiImportCurrentData} enabledFields={enabledFields} onApply={handleApplyAiPost} />
+          }
+        />
+      }
+    >
+      <QuickCreateCategoryModal 
+        isOpen={showCategoryModal} 
+        onClose={() => setShowCategoryModal(false)} 
+        onCreated={(id) => setCategoryId(id)}
+      />
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <PostFormTabs activeTab={activeTab} onChange={setActiveTab} />
+
+        <AdminFormGrid>
+          <AdminFormMain>
+            {activeTab === 'content' ? (
+              <>
+                <AdminFormCard>
+                  <AdminTitleInput
+                    value={title}
+                    onChange={handleTitleChange}
+                    placeholder="Nhập tiêu đề bài viết..."
+                    copyLabel="tiêu đề bài viết"
+                    extraAction={
+                      <HeadlineGeneratorWidget
+                        currentTitle={title}
+                        onSelect={handleApplyHeadline}
+                      />
+                    }
+                  />
+                  <AdminSlugInput
+                    slug={slug}
+                    onChange={setSlug}
+                    categorySlug={categorySlugPreview}
+                  />
+                  {enabledFields.has('excerpt') && (
+                    <div className="space-y-2">
+                      <Label>Mô tả ngắn</Label>
+                      <Input value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="Nhập mô tả ngắn..." />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Nội dung <span className="text-red-500">*</span></Label>
+                    <LexicalEditor onChange={setContent} initialContent={content} resetKey={editorResetKey} />
+                  </div>
+                </AdminFormCard>
           {generatorEnabled && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">Sinh tự động</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
+            <AdminFormCard title="Sinh tự động">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label>Mục tiêu bài</Label>
@@ -523,13 +636,27 @@ export default function PostCreatePage() {
                     </div>
                   )}
                   {requiredFieldSet.has('keyword') && (
-                    <div className="space-y-2">
-                      <Label>Nhu cầu / Keyword</Label>
-                      <Input
-                        value={generatorKeyword}
-                        onChange={(e) =>{  setGeneratorKeyword(e.target.value); }}
-                        placeholder="VD: chăm sóc tóc, gaming, tiết kiệm"
-                      />
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Nhu cầu / Keywords</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label className="text-xs text-slate-500">Từ khóa chính</Label>
+                          <Input
+                            value={generatorKeyword}
+                            onChange={(e) =>{  setGeneratorKeyword(e.target.value); }}
+                            placeholder="VD: chăm sóc tóc, gaming"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-slate-500">Từ khóa phụ</Label>
+                          <Input
+                            value={generatorSecondaryKeyword}
+                            onChange={(e) =>{  setGeneratorSecondaryKeyword(e.target.value); }}
+                            placeholder="VD: tiết kiệm, cho người mới"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500">Có thể nhập 1 hoặc 2 từ khóa. Khi nhập 2 từ khóa, bài viết sẽ dùng cả hai làm nhu cầu chính.</p>
                     </div>
                   )}
                   {requiredFieldSet.has('categoryId') && (
@@ -646,40 +773,13 @@ export default function PostCreatePage() {
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </AdminFormCard>
           )}
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              {/* Title - always shown (system field) */}
-              <div className="space-y-2">
-                <Label>Tiêu đề <span className="text-red-500">*</span></Label>
-                <Input value={title} onChange={handleTitleChange} required placeholder="Nhập tiêu đề bài viết..." />
-              </div>
-              {/* Slug - always shown (system field) */}
-              <div className="space-y-2">
-                <Label>Slug</Label>
-                <Input value={slug} onChange={(e) =>{  setSlug(e.target.value); }} placeholder="tu-dong-tao-tu-tieu-de" className="font-mono text-sm" />
-              </div>
-              {/* Excerpt - conditional */}
-              {enabledFields.has('excerpt') && (
-                <div className="space-y-2">
-                  <Label>Mô tả ngắn</Label>
-                  <Input value={excerpt} onChange={(e) =>{  setExcerpt(e.target.value); }} placeholder="Tóm tắt nội dung bài viết..." />
-                </div>
-              )}
-              {/* Content - always shown (system field) */}
-              <div className="space-y-2">
-                <Label>Nội dung</Label>
-                <LexicalEditor onChange={setContent} initialContent={content} resetKey={editorResetKey} />
-              </div>
-            </CardContent>
-          </Card>
 
           {showAdvancedRenderCard && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">Render nâng cao</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
+            <AdminFormCard title="Render nâng cao">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Kiểu render</Label>
                   <select
@@ -714,234 +814,83 @@ export default function PostCreatePage() {
                     />
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </AdminFormCard>
           )}
 
-          {(enabledFields.has('metaTitle') || enabledFields.has('metaDescription')) && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">SEO</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {enabledFields.has('metaTitle') && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Meta Title</Label>
-                      <span className={`text-xs ${metaTitle.length > 60 ? 'text-red-500' : 'text-slate-400'}`}>
-                        {metaTitle.length}/60
-                      </span>
-                    </div>
-                    <Input
-                      value={metaTitle}
-                      onChange={(e) =>{  setMetaTitle(e.target.value); }}
-                      placeholder="Lấy theo tiêu đề bài viết nếu để trống"
-                    />
-                  </div>
-                )}
-                {enabledFields.has('metaDescription') && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Meta Description</Label>
-                      <span className={`text-xs ${metaDescription.length > 160 ? 'text-red-500' : 'text-slate-400'}`}>
-                        {metaDescription.length}/160
-                      </span>
-                    </div>
-                    <textarea
-                      value={metaDescription}
-                      onChange={(e) =>{  setMetaDescription(e.target.value); }}
-                      className="w-full min-h-[90px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                      placeholder="Lấy theo mô tả ngắn/nội dung nếu để trống"
-                    />
-                  </div>
-                )}
-                <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-3 text-sm">
-                  <div className="text-blue-600 font-medium truncate">
-                    {metaTitle.trim() || title || 'Tiêu đề bài viết'}
-                  </div>
-                  <div className="text-emerald-600 text-xs">
-                    /{categorySlugPreview}/{slug || 'bai-viet'}
-                  </div>
-                  <div className="text-slate-600 text-xs mt-1 line-clamp-2">
-                    {metaDescription.trim() || excerpt || 'Mô tả ngắn sẽ hiển thị tại đây.'}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        
-        <div className="space-y-6">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Xuất bản</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Trạng thái</Label>
-                <select 
-                  value={status} 
-                  onChange={(e) =>{  setStatus(e.target.value as 'Draft' | 'Published'); }}
-                  className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                >
-                  <option value="Draft">Bản nháp</option>
-                  <option value="Published">Đã xuất bản</option>
-                </select>
-              </div>
-              {schedulingEnabled && status === 'Published' && (
-                <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                    <Checkbox
-                      checked={publishImmediately}
-                      onCheckedChange={(checked) => {
-                        setPublishImmediately(checked);
-                        if (checked) {setPublishAtLocal('');}
-                      }}
-                    />
-                    Xuất bản ngay
-                  </label>
-                  {!publishImmediately && (
-                    <div className="space-y-2">
-                      <Label>Thời gian xuất bản</Label>
-                      <Input
-                        type="datetime-local"
-                        value={publishAtLocal}
-                        onChange={(e) =>{  setPublishAtLocal(e.target.value); }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>Danh mục <span className="text-red-500">*</span></Label>
-                {multiCategoryEnabled ? (
-                  <>
-                  <CategoryTagsInput
-                    categories={categoriesData}
-                    value={[categoryId, ...additionalCategoryIds].filter(Boolean)}
-                    onQuickCreate={() =>{  setShowCategoryModal(true); }}
-                    onChange={(ids) => {
-                      setCategoryId(ids[0] ?? '');
-                      setAdditionalCategoryIds(ids.slice(1));
-                    }}
-                  />
-                  <p className="text-xs text-slate-500">Thẻ đầu tiên là danh mục chính/canonical, các thẻ sau là danh mục phụ.</p>
-                  </>
-                ) : (
-                  <div className="flex gap-2">
-                  <select 
-                    value={categoryId} 
-                    onChange={(e) =>{  setCategoryId(e.target.value); }}
-                    required
-                    className="flex-1 h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                  >
-                    <option value="">-- Chọn danh mục --</option>
-                    {categoriesData?.map(cat => (
-                      <option key={cat._id} value={cat._id}>{cat.name}</option>
-                    ))}
-                  </select>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() =>{  setShowCategoryModal(true); }}
-                    title="Tạo danh mục mới"
-                  >
-                    <Plus size={16} />
-                  </Button>
-                  </div>
-                )}
-              </div>
-              {enabledFields.has('author_name') && (
-                <div className="space-y-2">
-                  <Label>Tác giả</Label>
-                  <Input
-                    value={authorName}
-                    onChange={(e) =>{  setAuthorName(e.target.value); }}
-                    placeholder="Nhập tên tác giả..."
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader><CardTitle className="text-base">Ảnh đại diện</CardTitle></CardHeader>
-            <CardContent>
-              <ImageUploader
-                value={thumbnail}
-                storageId={thumbnailStorageId}
-                onChange={(url, storageId) => {
-                  setThumbnail(url);
-                  setThumbnailStorageId(storageId);
-                }}
-                folder="posts"
-                naming={{ entityName: slug.trim() || 'post', style: 'slug-index', index: 1 }}
-                deleteMode="defer"
-                aspectRatio="video"
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      <HomeComponentStickyFooter
-        isSubmitting={isSubmitting}
-        submitLabel="Đăng bài"
-        align="end"
-        disableSave={isSubmitting || !title.trim() || !categoryId}
-      >
-        <div className="flex flex-wrap justify-end gap-2">
-          <AiEntityImportDialog kind="post" enabledFields={enabledFields} onApply={handleApplyAiPost} />
-          <Button type="submit" variant="accent" disabled={isSubmitting || !title.trim() || !categoryId}>
-            {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-            Đăng bài
-          </Button>
-        </div>
-      </HomeComponentStickyFooter>
-    </form>
-    {galleryModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4" onClick={handleCloseGallery}>
-        <div
-          className="relative w-full max-w-4xl rounded-xl border border-slate-100 bg-white overflow-hidden"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={handleCloseGallery}
-            className="absolute right-3 top-3 rounded-md bg-slate-900/80 px-3 py-1 text-xs font-medium text-white"
-          >
-            Đóng
-          </button>
-          <div className="relative bg-black">
-            <img
-              src={galleryModal.images[galleryModal.index]}
-              alt="Ảnh xem trước"
-              className="w-full max-h-[75vh] object-contain"
-            />
-            {galleryModal.images.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={handlePrevGallery}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-md bg-white/90 px-2 py-1 text-lg font-semibold text-slate-900"
-                  aria-label="Ảnh trước"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextGallery}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white/90 px-2 py-1 text-lg font-semibold text-slate-900"
-                  aria-label="Ảnh sau"
-                >
-                  ›
-                </button>
+                <AdminSeoMetaCard
+                  metaTitle={metaTitle}
+                  onMetaTitleChange={setMetaTitle}
+                  metaDescription={metaDescription}
+                  onMetaDescriptionChange={setMetaDescription}
+                  fallbackTitle={title}
+                  fallbackDescription={excerpt || stripHtml(content).slice(0, 160)}
+                  slug={slug}
+                  categorySlug={categorySlugPreview}
+                  thumbnailUrl={thumbnail}
+                  showTitleInput={enabledFields.has('metaTitle')}
+                  showDescriptionInput={enabledFields.has('metaDescription')}
+                />
               </>
+            ) : showAdvancedSeoFields ? (
+              <PostAdvancedSeoFields
+                faqItems={faqItems}
+                focusKeyword={focusKeyword}
+                onFaqItemsChange={setFaqItems}
+                onFocusKeywordChange={setFocusKeyword}
+                onRelatedQueriesChange={setRelatedQueries}
+                onTagsChange={setPostTags}
+                relatedQueries={relatedQueries}
+                showFaqItems={enabledFields.has('faqItems')}
+                showFocusKeyword={enabledFields.has('focusKeyword')}
+                showRelatedQueries={enabledFields.has('relatedQueries')}
+                showTags={enabledFields.has('tags')}
+                tags={postTags}
+              />
+            ) : (
+              <AdminFormCard>
+                <div className="py-8 text-center text-sm text-slate-500">
+                  SEO nâng cao đang tắt trong cấu hình module Posts.
+                </div>
+              </AdminFormCard>
             )}
-            <div className="absolute bottom-3 right-3 rounded-full bg-black/70 px-2 py-1 text-xs text-white">
-              {galleryModal.index + 1}/{galleryModal.images.length}
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-    </>
+          </AdminFormMain>
+
+          <AdminFormSidebar>
+            <AdminPublishSidebarCard
+              status={status}
+              onStatusChange={(val) => setStatus(val as 'Draft' | 'Published')}
+              categoryId={categoryId}
+              onCategoryIdChange={setCategoryId}
+              categories={categoriesData}
+              multiCategoryEnabled={multiCategoryEnabled}
+              additionalCategoryIds={additionalCategoryIds}
+              onAdditionalCategoryIdsChange={setAdditionalCategoryIds}
+              onOpenCategoryModal={() => setShowCategoryModal(true)}
+              schedulingEnabled={schedulingEnabled}
+              publishImmediately={publishImmediately}
+              onPublishImmediatelyChange={setPublishImmediately}
+              publishAtLocal={publishAtLocal}
+              onPublishAtLocalChange={setPublishAtLocal}
+              showAuthor={enabledFields.has('author_name')}
+              authorName={authorName}
+              onAuthorNameChange={setAuthorName}
+            />
+
+            <AdminThumbnailSidebarCard
+              thumbnail={thumbnail}
+              thumbnailStorageId={thumbnailStorageId}
+              onThumbnailChange={(url, storageId) => {
+                setThumbnail(url);
+                setThumbnailStorageId(storageId);
+              }}
+              folder="posts"
+              entitySlug={slug}
+              aspectRatio="video"
+            />
+          </AdminFormSidebar>
+        </AdminFormGrid>
+      </form>
+    </AdminFormPageWrapper>
   );
 }

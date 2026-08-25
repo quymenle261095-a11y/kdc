@@ -2,7 +2,8 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { removeOwnerFilesAndCleanup, resolveStorageIdsFromLegacyUrls, syncOwnerFilesAndCleanup } from "./lib/fileService";
+import { removeOwnerFilesAndCleanup, syncOwnerFilesAndCleanup } from "./lib/fileService";
+import { EMAIL_CONFIG_SETTING_KEYS, getEmailConfigurationStatus as resolveEmailConfigurationStatus } from "../lib/email-config-status";
 
 const settingDoc = v.object({
   _creationTime: v.number(),
@@ -10,6 +11,13 @@ const settingDoc = v.object({
   group: v.string(),
   key: v.string(),
   value: v.any(),
+});
+
+const emailConfigurationStatusDoc = v.object({
+  configured: v.boolean(),
+  driver: v.union(v.literal("smtp"), v.literal("resend"), v.literal("unknown")),
+  label: v.string(),
+  reason: v.string(),
 });
 
 const SETTING_STORAGE_ID_SUFFIX = "__storageId";
@@ -95,6 +103,28 @@ export const getMultiple = query({
   returns: v.record(v.string(), v.any()),
 });
 
+export const getMailConfigurationStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const settings = await Promise.all(EMAIL_CONFIG_SETTING_KEYS.map((key) =>
+      ctx.db
+        .query("settings")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique()
+    ));
+
+    const values: Record<string, unknown> = {};
+    for (const setting of settings) {
+      if (setting) {
+        values[setting.key] = setting.value;
+      }
+    }
+
+    return resolveEmailConfigurationStatus(values);
+  },
+  returns: emailConfigurationStatusDoc,
+});
+
 export const set = mutation({
   args: {
     group: v.string(),
@@ -103,7 +133,7 @@ export const set = mutation({
     value: v.any(),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
+    const _existing = await ctx.db
       .query("settings")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
@@ -113,9 +143,6 @@ export const set = mutation({
       .unique();
     const previousStorageIds = [
       typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
-      ...await resolveStorageIdsFromLegacyUrls(ctx, [
-        typeof existing?.value === "string" ? existing.value : null,
-      ], { folder: "settings", limit: 100 }),
     ];
 
     await upsertSetting(ctx, { group: args.group, key: args.key, value: args.value });
@@ -178,14 +205,11 @@ export const setMultiple = mutation({
       if (!Object.prototype.hasOwnProperty.call(setting, "storageId")) {
         continue;
       }
-      const existing = settingsMap.get(setting.key);
+      const _existing = settingsMap.get(setting.key);
       const storageKey = storageIdSettingKey(setting.key);
       const storageSetting = settingsMap.get(storageKey);
       const previousStorageIds = [
         typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
-        ...await resolveStorageIdsFromLegacyUrls(ctx, [
-          typeof existing?.value === "string" ? existing.value : null,
-        ], { folder: "settings", limit: 100 }),
       ];
       const nextStorageId = setting.storageId ?? null;
       if (nextStorageId) {
@@ -232,9 +256,6 @@ export const remove = mutation({
     }, {
       previousStorageIds: [
         typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
-        ...await resolveStorageIdsFromLegacyUrls(ctx, [
-          typeof setting?.value === "string" ? setting.value : null,
-        ], { folder: "settings", limit: 100 }),
       ],
     });
     if (setting) {await ctx.db.delete(setting._id);}
@@ -253,7 +274,7 @@ export const removeMultiple = mutation({
     ]);
     const settings = await ctx.db.query('settings').take(500);
     for (const key of args.keys) {
-      const setting = settings.find(item => item.key === key);
+      const _setting = settings.find(item => item.key === key);
       const storageSetting = settings.find(item => item.key === storageIdSettingKey(key));
       await removeOwnerFilesAndCleanup(ctx, {
         ownerId: key,
@@ -261,9 +282,6 @@ export const removeMultiple = mutation({
       }, {
         previousStorageIds: [
           typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
-          ...await resolveStorageIdsFromLegacyUrls(ctx, [
-            typeof setting?.value === "string" ? setting.value : null,
-          ], { folder: "settings", limit: 100 }),
         ],
       });
     }
@@ -293,9 +311,6 @@ export const removeByGroup = mutation({
       }, {
         previousStorageIds: [
           typeof storageSetting?.value === "string" ? storageSetting.value as Id<"_storage"> : null,
-          ...await resolveStorageIdsFromLegacyUrls(ctx, [
-            typeof setting.value === "string" ? setting.value : null,
-          ], { folder: "settings", limit: 100 }),
         ],
       });
     }

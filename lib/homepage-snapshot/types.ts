@@ -17,6 +17,21 @@ export type SnapshotEntityType = 'post' | 'product' | 'service' | 'productCatego
 
 export type SnapshotImportMode = 'append';
 
+export type SnapshotThumbnailFit = 'cover' | 'contain';
+
+export type SnapshotCustomThumbnail = {
+  url: string;
+  storageId?: string | null;
+  alt?: string;
+  config?: {
+    objectFit?: SnapshotThumbnailFit;
+    positionX?: number;
+    positionY?: number;
+    backgroundColor?: string;
+  };
+  updatedAt?: number;
+};
+
 export type SnapshotStaticItem = {
   sourceId: string;
   sourceType: SnapshotEntityType;
@@ -84,6 +99,9 @@ export type HomepageSnapshotPayload = {
     dependencies: SnapshotDependencyCapture;
     systemStyle: SnapshotSystemStylePayload;
     demoBundle?: Record<string, unknown>;
+  };
+  gallery?: {
+    customThumbnail?: SnapshotCustomThumbnail;
   };
   index: {
     mediaIndex: Array<{

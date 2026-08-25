@@ -219,8 +219,34 @@ const CONTACT_ICON_MAP = CONTACT_ICON_OPTIONS.reduce<Record<string, ContactIconO
   return acc;
 }, {});
 
+const LEGACY_ICON_ALIASES: Record<string, string> = {
+  address: 'map-pin',
+  'circle-help': 'help-circle',
+  'contact-address': 'map-pin',
+  'contact-email': 'mail',
+  'contact-phone': 'phone',
+  email: 'mail',
+  help: 'help-circle',
+  location: 'map-pin',
+  telephone: 'phone',
+  time: 'clock',
+  'work-hours': 'clock',
+  'working-hours': 'clock',
+};
+
+export const normalizeContactIconValue = (value: string): string => {
+  const normalized = value
+    .trim()
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
+    .toLowerCase();
+
+  return LEGACY_ICON_ALIASES[normalized] ?? normalized;
+};
+
 export const resolveContactIcon = (value: string): ContactIconOption['Icon'] => {
-  return CONTACT_ICON_MAP[value] ?? HelpCircle;
+  return CONTACT_ICON_MAP[value] ?? CONTACT_ICON_MAP[normalizeContactIconValue(value)] ?? HelpCircle;
 };
 
 export const renderContactIcon = (value: string, size = 16, className?: string): ReactNode => {

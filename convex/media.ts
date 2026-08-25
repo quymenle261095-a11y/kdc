@@ -108,7 +108,7 @@ function normalizeValue(value: unknown): string {
 
 function containsStorageId(value: unknown, storageId: string): boolean {
   if (value === null || value === undefined) {return false;}
-  if (typeof value === "string") {return value === storageId;}
+  if (typeof value === "string") {return value === storageId || value.includes(storageId);}
   if (typeof value === "number" || typeof value === "boolean") {return false;}
   if (Array.isArray(value)) {return value.some(item => containsStorageId(item, storageId));}
   if (typeof value === "object") {
@@ -237,16 +237,66 @@ async function resolveMediaUsageMap(
     }
   }
 
-  const users = fullScan ? await ctx.db.query("users").collect() : trimUsageRecords(await ctx.db.query("users").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  const fetchTableRecords = async (tableName: string) => {
+    if (fullScan) {
+      return ctx.db.query(tableName as any).collect();
+    }
+    const rawRecords = await ctx.db.query(tableName as any).take(MAX_USAGE_SCAN_PER_TABLE + 1);
+    return trimUsageRecords(rawRecords, scanState);
+  };
+
+  const [
+    users,
+    customers,
+    productCategories,
+    products,
+    productOptionValues,
+    productVariants,
+    productSupplementalContents,
+    postCategories,
+    posts,
+    serviceCategories,
+    services,
+    courseCategories,
+    courses,
+    projectCategories,
+    projects,
+    promotions,
+    landingPages,
+    pages,
+    settings,
+    homeComponents
+  ] = await Promise.all([
+    fetchTableRecords("users"),
+    fetchTableRecords("customers"),
+    fetchTableRecords("productCategories"),
+    fetchTableRecords("products"),
+    fetchTableRecords("productOptionValues"),
+    fetchTableRecords("productVariants"),
+    fetchTableRecords("productSupplementalContents"),
+    fetchTableRecords("postCategories"),
+    fetchTableRecords("posts"),
+    fetchTableRecords("serviceCategories"),
+    fetchTableRecords("services"),
+    fetchTableRecords("courseCategories"),
+    fetchTableRecords("courses"),
+    fetchTableRecords("projectCategories"),
+    fetchTableRecords("projects"),
+    fetchTableRecords("promotions"),
+    fetchTableRecords("landingPages"),
+    fetchTableRecords("pages"),
+    fetchTableRecords("settings"),
+    fetchTableRecords("homeComponents"),
+  ]);
+
   users.forEach(record => collectUsageMatches(usageMap, candidates, "users", record, "avatar", record.avatar));
-
-  const customers = fullScan ? await ctx.db.query("customers").collect() : trimUsageRecords(await ctx.db.query("customers").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   customers.forEach(record => collectUsageMatches(usageMap, candidates, "customers", record, "avatar", record.avatar));
-
-  const productCategories = fullScan ? await ctx.db.query("productCategories").collect() : trimUsageRecords(await ctx.db.query("productCategories").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  productCategories.forEach(record => collectUsageMatches(usageMap, candidates, "productCategories", record, "image", record.image));
-
-  const products = fullScan ? await ctx.db.query("products").collect() : trimUsageRecords(await ctx.db.query("products").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  productCategories.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "productCategories", record, "image", record.image);
+    collectUsageMatches(usageMap, candidates, "productCategories", record, "description", record.description);
+    collectUsageMatches(usageMap, candidates, "productCategories", record, "filterFooterContent", record.filterFooterContent);
+    collectUsageMatches(usageMap, candidates, "productCategories", record, "productDetailSuffixContent", record.productDetailSuffixContent);
+  });
   products.forEach(record => {
     collectUsageMatches(usageMap, candidates, "products", record, "imageStorageId", record.imageStorageId);
     collectUsageMatches(usageMap, candidates, "products", record, "imageStorageIds", record.imageStorageIds);
@@ -256,26 +306,19 @@ async function resolveMediaUsageMap(
     collectUsageMatches(usageMap, candidates, "products", record, "markdownRender", record.markdownRender);
     collectUsageMatches(usageMap, candidates, "products", record, "htmlRender", record.htmlRender);
   });
-
-  const productOptionValues = fullScan ? await ctx.db.query("productOptionValues").collect() : trimUsageRecords(await ctx.db.query("productOptionValues").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   productOptionValues.forEach(record => collectUsageMatches(usageMap, candidates, "productOptionValues", record, "image", record.image));
-
-  const productVariants = fullScan ? await ctx.db.query("productVariants").collect() : trimUsageRecords(await ctx.db.query("productVariants").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   productVariants.forEach(record => {
     collectUsageMatches(usageMap, candidates, "productVariants", record, "image", record.image);
     collectUsageMatches(usageMap, candidates, "productVariants", record, "images", record.images);
   });
-
-  const productSupplementalContents = fullScan ? await ctx.db.query("productSupplementalContents").collect() : trimUsageRecords(await ctx.db.query("productSupplementalContents").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   productSupplementalContents.forEach(record => {
     collectUsageMatches(usageMap, candidates, "productSupplementalContents", record, "preContent", record.preContent);
     collectUsageMatches(usageMap, candidates, "productSupplementalContents", record, "postContent", record.postContent);
   });
-
-  const postCategories = fullScan ? await ctx.db.query("postCategories").collect() : trimUsageRecords(await ctx.db.query("postCategories").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  postCategories.forEach(record => collectUsageMatches(usageMap, candidates, "postCategories", record, "thumbnail", record.thumbnail));
-
-  const posts = fullScan ? await ctx.db.query("posts").collect() : trimUsageRecords(await ctx.db.query("posts").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  postCategories.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "postCategories", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "postCategories", record, "description", record.description);
+  });
   posts.forEach(record => {
     collectUsageMatches(usageMap, candidates, "posts", record, "thumbnailStorageId", record.thumbnailStorageId);
     collectUsageMatches(usageMap, candidates, "posts", record, "thumbnail", record.thumbnail);
@@ -283,17 +326,10 @@ async function resolveMediaUsageMap(
     collectUsageMatches(usageMap, candidates, "posts", record, "markdownRender", record.markdownRender);
     collectUsageMatches(usageMap, candidates, "posts", record, "htmlRender", record.htmlRender);
   });
-
-  const orders = fullScan ? await ctx.db.query("orders").collect() : trimUsageRecords(await ctx.db.query("orders").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  orders.forEach(record => collectUsageMatches(usageMap, candidates, "orders", record, "items.productImage", record.items));
-
-  const cartItems = fullScan ? await ctx.db.query("cartItems").collect() : trimUsageRecords(await ctx.db.query("cartItems").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  cartItems.forEach(record => collectUsageMatches(usageMap, candidates, "cartItems", record, "productImage", record.productImage));
-
-  const serviceCategories = fullScan ? await ctx.db.query("serviceCategories").collect() : trimUsageRecords(await ctx.db.query("serviceCategories").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  serviceCategories.forEach(record => collectUsageMatches(usageMap, candidates, "serviceCategories", record, "thumbnail", record.thumbnail));
-
-  const services = fullScan ? await ctx.db.query("services").collect() : trimUsageRecords(await ctx.db.query("services").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  serviceCategories.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "serviceCategories", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "serviceCategories", record, "description", record.description);
+  });
   services.forEach(record => {
     collectUsageMatches(usageMap, candidates, "services", record, "thumbnailStorageId", record.thumbnailStorageId);
     collectUsageMatches(usageMap, candidates, "services", record, "thumbnail", record.thumbnail);
@@ -301,27 +337,45 @@ async function resolveMediaUsageMap(
     collectUsageMatches(usageMap, candidates, "services", record, "markdownRender", record.markdownRender);
     collectUsageMatches(usageMap, candidates, "services", record, "htmlRender", record.htmlRender);
   });
-
-  const promotions = fullScan ? await ctx.db.query("promotions").collect() : trimUsageRecords(await ctx.db.query("promotions").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  courseCategories.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "courseCategories", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "courseCategories", record, "description", record.description);
+  });
+  courses.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "courses", record, "thumbnailStorageId", record.thumbnailStorageId);
+    collectUsageMatches(usageMap, candidates, "courses", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "courses", record, "content", record.content);
+    collectUsageMatches(usageMap, candidates, "courses", record, "markdownRender", record.markdownRender);
+    collectUsageMatches(usageMap, candidates, "courses", record, "htmlRender", record.htmlRender);
+  });
+  projectCategories.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "projectCategories", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "projectCategories", record, "description", record.description);
+  });
+  projects.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "projects", record, "thumbnailStorageId", record.thumbnailStorageId);
+    collectUsageMatches(usageMap, candidates, "projects", record, "imageStorageIds", record.imageStorageIds);
+    collectUsageMatches(usageMap, candidates, "projects", record, "thumbnail", record.thumbnail);
+    collectUsageMatches(usageMap, candidates, "projects", record, "images", record.images);
+    collectUsageMatches(usageMap, candidates, "projects", record, "content", record.content);
+    collectUsageMatches(usageMap, candidates, "projects", record, "markdownRender", record.markdownRender);
+    collectUsageMatches(usageMap, candidates, "projects", record, "htmlRender", record.htmlRender);
+  });
   promotions.forEach(record => {
     collectUsageMatches(usageMap, candidates, "promotions", record, "thumbnail", record.thumbnail);
     collectUsageMatches(usageMap, candidates, "promotions", record, "discountConfig", record.discountConfig);
   });
-
-  const landingPages = fullScan ? await ctx.db.query("landingPages").collect() : trimUsageRecords(await ctx.db.query("landingPages").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   landingPages.forEach(record => {
     collectUsageMatches(usageMap, candidates, "landingPages", record, "heroImage", record.heroImage);
     collectUsageMatches(usageMap, candidates, "landingPages", record, "content", record.content);
   });
-
-  const settings = fullScan ? await ctx.db.query("settings").collect() : trimUsageRecords(await ctx.db.query("settings").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
+  pages.forEach(record => {
+    collectUsageMatches(usageMap, candidates, "pages", record, "content", record.content);
+    collectUsageMatches(usageMap, candidates, "pages", record, "markdownRender", record.markdownRender);
+    collectUsageMatches(usageMap, candidates, "pages", record, "htmlRender", record.htmlRender);
+  });
   settings.forEach(record => collectUsageMatches(usageMap, candidates, "settings", record, "value", record.value));
-
-  const homeComponents = fullScan ? await ctx.db.query("homeComponents").collect() : trimUsageRecords(await ctx.db.query("homeComponents").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
   homeComponents.forEach(record => collectUsageMatches(usageMap, candidates, "homeComponents", record, "config", record.config));
-
-  const homeComponentSnapshots = fullScan ? await ctx.db.query("homeComponentSnapshots").collect() : trimUsageRecords(await ctx.db.query("homeComponentSnapshots").take(MAX_USAGE_SCAN_PER_TABLE + 1), scanState);
-  homeComponentSnapshots.forEach(record => collectUsageMatches(usageMap, candidates, "homeComponentSnapshots", record, "payload", record.payload));
 
   return { scanComplete: scanState.complete, usageMap };
 }
@@ -729,6 +783,68 @@ export const update = mutation({
     }
     
     await ctx.db.patch(id, filteredUpdates);
+    return null;
+  },
+  returns: v.null(),
+});
+
+// Replace media file
+export const replaceFile = mutation({
+  args: {
+    id: v.id("images"),
+    storageId: v.id("_storage"),
+    size: v.number(),
+    mimeType: v.string(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    extension: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, storageId, size, mimeType, width, height, extension } = args;
+    const media = await ctx.db.get(id);
+    if (!media) {throw new Error("Media not found");}
+
+    // Delete old storage file
+    try {
+      await ctx.storage.delete(media.storageId);
+    } catch (error) {
+      console.error("Failed to delete old file:", error);
+    }
+
+    // Update counters
+    const oldTypeKey = getMediaTypeKey(media.mimeType);
+    const newTypeKey = getMediaTypeKey(mimeType);
+
+    // Subtract old stats
+    await updateMediaStats(ctx, "total", 0, -media.size);
+    await updateMediaStats(ctx, oldTypeKey, 0, -media.size);
+
+    // Add new stats
+    await updateMediaStats(ctx, "total", 0, size);
+    await updateMediaStats(ctx, newTypeKey, 0, size);
+
+    // If type changed (e.g. image -> video), update type count
+    if (oldTypeKey !== newTypeKey) {
+      await updateMediaStats(ctx, oldTypeKey, -1, 0);
+      await updateMediaStats(ctx, newTypeKey, 1, 0);
+    }
+
+    // Update document
+    const updates: Record<string, any> = {
+      storageId,
+      size,
+      mimeType,
+      width,
+      height,
+    };
+    if (extension !== undefined) {
+      updates.extension = extension;
+    } else {
+      // Resolve from filename or mimetype
+      updates.extension = resolveExtension(media.filename, mimeType);
+    }
+
+    await ctx.db.patch(id, updates);
     return null;
   },
   returns: v.null(),

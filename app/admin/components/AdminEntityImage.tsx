@@ -1,36 +1,28 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { AdminImage as Image } from '@/app/admin/components/AdminImage';
-import { Briefcase, FileText, Package } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import { cn } from './ui';
 import { isValidImageSrc } from '@/lib/utils/image';
 
-type AdminEntityImageVariant = 'post' | 'service' | 'product';
+export type AdminEntityImageVariant = 'post' | 'service' | 'product' | 'course' | 'project' | 'resource' | 'default';
 
-type AdminEntityImageProps = {
+export type AdminEntityImageProps = {
   alt: string;
   className?: string;
-  height: number;
+  height?: number;
   src?: string | null;
-  variant: AdminEntityImageVariant;
-  width: number;
+  variant?: AdminEntityImageVariant;
+  width?: number;
 };
 
-const FALLBACKS: Record<AdminEntityImageVariant, { icon: typeof FileText; label: string }> = {
-  post: { icon: FileText, label: 'Bài viết' },
-  product: { icon: Package, label: 'Sản phẩm' },
-  service: { icon: Briefcase, label: 'Dịch vụ' },
-};
-
-export function AdminEntityImage({ alt, className, height, src, variant, width }: AdminEntityImageProps) {
+export function AdminEntityImage({ alt, className, height = 36, src, width = 36 }: AdminEntityImageProps) {
   const [hasError, setHasError] = useState(false);
   const isValid = isValidImageSrc(src);
-  const fallback = FALLBACKS[variant];
-  const Icon = useMemo(() => fallback.icon, [fallback.icon]);
 
   return (
-    <div className={cn('relative overflow-hidden rounded', className)}>
+    <div className={cn('relative shrink-0 overflow-hidden rounded-md border border-slate-200/60 bg-slate-100 dark:border-slate-700/60 dark:bg-slate-800/80 flex items-center justify-center', className)}>
       {isValid && !hasError ? (
         <Image
           src={src as string}
@@ -41,9 +33,8 @@ export function AdminEntityImage({ alt, className, height, src, variant, width }
           onError={() => setHasError(true)}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center gap-1 rounded bg-slate-200 text-[10px] text-slate-500 dark:bg-slate-700 dark:text-slate-400">
-          <Icon size={12} />
-          <span>{fallback.label}</span>
+        <div className="flex h-full w-full items-center justify-center text-slate-400 dark:text-slate-500">
+          <ImageIcon size={15} strokeWidth={1.75} />
         </div>
       )}
     </div>

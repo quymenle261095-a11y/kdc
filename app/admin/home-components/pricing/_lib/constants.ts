@@ -7,14 +7,14 @@ import { DEFAULT_PRICING_CORNER_RADIUS, normalizePricingCornerRadius } from '../
 import { DEFAULT_SECTION_SPACING, normalizeSectionSpacing, type SectionSpacing } from '../../_shared/types/sectionSpacing';
 
 export const PRICING_STYLES: Array<{ id: PricingStyle; label: string }> = [
-  { id: 'cards', label: 'Cards' },
-  { id: 'horizontal', label: 'Ngang' },
-  { id: 'minimal', label: 'Minimal' },
-  { id: 'comparison', label: 'So sánh' },
-  { id: 'featured', label: 'Nổi bật' },
-  { id: 'compact', label: 'Gọn' },
-  { id: 'tabbed', label: 'Tabs chi tiết' },
-  { id: 'construction', label: 'Thi công' },
+  { id: 'cards', label: '(1) Dạng thẻ' },
+  { id: 'horizontal', label: '(2) Hàng ngang' },
+  { id: 'minimal', label: '(3) Tối giản' },
+  { id: 'comparison', label: '(4) So sánh' },
+  { id: 'featured', label: '(5) Nổi bật' },
+  { id: 'compact', label: '(6) Thu gọn' },
+  { id: 'tabbed', label: '(7) Phân tab' },
+  { id: 'construction', label: '(8) Góc cạnh' },
 ];
 
 const DEFAULT_PRICING_STYLE: PricingStyle = 'cards';

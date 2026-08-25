@@ -430,6 +430,8 @@ export default function ContactEditPage({
               mode={effectiveColors.mode}
               selectedStyle={style}
               onStyleChange={(nextStyle) => { setConfig({ ...normalizedConfig, style: nextStyle as ContactStyle }); }}
+              onConfigChange={(nextConfig) => { setConfig(normalizeContactConfig(nextConfig)); }}
+              onTitleChange={setTitle}
               title={title}
               mapData={mapData}
               fontStyle={fontStyle}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { use, useMemo } from 'react';
 import { ErrorPageView } from '@/components/site/error/ErrorPageView';
 import { useBrandColors } from '@/components/site/hooks';
 import { ERROR_STATUS_CODES, useErrorPagesConfig } from '@/lib/experiences';
@@ -8,17 +8,18 @@ import { ERROR_STATUS_CODES, useErrorPagesConfig } from '@/lib/experiences';
 const isValidStatusCode = (value: number) =>
   ERROR_STATUS_CODES.includes(value as (typeof ERROR_STATUS_CODES)[number]);
 
-export default function ErrorCodePage({ params }: { params: { code: string } }) {
+export default function ErrorCodePage({ params }: { params: Promise<{ code: string }> }) {
+  const unwrappedParams = use(params);
   const config = useErrorPagesConfig();
   const brandColors = useBrandColors();
 
   const resolvedCode = useMemo(() => {
-    const parsed = Number(params.code);
+    const parsed = Number(unwrappedParams.code);
     if (!Number.isFinite(parsed)) {
       return 404;
     }
     return isValidStatusCode(parsed) ? parsed : 404;
-  }, [params.code]);
+  }, [unwrappedParams.code]);
 
   return (
     <ErrorPageView

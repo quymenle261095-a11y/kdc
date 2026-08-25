@@ -69,9 +69,8 @@ export class ProductSeeder extends BaseSeeder<ProductData> {
     const hasSale = this.randomBoolean(0.3); // 30% có sale
     
     const status = this.faker.helpers.weightedArrayElement([
-      { value: 'Active' as const, weight: 7 },
+      { value: 'Active' as const, weight: 8 },
       { value: 'Draft' as const, weight: 2 },
-      { value: 'Archived' as const, weight: 1 },
     ]);
     
     return {

@@ -24,30 +24,14 @@ const isLayoutStyle = (value: unknown): value is ContactLayoutStyle => {
   return value === 'form-only' || value === 'with-map' || value === 'with-info';
 };
 
-const mergeLegacyLayout = (
-  value: unknown,
-  fallback: Pick<ContactExperienceConfig, 'showContactInfo' | 'showMap' | 'showSocialLinks'>
-): Pick<ContactExperienceConfig, 'showContactInfo' | 'showMap' | 'showSocialLinks'> => {
-  if (!isRecord(value)) {
-    return fallback;
-  }
-  return {
-    showContactInfo: typeof value.showContactInfo === 'boolean' ? value.showContactInfo : fallback.showContactInfo,
-    showMap: typeof value.showMap === 'boolean' ? value.showMap : fallback.showMap,
-    showSocialLinks: typeof value.showSocialLinks === 'boolean' ? value.showSocialLinks : fallback.showSocialLinks,
-  };
-};
-
 export const parseContactExperienceConfig = (raw: unknown): ContactExperienceConfig => {
   const source = isRecord(raw) ? raw : {};
-  const layoutsRaw = isRecord(source.layouts) ? source.layouts : {};
   const layoutStyle = isLayoutStyle(source.layoutStyle) ? source.layoutStyle : DEFAULT_CONTACT_CONFIG.layoutStyle;
-  const legacyLayout = mergeLegacyLayout(layoutsRaw[layoutStyle], DEFAULT_CONTACT_CONFIG);
 
   return {
     layoutStyle,
-    showContactInfo: typeof source.showContactInfo === 'boolean' ? source.showContactInfo : legacyLayout.showContactInfo,
-    showMap: typeof source.showMap === 'boolean' ? source.showMap : legacyLayout.showMap,
-    showSocialLinks: typeof source.showSocialLinks === 'boolean' ? source.showSocialLinks : legacyLayout.showSocialLinks,
+    showContactInfo: typeof source.showContactInfo === 'boolean' ? source.showContactInfo : DEFAULT_CONTACT_CONFIG.showContactInfo,
+    showMap: typeof source.showMap === 'boolean' ? source.showMap : DEFAULT_CONTACT_CONFIG.showMap,
+    showSocialLinks: typeof source.showSocialLinks === 'boolean' ? source.showSocialLinks : DEFAULT_CONTACT_CONFIG.showSocialLinks,
   };
 };

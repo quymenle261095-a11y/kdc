@@ -15,6 +15,7 @@ import {
   syncOwnerFilesAndCleanup,
 } from "./lib/fileService";
 import { generateArticlePayload } from "../lib/posts/generator/assembler";
+import { getGeneratorKeywordPhrase, getGeneratorKeywords } from "../lib/posts/generator/keywords";
 import { getMacroTemplate } from "../lib/posts/generator/macro-templates";
 import type { GeneratorProduct, GeneratorSettings, GeneratorRequest } from "../lib/posts/generator/types";
 import {
@@ -31,6 +32,11 @@ const postDoc = v.object({
   authorName: v.optional(v.string()),
   categoryId: v.id("postCategories"),
   content: v.string(),
+  faqItems: v.optional(v.array(v.object({
+    answer: v.string(),
+    question: v.string(),
+  }))),
+  focusKeyword: v.optional(v.string()),
   renderType: v.optional(v.union(
     v.literal("content"),
     v.literal("markdown"),
@@ -43,8 +49,10 @@ const postDoc = v.object({
   metaTitle: v.optional(v.string()),
   order: v.number(),
   publishedAt: v.optional(v.number()),
+  relatedQueries: v.optional(v.array(v.string())),
   slug: v.string(),
   status: contentStatus,
+  tags: v.optional(v.array(v.string())),
   thumbnail: v.optional(v.string()),
   thumbnailStorageId: v.optional(v.union(v.id("_storage"), v.null())),
   title: v.string(),
@@ -127,8 +135,8 @@ export const listAdminWithOffset = query({
     } else {
       posts = await ctx.db
         .query("posts")
-        .order("desc")
-        .take(fetchLimit);
+        .take(500);
+      posts.sort((a, b) => a.order - b.order);
     }
 
     if (args.search?.trim() && posts.length > 0) {
@@ -367,7 +375,8 @@ export const searchPublished = query({
       v.literal("newest"),
       v.literal("oldest"),
       v.literal("popular"),
-      v.literal("title")
+      v.literal("title"),
+      v.literal("title_desc")
     )),
   },
   handler: async (ctx, args) => {
@@ -432,12 +441,18 @@ export const searchPublished = query({
           posts.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
           break;
         }
+        case "title_desc": {
+          posts.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
+          break;
+        }
         default: { // Newest
           posts.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
         }
       }
     } else if (sortBy === "title") {
       posts.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+    } else if (sortBy === "title_desc") {
+      posts.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
     }
     
     return posts.slice(0, limit);
@@ -463,9 +478,33 @@ export const listFeatured = query({
 
 // Count published posts (for result display)
 export const countPublished = query({
-  args: { categoryId: v.optional(v.id("postCategories")) },
+  args: {
+    categoryId: v.optional(v.id("postCategories")),
+    search: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const now = Date.now();
+    
+    if (args.search?.trim()) {
+      const searchLower = args.search.toLowerCase().trim();
+      const searchQuery = ctx.db
+        .query("posts")
+        .withSearchIndex("search_title", (q) => {
+          const builder = q.search("title", searchLower).eq("status", "Published");
+          return args.categoryId ? builder.eq("categoryId", args.categoryId) : builder;
+        });
+      let posts = await searchQuery.take(1000);
+      posts = posts.filter((post) => !post.publishedAt || post.publishedAt <= now);
+      
+      const ranked = rankByFuzzyMatches(
+        posts,
+        args.search,
+        (post) => [post.title ?? "", post.excerpt ?? ""],
+        42,
+      );
+      return ranked.length;
+    }
+
     if (await isPostsAggregateReady(ctx)) {
       return countPublishedPosts(ctx, { categoryId: args.categoryId, now });
     }
@@ -557,7 +596,8 @@ export const listPublishedWithOffset = query({
       v.literal("newest"),
       v.literal("oldest"),
       v.literal("popular"),
-      v.literal("title")
+      v.literal("title"),
+      v.literal("title_desc")
     )),
   },
   handler: async (ctx, args) => {
@@ -617,6 +657,8 @@ export const listPublishedWithOffset = query({
       posts = ranked.map((entry) => entry.item);
     } else if (sortBy === "title") {
       posts.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+    } else if (sortBy === "title_desc") {
+      posts.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
     } else if (args.categoryId) {
       // Re-sort if filtered by category
       switch (sortBy) {
@@ -648,7 +690,8 @@ export const searchPublishedPaginated = query({
       v.literal("newest"),
       v.literal("oldest"),
       v.literal("popular"),
-      v.literal("title")
+      v.literal("title"),
+      v.literal("title_desc")
     )),
   },
   handler: async (ctx, args) => {
@@ -700,6 +743,8 @@ export const searchPublishedPaginated = query({
     // Sort by title if needed (other sorts handled by index)
     if (sortBy === "title") {
       posts.sort((a, b) => a.title.localeCompare(b.title, 'vi'));
+    } else if (sortBy === "title_desc") {
+      posts.sort((a, b) => b.title.localeCompare(a.title, 'vi'));
     }
     
     return {
@@ -729,13 +774,20 @@ export const create = mutation({
     markdownRender: v.optional(v.string()),
     htmlRender: v.optional(v.string()),
     excerpt: v.optional(v.string()),
+    faqItems: v.optional(v.array(v.object({
+      answer: v.string(),
+      question: v.string(),
+    }))),
+    focusKeyword: v.optional(v.string()),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
     order: v.optional(v.number()),
     publishImmediately: v.optional(v.boolean()),
     publishedAt: v.optional(v.number()),
+    relatedQueries: v.optional(v.array(v.string())),
     slug: v.string(),
     status: v.optional(contentStatus),
+    tags: v.optional(v.array(v.string())),
     thumbnail: v.optional(v.string()),
     thumbnailStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     title: v.string(),
@@ -773,14 +825,21 @@ export const update = mutation({
     markdownRender: v.optional(v.string()),
     htmlRender: v.optional(v.string()),
     excerpt: v.optional(v.string()),
+    faqItems: v.optional(v.array(v.object({
+      answer: v.string(),
+      question: v.string(),
+    }))),
+    focusKeyword: v.optional(v.string()),
     id: v.id("posts"),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
     order: v.optional(v.number()),
     publishImmediately: v.optional(v.boolean()),
     publishedAt: v.optional(v.number()),
+    relatedQueries: v.optional(v.array(v.string())),
     slug: v.optional(v.string()),
     status: v.optional(contentStatus),
+    tags: v.optional(v.array(v.string())),
     thumbnail: v.optional(v.string()),
     thumbnailStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     title: v.optional(v.string()),
@@ -905,6 +964,15 @@ export const getDeleteInfo = query({
   }),
 });
 
+export const reorder = mutation({
+  args: { items: v.array(v.object({ id: v.id("posts"), order: v.number() })) },
+  handler: async (ctx, args) => {
+    await Promise.all(args.items.map(async (item) => ctx.db.patch(item.id, { order: item.order })));
+    return null;
+  },
+  returns: v.null(),
+});
+
 // ============================================================
 // AUTO GENERATOR (PREVIEW/REGENERATE)
 // ============================================================
@@ -916,6 +984,8 @@ const generatorRequestValidator = v.object({
   budgetMin: v.optional(v.number()),
   budgetMax: v.optional(v.number()),
   keyword: v.optional(v.string()),
+  secondaryKeyword: v.optional(v.string()),
+  keywords: v.optional(v.array(v.string())),
   compareSlugs: v.optional(v.array(v.string())),
   selectedProductSlugs: v.optional(v.array(v.string())),
   categoryId: v.optional(v.string()),
@@ -1113,15 +1183,26 @@ const fetchProductsForRequest = async (
   }
 
   if (template.productStrategy === "use_case" || template.productStrategy === "value_popular") {
-    const keyword = request.useCase ?? request.keyword;
-    if (template.productStrategy === "use_case" && !keyword?.trim()) {
+    const keywordPhrase = getGeneratorKeywordPhrase(request);
+    const keywords = getGeneratorKeywords(request);
+    const searchTerms = keywords.length > 0 ? keywords : keywordPhrase ? [keywordPhrase] : [];
+    if (template.productStrategy === "use_case" && searchTerms.length === 0) {
       throw new Error("Cần nhập nhu cầu/keyword");
     }
-    if (keyword?.trim()) {
-      return ctx.db
-        .query("products")
-        .withSearchIndex("search_name", (q) => q.search("name", keyword.toLowerCase()).eq("status", "Active"))
-        .take(limit);
+    if (searchTerms.length > 0) {
+      const batches = await Promise.all(searchTerms.map((term) =>
+        ctx.db
+          .query("products")
+          .withSearchIndex("search_name", (q) => q.search("name", term.toLowerCase()).eq("status", "Active"))
+          .take(limit)
+      ));
+      const uniqueProducts = new Map<Doc<"products">["_id"], Doc<"products">>();
+      batches.flat().forEach((product) => {
+        if (!uniqueProducts.has(product._id)) {
+          uniqueProducts.set(product._id, product);
+        }
+      });
+      return Array.from(uniqueProducts.values()).slice(0, limit);
     }
   }
 
@@ -1213,6 +1294,74 @@ export const createFromGeneratedPayload = mutation({
     return id;
   },
   returns: v.id("posts"),
+});
+
+export const duplicate = mutation({
+  args: { id: v.id("posts") },
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get(args.id);
+    if (!source) {
+      throw new Error("Post not found");
+    }
+
+    const buildCopiedName = (base: string, attempt: number) =>
+      attempt <= 1 ? `${base} (copy)` : `${base} (copy ${attempt})`;
+      
+    let copiedTitle = "";
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      const candidate = buildCopiedName(source.title, attempt);
+      const existing = await ctx.db
+        .query("posts")
+        .filter((q) => q.eq(q.field("title"), candidate))
+        .first();
+      if (!existing) {
+        copiedTitle = candidate;
+        break;
+      }
+    }
+    if (!copiedTitle) {
+      copiedTitle = `${source.title} (copy ${Date.now()})`;
+    }
+
+    const additionalCategoryIds = await listPostAdditionalCategoryIds(ctx, source._id, source.categoryId);
+
+    const newPostId = await PostsModel.create(ctx, {
+      authorName: source.authorName,
+      categoryId: source.categoryId,
+      content: source.content,
+      renderType: source.renderType,
+      markdownRender: source.markdownRender,
+      htmlRender: source.htmlRender,
+      excerpt: source.excerpt,
+      metaDescription: source.metaDescription,
+      metaTitle: source.metaTitle,
+      order: await PostsModel.getNextOrder(ctx),
+      slug: source.slug,
+      status: source.status,
+      thumbnail: source.thumbnail,
+      thumbnailStorageId: source.thumbnailStorageId,
+      title: copiedTitle,
+    });
+
+    if (await isMultiCategoryEnabled(ctx, "posts")) {
+      await syncPostCategoryAssignments(ctx, newPostId, source.categoryId, additionalCategoryIds);
+    }
+
+    if (source.thumbnailStorageId) {
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "thumbnail",
+        ownerId: newPostId,
+        ownerTable: "posts",
+        purpose: "post-thumbnail",
+      }, [source.thumbnailStorageId]);
+    }
+
+    const newPost = await ctx.db.get(newPostId);
+    if (!newPost) {
+      throw new Error("Failed to duplicate post");
+    }
+    return newPost;
+  },
 });
 
 async function backfillPostAggregateBatch(

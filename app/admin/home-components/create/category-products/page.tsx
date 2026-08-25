@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
@@ -20,19 +20,18 @@ import type {
 } from '../../category-products/_types';
 import { DEFAULT_CATEGORY_PRODUCTS_CORNER_RADIUS, getCategoryProductsResponsiveColumns } from '../../category-products/_types';
 import { resolveProductImageAspectRatio } from '@/lib/products/image-aspect-ratio';
+import type { Id } from '@/convex/_generated/dataModel';
 
 export default function CategoryProductsCreatePage() {
   const COMPONENT_TYPE = 'CategoryProducts';
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Sản phẩm theo danh mục', COMPONENT_TYPE);
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
   const brandMode: CategoryProductsBrandMode = mode === 'single' ? 'single' : 'dual';
-  
-  const categoriesData = useQuery(api.productCategories.listActive);
-  const productsData = useQuery(api.products.listPublicResolved, { limit: 100 });
-  const aspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
   
   const [sections, setSections] = useState<CategoryProductsSection[]>([]);
   const [selectionMode, setSelectionMode] = useState<CategoryProductsSelectionMode>('demo');
@@ -42,6 +41,30 @@ export default function CategoryProductsCreatePage() {
   const [columnsDesktop, setColumnsDesktop] = useState<3 | 4>(4);
   const [spacing, setSpacing] = useState<SectionSpacing>(DEFAULT_SECTION_SPACING);
   const [cornerRadius, setCornerRadius] = useState<CategoryProductsCornerRadius>(DEFAULT_CATEGORY_PRODUCTS_CORNER_RADIUS);
+
+  // Cart buttons settings
+  const [showAddToCartButton, setShowAddToCartButton] = useState(true);
+  const [showBuyNowButton, setShowBuyNowButton] = useState(true);
+  const [cartButtonsLayout, setCartButtonsLayout] = useState<'stack' | 'grid-2'>('stack');
+
+  const categoriesData = useQuery(api.productCategories.listActiveCategoriesWithProductCounts);
+  
+  const categoryIdsForQuery = useMemo(() => {
+    if (!categoriesData) {
+      return [];
+    }
+    const validIds = new Set<string>(categoriesData.map(c => c._id));
+    return sections
+      .map(s => s.categoryId)
+      .filter((id): id is Id<"productCategories"> => !!id && validIds.has(id));
+  }, [sections, categoriesData]);
+
+  const productsData = useQuery(
+    api.products.listProductsForCategories,
+    categoryIdsForQuery.length > 0 ? { categoryIds: categoryIdsForQuery } : 'skip'
+  );
+  
+  const aspectRatioSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'defaultImageAspectRatio' });
   const columnsMobile = getCategoryProductsResponsiveColumns(columnsDesktop).mobile;
   const productImageCropAspectRatio = style === 'wine-grid' ? 'square' : resolveProductImageAspectRatio(aspectRatioSetting?.value);
 
@@ -59,6 +82,9 @@ export default function CategoryProductsCreatePage() {
       spacing,
       style,
       cornerRadius,
+      showAddToCartButton,
+      showBuyNowButton,
+      cartButtonsLayout,
     });
   };
 
@@ -98,10 +124,19 @@ export default function CategoryProductsCreatePage() {
         cornerRadius={cornerRadius}
         setCornerRadius={setCornerRadius}
         productImageCropAspectRatio={productImageCropAspectRatio}
+        showAddToCartButton={showAddToCartButton}
+        setShowAddToCartButton={setShowAddToCartButton}
+        showBuyNowButton={showBuyNowButton}
+        setShowBuyNowButton={setShowBuyNowButton}
+        cartButtonsLayout={cartButtonsLayout}
+        setCartButtonsLayout={setCartButtonsLayout}
         className="mb-3"
       />
 
       <CategoryProductsPreview
+        title={title}
+        onTitleChange={setTitle}
+        isVisualEditAllowed={isVisualEditAllowed}
         config={{
           columnsDesktop,
           columnsMobile,
@@ -112,6 +147,9 @@ export default function CategoryProductsCreatePage() {
           spacing,
           style,
           cornerRadius,
+          showAddToCartButton,
+          showBuyNowButton,
+          cartButtonsLayout,
         }}
         brandColor={primary}
         secondary={secondary}

@@ -8,7 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { ChevronLeft, ChevronRight, Copy, Crown, Edit, Loader2, Plus, Search, Shield, ShieldOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { useAdminAuth } from '../auth/context';
@@ -84,7 +84,7 @@ function RolesTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
-  const [visibleColumns, setVisibleColumns] = useState(['select', 'name', 'description', 'usersCount', 'type', 'actions']);
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_roles_visible_columns');
   const [selectedIds, setSelectedIds] = useState<Id<"roles">[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"roles"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -137,7 +137,7 @@ function RolesTable({
   const columns = useMemo(() => {
     const cols = [] as { key: string; label: string; required?: boolean }[];
     if (selectionEnabled) {
-      cols.push({ key: 'select', label: 'Chọn' });
+      cols.push({ key: 'select', label: 'Chọn', required: true });
     }
     cols.push({ key: 'name', label: 'Tên vai trò', required: true });
     if (showDescription) {
@@ -190,12 +190,7 @@ function RolesTable({
   const resolvedSelectedIds = selectionEnabled ? selectedIds : [];
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
-    setCurrentPage(1);
-  };
-
-  const handleFilterChange = (value: string) => {
-    setFilterType(value);
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
   };
 
@@ -204,9 +199,20 @@ function RolesTable({
     setCurrentPage(1);
   };
 
-  const toggleColumn = (key: string) => {
-    setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  const handleFilterChange = (value: string) => {
+    setFilterType(value);
+    setCurrentPage(1);
   };
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setFilterType('');
+    setCurrentPage(1);
+  };
+
+  const selectedOnPage = selectableRoles.filter(role => selectedIds.includes(role._id));
+  const isPageSelected = selectableRoles.length > 0 && selectedOnPage.length === selectableRoles.length;
+  const isPageIndeterminate = selectedOnPage.length > 0 && selectedOnPage.length < selectableRoles.length;
 
   const toggleSelectAll = () => {
     if (!selectionEnabled) {return;}
@@ -300,175 +306,176 @@ function RolesTable({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Phân quyền vai trò</h1>
-          <p className="text-sm text-slate-500">Định nghĩa quyền truy cập cho từng nhóm người dùng</p>
-        </div>
-        <div className="flex gap-2">
-          {canCreate && (
-            <Link href="/admin/roles/create">
-              <Button className="gap-2"><Plus size={16}/> Thêm vai trò</Button>
-            </Link>
-          )}
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý vai trò & Phân quyền"
+        description="Quản lý vai trò và gán quyền hạn hệ thống"
+        addHref={canCreate ? "/admin/roles/create" : undefined}
+      />
 
       {selectionEnabled && (
         <BulkActionBar
           selectedCount={resolvedSelectedIds.length}
           entityLabel="vai trò"
           onDelete={handleBulkDelete}
-          onClearSelection={() =>{  setSelectedIds([]); }}
+          onClearSelection={() => setSelectedIds([])}
           isLoading={isBulkDeleting}
         />
       )}
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex flex-wrap gap-3 flex-1">
-            <div className="relative max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input 
-                placeholder="Tìm vai trò..." 
-                className="pl-9 w-48" 
-                value={searchTerm} 
-                onChange={(e) =>{  handleSearchChange(e.target.value); }} 
+        <TableToolbar
+          activeFilterCount={[Boolean(filterType)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={handleSearchChange}
+              placeholder="Tìm tên vai trò..."
+            />
+          }
+          filters={
+            <>
+              <FilterSelect
+                label="Loại vai trò"
+                value={filterType}
+                onChange={(val) => handleFilterChange(val)}
+                placeholder="Tất cả loại"
+                options={[
+                  { value: 'system', label: 'Hệ thống' },
+                  { value: 'custom', label: 'Tùy chỉnh' },
+                ]}
               />
-            </div>
-            <select 
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm" 
-              value={filterType} 
-              onChange={(e) =>{  handleFilterChange(e.target.value); }}
-            >
-              <option value="">Tất cả loại</option>
-              <option value="system">Hệ thống</option>
-              <option value="custom">Tùy chỉnh</option>
-            </select>
-          </div>
-          <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={toggleColumn} />
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterType)} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={toggleColumn} />
+            </>
+          }
+        />
+
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
+              <TableRow>
+                <TableHeadSelect 
+                  checked={isPageSelected} 
+                  onChange={toggleSelectAll} 
+                  indeterminate={isPageIndeterminate} 
+                  disabled={!selectionEnabled}
+                />
+                <SortableHeader label="Tên vai trò" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                <TableHead>Mô tả</TableHead>
+                <SortableHeader label="Số người dùng" sortKey="usersCount" sortConfig={sortConfig} onSort={handleSort} />
+                <TableHead>Loại</TableHead>
+                <TableHead className="text-right">Hành động</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedData.map((role) => (
+                <TableRow key={role._id} className={selectedIds.includes(role._id) ? 'bg-purple-500/5' : ''}>
+                  <TableCellSelect 
+                    checked={selectedIds.includes(role._id)} 
+                    onChange={() => toggleSelectItem(role._id)} 
+                    disabled={role.isSystem}
+                  />
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Shield size={16} className={role.isSystem ? 'text-purple-600' : 'text-slate-400'} />
+                      <span className="font-medium">{role.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-slate-500 max-w-[250px] truncate">{role.description || '-'}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Badge variant="secondary" className="gap-1">
+                      <Crown size={12} />
+                      {role.usersCount} người dùng
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Badge variant={role.isSystem ? 'default' : 'secondary'} className={role.isSystem ? 'bg-purple-600' : ''}>
+                      {role.isSystem ? 'Hệ thống' : 'Tùy chỉnh'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <RowActions>
+                      <RowActionButton
+                        title="Nhân bản vai trò"
+                        icon={<Copy size={16} />}
+                        onClick={async () => handleCloneRole(role._id)}
+                      />
+                      <EditActionButton href={`/admin/roles/${role._id}/edit`} />
+                      {!role.isSystem && (
+                        <DeleteActionButton onClick={async () => handleDelete(role._id)} />
+                      )}
+                    </RowActions>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {paginatedData.length === 0 && (
+                <TableEmptyState
+                  colSpan={6}
+                  message={searchTerm || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có vai trò nào'}
+                />
+              )}
+            </TableBody>
+          </Table>
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {resolvedVisibleColumns.includes('select') && (
-                <TableHead className="w-[40px]">
-                  <SelectCheckbox 
-                    checked={resolvedSelectedIds.length === selectableRoles.length && selectableRoles.length > 0} 
-                    onChange={toggleSelectAll} 
-                    indeterminate={resolvedSelectedIds.length > 0 && resolvedSelectedIds.length < selectableRoles.length} 
-                  />
-                </TableHead>
-              )}
-              {resolvedVisibleColumns.includes('name') && (
-                <SortableHeader label="Tên vai trò" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
-              )}
-              {resolvedVisibleColumns.includes('description') && showDescription && (
-                <TableHead>Mô tả</TableHead>
-              )}
-              {resolvedVisibleColumns.includes('usersCount') && (
-                <SortableHeader label="Số người dùng" sortKey="usersCount" sortConfig={sortConfig} onSort={handleSort} className="text-center" />
-              )}
-              {resolvedVisibleColumns.includes('type') && (
-                <TableHead className="text-center">Loại</TableHead>
-              )}
-              {resolvedVisibleColumns.includes('actions') && (
-                <TableHead className="text-right">Hành động</TableHead>
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedData.map(role => (
-              <TableRow key={role._id} className={resolvedSelectedIds.includes(role._id) ? 'bg-blue-500/5' : ''}>
-                {resolvedVisibleColumns.includes('select') && (
-                  <TableCell>
-                    {role.isSystem ? (
-                      <span className="w-4 h-4 block" title="Không thể chọn vai trò hệ thống" />
-                    ) : (
-                      <SelectCheckbox checked={resolvedSelectedIds.includes(role._id)} onChange={() =>{  toggleSelectItem(role._id); }} />
+        {/* Mobile View */}
+        <MobileCardList>
+          {paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có vai trò nào'}
+            </div>
+          ) : (
+            paginatedData.map(role => (
+              <MobileRowCard
+                key={role._id}
+                selected={resolvedSelectedIds.includes(role._id)}
+                checkbox={
+                  role.isSystem ? null : (
+                    <SelectCheckbox checked={resolvedSelectedIds.includes(role._id)} onChange={() => toggleSelectItem(role._id)} />
+                  )
+                }
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <Shield size={15} className="text-blue-500" />
+                    {role.name}
+                    {role.isSuperAdmin && <Crown size={14} className="text-amber-500" />}
+                  </span>
+                }
+                subtitle={<span className="text-xs text-slate-500">{role.description}</span>}
+                badge={
+                  role.isSystem ? <Badge variant="info">Hệ thống</Badge> : <Badge variant="secondary">Tùy chỉnh</Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Số người dùng:</span> {role.usersCount}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    {canCreate && (
+                      <RowActionButton
+                        title="Nhân bản"
+                        icon={cloningRoleId === role._id ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                        onClick={() => { void handleCloneRole(role._id); }}
+                        disabled={cloningRoleId === role._id}
+                      />
                     )}
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('name') && (
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: showColor && role.color ? `${role.color}20` : 'rgb(59 130 246 / 0.1)' }}
-                      >
-                        <Shield size={16} style={{ color: showColor && role.color ? role.color : '#3b82f6' }} />
-                      </div>
-                      <span className="font-medium">{role.name}</span>
-                      {role.isSuperAdmin && (
-                        <span title="Super Admin"><Crown size={14} className="text-amber-500" /></span>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('description') && showDescription && (
-                  <TableCell className="text-slate-500 max-w-[300px] truncate">{role.description}</TableCell>
-                )}
-                {resolvedVisibleColumns.includes('usersCount') && (
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">{role.usersCount}</Badge>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('type') && (
-                  <TableCell className="text-center">
-                    {role.isSystem ? (
-                      <Badge variant="info">Hệ thống</Badge>
-                    ) : (
-                      <Badge variant="secondary">Tùy chỉnh</Badge>
+                    {canEdit && <EditActionButton href={`/admin/roles/${role._id}/edit`} />}
+                    {canDelete && (
+                      <DeleteActionButton
+                        onClick={async () => handleDelete(role._id)}
+                        disabled={role.isSystem}
+                      />
                     )}
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('actions') && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {canCreate && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => { void handleCloneRole(role._id); }}
-                          disabled={cloningRoleId === role._id}
-                          title="Nhân bản"
-                        >
-                          {cloningRoleId === role._id ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
-                        </Button>
-                      )}
-                      {canEdit && (
-                        <Link href={`/admin/roles/${role._id}/edit`}>
-                          <Button variant="ghost" size="icon"><Edit size={16}/></Button>
-                        </Link>
-                      )}
-                      {canDelete && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className={role.isSystem ? "text-slate-300 cursor-not-allowed" : "text-red-500 hover:text-red-600"} 
-                          onClick={ async () => handleDelete(role._id)}
-                          disabled={role.isSystem}
-                          title={role.isSystem ? "Không thể xóa vai trò hệ thống" : "Xóa"}
-                        >
-                          <Trash2 size={16}/>
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-            {paginatedData.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={resolvedVisibleColumns.length} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có vai trò nào'}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
 
         {sortedData.length > 0 && (
           <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -524,6 +531,6 @@ function RolesTable({
         onConfirm={async () => handleConfirmBulkDelete()}
         isLoading={isBulkDeleting}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

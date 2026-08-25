@@ -1,4 +1,4 @@
-import { DollarSign, Image, Tag, Box, Package, Layers, Download, FolderTree, FileText, Code, SquareStack } from 'lucide-react';
+import { DollarSign, Image, Tag, Box, Package, Layers, Download, FolderTree, FileText, Code, SquareStack, Search } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
 import { PRODUCT_IMAGE_ASPECT_RATIO_OPTIONS } from '../../products/image-aspect-ratio';
  
@@ -16,6 +16,7 @@ export const productsModule = defineModuleWithRuntime({
      { key: 'enableSKU', label: 'Mã SKU', icon: Tag, linkedField: 'sku', enabled: false },
     { key: 'enableBarcode', label: 'Mã vạch phiên bản', icon: Tag, linkedField: 'barcode', enabled: false },
      { key: 'enableStock', label: 'Quản lý kho', icon: Box, linkedField: 'stock' },
+     { key: 'enableAdvancedSEO', label: 'SEO nâng cao', icon: Search, linkedField: 'focusKeyword', enabled: true },
      { key: 'enableMarkdownRender', label: 'Markdown render', icon: FileText, linkedField: 'markdownRender', enabled: false },
      { key: 'enableHtmlRender', label: 'HTML render', icon: Code, linkedField: 'htmlRender', enabled: false },
      {
@@ -53,7 +54,7 @@ export const productsModule = defineModuleWithRuntime({
       default: 'cart',
       options: [
         { value: 'cart', label: 'Giỏ hàng & thanh toán' },
-        { value: 'contact', label: 'Nút liên hệ (/contact)' },
+        { value: 'contact', label: 'Nút liên hệ' },
         { value: 'affiliate', label: 'Nút Affiliate (Mua ngay)' },
       ],
     },
@@ -257,9 +258,13 @@ export const productsModule = defineModuleWithRuntime({
       { enabled: true, fieldKey: 'images', isSystem: false, linkedFeature: 'enableGallery', name: 'Thư viện ảnh', order: 11, required: false, type: 'gallery' },
       { enabled: true, fieldKey: 'metaTitle', group: 'seo', isSystem: false, name: 'Meta Title', order: 12, required: false, type: 'text' },
       { enabled: true, fieldKey: 'metaDescription', group: 'seo', isSystem: false, name: 'Meta Description', order: 13, required: false, type: 'textarea' },
-      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 14, required: false, type: 'select' },
-      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 15, required: false, type: 'textarea' },
-      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 16, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'focusKeyword', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Từ khóa chính', order: 14, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'tags', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Tags', order: 15, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'relatedQueries', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Cách khách hay tìm', order: 16, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'faqItems', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'FAQ', order: 17, required: false, type: 'json' },
+      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 18, required: false, type: 'select' },
+      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 19, required: false, type: 'textarea' },
+      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 20, required: false, type: 'textarea' },
     ],
   },
 

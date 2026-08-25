@@ -17,11 +17,31 @@ const customerDoc = v.object({
   phone: v.string(),
   status: customerStatus,
   totalSpent: v.number(),
+  addressFormat: v.optional(v.union(v.literal("text"), v.literal("2-level"), v.literal("3-level"))),
+  addressDetail: v.optional(v.string()),
+  provinceCode: v.optional(v.string()),
+  provinceName: v.optional(v.string()),
+  districtCode: v.optional(v.string()),
+  districtName: v.optional(v.string()),
+  wardCode: v.optional(v.string()),
+  wardName: v.optional(v.string()),
 });
+
+const sanitizeCustomer = (customer: Doc<"customers">) => {
+  const { passwordHash, ...safeCustomer } = customer;
+  void passwordHash;
+  return safeCustomer;
+};
 
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => ctx.db.query("customers").paginate(args.paginationOpts),
+  handler: async (ctx, args) => {
+    const result = await ctx.db.query("customers").paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(sanitizeCustomer),
+    };
+  },
   returns: v.object({
     continueCursor: v.string(),
     isDone: v.boolean(),
@@ -34,8 +54,10 @@ export const listAll = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const maxLimit = Math.min(args.limit ?? 100, 100);
-    return  ctx.db.query("customers").order("desc").take(maxLimit);
+    const customers = await ctx.db.query("customers").order("desc").take(maxLimit);
+    return customers.map(sanitizeCustomer);
   },
+  returns: v.array(customerDoc),
 });
 
 export const listAdminWithOffset = query({
@@ -70,7 +92,7 @@ export const listAdminWithOffset = query({
       );
     }
 
-    return customers.slice(offset, offset + limit);
+    return customers.slice(offset, offset + limit).map(sanitizeCustomer);
   },
   returns: v.array(customerDoc),
 });
@@ -145,25 +167,37 @@ export const listAdminIds = query({
 
 export const getById = query({
   args: { id: v.id("customers") },
-  handler: async (ctx, args) => ctx.db.get(args.id),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.id);
+    return customer ? sanitizeCustomer(customer) : null;
+  },
   returns: v.union(customerDoc, v.null()),
 });
 
 export const getByEmail = query({
   args: { email: v.string() },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const customer = await ctx.db
       .query("customers")
       .withIndex("by_email", (q) => q.eq("email", args.email))
-      .unique(),
+      .unique();
+    return customer ? sanitizeCustomer(customer) : null;
+  },
   returns: v.union(customerDoc, v.null()),
 });
 
 export const getByStatus = query({
   args: { paginationOpts: paginationOptsValidator, status: customerStatus },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const result = await ctx.db
       .query("customers")
       .withIndex("by_status", (q) => q.eq("status", args.status))
-      .paginate(args.paginationOpts),
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(sanitizeCustomer),
+    };
+  },
   returns: v.object({
     continueCursor: v.string(),
     isDone: v.boolean(),
@@ -173,11 +207,17 @@ export const getByStatus = query({
 
 export const getTopSpenders = query({
   args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const result = await ctx.db
       .query("customers")
       .withIndex("by_status_totalSpent", (q) => q.eq("status", "Active"))
       .order("desc")
-      .paginate(args.paginationOpts),
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(sanitizeCustomer),
+    };
+  },
   returns: v.object({
     continueCursor: v.string(),
     isDone: v.boolean(),
@@ -187,10 +227,16 @@ export const getTopSpenders = query({
 
 export const getByCity = query({
   args: { city: v.string(), paginationOpts: paginationOptsValidator },
-  handler: async (ctx, args) => ctx.db
+  handler: async (ctx, args) => {
+    const result = await ctx.db
       .query("customers")
       .withIndex("by_city_status", (q) => q.eq("city", args.city))
-      .paginate(args.paginationOpts),
+      .paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map(sanitizeCustomer),
+    };
+  },
   returns: v.object({
     continueCursor: v.string(),
     isDone: v.boolean(),
@@ -236,6 +282,14 @@ export const update = mutation({
     notes: v.optional(v.string()),
     phone: v.optional(v.string()),
     status: v.optional(customerStatus),
+    addressFormat: v.optional(v.union(v.literal("text"), v.literal("2-level"), v.literal("3-level"))),
+    addressDetail: v.optional(v.string()),
+    provinceCode: v.optional(v.string()),
+    provinceName: v.optional(v.string()),
+    districtCode: v.optional(v.string()),
+    districtName: v.optional(v.string()),
+    wardCode: v.optional(v.string()),
+    wardName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -427,6 +481,18 @@ export const getStats = query({
     totalOrders: v.number(),
     totalSpent: v.number(),
   }),
+});
+
+export const getByPhone = query({
+  args: { phone: v.string() },
+  handler: async (ctx, args) => {
+    const normalizedPhone = args.phone.trim();
+    // No by_phone index in schema → scan with limit 500 then filter
+    const customers = await ctx.db.query('customers').take(500);
+    const customer = customers.find((c) => c.phone.trim() === normalizedPhone) ?? null;
+    return customer ? sanitizeCustomer(customer) : null;
+  },
+  returns: v.union(customerDoc, v.null()),
 });
 
 // CUST-004 FIX: Get unique cities - optimized with indexed query

@@ -137,16 +137,17 @@ export type AccountProfileColors = {
 export const getAccountProfileColors = (
   primary: string,
   secondary: string | undefined,
-  mode: AccountProfileColorMode = 'single'
+  mode: AccountProfileColorMode = 'single',
+  isDark = false
 ): AccountProfileColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSurfaceMuted = '#f8fafc';
-  const neutralSurfaceSoft = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderStrong = '#cbd5e1';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSoft = '#94a3b8';
+  const neutralSurface = isDark ? '#161617' : '#ffffff';
+  const neutralSurfaceMuted = isDark ? '#111111' : '#f8fafc';
+  const neutralSurfaceSoft = isDark ? '#2c2c2e' : '#f1f5f9';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralBorderStrong = isDark ? '#3f3f46' : '#cbd5e1';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
 
   const secondaryResolved = resolveSecondaryForMode(primary, secondary, mode);
   const primaryTint = getSolidTint(primary, primary, 0.42);
@@ -173,30 +174,34 @@ export const getAccountProfileColors = (
     primarySolidBg: primary,
     primarySolidText,
     primarySolidMutedText,
-    avatarBg: neutralSurface,
-    avatarBorder: neutralSurface,
-    avatarIcon: ensureAPCATextColor(primary, neutralSurface, 16, 600),
+    avatarBg: isDark ? '#2c2c2e' : neutralSurface,
+    avatarBorder: isDark ? '#3a3a3c' : neutralSurface,
+    avatarIcon: ensureAPCATextColor(primary, isDark ? '#2c2c2e' : neutralSurface, 16, 600),
     statusDotBg: secondaryResolved,
-    statusDotBorder: neutralSurface,
+    statusDotBorder: isDark ? '#161617' : neutralSurface,
     sectionLabel: ensureAPCATextColor(secondaryResolved, neutralSurface, 12, 600),
     sectionAccentBorder: secondaryResolved,
-    separatorDot: neutralBorderStrong,
-    actionCardBg: neutralSurface,
-    actionCardBorder: neutralBorder,
-    actionIconBg: mode === 'dual' ? secondaryTint : primaryTint,
-    actionIconColor: ensureAPCATextColor(
-      mode === 'dual' ? secondaryResolved : primary,
-      mode === 'dual' ? secondaryTint : primaryTint,
-      14,
-      600
-    ),
+    separatorDot: isDark ? '#27272a' : neutralBorderStrong,
+    actionCardBg: isDark ? '#1c1c1e' : neutralSurface,
+    actionCardBorder: isDark ? '#27272a' : neutralBorder,
+    actionIconBg: isDark
+      ? '#2c2c2e'
+      : (mode === 'dual' ? secondaryTint : primaryTint),
+    actionIconColor: isDark
+      ? (mode === 'dual' ? secondaryResolved : primary)
+      : ensureAPCATextColor(
+          mode === 'dual' ? secondaryResolved : primary,
+          mode === 'dual' ? secondaryTint : primaryTint,
+          14,
+          600
+        ),
     actionTitle: ensureAPCATextColor(
       mode === 'dual' ? secondaryResolved : primary,
-      neutralSurface,
+      isDark ? '#1c1c1e' : neutralSurface,
       14,
       600
     ),
-    actionDescription: ensureAPCATextColor(neutralMuted, neutralSurface, 12, 500),
-    actionArrow: ensureAPCATextColor(neutralSoft, neutralSurface, 12, 500),
+    actionDescription: ensureAPCATextColor(neutralMuted, isDark ? '#1c1c1e' : neutralSurface, 12, 500),
+    actionArrow: ensureAPCATextColor(neutralSoft, isDark ? '#1c1c1e' : neutralSurface, 12, 500),
   };
 };

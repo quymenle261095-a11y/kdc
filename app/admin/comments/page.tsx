@@ -8,7 +8,7 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { Ban, Check, ChevronDown, Edit, FileText, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, SelectCheckbox, SortableHeader, generatePaginationItems, useSortableData } from '../components/TableUtilities';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableCellSelect, TableEmptyState, TableHeadSelect, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
@@ -33,21 +33,7 @@ function CommentsContent() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'desc', key: 'created' });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return ['rating', 'type', 'target', 'status', 'created'];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_comments_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : ['rating', 'type', 'target', 'status', 'created'];
-      }
-    } catch {
-      return ['rating', 'type', 'target', 'status', 'created'];
-    }
-    return ['rating', 'type', 'target', 'status', 'created'];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_comments_visible_columns');
   const isSelectAllActive = selectionMode === 'all';
 
   const postsData = useQuery(api.posts.listAll, {});
@@ -178,7 +164,7 @@ function CommentsContent() {
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
   };
 
@@ -283,16 +269,12 @@ function CommentsContent() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Quản lý bình luận và đánh giá</h1>
-          <p className="text-sm text-slate-500">Xem danh sách bình luận và đánh giá mới nhất</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/comments/create"><Button className="gap-2"><Plus size={16}/> Thêm mới</Button></Link>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý bình luận và đánh giá"
+        description="Xem danh sách bình luận và đánh giá mới nhất"
+        addHref="/admin/comments/create"
+      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}
@@ -319,274 +301,217 @@ function CommentsContent() {
 
       <Card>
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Tìm kiếm bình luận..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }}
-            />
-          </div>
+          <SearchInput
+            value={searchTerm}
+            onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+            placeholder="Tìm kiếm bình luận..."
+          />
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+            <FilterSelect
               value={filterType}
-              onChange={(e) =>{  handleTypeChange(e.target.value); }}
-            >
-              <option value="">Tất cả loại</option>
-              <option value="post">Bình luận bài viết</option>
-              <option value="product">Đánh giá sản phẩm</option>
-            </select>
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+              onChange={(val) => handleTypeChange(val)}
+              placeholder="Tất cả loại"
+              options={[
+                { value: 'post', label: 'Bình luận bài viết' },
+                { value: 'product', label: 'Đánh giá sản phẩm' },
+              ]}
+            />
+            <FilterSelect
               value={filterStatus}
-              onChange={(e) =>{  handleStatusChange(e.target.value); }}
-            >
-              <option value="">Tất cả trạng thái</option>
-              <option value="Approved">Đã duyệt</option>
-              <option value="Pending">Chờ duyệt</option>
-              <option value="Spam">Spam</option>
-            </select>
-            <Button variant="outline" size="sm" onClick={handleResetFilters}>
-              Xóa lọc
-            </Button>
+              onChange={(val) => handleStatusChange(val)}
+              placeholder="Tất cả trạng thái"
+              options={[
+                { value: 'Approved', label: 'Đã duyệt' },
+                { value: 'Pending', label: 'Chờ duyệt' },
+                { value: 'Spam', label: 'Spam' },
+              ]}
+            />
+            <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterType || filterStatus)} onReset={handleResetFilters} />
             <ColumnToggle
               columns={columns}
               visibleColumns={resolvedVisibleColumns}
-              onToggle={(key) => {
-                setVisibleColumns(prev => prev.includes(key) ? prev.filter(col => col !== key) : [...prev, key]);
-              }}
+              onToggle={toggleColumn}
             />
           </div>
         </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>
-              <SortableHeader label="Người dùng" sortKey="author" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
-              <TableHead>Nội dung</TableHead>
-              {resolvedVisibleColumns.includes('rating') && (
-                <SortableHeader label="Đánh giá" sortKey="rating" sortConfig={sortConfig} onSort={handleSort} className="w-[90px]" />
-              )}
-              {resolvedVisibleColumns.includes('type') && (
-                <TableHead className="w-[80px]">Loại</TableHead>
-              )}
-              {resolvedVisibleColumns.includes('target') && (
-                <TableHead className="w-[180px]">Bài viết / Sản phẩm</TableHead>
-              )}
-              {resolvedVisibleColumns.includes('status') && (
-                <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="w-[120px]" />
-              )}
-              {resolvedVisibleColumns.includes('created') && (
-                <SortableHeader label="Thời gian" sortKey="created" sortConfig={sortConfig} onSort={handleSort} className="w-[140px]" />
-              )}
-              {resolvedVisibleColumns.includes('ip') && (
-                <TableHead className="w-[120px]">IP</TableHead>
-              )}
-              <TableHead className="text-right w-[140px]">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedCommentsPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell>
-                    <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-2/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                  {resolvedVisibleColumns.includes('rating') && (
-                    <TableCell>
-                      <div className="h-4 w-10 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('type') && (
-                    <TableCell>
-                      <div className="h-5 w-16 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('target') && (
-                    <TableCell>
-                      <div className="h-4 w-28 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('status') && (
-                    <TableCell>
-                      <div className="h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('created') && (
-                    <TableCell>
-                      <div className="h-4 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('ip') && (
-                    <TableCell>
-                      <div className="h-4 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right">
-                    <div className="ml-auto h-8 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedComments.map(comment => (
-                  <TableRow key={comment.id} className={selectedIds.includes(comment.id) ? 'bg-blue-500/5' : ''}>
-                    <TableCell><SelectCheckbox checked={selectedIds.includes(comment.id)} onChange={() =>{  toggleSelectItem(comment.id); }} /></TableCell>
-                    <TableCell>
-                      <div className="font-medium">{comment.author}</div>
-                      {!resolvedVisibleColumns.includes('ip') && (
-                        <div className="text-xs text-slate-400">IP: {comment.authorIp ?? 'N/A'}</div>
-                      )}
-                    </TableCell>
-                    <TableCell><p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{comment.content}</p></TableCell>
-                    {resolvedVisibleColumns.includes('rating') && (
-                      <TableCell className="text-sm text-slate-500">{comment.rating ? `${comment.rating}/5` : '—'}</TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('type') && (
-                      <TableCell>
-                        <Badge variant={comment.targetType === 'post' ? 'secondary' : 'outline'} className="gap-1 whitespace-nowrap">
-                          {comment.targetType === 'post' ? <FileText size={12} /> : <Package size={12} />}
-                          {comment.targetType === 'post' ? 'Bài viết' : 'Sản phẩm'}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('target') && (
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
-                          {comment.targetName}
-                        </div>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('status') && (
-                      <TableCell>
-                        <Badge variant={comment.status === 'Approved' ? 'default' : (comment.status === 'Pending' ? 'secondary' : 'destructive')} className="whitespace-nowrap">
-                          {comment.status === 'Approved' ? 'Đã duyệt' : (comment.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('created') && (
-                      <TableCell className="text-xs text-slate-500">{new Date(comment.created).toLocaleString('vi-VN')}</TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('ip') && (
-                      <TableCell className="text-xs text-slate-500">{comment.authorIp ?? 'N/A'}</TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {comment.status !== 'Approved' && (
-                          <Button variant="ghost" size="icon" className="text-green-500 hover:text-green-600" title="Duyệt" onClick={ async () => handleApprove(comment.id)}><Check size={16}/></Button>
-                        )}
-                        {comment.status !== 'Spam' && (
-                          <Button variant="ghost" size="icon" className="text-orange-500 hover:text-orange-600" title="Đánh dấu spam" onClick={ async () => handleSpam(comment.id)}><Ban size={16}/></Button>
-                        )}
-                        <Link href={`/admin/comments/${comment.id}/edit`}>
-                          <Button variant="ghost" size="icon" title="Chỉnh sửa"><Edit size={16}/></Button>
-                        </Link>
-                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" title="Xóa" onClick={ async () => handleDelete(comment.id)}><Trash2 size={16}/></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedComments.length === 0 && (
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
               <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterStatus || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Không có bình luận nào.'}
-                </TableCell>
+                <TableHeadSelect checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} />
+                <SortableHeader label="Người dùng" sortKey="author" sortConfig={sortConfig} onSort={handleSort} className="w-[180px]" />
+                <TableHead>Nội dung</TableHead>
+                {resolvedVisibleColumns.includes('rating') && (
+                  <SortableHeader label="Đánh giá" sortKey="rating" sortConfig={sortConfig} onSort={handleSort} className="w-[90px]" />
+                )}
+                {resolvedVisibleColumns.includes('type') && (
+                  <TableHead className="w-[80px]">Loại</TableHead>
+                )}
+                {resolvedVisibleColumns.includes('target') && (
+                  <TableHead className="w-[180px]">Bài viết / Sản phẩm</TableHead>
+                )}
+                {resolvedVisibleColumns.includes('status') && (
+                  <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} className="w-[120px]" />
+                )}
+                {resolvedVisibleColumns.includes('created') && (
+                  <SortableHeader label="Thời gian" sortKey="created" sortConfig={sortConfig} onSort={handleSort} className="w-[140px]" />
+                )}
+                {resolvedVisibleColumns.includes('ip') && (
+                  <TableHead className="w-[120px]">IP</TableHead>
+                )}
+                <TableHead className="text-right w-[140px]">Hành động</TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedCommentsPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số bình luận mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedCommentsPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedComments.map(comment => (
+                    <TableRow key={comment.id} className={selectedIds.includes(comment.id) ? 'bg-blue-500/5' : ''}>
+                      <TableCellSelect checked={selectedIds.includes(comment.id)} onChange={() =>{  toggleSelectItem(comment.id); }} />
+                      <TableCell className="whitespace-nowrap">
+                        <div className="font-medium">{comment.author}</div>
+                        {!resolvedVisibleColumns.includes('ip') && (
+                          <div className="text-xs text-slate-400">IP: {comment.authorIp ?? 'N/A'}</div>
+                        )}
+                      </TableCell>
+                      <TableCell><p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">{comment.content}</p></TableCell>
+                      {resolvedVisibleColumns.includes('rating') && (
+                        <TableCell className="text-sm text-slate-500 whitespace-nowrap">{comment.rating ? `${comment.rating}/5` : '—'}</TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('type') && (
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant={comment.targetType === 'post' ? 'secondary' : 'outline'} className="gap-1 whitespace-nowrap">
+                            {comment.targetType === 'post' ? <FileText size={12} /> : <Package size={12} />}
+                            {comment.targetType === 'post' ? 'Bài viết' : 'Sản phẩm'}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('target') && (
+                        <TableCell className="whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
+                            {comment.targetName}
+                          </div>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('status') && (
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant={comment.status === 'Approved' ? 'default' : (comment.status === 'Pending' ? 'secondary' : 'destructive')} className="whitespace-nowrap">
+                            {comment.status === 'Approved' ? 'Đã duyệt' : (comment.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('created') && (
+                        <TableCell className="text-xs text-slate-500 whitespace-nowrap">{new Date(comment.created).toLocaleString('vi-VN')}</TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('ip') && (
+                        <TableCell className="text-xs text-slate-500 whitespace-nowrap">{comment.authorIp ?? 'N/A'}</TableCell>
+                      )}
+                      <TableCell className="text-right whitespace-nowrap">
+                        <RowActions>
+                          {comment.status !== 'Approved' && (
+                            <RowActionButton
+                              title="Duyệt"
+                              icon={<Check size={16} />}
+                              onClick={async () => handleApprove(comment.id)}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            />
+                          )}
+                          {comment.status !== 'Spam' && (
+                            <RowActionButton
+                              title="Đánh dấu spam"
+                              icon={<Ban size={16} />}
+                              onClick={async () => handleSpam(comment.id)}
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            />
+                          )}
+                          <EditActionButton href={`/admin/comments/${comment.id}/edit`} />
+                          <DeleteActionButton onClick={async () => handleDelete(comment.id)} />
+                        </RowActions>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </select>
-                <span>bình luận/trang</span>
-              </div>
+                </>
+              )}
+              {!isTableLoading && paginatedComments.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterStatus || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Không có bình luận nào.'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedCommentsPerPage) + 1 : 0}–{Math.min(currentPage * resolvedCommentsPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">bình luận</span>
-              </div>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedComments.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterStatus || filterType ? 'Không tìm thấy kết quả phù hợp' : 'Không có bình luận nào.'}
             </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
-                      </div>
-                    );
-                  }
-
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
-            </div>
-          </div>
-        )}
+          ) : (
+            paginatedComments.map(comment => (
+              <MobileRowCard
+                key={comment.id}
+                selected={selectedIds.includes(comment.id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(comment.id)} onChange={() => toggleSelectItem(comment.id)} />}
+                title={comment.author}
+                subtitle={<span className="text-xs text-slate-500">{comment.targetName}</span>}
+                badge={
+                  <Badge variant={comment.status === 'Approved' ? 'default' : (comment.status === 'Pending' ? 'secondary' : 'destructive')}>
+                    {comment.status === 'Approved' ? 'Đã duyệt' : (comment.status === 'Pending' ? 'Chờ duyệt' : 'Spam')}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 italic">{comment.content}</p>
+                    <div><span className="text-slate-400">Loại:</span> {comment.targetType === 'post' ? 'Bài viết' : 'Sản phẩm'}</div>
+                    <div><span className="text-slate-400">Thời gian:</span> {new Date(comment.created).toLocaleString('vi-VN')}</div>
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    {comment.status !== 'Approved' && (
+                      <RowActionButton
+                        title="Duyệt"
+                        icon={<Check size={16} />}
+                        onClick={async () => handleApprove(comment.id)}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                      />
+                    )}
+                    {comment.status !== 'Spam' && (
+                      <RowActionButton
+                        title="Đánh dấu spam"
+                        icon={<Ban size={16} />}
+                        onClick={async () => handleSpam(comment.id)}
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      />
+                    )}
+                    <EditActionButton href={`/admin/comments/${comment.id}/edit`} />
+                    <DeleteActionButton onClick={async () => handleDelete(comment.id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedCommentsPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="bình luận"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -600,6 +525,6 @@ function CommentsContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

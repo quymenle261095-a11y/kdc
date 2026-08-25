@@ -5,6 +5,7 @@ import {
   normalizeCareerHarmony,
 } from '@/app/admin/home-components/career/_lib/constants';
 import { getCareerColorTokens } from '@/app/admin/home-components/career/_lib/colors';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import {
   normalizeCareerConfig,
   normalizeCareerJobs,
@@ -19,6 +20,7 @@ interface CareerSectionProps {
   brandColor: string;
   secondary: string;
   mode: CareerBrandMode;
+  isDark?: boolean;
 }
 
 export function CareerSection({
@@ -27,18 +29,22 @@ export function CareerSection({
   brandColor,
   secondary,
   mode,
+  isDark,
 }: CareerSectionProps) {
   const normalizedConfig = normalizeCareerConfig(config);
   const normalizedStyle = normalizeCareerStyle(normalizedConfig.style);
   const normalizedJobs = normalizeCareerJobs(normalizedConfig.jobs);
   const harmony = normalizeCareerHarmony(normalizedConfig.harmony ?? DEFAULT_CAREER_HARMONY);
 
-  const tokens = getCareerColorTokens({
-    primary: brandColor,
-    secondary,
-    mode,
-    harmony,
-  });
+  const tokens = adaptTokensForDarkMode(
+    getCareerColorTokens({
+      primary: brandColor,
+      secondary,
+      mode,
+      harmony,
+    }),
+    isDark ?? false
+  );
 
   return (
     <CareerSectionShared

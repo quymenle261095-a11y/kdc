@@ -28,6 +28,7 @@ interface FullWidthLayoutProps {
   viewMode: 'grid' | 'list';
   enabledFields: Set<string>;
   getDetailHref: (service: Service) => string;
+  gridColumns?: number;
 }
 
 const formatPrice = (price?: number): string => {
@@ -35,7 +36,7 @@ const formatPrice = (price?: number): string => {
   return new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(price);
 };
 
-export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabledFields, getDetailHref }: FullWidthLayoutProps): React.ReactElement => {
+export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabledFields, getDetailHref, gridColumns }: FullWidthLayoutProps): React.ReactElement => {
   const showExcerpt = enabledFields.has('excerpt');
   const showPrice = enabledFields.has('price');
   const showDuration = enabledFields.has('duration');
@@ -157,8 +158,11 @@ export const FullWidthLayout = ({ services, tokens, categoryMap, viewMode, enabl
   }
 
   // Grid view
+  const gridCols = gridColumns ?? 3;
+  const gridClass = gridCols === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div className={`grid ${gridClass} gap-3`}>
     {services.map((service) => {
       const showImage = Boolean(service.thumbnail) && !brokenThumbnails.has(String(service._id));
 

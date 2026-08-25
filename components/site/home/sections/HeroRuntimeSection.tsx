@@ -34,6 +34,7 @@ const SiteImage = ({ src, alt = '', width = 1200, height = 800, sizes = '100vw',
       mode="hero"
       src={src}
       {...rest}
+      unoptimized={rest.unoptimized ?? true}
       loading={resolvedLoading}
       fetchPriority={fetchPriority}
       alt={alt}
@@ -49,6 +50,11 @@ const isLikelyVisibleSlide = (index: number, currentIndex: number, total: number
   if (index === currentIndex) {return true;}
   if (index === (currentIndex + 1) % total) {return true;}
   return index === (currentIndex - 1 + total) % total;
+};
+
+const getBlurImageUrl = (imageUrl?: string | null): string => {
+  if (!imageUrl) {return '';}
+  return imageUrl;
 };
 
 const HeroRuntimeVideo = ({ src, className }: { src: string; className: string }) => {
@@ -103,7 +109,9 @@ const HeroRuntimeVideo = ({ src, className }: { src: string; className: string }
   );
 };
 
-export function HeroRuntimeSection({ config, brandColor, secondary, mode }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function HeroRuntimeSection({ config, brandColor, secondary, mode, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const rawSlides = (config.slides as { image: string; link: string; mediaType?: 'image' | 'video' }[]) || [];
   // Auto-detect mediaType nếu chưa có (backward-compatible)
   const slides = rawSlides.map(s => ({ ...s, mediaType: s.mediaType ?? (isVideoUrl(s.image) ? 'video' as const : undefined) }));
@@ -114,13 +122,13 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
   const [currentSlide, setCurrentSlide] = React.useState(0);
   const primaryHref = content.primaryButtonLink || slides[currentSlide]?.link || '#';
   const secondaryHref = content.secondaryButtonLink || '#';
-  const sliderColors = getSliderColors(brandColor, secondary, mode);
-  const fadeColors = getFadeColors(brandColor, secondary, mode);
-  const bentoColors = getBentoColors(brandColor, secondary, mode);
-  const conquestColors = getConquestColors(brandColor, secondary, mode);
-  const fullscreenColors = getFullscreenColors(brandColor, secondary, mode);
-  const splitColors = getSplitColors(brandColor, secondary, mode);
-  const parallaxColors = getParallaxColors(brandColor, secondary, mode);
+  const sliderColors = adaptTokensForDarkMode(getSliderColors(brandColor, secondary, mode), isDark ?? false);
+  const fadeColors = adaptTokensForDarkMode(getFadeColors(brandColor, secondary, mode), isDark ?? false);
+  const bentoColors = adaptTokensForDarkMode(getBentoColors(brandColor, secondary, mode), isDark ?? false);
+  const conquestColors = adaptTokensForDarkMode(getConquestColors(brandColor, secondary, mode), isDark ?? false);
+  const fullscreenColors = adaptTokensForDarkMode(getFullscreenColors(brandColor, secondary, mode), isDark ?? false);
+  const splitColors = adaptTokensForDarkMode(getSplitColors(brandColor, secondary, mode), isDark ?? false);
+  const parallaxColors = adaptTokensForDarkMode(getParallaxColors(brandColor, secondary, mode), isDark ?? false);
   const renderWithSpacing = (node: React.ReactNode) => (
     <div className={sectionSpacingClassName}>
       {node}
@@ -214,13 +222,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
     }
     return (
       <a href={slide.link || '#'} className="block w-full h-full relative">
-        <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
+        <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(slide.image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
         <div className="absolute inset-0 bg-black/20" />
         <SiteImage src={slide.image} alt="" className="relative w-full h-full object-contain z-10" priority={options?.priority} loading={options?.loading} sizes="100vw" />
-        {options?.priority && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={slide.image} alt="" fetchPriority="high" decoding="async" className="absolute w-0 h-0 opacity-0" aria-hidden />
-        )}
       </a>
     );
   };
@@ -245,9 +249,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
 
   if (style === 'slider') {
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden">
+      <section className={cn("relative w-full overflow-hidden", isDark ? "bg-slate-950" : "bg-transparent")}>
         <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
-        <div className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[400px] md:max-h-[550px] overflow-hidden" ref={heroEmblaRef}>
+        <div className="relative w-full aspect-[21/9] max-h-[400px] md:max-h-[550px] overflow-hidden" ref={heroEmblaRef}>
           <div className="flex h-full">
             {slides.map((slide, idx) => {
               const shouldLoad = isLikelyVisibleSlide(idx, emblaCurrentSlide, slides.length);
@@ -283,9 +287,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
 
   if (style === 'fade') {
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden">
+      <section className={cn("relative w-full overflow-hidden", isDark ? "bg-slate-950" : "bg-transparent")}>
         <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
-        <div className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[450px] md:max-h-[600px]" ref={heroEmblaRef}>
+        <div className="relative w-full aspect-[21/9] max-h-[450px] md:max-h-[600px]" ref={heroEmblaRef}>
           <div className="flex h-full w-full">
             {slides.map((slide, idx) => {
               const shouldLoad = isLikelyVisibleSlide(idx, emblaCurrentSlide, slides.length);
@@ -312,15 +316,15 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
 
   if (style === 'builderCoffee') {
     return renderWithSpacing(
-      <section className="relative w-full overflow-hidden bg-white pb-[50px]">
-        <div className="mx-auto w-full max-w-7xl px-3">
-          <div className="mt-5 flex flex-wrap -mx-3">
+      <section className={cn("relative w-full overflow-hidden pb-[50px]", isDark ? "bg-slate-950" : "bg-white")}>
+        <div className="mx-auto w-full max-w-7xl tv:max-w-[1600px] px-3">
+          <div className={cn("flex flex-wrap -mx-3", normalizeHeroSpacing(config.spacing) !== 'none' && "mt-5")}>
             <div className="grid w-full max-w-full grid-cols-3 gap-[10px] px-3">
               <div className="col-span-3 overflow-hidden">
                 <div className="relative">
                   <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
                   <div
-                    className={cn('relative flex w-full select-none items-center overflow-hidden bg-white', cornerRadiusClassName)}
+                    className={cn('relative flex w-full select-none items-center overflow-hidden', isDark ? "bg-slate-900" : "bg-white", cornerRadiusClassName)}
                     role="toolbar"
                     ref={heroEmblaRef}
                   >
@@ -335,8 +339,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                                   <HeroRuntimeVideo src={slide.image} className="h-[250px] md:h-[400px] lg:h-[500px] w-full object-contain" />
                                 ) : (
                                   <div className="relative h-[250px] md:h-[400px] lg:h-[500px] w-full overflow-hidden">
-                                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
-                                    <div className="absolute inset-0 bg-black/10" />
+                                    <div className="absolute inset-0 scale-125" style={{ backgroundImage: `url(${getBlurImageUrl(slide.image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(45px)' }} />
+                                    <div className={cn("absolute inset-0 z-0", isDark ? "bg-gradient-to-r from-slate-900/90 via-transparent to-slate-900/90" : "bg-gradient-to-r from-white/40 via-transparent to-white/40")} />
+                                    <div className={cn("absolute inset-0 z-0", isDark ? "bg-black/35" : "bg-black/10")} />
                                     <SiteImage src={slide.image} alt="Sản phẩm nổi bật" className="relative z-10 mx-auto h-full w-full max-w-full object-contain align-middle" width={1500} height={560} priority={idx === 0} loading={shouldLoad ? 'eager' : 'lazy'} sizes="100vw" />
                                   </div>
                                 )
@@ -357,24 +362,49 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                           aria-label="Previous"
                           onClick={scrollHeroPrev}
                           disabled={!canScrollPrev}
-                          className="absolute -left-0.5 top-1/2 z-20 block h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px] disabled:cursor-not-allowed disabled:opacity-40"
-                          style={{ backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-left.png?1778581786863")', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundSize: 'contain' }}
+                          className={cn(
+                            "absolute left-0 top-1/2 z-20 flex h-[52px] w-[20px] md:h-[118px] md:w-[32px] -translate-y-1/2 items-center justify-start pl-1 md:pl-2 rounded-r-full border border-l-0 shadow-md transition-all hover:w-[24px] md:hover:w-[38px] disabled:opacity-30 disabled:cursor-not-allowed",
+                            isDark ? "bg-slate-900/95 border-slate-800 text-white" : "bg-white/95 border-slate-200/80 text-slate-800"
+                          )}
                         >
-                          <span className="absolute inset-0 z-30 flex items-center justify-start pl-0.5 text-black md:pl-1"><svg className="h-2.5 w-2.5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M15 19l-7-7 7-7" /></svg></span>
+                          <span className="flex items-center justify-center">
+                            <svg className="h-3 w-3 md:h-5 md:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </span>
                         </button>
                         <button
                           type="button"
                           aria-label="Next"
                           onClick={scrollHeroNext}
                           disabled={!canScrollNext}
-                          className="absolute -right-0.5 top-1/2 z-20 block h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px] disabled:cursor-not-allowed disabled:opacity-40"
-                          style={{ backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-right.png?1778581786863")', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundSize: 'contain' }}
+                          className={cn(
+                            "absolute right-0 top-1/2 z-20 flex h-[52px] w-[20px] md:h-[118px] md:w-[32px] -translate-y-1/2 items-center justify-end pr-1 md:pr-2 rounded-l-full border border-r-0 shadow-md transition-all hover:w-[24px] md:hover:w-[38px] disabled:opacity-30 disabled:cursor-not-allowed",
+                            isDark ? "bg-slate-900/95 border-slate-800 text-white" : "bg-white/95 border-slate-200/80 text-slate-800"
+                          )}
                         >
-                          <span className="absolute inset-0 z-30 flex items-center justify-end pr-0.5 text-black md:pr-1"><svg className="h-2.5 w-2.5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.1} d="M9 5l7 7-7 7" /></svg></span>
+                          <span className="flex items-center justify-center">
+                            <svg className="h-3 w-3 md:h-5 md:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
                         </button>
-                        <div className="absolute bottom-0 left-1/2 z-20 mb-4 flex h-6 w-[100px] -translate-x-1/2 items-center justify-center rounded-[15px]">
+                        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/20 backdrop-blur-[2px]">
                           {slides.map((_, idx) => (
-                            <button key={idx} type="button" aria-label={`Đi tới slide ${idx + 1}`} onClick={() => { scrollHeroTo(idx); }} className="mx-[3px] h-0.5 w-4 border transition-opacity" style={{ backgroundColor: idx === emblaCurrentSlide ? '#8b7046' : '#cccccc', borderColor: idx === emblaCurrentSlide ? '#8b7046' : '#cccccc', opacity: idx === emblaCurrentSlide ? 1 : 0.7 }} />
+                            <button 
+                              key={idx} 
+                              type="button" 
+                              aria-label={`Đi tới slide ${idx + 1}`} 
+                              onClick={() => { scrollHeroTo(idx); }} 
+                              className={cn(
+                                "h-1 rounded-full transition-all duration-300", 
+                                idx === emblaCurrentSlide ? "w-6" : "w-1.5 hover:w-3"
+                              )} 
+                              style={{ 
+                                backgroundColor: idx === emblaCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive,
+                                opacity: idx === emblaCurrentSlide ? 1 : 0.6
+                              }} 
+                            />
                           ))}
                         </div>
                       </>
@@ -394,9 +424,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
     const bentoCurrentSlide = bentoSlides.length > 0 ? currentSlide % bentoSlides.length : 0;
     const bentoPlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9', '#e2e8f0'];
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
+      <section className={cn("relative w-full overflow-hidden p-2 md:p-4", isDark ? "bg-slate-950" : "bg-transparent")}>
         <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
-        <div className="mx-auto w-full max-w-7xl">
+        <div className="mx-auto w-full max-w-7xl tv:max-w-[1600px]">
           <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
             <div className="flex h-full">
               {bentoSlides.map((slide, idx) => (
@@ -437,7 +467,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                   <HeroRuntimeVideo src={bentoSlides[0].image} className="w-full h-full object-cover" />
                 ) : (
                 <div className="w-full h-full relative">
-                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[0].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(bentoSlides[0].image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
                   <SiteImage src={bentoSlides[0].image} alt="" className="relative w-full h-full object-cover z-10" priority sizes="50vw" />
                 </div>
@@ -450,7 +480,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                   <HeroRuntimeVideo src={bentoSlides[1].image} className="w-full h-full object-cover" />
                 ) : (
                 <div className="w-full h-full relative">
-                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[1].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(20px)' }} />
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(bentoSlides[1].image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(20px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
                   <SiteImage src={bentoSlides[1].image} alt="" className="relative w-full h-full object-cover z-10" loading="lazy" sizes="25vw" />
                 </div>
@@ -463,7 +493,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                   <HeroRuntimeVideo src={bentoSlides[2].image} className="w-full h-full object-cover" />
                 ) : (
                 <div className="w-full h-full relative">
-                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[2].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(bentoSlides[2].image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
                   <SiteImage src={bentoSlides[2].image} alt="" className="relative w-full h-full object-cover z-10" loading="lazy" sizes="25vw" />
                 </div>
@@ -476,7 +506,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                   <HeroRuntimeVideo src={bentoSlides[3].image} className="w-full h-full object-cover" />
                 ) : (
                 <div className="w-full h-full relative">
-                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${bentoSlides[3].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(bentoSlides[3].image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(15px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
                   <SiteImage src={bentoSlides[3].image} alt="" className="relative w-full h-full object-cover z-10" loading="lazy" sizes="25vw" />
                 </div>
@@ -493,9 +523,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
     const tripleSlides = slides.slice(0, 3);
     const triplePlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
+      <section className={cn("relative w-full overflow-hidden p-2 md:p-4", isDark ? "bg-slate-950" : "bg-transparent")}>
         <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
-        <div className="mx-auto w-full max-w-7xl">
+        <div className="mx-auto w-full max-w-7xl tv:max-w-[1600px]">
           <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
             <div className="flex h-full">
               {tripleSlides.map((slide, idx) => (
@@ -537,7 +567,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                     <HeroRuntimeVideo src={slide.image} className="w-full h-full object-cover" />
                   ) : (
                   <div className="w-full h-full relative">
-                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${25 - idx * 5}px)` }} />
+                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(slide.image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${25 - idx * 5}px)` }} />
                     <div className="absolute inset-0 bg-black/20" />
                     <SiteImage src={slide.image} alt="" className="relative w-full h-full object-cover z-10" priority={idx === 0} loading={idx === 0 ? undefined : 'lazy'} sizes="33vw" />
                   </div>
@@ -555,9 +585,9 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
     const tripleSlides = slides.slice(0, 3);
     const triplePlaceholders = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2 md:p-4">
+      <section className={cn("relative w-full overflow-hidden p-2 md:p-4", isDark ? "bg-slate-950" : "bg-transparent")}>
         <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
-        <div className="mx-auto w-full max-w-7xl">
+        <div className="mx-auto w-full max-w-7xl tv:max-w-[1600px]">
           <div className="relative aspect-[16/9] max-h-[400px] overflow-hidden md:hidden" ref={heroEmblaRef}>
             <div className="flex h-full">
               {tripleSlides.map((slide, idx) => (
@@ -598,7 +628,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                   <HeroRuntimeVideo src={tripleSlides[0].image} className="w-full h-full object-cover" />
                 ) : (
                 <div className="w-full h-full relative">
-                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${tripleSlides[0].image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
+                  <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(tripleSlides[0].image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(25px)' }} />
                   <div className="absolute inset-0 bg-black/20" />
                   <SiteImage src={tripleSlides[0].image} alt="" className="relative w-full h-full object-cover z-10" priority sizes="66vw" />
                 </div>
@@ -612,7 +642,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
                     <HeroRuntimeVideo src={slide.image} className="w-full h-full object-cover" />
                   ) : (
                   <div className="w-full h-full relative">
-                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${20 - idx * 5}px)` }} />
+                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(slide.image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${20 - idx * 5}px)` }} />
                     <div className="absolute inset-0 bg-black/20" />
                     <SiteImage src={slide.image} alt="" className="relative w-full h-full object-cover z-10" loading="lazy" sizes="33vw" />
                   </div>
@@ -640,7 +670,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
     }
     return (
       <div className="w-full h-full relative">
-        <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${options?.blur ?? 25}px)` }} />
+        <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${getBlurImageUrl(slide.image)})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: `blur(${options?.blur ?? 25}px)` }} />
         <SiteImage src={slide.image ?? ''} alt="" className={cn('relative w-full h-full z-10', options?.fit === 'cover' ? 'object-cover' : 'object-contain')} priority={options?.priority} loading={options?.loading} sizes="100vw" />
         {options?.overlay}
       </div>
@@ -659,7 +689,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
       }
       : { borderColor: 'rgba(255,255,255,0.3)', color: '#ffffff' };
     return renderWithSpacing(
-      <section className="relative w-full bg-slate-900 overflow-hidden">
+      <section className={cn("relative w-full overflow-hidden", isDark ? "bg-slate-950" : "bg-transparent")}>
         <div className="relative w-full aspect-[16/9] overflow-hidden">
           {!showFullscreenContent ? (
             <>
@@ -713,8 +743,8 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
             <div className={`absolute inset-0 z-30 flex flex-col justify-center px-4 md:px-8 lg:px-16${content.textAlign === 'center' ? ' items-center text-center' : ''}${content.textAlign === 'right' ? ' items-end text-right' : ''}`}>
               <div className="max-w-xl space-y-4 md:space-y-6">
                 {content.badge && <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: fullscreenColors.badgeBg, color: fullscreenColors.badgeText }}><span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: fullscreenColors.badgeDotPulse }} />{content.badge}</div>}
-                <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight">{parseHighlightedHeading(content.heading ?? 'Tiêu đề chính', content.highlightColor)}</h1>
-                {content.description && <p className="text-white/80 text-sm md:text-lg">{content.description}</p>}
+                <h1 className="text-2xl md:text-4xl lg:text-5xl tv:text-7xl font-bold text-white leading-tight">{parseHighlightedHeading(content.heading ?? 'Tiêu đề chính', content.highlightColor)}</h1>
+                {content.description && <p className="text-white/80 text-sm md:text-lg tv:text-2xl">{content.description}</p>}
                 <div className={`flex flex-col sm:flex-row gap-3${content.textAlign === 'center' ? ' justify-center' : ''}${content.textAlign === 'right' ? ' justify-end' : ''}`}>
                   {content.primaryButtonText && <a href={primaryHref} className="px-6 py-3 font-medium rounded-lg text-center" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>{content.primaryButtonText}</a>}
                   {content.secondaryButtonText && <a href={secondaryHref} className="px-6 py-3 font-medium rounded-lg border hover:bg-white/10 transition-colors text-center" style={secondaryButtonStyle}>{content.secondaryButtonText}</a>}
@@ -755,19 +785,19 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
 
     return renderWithSpacing(
       <section className="relative w-full overflow-hidden" style={{ backgroundColor: conquestColors.sectionBg, color: conquestColors.sectionText }}>
-        <div className="relative mx-auto flex min-h-[520px] w-full max-w-7xl flex-col overflow-hidden px-4 pt-8 md:min-h-[560px] md:flex-row md:items-stretch md:justify-between md:px-8 md:pt-0">
-          <div className={cn("relative z-20 flex max-w-full flex-col justify-center gap-4 pb-4 md:min-w-[420px] md:max-w-[540px] md:gap-6 md:py-20", contentAlignClass)}>
+        <div className="relative mx-auto flex min-h-[520px] w-full max-w-7xl tv:max-w-[1600px] flex-col overflow-hidden px-4 pt-8 md:min-h-[560px] md:flex-row md:items-stretch md:justify-between md:px-8 md:pt-0">
+          <div className={cn("relative z-20 flex max-w-full flex-col justify-center gap-4 pb-4 md:min-w-[420px] md:max-w-[540px] tv:max-w-[800px] md:gap-6 tv:gap-8 md:py-20 tv:py-28", contentAlignClass)}>
             {content.badge && (
               <span className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: conquestColors.badgeBg, color: conquestColors.badgeText }}>
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: conquestColors.accentSolid }} />
                 {content.badge}
               </span>
             )}
-            <h1 className="text-3xl font-bold uppercase leading-[1.05] md:text-5xl lg:text-6xl">
+            <h1 className="text-3xl font-bold uppercase leading-[1.05] md:text-5xl lg:text-6xl tv:text-8xl">
               {parseHighlightedHeading(content.heading ?? 'Chinh phục tầm cao mới', content.highlightColor || conquestColors.accentSolid)}
             </h1>
             {content.description && (
-              <p className="max-w-xl text-sm md:text-lg" style={{ color: conquestColors.descriptionText }}>
+              <p className="max-w-xl text-sm md:text-lg tv:text-2xl" style={{ color: conquestColors.descriptionText }}>
                 {content.description}
               </p>
             )}
@@ -841,7 +871,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
           <div className="w-full md:w-1/2 flex flex-col justify-center p-6 md:p-10 lg:p-16 order-2 md:order-1" style={{ backgroundColor: splitColors.contentBg }}>
             <div className={`max-w-md space-y-4${content.textAlign === 'center' ? ' text-center' : ''}${content.textAlign === 'right' ? ' text-right' : ''}`}>
               <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: splitColors.badgeBg, color: splitColors.badgeText }}>{content.badge ?? `Banner ${emblaCurrentSlide + 1}/${slides.length}`}</span>
-              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight" style={{ color: splitColors.headingText }}>{parseHighlightedHeading(content.heading ?? 'Tiêu đề nổi bật', content.highlightColor)}</h1>
+              <h1 className="text-2xl md:text-3xl lg:text-4xl tv:text-6xl font-bold leading-tight" style={{ color: splitColors.headingText }}>{parseHighlightedHeading(content.heading ?? 'Tiêu đề nổi bật', content.highlightColor)}</h1>
               {content.description && <p className="text-base md:text-lg" style={{ color: splitColors.descriptionText }}>{content.description}</p>}
               {content.primaryButtonText && <div className={`pt-2${content.textAlign === 'center' ? ' text-center' : ''}${content.textAlign === 'right' ? ' text-right' : ''}`}><a href={primaryHref} className="inline-block px-6 py-3 font-medium rounded-lg" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>{content.primaryButtonText}</a></div>}
             </div>
@@ -874,7 +904,7 @@ export function HeroRuntimeSection({ config, brandColor, secondary, mode }: Home
   }
 
   return renderWithSpacing(
-    <section className="relative w-full bg-slate-900 overflow-hidden">
+    <section className={cn("relative w-full overflow-hidden", isDark ? "bg-slate-950" : "bg-transparent")}>
       <h1 className="sr-only">{content.heading || 'Trang chủ'}</h1>
       <div className="md:hidden" style={{ backgroundColor: parallaxColors.cardBg }}>
         <div className="relative h-[280px] w-full overflow-hidden" ref={heroEmblaRef}>

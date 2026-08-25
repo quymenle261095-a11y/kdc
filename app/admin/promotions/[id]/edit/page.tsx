@@ -5,11 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
-import { HomeComponentStickyFooter } from '@/app/admin/home-components/_shared/components/HomeComponentStickyFooter';
+import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../components/ui';
+import { AdminStickyFooter } from '@/app/admin/components/AdminStickyFooter';
+import { CopyableInput } from '../../../components/CopyTextButton';
+import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
+
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormPageWrapper,
+} from '@/app/admin/components/FormUtilities';
 
 const MODULE_KEY = 'promotions';
 
@@ -18,6 +24,7 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
 
   const promotionData = useQuery(api.promotions.getById, { id: id as Id<"promotions"> });
+  useSetAdminBreadcrumb(promotionData?.name);
   const updatePromotion = useMutation(api.promotions.update);
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: MODULE_KEY });
 
@@ -26,7 +33,7 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
   const [description, setDescription] = useState('');
   const [promotionType, setPromotionType] = useState<'coupon' | 'campaign' | 'flash_sale' | 'bundle' | 'loyalty'>('coupon');
   const [discountType, setDiscountType] = useState<'percent' | 'fixed' | 'buy_x_get_y' | 'buy_a_get_b' | 'tiered' | 'free_shipping' | 'gift'>('percent');
-  const [discountValue, setDiscountValue] = useState<number>(10);
+  const [discountValue, setDiscountValue] = useState(0);
   const [discountConfigText, setDiscountConfigText] = useState('');
   const [applicableTo, setApplicableTo] = useState<'all' | 'products' | 'categories' | 'brands' | 'tags'>('all');
   const [applicableIdsText, setApplicableIdsText] = useState('');
@@ -49,12 +56,17 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
   const [stackable, setStackable] = useState(true);
   const [priority, setPriority] = useState<number | undefined>();
   const [displayOnPage, setDisplayOnPage] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [featured, setFeatured] = useState(false);
+  const [maxShippingDiscount, setMaxShippingDiscount] = useState<number | undefined>();
   const [thumbnail, setThumbnail] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [status, setStatus] = useState<'Active' | 'Inactive' | 'Scheduled' | 'Expired'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [, setIsSaved] = useState(true);
+  const initialFormSnapshotRef = React.useRef<string>('');
 
   // Get enabled features from system config
   const enabledFeatures = useMemo(() => {
@@ -89,7 +101,93 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
     return `${hours}:${minutes}`;
   };
 
-  // Load existing data
+  const createSnapshot = (data: {
+    applicableIdsText: string;
+    applicableTo: string;
+    budget?: number;
+    code: string;
+    customerGroupIdsText: string;
+    customerTierIdsText: string;
+    customerType: string;
+    description: string;
+    discountConfigText: string;
+    discountType: string;
+    discountValue: number;
+    displayOnPage: boolean;
+    endDate: string;
+    featured: boolean;
+    isPrivate: boolean;
+    maxDiscountAmount?: number;
+    maxShippingDiscount?: number;
+    minOrderAmount?: number;
+    minOrderHistory?: number;
+    minQuantity?: number;
+    minTotalSpent?: number;
+    name: string;
+    priority?: number;
+    promotionType: string;
+    recurringDaysText: string;
+    recurringFromTime: string;
+    recurringToTime: string;
+    scheduleType: string;
+    stackable: boolean;
+    startDate: string;
+    status: string;
+    thumbnail: string;
+    usageLimit?: number;
+    usagePerCustomer?: number;
+  }) => JSON.stringify(data);
+
+  const currentSnapshot = useMemo(() => {
+    return createSnapshot({
+      applicableIdsText,
+      applicableTo,
+      budget,
+      code,
+      customerGroupIdsText,
+      customerTierIdsText,
+      customerType,
+      description,
+      discountConfigText,
+      discountType,
+      discountValue,
+      displayOnPage,
+      endDate,
+      featured,
+      isPrivate,
+      maxDiscountAmount,
+      maxShippingDiscount,
+      minOrderAmount,
+      minOrderHistory,
+      minQuantity,
+      minTotalSpent,
+      name,
+      priority,
+      promotionType,
+      recurringDaysText,
+      recurringFromTime,
+      recurringToTime,
+      scheduleType,
+      stackable,
+      startDate,
+      status,
+      thumbnail,
+      usageLimit,
+      usagePerCustomer,
+    });
+  }, [
+    applicableIdsText, applicableTo, budget, code, customerGroupIdsText, customerTierIdsText, customerType, description, discountConfigText, discountType, discountValue, displayOnPage, endDate, featured, isPrivate, maxDiscountAmount, maxShippingDiscount, minOrderAmount, minOrderHistory, minQuantity, minTotalSpent, name, priority, promotionType, recurringDaysText, recurringFromTime, recurringToTime, scheduleType, stackable, startDate, status, thumbnail, usageLimit, usagePerCustomer
+  ]);
+
+  useEffect(() => {
+    if (initialFormSnapshotRef.current) {
+      const isDifferent = currentSnapshot !== initialFormSnapshotRef.current;
+      setIsDirty(isDifferent);
+      setIsSaved(!isDifferent);
+    }
+  }, [currentSnapshot]);
+
+  // Load initial promotion data
   useEffect(() => {
     if (promotionData) {
       setName(promotionData.name);
@@ -110,13 +208,17 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
       setMinTotalSpent(promotionData.minTotalSpent);
       setMinOrderAmount(promotionData.minOrderAmount);
       setMaxDiscountAmount(promotionData.maxDiscountAmount);
+      setMaxShippingDiscount(promotionData.maxShippingDiscount);
+      setIsPrivate(promotionData.isPrivate ?? false);
       setUsageLimit(promotionData.usageLimit);
       setUsagePerCustomer(promotionData.usagePerCustomer);
       setBudget(promotionData.budget);
       setScheduleType(promotionData.scheduleType ?? 'always');
       setRecurringDaysText((promotionData.recurringDays ?? []).join(','));
-      setRecurringFromTime(formatMinutesToTime(promotionData.recurringHours?.from));
-      setRecurringToTime(formatMinutesToTime(promotionData.recurringHours?.to));
+      const fromTime = formatMinutesToTime(promotionData.recurringHours?.from);
+      const toTime = formatMinutesToTime(promotionData.recurringHours?.to);
+      setRecurringFromTime(fromTime);
+      setRecurringToTime(toTime);
       setStackable(promotionData.stackable ?? true);
       setPriority(promotionData.priority);
       setDisplayOnPage(promotionData.displayOnPage ?? true);
@@ -124,12 +226,53 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
       setThumbnail(promotionData.thumbnail ?? '');
       setStatus(promotionData.status);
       
+      const startStr = promotionData.startDate ? new Date(promotionData.startDate).toISOString().slice(0, 16) : '';
+      const endStr = promotionData.endDate ? new Date(promotionData.endDate).toISOString().slice(0, 16) : '';
       if (promotionData.startDate) {
-        setStartDate(new Date(promotionData.startDate).toISOString().slice(0, 16));
+        setStartDate(startStr);
       }
       if (promotionData.endDate) {
-        setEndDate(new Date(promotionData.endDate).toISOString().slice(0, 16));
+        setEndDate(endStr);
       }
+
+      initialFormSnapshotRef.current = createSnapshot({
+        applicableIdsText: (promotionData.applicableIds ?? []).join(','),
+        applicableTo: promotionData.applicableTo ?? 'all',
+        budget: promotionData.budget,
+        code: promotionData.code ?? '',
+        customerGroupIdsText: (promotionData.customerGroupIds ?? []).join(','),
+        customerTierIdsText: (promotionData.customerTierIds ?? []).join(','),
+        customerType: promotionData.customerType ?? 'all',
+        description: promotionData.description ?? '',
+        discountConfigText: promotionData.discountConfig ? JSON.stringify(promotionData.discountConfig, null, 2) : '',
+        discountType: promotionData.discountType,
+        discountValue: promotionData.discountValue ?? 0,
+        displayOnPage: promotionData.displayOnPage ?? true,
+        endDate: endStr,
+        featured: promotionData.featured ?? false,
+        isPrivate: promotionData.isPrivate ?? false,
+        maxDiscountAmount: promotionData.maxDiscountAmount,
+        maxShippingDiscount: promotionData.maxShippingDiscount,
+        minOrderAmount: promotionData.minOrderAmount,
+        minOrderHistory: promotionData.minOrderHistory,
+        minQuantity: promotionData.minQuantity,
+        minTotalSpent: promotionData.minTotalSpent,
+        name: promotionData.name ?? '',
+        priority: promotionData.priority,
+        promotionType: promotionData.promotionType ?? (promotionData.code ? 'coupon' : 'campaign'),
+        recurringDaysText: (promotionData.recurringDays ?? []).join(','),
+        recurringFromTime: fromTime,
+        recurringToTime: toTime,
+        scheduleType: promotionData.scheduleType ?? 'always',
+        stackable: promotionData.stackable ?? true,
+        startDate: startStr,
+        status: promotionData.status,
+        thumbnail: promotionData.thumbnail ?? '',
+        usageLimit: promotionData.usageLimit,
+        usagePerCustomer: promotionData.usagePerCustomer,
+      });
+      setIsDirty(false);
+      setIsSaved(true);
     }
   }, [promotionData]);
 
@@ -176,11 +319,13 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
         discountType,
         discountValue: discountType === 'percent' || discountType === 'fixed' ? discountValue : undefined,
         displayOnPage: isFeatureEnabled('enableDisplay') ? displayOnPage : undefined,
-        endDate: isFeatureEnabled('enableSchedule') && endDate ? new Date(endDate).getTime() : undefined,
+        endDate: isFeatureEnabled('enableSchedule') && scheduleType !== 'always' && endDate ? new Date(endDate).getTime() : undefined,
         id: id as Id<"promotions">,
         excludeIds: isFeatureEnabled('enableApplicable') ? parseList(excludeIdsText) : undefined,
         featured: isFeatureEnabled('enableDisplay') ? featured : undefined,
+        isPrivate,
         maxDiscountAmount: isFeatureEnabled('enableMaxDiscount') && discountType === 'percent' ? maxDiscountAmount : undefined,
+        maxShippingDiscount: discountType === 'free_shipping' ? maxShippingDiscount : undefined,
         minOrderAmount: isFeatureEnabled('enableMinOrder') ? minOrderAmount : undefined,
         minOrderHistory: isFeatureEnabled('enableCustomerConditions') ? minOrderHistory : undefined,
         minQuantity: isFeatureEnabled('enableApplicable') ? minQuantity : undefined,
@@ -192,12 +337,15 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
         recurringHours,
         scheduleType: isFeatureEnabled('enableSchedule') ? scheduleType : undefined,
         stackable: isFeatureEnabled('enableStacking') ? stackable : undefined,
-        startDate: isFeatureEnabled('enableSchedule') && startDate ? new Date(startDate).getTime() : undefined,
+        startDate: isFeatureEnabled('enableSchedule') && scheduleType !== 'always' && startDate ? new Date(startDate).getTime() : undefined,
         status,
         thumbnail: isFeatureEnabled('enableDisplay') && thumbnail.trim() ? thumbnail.trim() : undefined,
         usageLimit: isFeatureEnabled('enableUsageLimit') ? usageLimit : undefined,
         usagePerCustomer: isFeatureEnabled('enableUsageLimit') ? usagePerCustomer : undefined,
       });
+      initialFormSnapshotRef.current = currentSnapshot;
+      setIsDirty(false);
+      setIsSaved(true);
       toast.success('Cập nhật khuyến mãi thành công');
     } catch (error) {
       toast.error(getAdminMutationErrorMessage(error, 'Không thể cập nhật khuyến mãi'));
@@ -206,26 +354,91 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  if (promotionData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-pink-500" />
-      </div>
-    );
-  }
+  const renderScheduleStatusHelper = (startDateStr?: string, endDateStr?: string) => {
+    if (!startDateStr && !endDateStr) {return null;}
 
-  if (promotionData === null) {
-    return <div className="text-center py-8 text-slate-500">Không tìm thấy khuyến mãi</div>;
-  }
+    const now = Date.now();
+    const startTs = startDateStr ? new Date(startDateStr).getTime() : undefined;
+    const endTs = endDateStr ? new Date(endDateStr).getTime() : undefined;
+
+    const formatDuration = (ms: number) => {
+      const totalMinutes = Math.floor(ms / (1000 * 60));
+      const days = Math.floor(totalMinutes / (60 * 24));
+      const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+      const minutes = totalMinutes % 60;
+
+      const parts: string[] = [];
+      if (days > 0) {parts.push(`${days} ngày`);}
+      if (hours > 0) {parts.push(`${hours} giờ`);}
+      if (minutes > 0 || parts.length === 0) {parts.push(`${minutes} phút`);}
+      return parts.join(' ');
+    };
+
+    if (startTs && now < startTs) {
+      const diff = startTs - now;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+          <span className="font-semibold shrink-0">⏳ Chưa tới thời gian:</span>
+          <span>Còn <strong>{formatDuration(diff)}</strong> nữa khuyến mãi mới chính thức bắt đầu.</span>
+        </div>
+      );
+    }
+
+    if (endTs && now > endTs) {
+      const diff = now - endTs;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-300">
+          <span className="font-semibold shrink-0">🔴 Đã hết hạn:</span>
+          <span>Khuyến mãi đã kết thúc cách đây <strong>{formatDuration(diff)}</strong>.</span>
+        </div>
+      );
+    }
+
+    if (endTs && now <= endTs) {
+      const diff = endTs - now;
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <span className="font-semibold shrink-0">✅ Đang áp dụng:</span>
+          <span>Còn <strong>{formatDuration(diff)}</strong> nữa mới hết hạn khuyến mãi.</span>
+        </div>
+      );
+    }
+
+    if (startTs && now >= startTs && !endTs) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <span className="font-semibold shrink-0">✅ Đang áp dụng:</span>
+          <span>Khuyến mãi đang hoạt động (không cài ngày kết thúc).</span>
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa khuyến mãi</h1>
-          <p className="text-sm text-slate-500 mt-1">Cập nhật thông tin voucher: {promotionData.code}</p>
-        </div>
-      </div>
+    <AdminFormPageWrapper
+      title="Chỉnh sửa khuyến mãi"
+      subtitle={promotionData ? `Cập nhật thông tin voucher: ${promotionData.code}` : undefined}
+      backHref="/admin/promotions"
+      isLoading={promotionData === undefined}
+      notFound={promotionData === null}
+      notFoundMessage="Không tìm thấy khuyến mãi"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      isDirty={isDirty}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          hasChanges={isDirty}
+          submitLabel="Lưu thay đổi"
+          onCancel={() => router.push('/admin/promotions')}
+          onClickSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+          disableSave={isSubmitting || !name.trim()}
+        />
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -239,18 +452,16 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                   onChange={(e) =>{  setPromotionType(e.target.value as typeof promotionType); }}
                   className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
                 >
-                  <option value="coupon">Coupon nhập mã</option>
-                  <option value="campaign">Chương trình tự động</option>
-                  <option value="flash_sale">Flash sale</option>
-                  <option value="bundle">Combo sản phẩm</option>
-                  <option value="loyalty">Loyalty</option>
+                  <option value="coupon">Coupon nhập mã (Coupon v1)</option>
                 </select>
+                <p className="text-xs text-slate-500">Các loại Ưu đãi tự động, Flash sale, Combo, Loyalty hiện đang thuộc Roadmap sản phẩm.</p>
               </div>
               <div className="space-y-2">
                 <Label>Tên khuyến mãi <span className="text-red-500">*</span></Label>
-                <Input 
+                <CopyableInput
                   value={name} 
                   onChange={(e) =>{  setName(e.target.value); }} 
+                  copyLabel="tên khuyến mãi"
                   required 
                 />
               </div>
@@ -301,11 +512,7 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                 >
                   <option value="percent">Giảm theo phần trăm (%)</option>
                   <option value="fixed">Giảm số tiền cố định (VND)</option>
-                  <option value="buy_x_get_y">Mua X tặng Y</option>
-                  <option value="buy_a_get_b">Mua A tặng B</option>
-                  <option value="tiered">Giảm theo bậc</option>
-                  <option value="free_shipping">Miễn phí ship</option>
-                  <option value="gift">Tặng quà</option>
+                  <option value="free_shipping">Miễn phí vận chuyển (Free Ship)</option>
                 </select>
               </div>
 
@@ -323,20 +530,22 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                     required
                     min={1}
                     max={discountType === 'percent' ? 100 : undefined}
+                    placeholder={discountType === 'percent' ? 'VD: 10' : 'VD: 50000'}
                   />
                 </div>
               )}
 
-              {discountType !== 'percent' && discountType !== 'fixed' && isFeatureEnabled('enableAdvancedDiscount') && (
+              {discountType === 'free_shipping' && (
                 <div className="space-y-2">
-                  <Label>Cấu hình chi tiết (JSON)</Label>
-                  <textarea 
-                    value={discountConfigText}
-                    onChange={(e) =>{  setDiscountConfigText(e.target.value); }}
-                    className="w-full min-h-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"
-                    placeholder='VD: {"buyQuantity":2,"getQuantity":1}'
+                  <Label>Trần giảm phí vận chuyển tối đa (VND)</Label>
+                  <Input 
+                    type="number"
+                    value={maxShippingDiscount ?? ''} 
+                    onChange={(e) => { setMaxShippingDiscount(e.target.value ? Number(e.target.value) : undefined); }}
+                    min={0}
+                    placeholder="VD: 30000 (Để trống nếu miễn phí 100%)"
                   />
-                  <p className="text-xs text-slate-500">Dùng JSON để mô tả chi tiết mua X tặng Y, combo, quà tặng.</p>
+                  <p className="text-xs text-slate-500">Để trống để hỗ trợ 100% phí vận chuyển, hoặc nhập số tiền giảm tối đa.</p>
                 </div>
               )}
 
@@ -348,6 +557,7 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                     value={minOrderAmount ?? ''} 
                     onChange={(e) =>{  setMinOrderAmount(e.target.value ? Number(e.target.value) : undefined); }}
                     min={0}
+                    placeholder="VD: 500000"
                   />
                 </div>
               )}
@@ -486,24 +696,33 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                     <option value="recurring">Lặp theo lịch</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Ngày bắt đầu</Label>
-                    <Input 
-                      type="datetime-local"
-                      value={startDate}
-                      onChange={(e) =>{  setStartDate(e.target.value); }}
-                    />
+                {scheduleType === 'always' ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    ⚡ <strong>Chế độ luôn hoạt động:</strong> Khuyến mãi được tự động áp dụng ngay lập tức và không bị giới hạn thời gian kết thúc.
                   </div>
-                  <div className="space-y-2">
-                    <Label>Ngày kết thúc</Label>
-                    <Input 
-                      type="datetime-local"
-                      value={endDate}
-                      onChange={(e) =>{  setEndDate(e.target.value); }}
-                    />
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Ngày bắt đầu</Label>
+                        <Input 
+                          type="datetime-local"
+                          value={startDate}
+                          onChange={(e) =>{  setStartDate(e.target.value); }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Ngày kết thúc</Label>
+                        <Input 
+                          type="datetime-local"
+                          value={endDate}
+                          onChange={(e) =>{  setEndDate(e.target.value); }}
+                        />
+                      </div>
+                    </div>
+                    {renderScheduleStatusHelper(startDate, endDate)}
+                  </>
+                )}
                 {scheduleType === 'recurring' && (
                   <div className="space-y-3">
                     <div className="space-y-2">
@@ -561,6 +780,17 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
               {isFeatureEnabled('enableDisplay') && (
                 <>
                   <div className="space-y-2">
+                    <Label>Mã riêng tư</Label>
+                    <select
+                      value={isPrivate ? 'true' : 'false'}
+                      onChange={(e) => setIsPrivate(e.target.value === 'true')}
+                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                    >
+                      <option value="false">Công khai (Hiển thị rộng rãi)</option>
+                      <option value="true">Riêng tư (Chăm sóc riêng / CSKH / KOL)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Hiển thị ngoài site</Label>
                     <select
                       value={displayOnPage ? 'true' : 'false'}
@@ -582,20 +812,19 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
                       <option value="true">Nổi bật</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Thumbnail</Label>
-                    <Input
-                      value={thumbnail}
-                      onChange={(e) =>{  setThumbnail(e.target.value); }}
-                      placeholder="URL ảnh thumbnail"
-                    />
-                  </div>
+                  <SettingsImageUploader
+                    label="Ảnh đại diện (Thumbnail)"
+                    value={thumbnail}
+                    onChange={(url) => setThumbnail(url ?? '')}
+                    folder="promotions"
+                    previewSize="md"
+                  />
                 </>
               )}
 
               <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  <strong>Đã sử dụng:</strong> {promotionData.usedCount} lượt
+                  <strong>Đã sử dụng:</strong> {promotionData?.usedCount ?? 0} lượt
                 </p>
               </div>
             </CardContent>
@@ -668,24 +897,7 @@ export default function PromotionEditPage({ params }: { params: Promise<{ id: st
           )}
         </div>
       </div>
-
-      <HomeComponentStickyFooter
-        isSubmitting={isSubmitting}
-        submitLabel="Cập nhật"
-        onCancel={() =>{  router.push('/admin/promotions'); }}
-        disableSave={isSubmitting}
-      >
-        <>
-          <Button type="button" variant="ghost" onClick={() =>{  router.push('/admin/promotions'); }}>Hủy bỏ</Button>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={() =>{  setStatus('Inactive'); }}>Lưu nháp</Button>
-            <Button type="submit" className="bg-pink-600 hover:bg-pink-500" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 size={16} className="animate-spin mr-2" />}
-              Cập nhật
-            </Button>
-          </div>
-        </>
-      </HomeComponentStickyFooter>
-    </form>
+      </form>
+    </AdminFormPageWrapper>
   );
 }

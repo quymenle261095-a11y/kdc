@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { cn } from '../../../components/ui';
 import {
   ArrowUp,
   Calendar,
@@ -10,7 +11,6 @@ import {
   Instagram,
   Mail,
   MapPin,
-  MessageCircle,
   MessageSquareMore,
   Phone,
   Plus,
@@ -20,11 +20,11 @@ import {
 } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, type PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import {
   getAPCATextColor,
-  getSpeedDialColorTokens,
+  getSpeedDialThemeTokens,
   normalizeSpeedDialActions,
   resolveActionBgColor,
   type SpeedDialColorTokens,
@@ -52,6 +52,12 @@ const XIcon = ({ size = 18 }: { size?: number }) => (
   </svg>
 );
 
+const PinterestIcon = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+  </svg>
+);
+
 const ShopeeIcon = ({ size = 18 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M15.9414 17.9633c.229-1.879-.981-3.077-4.1758-4.0969-1.548-.528-2.277-1.22-2.26-2.1719.065-1.056 1.048-1.825 2.352-1.85a5.2898 5.2898 0 0 1 2.8838.89c.116.072.197.06.263-.039.09-.145.315-.494.39-.62.051-.081.061-.187-.068-.281-.185-.1369-.704-.4149-.983-.5319a6.4697 6.4697 0 0 0-2.5118-.514c-1.909.008-3.4129 1.215-3.5389 2.826-.082 1.1629.494 2.1078 1.73 2.8278.262.152 1.6799.716 2.2438.892 1.774.552 2.695 1.5419 2.478 2.6969-.197 1.047-1.299 1.7239-2.818 1.7439-1.2039-.046-2.2878-.537-3.1278-1.19l-.141-.11c-.104-.08-.218-.075-.287.03-.05.077-.376.547-.458.67-.077.108-.035.168.045.234.35.293.817.613 1.134.775a6.7097 6.7097 0 0 0 2.8289.727 4.9048 4.9048 0 0 0 2.0759-.354c1.095-.465 1.8029-1.394 1.9449-2.554zM11.9986 1.4009c-2.068 0-3.7539 1.95-3.8329 4.3899h7.6657c-.08-2.44-1.765-4.3899-3.8328-4.3899zm7.8516 22.5981-.08.001-15.7843-.002c-1.074-.04-1.863-.91-1.971-1.991l-.01-.195L1.298 6.2858a.459.459 0 0 1 .45-.494h4.9748C6.8448 2.568 9.1607 0 11.9996 0c2.8388 0 5.1537 2.5689 5.2757 5.7898h4.9678a.459.459 0 0 1 .458.483l-.773 15.5883-.007.131c-.094 1.094-.979 1.9769-2.0709 2.0059z"/>
@@ -63,6 +69,19 @@ const ShopeeIcon = ({ size = 18 }: { size?: number }) => (
 const MessengerIcon = ({ size = 18 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 0C5.24 0 0 4.952 0 11.64c0 3.499 1.434 6.521 3.769 8.61a.96.96 0 0 1 .323.683l.065 2.135a.96.96 0 0 0 1.347.85l2.381-1.053a.96.96 0 0 1 .641-.046A13 13 0 0 0 12 23.28c6.76 0 12-4.952 12-11.64S18.76 0 12 0m6.806 7.44c.522-.03.971.567.63 1.094l-4.178 6.457a.707.707 0 0 1-.977.208l-3.87-2.504a.44.44 0 0 0-.49.007l-4.363 3.01c-.637.438-1.415-.317-.995-.966l4.179-6.457a.706.706 0 0 1 .977-.21l3.87 2.505c.15.097.344.094.491-.007l4.362-3.008a.7.7 0 0 1 .364-.13"/>
+  </svg>
+);
+
+const AiChatIcon = ({ size = 18 }: { size?: number }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {/* Anten */}
+    <path d="M12 9V5h3" />
+    {/* Mặt robot */}
+    <rect x="6" y="9" width="12" height="8" rx="2" />
+    {/* Hai mắt */}
+    <path d="M10 12v2M14 12v2" />
+    {/* Hai tai */}
+    <path d="M4 13h2M18 13h2" />
   </svg>
 );
 
@@ -82,6 +101,10 @@ interface SpeedDialSectionSharedProps {
   previewStyle?: SpeedDialStyle;
   onPreviewStyleChange?: (style: SpeedDialStyle) => void;
   enableShadow?: boolean;
+  isDark?: boolean;
+  enableGlassmorphism?: boolean;
+  visualEditEnabled?: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }
 
 /** Icon dùng PNG logo (fill full nút, không cần bg color) */
@@ -99,7 +122,7 @@ const darkenColor = (hex: string, pct: number): string => {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
-const getIconNode = (name: string, size = 18) => {
+export const getIconNode = (name: string, size = 18) => {
   const normalized = name.trim().toLowerCase();
 
   if (normalized === 'calendar') {return <Calendar size={size} />;}
@@ -109,11 +132,12 @@ const getIconNode = (name: string, size = 18) => {
   if (normalized === 'instagram') {return <Instagram size={size} />;}
   if (normalized === 'mail') {return <Mail size={size} />;}
   if (normalized === 'map-pin') {return <MapPin size={size} />;}
-  if (normalized === 'message-circle') {return <MessageCircle size={size} />;}
+  if (normalized === 'message-circle') {return <AiChatIcon size={size} />;}
   if (normalized === 'shopping-cart') {return <ShoppingCart size={size} />;}
   if (normalized === 'telegram') {return <Send size={size} />;}
   if (normalized === 'tiktok') {return <TikTokIcon size={size} />;}
   if (normalized === 'x') {return <XIcon size={size} />;}
+  if (normalized === 'pinterest') {return <PinterestIcon size={size} />;}
   if (normalized === 'shopee') {return <ShopeeIcon size={size} />;}
   if (normalized === 'lazada') {return <img src="/icons/lazada-logo.png" alt="Lazada" className="w-full h-full rounded-full object-cover" />;}
   if (normalized === 'tiki') {return <img src="/icons/tiki-logo.png" alt="Tiki" className="w-full h-full rounded-full object-contain p-1.5" style={{ background: '#fff', border: '1.5px solid #1A94FF' }} />;}
@@ -124,12 +148,22 @@ const getIconNode = (name: string, size = 18) => {
   return <Phone size={size} />;
 };
 
+const AI_CHATBOT_URL = '#ai-chatbot';
+const AI_CHATBOT_OPEN_EVENT = 'vietadmin:open-ai-chatbot';
+
 const getLinkProps = (url: string) => {
   const href = url.trim().length > 0 ? url : '#';
   const isExternal = /^https?:\/\//i.test(href);
+  const isAiChatbot = href === AI_CHATBOT_URL;
 
   return {
     href,
+    onClick: isAiChatbot
+      ? ((event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent(AI_CHATBOT_OPEN_EVENT));
+      })
+      : undefined,
     rel: isExternal ? 'noopener noreferrer' : undefined,
     target: isExternal ? '_blank' as const : undefined,
   };
@@ -175,6 +209,8 @@ const renderFab = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -186,6 +222,8 @@ const renderFab = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   /* Layout 1: tất cả nút hiện luôn, không có toggle */
   const isPrev = context === 'preview';
@@ -211,7 +249,7 @@ const renderFab = ({
           type="button"
           onClick={onBackToTop}
           className={`${btnSize} rounded-full flex items-center justify-center ${shadowClass(enableShadow, 'shadow-md')} transition-transform hover:scale-105`}
-          style={{ background: 'linear-gradient(180deg, #3b82f6 50%, #2563eb 100%)', color: '#fff' }}
+          style={{ background: `linear-gradient(180deg, ${tokens.mainButtonBg} 50%, ${darkenColor(tokens.mainButtonBg, 15)} 100%)`, color: tokens.mainButtonText }}
           aria-label="Lên đầu trang"
         >
           <ArrowUp size={iconSize} />
@@ -219,9 +257,10 @@ const renderFab = ({
       )}
 
       {/* Action buttons */}
-      {actions.map((action) => {
+      {actions.map((action, index) => {
         const bg = resolveActionBgColor(action.bgColor, tokens, 'fab');
         const isImg = isImageBrandIcon(action.icon);
+        const isEditable = isVisualEditActive && onActionLabelChange !== undefined;
 
         return (
           <a
@@ -233,10 +272,25 @@ const renderFab = ({
             {/* Tooltip — hiện khi hover */}
             {action.label && (
               <span
-                className={`absolute ${isRight ? 'right-full mr-2.5' : 'left-full ml-2.5'} top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] font-medium rounded-[5px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none`}
-                style={{ backgroundColor: '#000', color: '#fff' }}
+                className={cn(
+                  `absolute ${isRight ? 'right-full mr-2.5' : 'left-full ml-2.5'} top-1/2 -translate-y-1/2 px-2.5 py-1 text-[11px] font-medium rounded-[5px] whitespace-nowrap transition-opacity duration-200`,
+                  isEditable ? 'pointer-events-auto opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none'
+                )}
+                style={{ backgroundColor: tokens.tooltipBg, color: tokens.tooltipText }}
               >
-                {action.label}
+                <span
+                  contentEditable={isEditable}
+                  suppressContentEditableWarning={isEditable}
+                  onBlur={isEditable ? (e) => {
+                    onActionLabelChange?.(index, e.currentTarget.textContent ?? '');
+                  } : undefined}
+                  onClick={(e) => { if (isEditable) { e.preventDefault(); e.stopPropagation(); } }}
+                  className={cn(
+                    isEditable && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                  )}
+                >
+                  {action.label}
+                </span>
               </span>
             )}
             {/* Button circle */}
@@ -244,7 +298,7 @@ const renderFab = ({
               className={`${btnSize} rounded-full ${shadowClass(enableShadow, 'shadow-md')} flex items-center justify-center transition-transform hover:scale-105 ${isImg ? 'overflow-hidden p-0' : ''}`}
               style={{
                 background: isImg ? 'transparent' : `linear-gradient(180deg, ${bg} 50%, ${darkenColor(bg, 15)} 100%)`,
-                color: isImg ? undefined : '#fff',
+                color: isImg ? undefined : getAPCATextColor(bg, 14, 600),
               }}
             >
               {getIconNode(action.icon, iconSize)}
@@ -267,6 +321,7 @@ const renderSidebar = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  glassStyle,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -278,6 +333,7 @@ const renderSidebar = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  glassStyle?: React.CSSProperties;
 }) => {
   const wrapperClass = context === 'site'
     ? `fixed top-1/2 -translate-y-1/2 z-50 ${isRight ? 'right-[2px] md:right-0' : 'left-0'}`
@@ -323,6 +379,7 @@ const renderSidebar = ({
             style={{
               backgroundColor: tokens.neutralSurface,
               borderColor: tokens.neutralBorder,
+              ...glassStyle,
             }}
           >
             {actions.map((action) => {
@@ -363,6 +420,9 @@ const renderPills = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  glassStyle,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -374,6 +434,9 @@ const renderPills = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  glassStyle?: React.CSSProperties;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   /* Layout 3: card trắng popup + toggle cam + back-to-top (giống dola-construction) */
   const isPrev = context === 'preview';
@@ -398,34 +461,49 @@ const renderPills = ({
       role="group"
       aria-label={groupLabel}
     >
-      {/* ── White popup card (khi mở) ── */}
       {isOpen && (
         <div
-          className={`bg-white ${shadowClass(enableShadow, 'shadow-xl')} border border-gray-200 overflow-hidden ${isPrev ? 'rounded-lg w-[160px]' : 'rounded-2xl w-[280px]'}`}
+          className={`${shadowClass(enableShadow, 'shadow-xl')} border overflow-hidden ${isPrev ? 'rounded-lg w-[160px]' : 'rounded-2xl w-[280px]'}`}
+          style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.neutralBorder, ...glassStyle }}
         >
           {actions.map((action, idx) => {
             const bg = resolveActionBgColor(action.bgColor, tokens, 'pills');
+            const text = getAPCATextColor(bg, 14, 600);
             const isImg = isImageBrandIcon(action.icon);
+            const isEditable = isVisualEditActive && onActionLabelChange !== undefined;
 
             return (
               <a
                 key={action.key}
                 {...getLinkProps(action.url)}
-                className={`flex items-center gap-2 transition-colors hover:bg-gray-50 ${isPrev ? 'px-2 py-1.5' : 'px-4 py-3'} ${idx < actions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                className={`flex items-center gap-2 transition-colors ${isPrev ? 'px-2 py-1.5' : 'px-4 py-3'} ${idx < actions.length - 1 ? 'border-b' : ''}`}
+                style={{ borderBottomColor: tokens.separatorColor }}
                 aria-label={action.label || action.icon}
               >
                 <span
                   className={`${circleSize} rounded-full flex items-center justify-center shrink-0 ${isImg ? 'overflow-hidden p-0' : ''}`}
                   style={{
                     backgroundColor: isImg ? 'transparent' : bg,
-                    color: isImg ? undefined : '#fff',
+                    color: isImg ? undefined : text,
                   }}
                 >
                   {getIconNode(action.icon, circleIconSize)}
                 </span>
                 {action.label && (
-                  <span className={`${isPrev ? 'text-[9px]' : 'text-sm'} font-medium text-gray-700 truncate`}>
-                    {action.label}
+                  <span className={`${isPrev ? 'text-[9px]' : 'text-sm'} font-medium truncate`} style={{ color: tokens.bodyText }}>
+                    <span
+                      contentEditable={isEditable}
+                      suppressContentEditableWarning={isEditable}
+                      onBlur={isEditable ? (e) => {
+                        onActionLabelChange?.(idx, e.currentTarget.textContent ?? '');
+                      } : undefined}
+                      onClick={(e) => { if (isEditable) { e.preventDefault(); e.stopPropagation(); } }}
+                      className={cn(
+                        isEditable && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                      )}
+                    >
+                      {action.label}
+                    </span>
                   </span>
                 )}
               </a>
@@ -443,7 +521,7 @@ const renderPills = ({
           aria-expanded={isOpen}
           aria-label="Toggle menu"
           className={`${toggleSize} ${toggleRadius} ${shadowClass(enableShadow, 'shadow-lg')} flex flex-col items-center justify-center transition-transform hover:scale-105`}
-          style={{ backgroundColor: primaryColor, color: '#fff' }}
+          style={{ backgroundColor: primaryColor, color: tokens.mainButtonText }}
         >
           {isOpen ? (
             <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -461,7 +539,7 @@ const renderPills = ({
             type="button"
             onClick={onBackToTop}
             className={`${toggleSize} ${toggleRadius} ${shadowClass(enableShadow, 'shadow-lg')} flex items-center justify-center transition-transform hover:scale-105`}
-            style={{ backgroundColor: primaryColor, color: '#fff' }}
+            style={{ backgroundColor: primaryColor, color: tokens.mainButtonText }}
             aria-label="Lên đầu trang"
           >
             <ArrowUp size={iconSize} />
@@ -483,6 +561,7 @@ const renderStack = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  glassStyle,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -494,6 +573,7 @@ const renderStack = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  glassStyle?: React.CSSProperties;
 }) => {
   const siteRight = isRight ? 'right-[2px] md:right-0' : 'left-0';
   const previewRight = isRight ? (showBackToTop ? 'right-3' : 'right-1') : (showBackToTop ? 'left-3' : 'left-1');
@@ -524,6 +604,7 @@ const renderStack = ({
           style={{
             backgroundColor: tokens.neutralSurface,
             borderColor: tokens.neutralBorder,
+            ...glassStyle,
           }}
         >
           <div className="flex flex-col gap-2">
@@ -576,6 +657,8 @@ const renderDock = ({
   isOpen: _isOpen,
   onToggle: _onToggle,
   enableShadow,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -588,6 +671,8 @@ const renderDock = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   /* Layout 5: Desktop = thanh dọc icon-only, Mobile = bottom nav ngang (bean-construction) */
   const bg = tokens.mainButtonBg;
@@ -614,7 +699,7 @@ const renderDock = ({
       role="group"
       aria-label={groupLabel}
     >
-      {actions.map((action) => (
+      {actions.map((action, index) => (
         <a
           key={action.key}
           {...getLinkProps(action.url)}
@@ -627,7 +712,19 @@ const renderDock = ({
           </span>
           {action.label && (
             <span className="text-center leading-tight" style={{ fontSize: isPrev ? '7px' : '11px', fontWeight: 600, color: textColor }}>
-              {action.label}
+              <span
+                contentEditable={isVisualEditActive && onActionLabelChange !== undefined}
+                suppressContentEditableWarning={isVisualEditActive && onActionLabelChange !== undefined}
+                onBlur={isVisualEditActive && onActionLabelChange !== undefined ? (e) => {
+                  onActionLabelChange?.(index, e.currentTarget.textContent ?? '');
+                } : undefined}
+                onClick={(e) => { if (isVisualEditActive && onActionLabelChange !== undefined) { e.preventDefault(); e.stopPropagation(); } }}
+                className={cn(
+                  isVisualEditActive && onActionLabelChange !== undefined && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                )}
+              >
+                {action.label}
+              </span>
             </span>
           )}
         </a>
@@ -687,7 +784,7 @@ const renderDock = ({
           style={{ backgroundColor: bg, borderRadius, width: `${barWidth}px`, boxShadow: enableShadow ? '0 10px 30px rgba(15,23,42,0.22)' : undefined }}
         >
           <span style={waveTopStyle} aria-hidden="true" />
-          {actions.map((action) => (
+          {actions.map((action, index) => (
             <a
               key={action.key}
               {...getLinkProps(action.url)}
@@ -700,7 +797,19 @@ const renderDock = ({
               </span>
               {action.label && (
                 <span className="text-center leading-tight" style={{ fontSize: '10px', fontWeight: 600, color: textColor }}>
-                  {action.label}
+                  <span
+                    contentEditable={isVisualEditActive && onActionLabelChange !== undefined}
+                    suppressContentEditableWarning={isVisualEditActive && onActionLabelChange !== undefined}
+                    onBlur={isVisualEditActive && onActionLabelChange !== undefined ? (e) => {
+                      onActionLabelChange?.(index, e.currentTarget.textContent ?? '');
+                    } : undefined}
+                    onClick={(e) => { if (isVisualEditActive && onActionLabelChange !== undefined) { e.preventDefault(); e.stopPropagation(); } }}
+                    className={cn(
+                      isVisualEditActive && onActionLabelChange !== undefined && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                    )}
+                  >
+                    {action.label}
+                  </span>
                 </span>
               )}
             </a>
@@ -720,6 +829,8 @@ const renderBuilderBar = ({
   groupLabel,
   previewDevice,
   enableShadow,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -732,6 +843,8 @@ const renderBuilderBar = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   const isPrev = context === 'preview';
   const bg = tokens.actionStyleBg['builder-bar'];
@@ -747,7 +860,7 @@ const renderBuilderBar = ({
       style={{ backgroundColor: bg, boxShadow: enableShadow ? '0 -10px 30px rgba(15,23,42,0.18)' : undefined }}
       aria-label={groupLabel}
     >
-      {actions.map((action) => (
+      {actions.map((action, index) => (
         <a
           key={action.key}
           {...getLinkProps(action.url)}
@@ -760,7 +873,19 @@ const renderBuilderBar = ({
           </span>
           {action.label && (
             <span className="max-w-[54px] break-words text-center text-[6px] font-bold leading-none">
-              {action.label}
+              <span
+                contentEditable={isVisualEditActive && onActionLabelChange !== undefined}
+                suppressContentEditableWarning={isVisualEditActive && onActionLabelChange !== undefined}
+                onBlur={isVisualEditActive && onActionLabelChange !== undefined ? (e) => {
+                  onActionLabelChange?.(index, e.currentTarget.textContent ?? '');
+                } : undefined}
+                onClick={(e) => { if (isVisualEditActive && onActionLabelChange !== undefined) { e.preventDefault(); e.stopPropagation(); } }}
+                className={cn(
+                  isVisualEditActive && onActionLabelChange !== undefined && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                )}
+              >
+                {action.label}
+              </span>
             </span>
           )}
         </a>
@@ -783,6 +908,7 @@ const renderBuilderBar = ({
         <ul className={`flex list-none flex-col overflow-hidden rounded-[10px] p-0 ${shadowClass(enableShadow, 'shadow-[0_6px_18px_rgba(0,0,0,0.25)]')}`}>
           {actions.map((action, index) => {
             const isLast = index === actions.length - 1;
+            const isEditable = isVisualEditActive && onActionLabelChange !== undefined;
 
             return (
               <li key={action.key} className="relative">
@@ -797,7 +923,19 @@ const renderBuilderBar = ({
                   </span>
                   {action.label && (
                     <span className="mt-1 max-w-full break-words text-[6px] font-bold leading-none">
-                      {action.label}
+                      <span
+                        contentEditable={isEditable}
+                        suppressContentEditableWarning={isEditable}
+                        onBlur={isEditable ? (e) => {
+                          onActionLabelChange?.(index, e.currentTarget.textContent ?? '');
+                        } : undefined}
+                        onClick={(e) => { if (isEditable) { e.preventDefault(); e.stopPropagation(); } }}
+                        className={cn(
+                          isEditable && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                        )}
+                      >
+                        {action.label}
+                      </span>
                     </span>
                   )}
                 </a>
@@ -828,6 +966,9 @@ const renderMinimal = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  glassStyle,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   isRight: boolean;
@@ -839,6 +980,9 @@ const renderMinimal = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  glassStyle?: React.CSSProperties;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   /* Layout 6: bean-spa style — toggle tròn + pulse, popup card trắng */
   const isPrev = context === 'preview';
@@ -858,7 +1002,7 @@ const renderMinimal = ({
           type="button"
           onClick={onBackToTop}
           className={`flex items-center justify-center rounded-full ${shadowClass(enableShadow, 'shadow-md')} mb-2 transition-transform hover:scale-105 ${isPrev ? 'h-5 w-5' : 'h-7 w-7'}`}
-          style={{ backgroundColor: primaryColor, color: '#fff' }}
+          style={{ backgroundColor: primaryColor, color: tokens.mainButtonText }}
           aria-label="Lên đầu trang"
         >
           <ArrowUp size={isPrev ? 10 : 14} />
@@ -868,45 +1012,58 @@ const renderMinimal = ({
       {/* Popup card */}
       {isOpen && (
         <div
-          className={`mb-2 bg-white ${shadowClass(enableShadow, 'shadow-xl')} overflow-hidden ${isPrev ? 'rounded-md w-[140px]' : 'rounded-lg w-[280px]'}`}
-          style={{ boxShadow: enableShadow ? '0 0 10px rgba(0,0,0,0.2)' : undefined }}
+          className={`mb-2 border ${shadowClass(enableShadow, 'shadow-xl')} overflow-hidden ${isPrev ? 'rounded-md w-[140px]' : 'rounded-lg w-[280px]'}`}
+          style={{ backgroundColor: tokens.neutralSurface, borderColor: tokens.neutralBorder, boxShadow: enableShadow ? '0 0 10px rgba(0,0,0,0.2)' : undefined, ...glassStyle }}
         >
-          {/* Header */}
           <div
-            className={`flex items-center justify-between text-white ${isPrev ? 'px-2 py-1.5' : 'px-4 py-3'}`}
-            style={{ backgroundColor: primaryColor }}
+            className={`flex items-center justify-between ${isPrev ? 'px-2 py-1.5' : 'px-4 py-3'}`}
+            style={{ backgroundColor: primaryColor, color: tokens.mainButtonText }}
           >
             <span className={`font-semibold ${isPrev ? 'text-[8px]' : 'text-sm'}`}>Liên hệ với chúng tôi</span>
-            <button type="button" onClick={onToggle} className="text-white/80 hover:text-white" aria-label="Đóng">
+            <button type="button" onClick={onToggle} aria-label="Đóng" style={{ color: tokens.mainButtonText }}>
               <svg width={isPrev ? 10 : 16} height={isPrev ? 10 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
-          {/* List items */}
           <div className={isPrev ? 'py-1' : 'py-1'}>
             {actions.map((action, i) => {
               const bg = resolveActionBgColor(action.bgColor, tokens, 'minimal');
+              const text = getAPCATextColor(bg, 14, 600);
+              const isEditable = isVisualEditActive && onActionLabelChange !== undefined;
               return (
                 <a
                   key={action.key}
                   {...getLinkProps(action.url)}
-                  className={`flex items-center gap-2 transition-colors hover:bg-gray-50 ${isPrev ? 'px-2 py-1' : 'px-4 py-2.5'} ${i < actions.length - 1 ? 'border-b border-gray-100' : ''}`}
+                  className={`flex items-center gap-2 transition-colors ${isPrev ? 'px-2 py-1' : 'px-4 py-2.5'} ${i < actions.length - 1 ? 'border-b' : ''}`}
+                  style={{ borderBottomColor: tokens.separatorColor }}
                   aria-label={action.label || action.icon}
                 >
                   <span
                     className={`flex shrink-0 items-center justify-center rounded-full ${isPrev ? 'h-5 w-5' : 'h-9 w-9'} ${isImageBrandIcon(action.icon) ? 'overflow-hidden p-0' : ''}`}
                     style={{
                       backgroundColor: isImageBrandIcon(action.icon) ? 'transparent' : bg,
-                      color: isImageBrandIcon(action.icon) ? undefined : '#fff',
+                      color: isImageBrandIcon(action.icon) ? undefined : text,
                     }}
                   >
                     {getIconNode(action.icon, isPrev ? 10 : 18)}
                   </span>
                   <div className="flex flex-col min-w-0">
-                    <span className={`font-semibold text-gray-800 truncate ${isPrev ? 'text-[7px]' : 'text-[13px]'}`}>
-                      {action.label || action.icon}
+                    <span className={`font-semibold truncate ${isPrev ? 'text-[7px]' : 'text-[13px]'}`} style={{ color: tokens.bodyText }}>
+                      <span
+                        contentEditable={isEditable}
+                        suppressContentEditableWarning={isEditable}
+                        onBlur={isEditable ? (e) => {
+                          onActionLabelChange?.(i, e.currentTarget.textContent ?? '');
+                        } : undefined}
+                        onClick={(e) => { if (isEditable) { e.preventDefault(); e.stopPropagation(); } }}
+                        className={cn(
+                          isEditable && "outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text px-1"
+                        )}
+                      >
+                        {action.label || action.icon}
+                      </span>
                     </span>
                     {action.url && (
-                      <span className={`text-gray-400 truncate ${isPrev ? 'text-[6px]' : 'text-[11px]'}`}>
+                      <span className={`truncate ${isPrev ? 'text-[6px]' : 'text-[11px]'}`} style={{ color: tokens.mutedText }}>
                         {action.url.replace(/^(https?:\/\/|tel:|mailto:)/, '').slice(0, 30)}
                       </span>
                     )}
@@ -928,7 +1085,7 @@ const renderMinimal = ({
           className={`relative flex flex-col items-center justify-center rounded-full ${shadowClass(enableShadow, 'shadow-lg')} transition-transform hover:scale-105`}
           style={{
             backgroundColor: primaryColor,
-            color: '#fff',
+            color: tokens.mainButtonText,
             width: `${toggleSize}px`,
             height: `${toggleSize}px`,
           }}
@@ -959,7 +1116,11 @@ const SpeedDialSectionContent = ({
   showBackToTop,
   onBackToTop,
   enableShadow,
+  enableGlassmorphism,
+  isDark,
   previewDevice,
+  isVisualEditActive,
+  onActionLabelChange,
 }: {
   actions: SpeedDialRenderableAction[];
   style: SpeedDialStyle;
@@ -972,9 +1133,29 @@ const SpeedDialSectionContent = ({
   showBackToTop: boolean;
   onBackToTop: () => void;
   enableShadow: boolean;
+  enableGlassmorphism?: boolean;
+  isDark?: boolean;
   previewDevice: PreviewDevice;
+  isVisualEditActive: boolean;
+  onActionLabelChange?: (index: number, val: string) => void;
 }) => {
   const isRight = position !== 'bottom-left';
+
+  // Glassmorphism styles cho popup container
+  const glassBg = isDark ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.78)';
+  const glassBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.07)';
+  const glassBoxShadow = isDark
+    ? '0 10px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+    : '0 10px 30px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.5)';
+  const glassStyle: React.CSSProperties = enableGlassmorphism
+    ? {
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        backgroundColor: glassBg,
+        borderColor: glassBorder,
+        boxShadow: glassBoxShadow,
+      }
+    : {};
 
   if (actions.length === 0) {
     return context === 'preview' ? renderPageMock(tokens) : null;
@@ -982,13 +1163,13 @@ const SpeedDialSectionContent = ({
 
   const floating = (
     <>
-      {style === 'fab' && renderFab({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'sidebar' && renderSidebar({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'pills' && renderPills({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'stack' && renderStack({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'dock' && renderDock({ actions, isRight, tokens, context, groupLabel, previewDevice, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'minimal' && renderMinimal({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
-      {style === 'builder-bar' && renderBuilderBar({ actions, isRight, tokens, context, groupLabel, previewDevice, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow })}
+      {style === 'fab' && renderFab({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, isVisualEditActive, onActionLabelChange })}
+      {style === 'sidebar' && renderSidebar({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, glassStyle })}
+      {style === 'pills' && renderPills({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, glassStyle, isVisualEditActive, onActionLabelChange })}
+      {style === 'stack' && renderStack({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, glassStyle })}
+      {style === 'dock' && renderDock({ actions, isRight, tokens, context, groupLabel, previewDevice, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, isVisualEditActive, onActionLabelChange })}
+      {style === 'minimal' && renderMinimal({ actions, isRight, tokens, context, groupLabel, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, glassStyle, isVisualEditActive, onActionLabelChange })}
+      {style === 'builder-bar' && renderBuilderBar({ actions, isRight, tokens, context, groupLabel, previewDevice, isOpen, onToggle, showBackToTop, onBackToTop, enableShadow, isVisualEditActive, onActionLabelChange })}
     </>
   );
 
@@ -1020,15 +1201,20 @@ export function SpeedDialSectionShared({
   previewStyle,
   onPreviewStyleChange,
   enableShadow = true,
+  isDark,
+  enableGlassmorphism = false,
+  visualEditEnabled,
+  onActionLabelChange,
 }: SpeedDialSectionSharedProps) {
   const selectedStyle = previewStyle ?? style;
   const normalizedActions = React.useMemo(() => normalizeSpeedDialActions(actions), [actions]);
   const resolvedSectionTitle = sectionTitle.trim().length > 0 ? sectionTitle : 'Speed Dial';
-  const tokens = React.useMemo(() => getSpeedDialColorTokens({
-    primary: brandColor,
-    secondary,
-    mode,
-  }), [brandColor, secondary, mode]);
+  const tokens = React.useMemo(() => getSpeedDialThemeTokens({
+      primary: brandColor,
+      secondary,
+      mode,
+      isDark: isDark ?? false,
+    }), [brandColor, secondary, mode, isDark]);
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
   const [isScrolled, setIsScrolled] = React.useState(false);
 
@@ -1069,12 +1255,48 @@ export function SpeedDialSectionShared({
         showBackToTop={showBackToTop}
         onBackToTop={handleBackToTop}
         enableShadow={enableShadow}
+        enableGlassmorphism={enableGlassmorphism}
+        isDark={isDark}
         previewDevice={previewDevice}
+        isVisualEditActive={visualEditEnabled ?? false}
+        onActionLabelChange={onActionLabelChange}
       />
     );
   }
 
   const info = getStyleInfo(selectedStyle, normalizedActions.length, mode, context, previewDevice);
+  const PreviewContent = ({ isDark = false }: { isDark?: boolean }) => {
+    const visualEdit = usePreviewVisualEdit();
+    const previewTokens = getSpeedDialThemeTokens({
+      primary: brandColor,
+      secondary,
+      mode,
+      isDark,
+    });
+
+    return (
+      <BrowserFrame>
+        <SpeedDialSectionContent
+          actions={normalizedActions}
+          style={selectedStyle}
+          position={position}
+          tokens={previewTokens}
+          context="preview"
+          groupLabel={resolvedSectionTitle}
+          isOpen={isOpen}
+          onToggle={() => { setIsOpen((prev) => !prev); }}
+          showBackToTop={showBackToTop}
+          onBackToTop={handleBackToTop}
+          enableShadow={enableShadow}
+          enableGlassmorphism={enableGlassmorphism}
+          isDark={isDark}
+          previewDevice={previewDevice}
+          isVisualEditActive={visualEdit.active}
+          onActionLabelChange={onActionLabelChange}
+        />
+      </BrowserFrame>
+    );
+  };
 
   return (
     <>
@@ -1087,23 +1309,9 @@ export function SpeedDialSectionShared({
         styles={SPEED_DIAL_STYLES}
         info={info}
         deviceWidthClass={deviceWidths[previewDevice]}
+        visualEditAllowed={true}
       >
-        <BrowserFrame>
-          <SpeedDialSectionContent
-            actions={normalizedActions}
-            style={selectedStyle}
-            position={position}
-            tokens={tokens}
-            context="preview"
-            groupLabel={resolvedSectionTitle}
-            isOpen={isOpen}
-            onToggle={() => { setIsOpen((prev) => !prev); }}
-            showBackToTop={showBackToTop}
-            onBackToTop={handleBackToTop}
-            enableShadow={enableShadow}
-            previewDevice={previewDevice}
-          />
-        </BrowserFrame>
+        <PreviewContent />
       </PreviewWrapper>
 
       {mode === 'dual' ? (

@@ -8,7 +8,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 const MAX_ITEMS_LIMIT = 100;
 
 // SVC-011: Added "service" to target types
-type TargetType = "post" | "product" | "service";
+type TargetType = "post" | "product" | "service" | "course";
 type CommentStatus = "Pending" | "Approved" | "Spam";
 
 function assertValidRating(rating?: number): void {
@@ -170,6 +170,12 @@ export async function validateTarget(
   } else if (targetType === "product") {
     const product = await ctx.db.get(targetId as Id<"products">);
     return product !== null;
+  } else if (targetType === "service") {
+    const service = await ctx.db.get(targetId as Id<"services">);
+    return service !== null;
+  } else if (targetType === "course") {
+    const course = await ctx.db.get(targetId as Id<"courses">);
+    return course !== null;
   }
   return false;
 }

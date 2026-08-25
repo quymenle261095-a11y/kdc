@@ -178,6 +178,17 @@ export default function CaseStudyCreatePage() {
         spacing={headerState.spacing}
         fontStyle={fontStyle}
         fontClassName="font-active"
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
+        onProjectsChange={(nextProjects) => {
+          setProjects(nextProjects.map((project, idx) => ({
+            ...projects[idx],
+            category: project.category,
+            description: project.description,
+            title: project.title,
+          })));
+        }}
       />
 
       {brandMode === 'dual' && warningMessages.length > 0 && (

@@ -370,6 +370,12 @@ export default function VoucherPromotionsEditPage({
               canUseRealData={canUseRealData}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              onTitleChange={(value) => {
+                setTitle(value);
+                setConfig((prev) => ({ ...prev, texts: { ...prev.texts, heading: value } }));
+              }}
+              onSubtitleChange={(value) => setConfig((prev) => ({ ...prev, subtitle: value, texts: { ...prev.texts, description: value } }))}
+              onBadgeTextChange={(value) => setConfig((prev) => ({ ...prev, badgeText: value }))}
             />
           </div>
         </div>

@@ -229,16 +229,17 @@ export type ProductDetailColors = {
 export const getProductDetailColors = (
   primary: string,
   secondary: string | undefined,
-  mode: ProductDetailColorMode = 'single'
+  mode: ProductDetailColorMode = 'single',
+  isDark?: boolean
 ): ProductDetailColors => {
-  const neutralSurface = '#ffffff';
-  const neutralSurfaceMuted = '#f8fafc';
-  const neutralSurfaceSoft = '#f1f5f9';
-  const neutralBorder = '#e2e8f0';
-  const neutralBorderStrong = '#cbd5e1';
-  const neutralText = '#0f172a';
-  const neutralMuted = '#475569';
-  const neutralSoft = '#94a3b8';
+  const neutralSurface = isDark ? '#161617' : '#ffffff';
+  const neutralSurfaceMuted = isDark ? '#1c1c1e' : '#f8fafc';
+  const neutralSurfaceSoft = isDark ? '#27272a' : '#f1f5f9';
+  const neutralBorder = isDark ? '#27272a' : '#e2e8f0';
+  const neutralBorderStrong = isDark ? '#3f3f46' : '#cbd5e1';
+  const neutralText = isDark ? '#f5f5f7' : '#0f172a';
+  const neutralMuted = isDark ? '#86868b' : '#475569';
+  const neutralSoft = isDark ? '#6e6e73' : '#94a3b8';
 
   const resolvedSecondary = resolveSecondaryForMode(primary, secondary, mode);
   const secondaryTint = getSolidTint(resolvedSecondary, primary, 0.42);

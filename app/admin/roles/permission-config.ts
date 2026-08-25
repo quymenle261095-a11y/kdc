@@ -14,7 +14,7 @@ const MODULE_ACTIONS: Partial<Record<string, PermissionActionList>> = {
   analytics: ['view'],
   cart: ['view', 'edit', 'delete'],
   subscriptions: ['view', 'create', 'edit', 'delete'],
-  kanban: ['view', 'create', 'edit', 'delete'],
+  miniApps: ['view', 'create', 'edit', 'delete'],
 };
 
 const EXCLUDED_MODULE_KEYS = new Set(['settings', 'homepage']);

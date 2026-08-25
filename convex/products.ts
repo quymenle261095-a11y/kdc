@@ -1,6 +1,6 @@
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
-import { api } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import { ConvexError, v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { productStatus } from "./lib/validators";
@@ -9,7 +9,6 @@ import { resolveUniqueSlug } from "./lib/iaSlugs";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   dedupeStorageIds,
-  isBrokenStorageBackedUrl,
   removeOwnerFilesAndCleanup,
   syncOwnerFilesAndCleanup,
 } from "./lib/fileService";
@@ -18,12 +17,13 @@ import {
   listProductAdditionalCategoryIds,
   mergeProductsByCategoryAssignments,
 } from "./lib/multiCategory";
+import { listProductCategoryScopeIds } from "./lib/productCategoryHierarchy";
 
 export async function recalculateProductEffectivePrice(ctx: MutationCtx, productId: Id<"products">) {
   const product = await ctx.db.get(productId);
   if (!product) return;
 
-  let effectivePrice = product.salePrice ?? product.price;
+  let effectivePrice = product.price ?? product.salePrice;
 
   if (product.hasVariants) {
     const variants = await ctx.db
@@ -33,7 +33,7 @@ export async function recalculateProductEffectivePrice(ctx: MutationCtx, product
     
     const activeVariants = variants.filter(v => v.status === "Active");
     if (activeVariants.length > 0) {
-      const prices = activeVariants.map(v => v.salePrice ?? v.price).filter((p): p is number => p !== undefined);
+      const prices = activeVariants.map(v => v.price ?? v.salePrice).filter((p): p is number => p !== undefined);
       if (prices.length > 0) {
         effectivePrice = Math.min(...prices);
       }
@@ -41,6 +41,191 @@ export async function recalculateProductEffectivePrice(ctx: MutationCtx, product
   }
 
   await ctx.db.patch(productId, { effectivePrice });
+}
+
+async function searchActiveProductsByNameOrSku(
+  ctx: QueryCtx,
+  args: {
+    categoryIds?: Id<"productCategories">[];
+    productTypeId?: Id<"productTypes">;
+    search: string;
+    limit: number;
+  },
+) {
+  const searchText = args.search.toLowerCase().trim();
+  const fallbackLimit = Math.max(args.limit, 200);
+  const categoryIds = args.categoryIds ?? [];
+
+  const searchInCategory = async (categoryId?: Id<"productCategories">) => {
+    const nameQuery = ctx.db
+      .query("products")
+      .withSearchIndex("search_name", (q) => {
+        const builder = q.search("name", searchText).eq("status", "Active");
+        return categoryId ? builder.eq("categoryId", categoryId) : builder;
+      });
+    const skuQuery = ctx.db
+      .query("products")
+      .withSearchIndex("search_sku", (q) => {
+        const builder = q.search("sku", searchText).eq("status", "Active");
+        return categoryId ? builder.eq("categoryId", categoryId) : builder;
+      });
+    const fallbackQuery = categoryId
+      ? ctx.db
+        .query("products")
+        .withIndex("by_category_status", (q) =>
+          q.eq("categoryId", categoryId).eq("status", "Active")
+        )
+      : ctx.db
+        .query("products")
+        .withIndex("by_status_order", (q) => q.eq("status", "Active"));
+
+    return Promise.all([
+      nameQuery.take(args.limit),
+      skuQuery.take(args.limit),
+      fallbackQuery.take(fallbackLimit),
+    ]);
+  };
+
+  const resultGroups = categoryIds.length > 0
+    ? await Promise.all(categoryIds.map((categoryId) => searchInCategory(categoryId)))
+    : [await searchInCategory()];
+
+  const [nameResults, skuResults, fallbackResults] = resultGroups.reduce(
+    (acc, group) => {
+      acc[0].push(...group[0]);
+      acc[1].push(...group[1]);
+      acc[2].push(...group[2]);
+      return acc;
+    },
+    [[], [], []] as [Doc<"products">[], Doc<"products">[], Doc<"products">[]],
+  );
+
+  let products = Array.from(
+    new Map([...nameResults, ...skuResults, ...fallbackResults].map((product) => [product._id, product])).values(),
+  );
+
+  if (args.productTypeId) {
+    products = products.filter((product) => product.productTypeId === args.productTypeId);
+  }
+
+  return products;
+}
+
+async function resolveProductCategoryScopeIds(ctx: QueryCtx, categoryId?: Id<"productCategories">) {
+  if (!categoryId) return [];
+  return listProductCategoryScopeIds(ctx, categoryId, { activeDescendantsOnly: true });
+}
+
+async function listActiveProductsByPrimaryCategories(
+  ctx: QueryCtx,
+  categoryIds: Id<"productCategories">[],
+  limit: number,
+  productTypeId?: Id<"productTypes">,
+) {
+  const productGroups = await Promise.all(
+    categoryIds.map(async (categoryId) => {
+      let query = ctx.db
+        .query("products")
+        .withIndex("by_category_status", (q) =>
+          q.eq("categoryId", categoryId).eq("status", "Active")
+        );
+
+      if (productTypeId) {
+        query = query.filter((q) => q.eq(q.field("productTypeId"), productTypeId));
+      }
+
+      return query.take(limit);
+    })
+  );
+
+  return Array.from(
+    new Map(productGroups.flat().map((product) => [product._id, product])).values()
+  );
+}
+
+async function collectActiveProductsByPrimaryCategories(
+  ctx: QueryCtx,
+  categoryIds: Id<"productCategories">[],
+  productTypeId?: Id<"productTypes">,
+) {
+  const productGroups = await Promise.all(
+    categoryIds.map(async (categoryId) => {
+      let query = ctx.db
+        .query("products")
+        .withIndex("by_category_status", (q) =>
+          q.eq("categoryId", categoryId).eq("status", "Active")
+        );
+
+      if (productTypeId) {
+        query = query.filter((q) => q.eq(q.field("productTypeId"), productTypeId));
+      }
+
+      return query.collect();
+    })
+  );
+
+  return Array.from(
+    new Map(productGroups.flat().map((product) => [product._id, product])).values()
+  );
+}
+
+async function mergeProductsByCategoryAssignmentsForScope(
+  ctx: QueryCtx,
+  categoryIds: Id<"productCategories">[],
+  primaryProducts: Doc<"products">[],
+  limit: number,
+) {
+  if (categoryIds.length === 0) return primaryProducts;
+
+  const assignmentGroups = await Promise.all(
+    categoryIds.map((categoryId) =>
+      ctx.db
+        .query("productCategoryAssignments")
+        .withIndex("by_category", (q) => q.eq("categoryId", categoryId))
+        .take(limit)
+    )
+  );
+  const assignedProducts = await Promise.all(
+    assignmentGroups.flat().map((item) => ctx.db.get(item.productId))
+  );
+  const map = new Map<Id<"products">, Doc<"products">>();
+  [...primaryProducts, ...assignedProducts.filter((item): item is Doc<"products"> => Boolean(item))]
+    .forEach((product) => map.set(product._id, product));
+  return Array.from(map.values());
+}
+
+function sortPublishedProducts(products: Doc<"products">[], sortBy: string) {
+  const sorted = [...products];
+  switch (sortBy) {
+    case "oldest":
+      sorted.sort((a, b) => a._creationTime - b._creationTime);
+      break;
+    case "popular":
+      sorted.sort((a, b) => b.sales - a.sales);
+      break;
+    case "price_asc":
+      sorted.sort((a, b) => (a.effectivePrice ?? 0) - (b.effectivePrice ?? 0));
+      break;
+    case "price_desc":
+      sorted.sort((a, b) => (b.effectivePrice ?? 0) - (a.effectivePrice ?? 0));
+      break;
+    case "name":
+      sorted.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+      break;
+    case "name_desc":
+      sorted.sort((a, b) => b.name.localeCompare(a.name, "vi"));
+      break;
+    default:
+      sorted.sort((a, b) => b._creationTime - a._creationTime);
+      break;
+  }
+  return sorted;
+}
+
+function readScopeOffset(cursor: string | null) {
+  if (!cursor?.startsWith("scope:")) return 0;
+  const value = Number(cursor.slice("scope:".length));
+  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 const comboItemDoc = v.object({
@@ -104,6 +289,13 @@ const productDoc = v.object({
   imageStorageIds: v.optional(v.array(v.union(v.id("_storage"), v.null()))),
   metaDescription: v.optional(v.string()),
   metaTitle: v.optional(v.string()),
+  focusKeyword: v.optional(v.string()),
+  relatedQueries: v.optional(v.array(v.string())),
+  tags: v.optional(v.array(v.string())),
+  faqItems: v.optional(v.array(v.object({
+    question: v.string(),
+    answer: v.string(),
+  }))),
   name: v.string(),
   optionIds: v.optional(v.array(v.id("productOptions"))),
   order: v.number(),
@@ -133,6 +325,7 @@ const productDoc = v.object({
   stock: v.number(),
   combos: v.optional(v.array(comboItemDoc)),
   productTypeId: v.optional(v.id("productTypes")),
+  effectivePrice: v.optional(v.number()),
 });
 
 const productAdminDoc = v.object({
@@ -155,6 +348,13 @@ const productAdminDoc = v.object({
   imageStorageIds: v.optional(v.array(v.union(v.id("_storage"), v.null()))),
   metaDescription: v.optional(v.string()),
   metaTitle: v.optional(v.string()),
+  focusKeyword: v.optional(v.string()),
+  relatedQueries: v.optional(v.array(v.string())),
+  tags: v.optional(v.array(v.string())),
+  faqItems: v.optional(v.array(v.object({
+    question: v.string(),
+    answer: v.string(),
+  }))),
   name: v.string(),
   optionIds: v.optional(v.array(v.id("productOptions"))),
   order: v.number(),
@@ -187,6 +387,7 @@ const productAdminDoc = v.object({
   hasInvalidVariantComparePrice: v.optional(v.boolean()),
   combos: v.optional(v.array(comboItemDoc)),
   productTypeId: v.optional(v.id("productTypes")),
+  effectivePrice: v.optional(v.number()),
 });
 
 const paginatedProducts = v.object({
@@ -310,38 +511,114 @@ function buildAdminQuery(ctx: QueryCtx, args: AdminSearchArgs) {
   return ctx.db.query("products").withIndex("by_order");
 }
 
-async function searchAdminProducts(ctx: QueryCtx, args: AdminSearchArgs, limit?: number) {
-  const searchLower = args.search?.toLowerCase().trim();
-  if (!searchLower) {
+function parseSearchQuery(search: string) {
+  const excludes: string[] = [];
+  const exacts: string[] = [];
+  const normals: string[] = [];
+
+  const regex = /(-)?(?:"([^"]+)"|([^\s"]+))/g;
+  let match;
+  while ((match = regex.exec(search)) !== null) {
+    const isExclude = !!match[1];
+    const phrase = match[2] || match[3];
+    if (!phrase) continue;
+
+    const cleanPhrase = phrase.toLowerCase().trim();
+    if (isExclude) {
+      excludes.push(cleanPhrase);
+    } else if (match[2]) {
+      exacts.push(cleanPhrase);
+    } else {
+      normals.push(cleanPhrase);
+    }
+  }
+
+  return { excludes, exacts, normals };
+}
+
+function matchProduct(
+  product: { name: string; sku?: string },
+  parsed: { excludes: string[]; exacts: string[]; normals: string[] },
+  exactMode: boolean
+): boolean {
+  const nameLower = product.name.toLowerCase();
+  const skuLower = (product.sku ?? "").toLowerCase();
+
+  for (const exclude of parsed.excludes) {
+    if (nameLower.includes(exclude) || skuLower.includes(exclude)) {
+      return false;
+    }
+  }
+
+  for (const exact of parsed.exacts) {
+    if (!nameLower.includes(exact) && !skuLower.includes(exact)) {
+      return false;
+    }
+  }
+
+  if (exactMode) {
+    for (const normal of parsed.normals) {
+      if (!nameLower.includes(normal) && !skuLower.includes(normal)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+async function searchAdminProducts(
+  ctx: QueryCtx,
+  args: AdminSearchArgs & { exactMode?: boolean }
+) {
+  const search = args.search?.trim();
+  if (!search) {
     return [] as Doc<"products">[];
   }
 
-  const buildSearchQuery = (indexName: "search_name" | "search_sku", field: "name" | "sku") =>
-    ctx.db.query("products").withSearchIndex(indexName, (q) => {
-      let builder = q.search(field, searchLower);
-      if (args.status) {
-        builder = builder.eq("status", args.status);
-      }
-      if (args.categoryId) {
-        builder = builder.eq("categoryId", args.categoryId);
-      }
-      return builder;
+  const parsed = parseSearchQuery(search);
+  const exactMode = !!args.exactMode;
+
+  let rawProducts: Doc<"products">[] = [];
+  const hasPositiveSearch = parsed.normals.length > 0 || parsed.exacts.length > 0;
+
+  if (!hasPositiveSearch) {
+    rawProducts = await buildAdminQuery(ctx, args).collect();
+  } else {
+    const searchTerms = [...parsed.normals, ...parsed.exacts].join(" ");
+    const buildSearchQuery = (indexName: "search_name" | "search_sku", field: "name" | "sku") =>
+      ctx.db.query("products").withSearchIndex(indexName, (q) => {
+        let builder = q.search(field, searchTerms);
+        if (args.status) {
+          builder = builder.eq("status", args.status);
+        }
+        if (args.categoryId) {
+          builder = builder.eq("categoryId", args.categoryId);
+        }
+        return builder;
+      });
+
+    const nameQuery = buildSearchQuery("search_name", "name");
+    const skuQuery = buildSearchQuery("search_sku", "sku");
+
+    const [nameResults, skuResults] = await Promise.all([
+      nameQuery.take(5000),
+      skuQuery.take(5000),
+    ]);
+
+    const combined = new Map<Id<"products">, Doc<"products">>();
+    [...nameResults, ...skuResults].forEach((product) => {
+      combined.set(product._id, product);
     });
 
-  const nameQuery = buildSearchQuery("search_name", "name");
-  const skuQuery = buildSearchQuery("search_sku", "sku");
+    rawProducts = Array.from(combined.values());
+  }
 
-  const [nameResults, skuResults] = await Promise.all([
-    limit ? nameQuery.take(limit) : nameQuery.collect(),
-    limit ? skuQuery.take(limit) : skuQuery.collect(),
-  ]);
+  const filtered = rawProducts.filter((product) =>
+    matchProduct(product, parsed, exactMode)
+  );
 
-  const combined = new Map<Id<"products">, Doc<"products">>();
-  [...nameResults, ...skuResults].forEach((product) => {
-    combined.set(product._id, product);
-  });
-
-  return Array.from(combined.values());
+  return filtered;
 }
 
 function resolveVariantPrice(variant: Doc<"productVariants">): number | null {
@@ -467,7 +744,9 @@ export const listAll = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const maxLimit = args.limit ?? 100; // Default max 100, configurable
-    return  ctx.db.query("products").take(maxLimit);
+    const products = await ctx.db.query("products").take(maxLimit);
+    const settings = await getVariantSettings(ctx);
+    return resolveVariantOverrides(ctx, products, settings);
   },
   returns: v.array(productDoc),
 });
@@ -479,17 +758,18 @@ export const listAdminWithOffset = query({
     offset: v.optional(v.number()),
     search: v.optional(v.string()),
     status: v.optional(productStatus),
+    exactMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 20, 100);
     const offset = args.offset ?? 0;
-    const fetchLimit = Math.min(offset + limit + 50, 5000);
     const settings = await getVariantSettings(ctx);
 
     let products: Doc<"products">[] = [];
     if (args.search?.trim()) {
-      products = await searchAdminProducts(ctx, args, fetchLimit);
+      products = await searchAdminProducts(ctx, args);
     } else {
+      const fetchLimit = Math.min(offset + limit + 50, 5000);
       products = await buildAdminQuery(ctx, args).order("desc").take(fetchLimit);
     }
 
@@ -522,6 +802,7 @@ export const countAdmin = query({
     categoryId: v.optional(v.id("productCategories")),
     search: v.optional(v.string()),
     status: v.optional(productStatus),
+    exactMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     let products: Doc<"products">[] = [];
@@ -542,15 +823,16 @@ export const listAdminIds = query({
     limit: v.optional(v.number()),
     search: v.optional(v.string()),
     status: v.optional(productStatus),
+    exactMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 5000, 5000);
-    const fetchLimit = limit + 1;
 
     let products: Doc<"products">[] = [];
     if (args.search?.trim()) {
-      products = await searchAdminProducts(ctx, args, fetchLimit);
+      products = await searchAdminProducts(ctx, args);
     } else {
+      const fetchLimit = limit + 1;
       products = await buildAdminQuery(ctx, args).order("desc").take(fetchLimit);
     }
 
@@ -582,10 +864,10 @@ export const listAdminExport = query({
     limit: v.optional(v.number()),
     search: v.optional(v.string()),
     status: v.optional(productStatus),
+    exactMode: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 5000, 5000);
-    const fetchLimit = Math.min(limit + 200, 5000);
 
     if (args.ids?.length) {
       const ids = args.ids.slice(0, limit);
@@ -609,8 +891,9 @@ export const listAdminExport = query({
 
     let products: Doc<"products">[] = [];
     if (args.search?.trim()) {
-      products = await searchAdminProducts(ctx, args, fetchLimit);
+      products = await searchAdminProducts(ctx, args);
     } else {
+      const fetchLimit = Math.min(limit + 200, 5000);
       products = await buildAdminQuery(ctx, args).order("desc").take(fetchLimit);
     }
 
@@ -679,13 +962,20 @@ export const getById = query({
 });
 
 export const listByIds = query({
-  args: { ids: v.array(v.id("products")) },
+  args: { ids: v.array(v.string()) },
   handler: async (ctx, args) => {
-    if (args.ids.length === 0) {
+    const ids = args.ids
+      .map((id) => ctx.db.normalizeId("products", id))
+      .filter((id): id is Id<"products"> => id !== null);
+
+    if (ids.length === 0) {
       return [];
     }
-    const products = await Promise.all(args.ids.map((id) => ctx.db.get(id)));
-    return products.filter((product): product is Doc<"products"> => Boolean(product));
+
+    const products = await Promise.all(ids.map((id) => ctx.db.get(id)));
+    const filtered = products.filter((product): product is Doc<"products"> => Boolean(product));
+    const settings = await getVariantSettings(ctx);
+    return resolveVariantOverrides(ctx, filtered, settings);
   },
   returns: v.array(productDoc),
 });
@@ -799,6 +1089,45 @@ export const listPublicResolved = query({
   returns: v.array(productDoc),
 });
 
+export const getPriceRangeStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_status_order", (q) => q.eq("status", "Active"))
+      .order("desc")
+      .take(200);
+
+    if (products.length === 0) {
+      return { minPrice: 0, maxPrice: 0 };
+    }
+
+    const settings = await getVariantSettings(ctx);
+    const resolvedProducts = await resolveVariantOverrides(ctx, products, settings);
+
+    let minPrice = Infinity;
+    let maxPrice = -Infinity;
+
+    for (const p of resolvedProducts) {
+      const price = p.effectivePrice ?? 0;
+      if (price > 0) {
+        if (price < minPrice) minPrice = price;
+        if (price > maxPrice) maxPrice = price;
+      }
+    }
+
+    if (minPrice === Infinity) minPrice = 0;
+    if (maxPrice === -Infinity) maxPrice = 0;
+
+    return { minPrice, maxPrice };
+  },
+  returns: v.object({
+    minPrice: v.number(),
+    maxPrice: v.number(),
+  }),
+});
+
+
 // Paginated published products for usePaginatedQuery hook (infinite scroll)
 export const listPublishedPaginated = query({
   args: {
@@ -816,19 +1145,85 @@ export const listPublishedPaginated = query({
   },
   handler: async (ctx, args) => {
     const sortBy = args.sortBy ?? "newest";
+    const categoryScopeIds = await resolveProductCategoryScopeIds(ctx, args.categoryId);
     let result;
 
-    if (args.categoryId) {
+    if (categoryScopeIds.length > 1) {
+      const offset = readScopeOffset(args.paginationOpts.cursor);
+      const requestedLimit = args.paginationOpts.numItems;
+      const fetchLimit = Math.min(offset + requestedLimit + 20, 1000);
+      let products = await listActiveProductsByPrimaryCategories(
+        ctx,
+        categoryScopeIds,
+        fetchLimit,
+        args.productTypeId,
+      );
+
+      if (await isMultiCategoryEnabled(ctx, "products")) {
+        products = await mergeProductsByCategoryAssignmentsForScope(ctx, categoryScopeIds, products, fetchLimit);
+        products = products.filter((product) =>
+          product.status === "Active" && (!args.productTypeId || product.productTypeId === args.productTypeId)
+        );
+      }
+
+      if (args.minPrice !== undefined || args.maxPrice !== undefined) {
+        products = products.filter((p) => {
+          const price = p.effectivePrice ?? 0;
+          if (args.minPrice !== undefined && price < args.minPrice) return false;
+          if (args.maxPrice !== undefined && price > args.maxPrice) return false;
+          return true;
+        });
+      }
+
+      const hasAttributeFilter = args.attributeTermIds && args.attributeTermIds.length > 0;
+      if (hasAttributeFilter && args.attributeTermIds) {
+        let matchedProductIds: Set<Id<"products">> | null = null;
+        let firstGroup = true;
+        for (const groupTerms of args.attributeTermIds) {
+          if (groupTerms.length === 0) continue;
+          const groupProductRows = await Promise.all(
+            groupTerms.map(termId =>
+              ctx.db.query("productAttributeTerms").withIndex("by_term", q => q.eq("termId", termId)).collect()
+            )
+          );
+          const groupProductIds = new Set(groupProductRows.flat().map(r => r.productId));
+          if (firstGroup) {
+            matchedProductIds = groupProductIds;
+            firstGroup = false;
+          } else {
+            matchedProductIds = new Set([...matchedProductIds!].filter(id => groupProductIds.has(id)));
+          }
+        }
+        if (matchedProductIds) {
+          products = products.filter(p => matchedProductIds!.has(p._id));
+        }
+      }
+
+      const settings = await getVariantSettings(ctx);
+      const page = await resolveVariantOverrides(
+        ctx,
+        sortPublishedProducts(products, sortBy).slice(offset, offset + requestedLimit),
+        settings,
+      );
+      const isDone = offset + requestedLimit >= products.length;
+      return {
+        continueCursor: isDone ? "" : `scope:${offset + requestedLimit}`,
+        isDone,
+        page,
+      };
+    }
+
+    if (categoryScopeIds.length === 1) {
       let query = ctx.db
         .query("products")
         .withIndex("by_category_status", (q) =>
-          q.eq("categoryId", args.categoryId!).eq("status", "Active")
+          q.eq("categoryId", categoryScopeIds[0]).eq("status", "Active")
         );
       
       if (args.productTypeId) {
         query = query.filter((q) => q.eq(q.field("productTypeId"), args.productTypeId));
       }
-      
+
       result = await query
         .order(sortBy === "oldest" ? "asc" : "desc")
         .paginate(args.paginationOpts);
@@ -836,36 +1231,42 @@ export const listPublishedPaginated = query({
       if (await isMultiCategoryEnabled(ctx, "products")) {
         result = {
           ...result,
-          page: (await mergeProductsByCategoryAssignments(ctx, args.categoryId, result.page, args.paginationOpts.numItems))
+          page: (await mergeProductsByCategoryAssignments(ctx, categoryScopeIds[0], result.page, args.paginationOpts.numItems))
             .filter((product) => product.status === "Active" && (!args.productTypeId || product.productTypeId === args.productTypeId)),
         };
       }
     } else if (args.productTypeId) {
-      result = await ctx.db
+      const query = ctx.db
         .query("products")
         .withIndex("by_type_status_effectivePrice", (q) =>
           q.eq("productTypeId", args.productTypeId!).eq("status", "Active")
-        )
+        );
+
+      result = await query
         .order(sortBy === "oldest" ? "asc" : "desc")
         .paginate(args.paginationOpts);
     } else if (sortBy === "popular") {
-      result = await ctx.db
+      const query = ctx.db
         .query("products")
-        .withIndex("by_status_sales", (q) => q.eq("status", "Active"))
+        .withIndex("by_status_sales", (q) => q.eq("status", "Active"));
+
+      result = await query
         .order("desc")
         .paginate(args.paginationOpts);
     } else {
-      result = await ctx.db
+      const query = ctx.db
         .query("products")
-        .withIndex("by_status_order", (q) => q.eq("status", "Active"))
+        .withIndex("by_status_order", (q) => q.eq("status", "Active"));
+
+      result = await query
         .order(sortBy === "oldest" ? "asc" : "desc")
         .paginate(args.paginationOpts);
     }
 
-    // Filter by minPrice and maxPrice
+    // Filter by minPrice and maxPrice using canonical sale price.
     if (args.minPrice !== undefined || args.maxPrice !== undefined) {
       result.page = result.page.filter((p) => {
-        const price = p.effectivePrice ?? p.salePrice ?? p.price;
+        const price = p.effectivePrice ?? 0;
         if (args.minPrice !== undefined && price < args.minPrice) return false;
         if (args.maxPrice !== undefined && price > args.maxPrice) return false;
         return true;
@@ -919,7 +1320,8 @@ export const listPublishedWithOffset = query({
       v.literal("popular"),
       v.literal("price_asc"),
       v.literal("price_desc"),
-      v.literal("name")
+      v.literal("name"),
+      v.literal("name_desc")
     )),
     attributeTermIds: v.optional(v.array(v.array(v.id("attributeTerms")))),
   },
@@ -927,58 +1329,48 @@ export const listPublishedWithOffset = query({
     const limit = Math.min(args.limit ?? 12, 50);
     const offset = args.offset ?? 0;
     const sortBy = args.sortBy ?? "newest";
+    const categoryScopeIds = await resolveProductCategoryScopeIds(ctx, args.categoryId);
 
     let products: Doc<"products">[] = [];
     const hasAttributeFilter = args.attributeTermIds && args.attributeTermIds.length > 0;
     const fetchLimit = (hasAttributeFilter || args.minPrice !== undefined || args.maxPrice !== undefined) ? 1000 : offset + limit + 10;
 
     if (args.search?.trim()) {
-      const searchLower = args.search.toLowerCase().trim();
       const fetchLimit = Math.min(offset + limit + 20, 500);
-      const searchQuery = ctx.db
-        .query("products")
-        .withSearchIndex("search_name", (q) => {
-          const builder = q.search("name", searchLower).eq("status", "Active");
-          return args.categoryId ? builder.eq("categoryId", args.categoryId) : builder;
-        });
-      products = await searchQuery.take(fetchLimit);
-      if (args.productTypeId) {
-        products = products.filter((p) => p.productTypeId === args.productTypeId);
-      }
-    } else if (args.categoryId) {
-      let query = ctx.db
-        .query("products")
-        .withIndex("by_category_status", (q) =>
-          q.eq("categoryId", args.categoryId!).eq("status", "Active")
-        );
-      
-      if (args.productTypeId) {
-        query = query.filter((q) => q.eq(q.field("productTypeId"), args.productTypeId));
-      }
-      
-      products = await query.take(fetchLimit);
+      products = await searchActiveProductsByNameOrSku(ctx, {
+        categoryIds: categoryScopeIds.length > 0 ? categoryScopeIds : undefined,
+        productTypeId: args.productTypeId,
+        search: args.search,
+        limit: fetchLimit,
+      });
+    } else if (categoryScopeIds.length > 0) {
+      products = await listActiveProductsByPrimaryCategories(ctx, categoryScopeIds, fetchLimit, args.productTypeId);
       if (await isMultiCategoryEnabled(ctx, "products")) {
-        products = await mergeProductsByCategoryAssignments(ctx, args.categoryId, products, fetchLimit);
+        products = categoryScopeIds.length === 1
+          ? await mergeProductsByCategoryAssignments(ctx, categoryScopeIds[0], products, fetchLimit)
+          : await mergeProductsByCategoryAssignmentsForScope(ctx, categoryScopeIds, products, fetchLimit);
         products = products.filter((product) => product.status === "Active" && (!args.productTypeId || product.productTypeId === args.productTypeId));
       }
     } else if (args.productTypeId) {
-      products = await ctx.db
+      const query = ctx.db
         .query("products")
         .withIndex("by_type_status_effectivePrice", (q) =>
           q.eq("productTypeId", args.productTypeId!).eq("status", "Active")
-        )
-        .take(fetchLimit);
+        );
+
+      products = await query.take(fetchLimit);
     } else if (sortBy === "popular") {
-      products = await ctx.db
+      const query = ctx.db
         .query("products")
-        .withIndex("by_status_sales", (q) => q.eq("status", "Active"))
-        .order("desc")
-        .take(fetchLimit);
+        .withIndex("by_status_sales", (q) => q.eq("status", "Active"));
+
+      products = await query.order("desc").take(fetchLimit);
     } else {
-      products = await ctx.db
+      const query = ctx.db
         .query("products")
-        .withIndex("by_status_order", (q) => q.eq("status", "Active"))
-        .take(fetchLimit);
+        .withIndex("by_status_order", (q) => q.eq("status", "Active"));
+
+      products = await query.take(fetchLimit);
     }
 
     if (args.search?.trim() && products.length > 0) {
@@ -993,7 +1385,7 @@ export const listPublishedWithOffset = query({
 
     if (args.minPrice !== undefined || args.maxPrice !== undefined) {
       products = products.filter((p) => {
-        const price = p.effectivePrice ?? p.salePrice ?? p.price;
+        const price = p.effectivePrice ?? 0;
         if (args.minPrice !== undefined && price < args.minPrice) return false;
         if (args.maxPrice !== undefined && price > args.maxPrice) return false;
         return true;
@@ -1041,15 +1433,19 @@ export const listPublishedWithOffset = query({
           break;
         }
         case "price_asc": {
-          products.sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price));
+          products.sort((a, b) => (a.effectivePrice ?? 0) - (b.effectivePrice ?? 0));
           break;
         }
         case "price_desc": {
-          products.sort((a, b) => (b.salePrice ?? b.price) - (a.salePrice ?? a.price));
+          products.sort((a, b) => (b.effectivePrice ?? 0) - (a.effectivePrice ?? 0));
           break;
         }
         case "name": {
-          products.sort((a, b) => a.name.localeCompare(b.name));
+          products.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+          break;
+        }
+        case "name_desc": {
+          products.sort((a, b) => b.name.localeCompare(a.name, "vi"));
           break;
         }
       }
@@ -1073,33 +1469,29 @@ export const searchPublished = query({
         v.literal("popular"),
         v.literal("price_asc"),
         v.literal("price_desc"),
-        v.literal("name")
+        v.literal("name"),
+        v.literal("name_desc")
       )
     ),
   },
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 20, 100);
+    const categoryScopeIds = await resolveProductCategoryScopeIds(ctx, args.categoryId);
     let products;
 
     if (args.search?.trim()) {
-      const searchLower = args.search.toLowerCase().trim();
       const fetchLimit = Math.min(limit * 2, 200);
-      const searchQuery = ctx.db
-        .query("products")
-        .withSearchIndex("search_name", (q) => {
-          const builder = q.search("name", searchLower).eq("status", "Active");
-          return args.categoryId ? builder.eq("categoryId", args.categoryId) : builder;
-        });
-      products = await searchQuery.take(fetchLimit);
-    } else if (args.categoryId) {
-      products = await ctx.db
-        .query("products")
-        .withIndex("by_category_status", (q) =>
-          q.eq("categoryId", args.categoryId!).eq("status", "Active")
-        )
-        .take(limit * 2);
+      products = await searchActiveProductsByNameOrSku(ctx, {
+        categoryIds: categoryScopeIds.length > 0 ? categoryScopeIds : undefined,
+        search: args.search,
+        limit: fetchLimit,
+      });
+    } else if (categoryScopeIds.length > 0) {
+      products = await listActiveProductsByPrimaryCategories(ctx, categoryScopeIds, limit * 2);
       if (await isMultiCategoryEnabled(ctx, "products")) {
-        products = await mergeProductsByCategoryAssignments(ctx, args.categoryId, products, limit * 2);
+        products = categoryScopeIds.length === 1
+          ? await mergeProductsByCategoryAssignments(ctx, categoryScopeIds[0], products, limit * 2)
+          : await mergeProductsByCategoryAssignmentsForScope(ctx, categoryScopeIds, products, limit * 2);
         products = products.filter((product) => product.status === "Active");
       }
     } else {
@@ -1138,15 +1530,19 @@ export const searchPublished = query({
         break;
       }
       case "price_asc": {
-        products.sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price));
+        products.sort((a, b) => (a.effectivePrice ?? 0) - (b.effectivePrice ?? 0));
         break;
       }
       case "price_desc": {
-        products.sort((a, b) => (b.salePrice ?? b.price) - (a.salePrice ?? a.price));
+        products.sort((a, b) => (b.effectivePrice ?? 0) - (a.effectivePrice ?? 0));
         break;
       }
       case "name": {
-        products.sort((a, b) => a.name.localeCompare(b.name));
+        products.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+        break;
+      }
+      case "name_desc": {
+        products.sort((a, b) => b.name.localeCompare(a.name, "vi"));
         break;
       }
     }
@@ -1177,35 +1573,30 @@ export const countPublished = query({
       }
     }
 
+    const categoryScopeIds = await resolveProductCategoryScopeIds(ctx, args.categoryId);
     let products;
-    if (args.categoryId) {
-      let query = ctx.db
-        .query("products")
-        .withIndex("by_category_status", (q) =>
-          q.eq("categoryId", args.categoryId!).eq("status", "Active")
-        );
-      
-      if (args.productTypeId) {
-        query = query.filter((q) => q.eq(q.field("productTypeId"), args.productTypeId));
-      }
-      
-      products = await query.collect();
+    if (categoryScopeIds.length > 0) {
+      products = await collectActiveProductsByPrimaryCategories(ctx, categoryScopeIds, args.productTypeId);
       if (await isMultiCategoryEnabled(ctx, "products")) {
-        products = await mergeProductsByCategoryAssignments(ctx, args.categoryId, products, 1000);
+        products = categoryScopeIds.length === 1
+          ? await mergeProductsByCategoryAssignments(ctx, categoryScopeIds[0], products, 1000)
+          : await mergeProductsByCategoryAssignmentsForScope(ctx, categoryScopeIds, products, 1000);
         products = products.filter((product) => product.status === "Active" && (!args.productTypeId || product.productTypeId === args.productTypeId));
       }
     } else if (args.productTypeId) {
-      products = await ctx.db
+      const query = ctx.db
         .query("products")
         .withIndex("by_type_status_effectivePrice", (q) =>
           q.eq("productTypeId", args.productTypeId!).eq("status", "Active")
-        )
-        .collect();
+        );
+
+      products = await query.collect();
     } else {
-      products = await ctx.db
+      const query = ctx.db
         .query("products")
-        .withIndex("by_status_order", (q) => q.eq("status", "Active"))
-        .collect();
+        .withIndex("by_status_order", (q) => q.eq("status", "Active"));
+
+      products = await query.collect();
     }
 
     if (args.search?.trim() && products.length > 0) {
@@ -1220,7 +1611,7 @@ export const countPublished = query({
 
     if (args.minPrice !== undefined || args.maxPrice !== undefined) {
       products = products.filter((p) => {
-        const price = p.effectivePrice ?? p.salePrice ?? p.price;
+        const price = p.effectivePrice ?? 0;
         if (args.minPrice !== undefined && price < args.minPrice) return false;
         if (args.maxPrice !== undefined && price > args.maxPrice) return false;
         return true;
@@ -1427,7 +1818,7 @@ export const importFromExcelRows = mutation({
     const seenSkus = new Set<string>();
     const seenSlugs = new Set<string>();
 
-    let defaultStatus: "Draft" | "Active" | "Archived" = "Draft";
+    let defaultStatus: "Draft" | "Active" = "Draft";
     const setting = await ctx.db
       .query("moduleSettings")
       .withIndex("by_module_setting", (q) =>
@@ -1605,6 +1996,13 @@ export const create = mutation({
     })),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
+    focusKeyword: v.optional(v.string()),
+    relatedQueries: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    faqItems: v.optional(v.array(v.object({
+      question: v.string(),
+      answer: v.string(),
+    }))),
     name: v.string(),
     optionIds: v.optional(v.array(v.id("productOptions"))),
     order: v.optional(v.number()),
@@ -1639,7 +2037,7 @@ export const create = mutation({
     const nextOrder = await getNextOrder(ctx);
     
     // FIX #12: Get default status from module settings instead of hardcoded
-    let defaultStatus: "Draft" | "Active" | "Archived" = "Draft";
+    let defaultStatus: "Draft" | "Active" = "Draft";
     if (!args.status) {
       const setting = await ctx.db
         .query("moduleSettings")
@@ -1768,6 +2166,13 @@ export const update = mutation({
     name: v.optional(v.string()),
     metaDescription: v.optional(v.string()),
     metaTitle: v.optional(v.string()),
+    focusKeyword: v.optional(v.string()),
+    relatedQueries: v.optional(v.array(v.string())),
+    tags: v.optional(v.array(v.string())),
+    faqItems: v.optional(v.array(v.object({
+      question: v.string(),
+      answer: v.string(),
+    }))),
     optionIds: v.optional(v.array(v.id("productOptions"))),
     order: v.optional(v.number()),
     price: v.optional(v.number()),
@@ -2076,6 +2481,10 @@ export const duplicate = mutation({
       markdownRender: source.markdownRender,
       metaDescription: source.metaDescription,
       metaTitle: source.metaTitle,
+      focusKeyword: source.focusKeyword,
+      relatedQueries: source.relatedQueries,
+      tags: source.tags,
+      faqItems: source.faqItems,
       name: copiedName,
       optionIds: source.optionIds,
       order: nextOrder,
@@ -2163,17 +2572,90 @@ export const bulkUpdateStatus = mutation({
   returns: v.object({ skipped: v.number(), updated: v.number() }),
 });
 
-export const bulkClearBrokenMedia = mutation({
+async function isBrokenExternalUrl(url: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    clearTimeout(timeoutId);
+    return res.status === 404;
+  } catch {
+    // Nếu DNS error, connection refused, v.v. (tức link đã sập hoàn toàn)
+    return true;
+  }
+}
+
+export const applyClearedMediaPatch = internalMutation({
+  args: {
+    patches: v.array(v.object({
+      id: v.id("products"),
+      patch: v.object({
+        image: v.optional(v.string()),
+        imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+        images: v.optional(v.array(v.string())),
+        imageStorageIds: v.optional(v.array(v.union(v.id("_storage"), v.null()))),
+      })
+    }))
+  },
+  handler: async (ctx, args) => {
+    let updated = 0;
+    for (const item of args.patches) {
+      const product = await ctx.db.get(item.id);
+      if (!product) continue;
+
+      await ctx.db.patch(item.id, item.patch);
+
+      const nextPrimaryStorageId = Object.prototype.hasOwnProperty.call(item.patch, "imageStorageId")
+        ? item.patch.imageStorageId
+        : product.imageStorageId;
+      const nextGalleryStorageIds = Object.prototype.hasOwnProperty.call(item.patch, "imageStorageIds")
+        ? item.patch.imageStorageIds
+        : product.imageStorageIds;
+
+      await syncOwnerFilesAndCleanup(ctx, {
+        ownerField: "images",
+        ownerId: item.id,
+        ownerTable: "products",
+        purpose: "product-gallery",
+      }, dedupeStorageIds([nextPrimaryStorageId, ...(nextGalleryStorageIds ?? [])]), {
+        previousStorageIds: [product.imageStorageId, ...(product.imageStorageIds ?? [])],
+      });
+      updated += 1;
+    }
+
+    if (updated > 0) {
+      await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "product" });
+    }
+  }
+});
+
+export const bulkClearBrokenMedia = action({
   args: { ids: v.array(v.id("products")) },
   handler: async (ctx, args) => {
     let checked = 0;
-    let updated = 0;
     let clearedPrimary = 0;
     let clearedGallery = 0;
     let skipped = 0;
+    let updated = 0;
+
+    const patches: Array<{
+      id: Id<"products">;
+      patch: {
+        image?: string;
+        imageStorageId?: Id<"_storage"> | null;
+        images?: string[];
+        imageStorageIds?: Array<Id<"_storage"> | null>;
+      };
+    }> = [];
 
     for (const id of args.ids) {
-      const product = await ctx.db.get(id);
+      const product: Doc<"products"> | null = await ctx.runQuery(api.products.getById, { id });
       if (!product) {
         skipped += 1;
         continue;
@@ -2187,10 +2669,20 @@ export const bulkClearBrokenMedia = mutation({
         imageStorageIds?: Array<Id<"_storage"> | null>;
       } = {};
 
-      if (await isBrokenStorageBackedUrl(ctx, product.image, product.imageStorageId)) {
-        patch.image = "";
-        patch.imageStorageId = null;
-        clearedPrimary += 1;
+      if (product.image) {
+        let isPrimaryBroken = false;
+        if (product.imageStorageId) {
+          const resolvedUrl = await ctx.storage.getUrl(product.imageStorageId);
+          isPrimaryBroken = !resolvedUrl;
+        } else {
+          isPrimaryBroken = await isBrokenExternalUrl(product.image);
+        }
+
+        if (isPrimaryBroken) {
+          patch.image = "";
+          patch.imageStorageId = null;
+          clearedPrimary += 1;
+        }
       }
 
       const images = product.images ?? [];
@@ -2198,44 +2690,43 @@ export const bulkClearBrokenMedia = mutation({
       if (images.length > 0) {
         const keptImages: string[] = [];
         const keptStorageIds: Array<Id<"_storage"> | null> = [];
+        let galleryChanged = false;
+
         for (let index = 0; index < images.length; index += 1) {
           const url = images[index];
           const storageId = imageStorageIds[index] ?? null;
-          if (await isBrokenStorageBackedUrl(ctx, url, storageId)) {
+          let isGalleryBroken = false;
+
+          if (storageId) {
+            const resolvedUrl = await ctx.storage.getUrl(storageId);
+            isGalleryBroken = !resolvedUrl;
+          } else {
+            isGalleryBroken = await isBrokenExternalUrl(url);
+          }
+
+          if (isGalleryBroken) {
             clearedGallery += 1;
+            galleryChanged = true;
             continue;
           }
           keptImages.push(url);
           keptStorageIds.push(storageId);
         }
-        if (keptImages.length !== images.length) {
+
+        if (galleryChanged) {
           patch.images = keptImages;
           patch.imageStorageIds = keptStorageIds;
         }
       }
 
       if (Object.keys(patch).length > 0) {
-        await ctx.db.patch(id, patch);
-        const nextPrimaryStorageId = Object.prototype.hasOwnProperty.call(patch, "imageStorageId")
-          ? patch.imageStorageId
-          : product.imageStorageId;
-        const nextGalleryStorageIds = Object.prototype.hasOwnProperty.call(patch, "imageStorageIds")
-          ? patch.imageStorageIds
-          : product.imageStorageIds;
-        await syncOwnerFilesAndCleanup(ctx, {
-          ownerField: "images",
-          ownerId: id,
-          ownerTable: "products",
-          purpose: "product-gallery",
-        }, dedupeStorageIds([nextPrimaryStorageId, ...(nextGalleryStorageIds ?? [])]), {
-          previousStorageIds: [product.imageStorageId, ...(product.imageStorageIds ?? [])],
-        });
+        patches.push({ id, patch });
         updated += 1;
       }
     }
 
-    if (updated > 0) {
-      await ctx.runMutation(api.landingPages.syncProgrammaticFromSourceChange, { source: "product" });
+    if (patches.length > 0) {
+      await ctx.runMutation(internal.products.applyClearedMediaPatch, { patches });
     }
 
     return { checked, clearedGallery, clearedPrimary, skipped, updated };
@@ -2317,50 +2808,71 @@ export const reorder = mutation({
 export const bulkRemove = mutation({
   args: { ids: v.array(v.id("products")) },
   handler: async (ctx, args) => {
-    let deletedCount = 0;
-
-    for (const id of args.ids) {
-      const product = await ctx.db.get(id);
-      if (!product) {continue;}
-
-      // Collect related items
-      const [comments, wishlistItems, cartItems] = await Promise.all([
-        ctx.db
-          .query("comments")
-          .withIndex("by_target_status", (q) =>
-            q.eq("targetType", "product").eq("targetId", id)
-          )
-          .collect(),
-        ctx.db
-          .query("wishlist")
-          .withIndex("by_product", (q) => q.eq("productId", id))
-          .collect(),
-        ctx.db
-          .query("cartItems")
-          .withIndex("by_product", (q) => q.eq("productId", id))
-          .collect(),
-      ]);
-
-      // Batch delete related items
-      await Promise.all([
-        ...comments.map( async (c) => ctx.db.delete(c._id)),
-        ...wishlistItems.map( async (w) => ctx.db.delete(w._id)),
-        ...cartItems.map( async (c) => ctx.db.delete(c._id)),
-      ]);
-
-      await removeOwnerFilesAndCleanup(ctx, {
-        ownerId: id,
-        ownerTable: "products",
-      }, {
-        previousStorageIds: [product.imageStorageId, ...(product.imageStorageIds ?? [])],
+    if (args.ids.length > 25) {
+      throw new ConvexError({
+        code: "BULK_REMOVE_LIMIT_EXCEEDED",
+        message: "Để tránh quá tải hệ thống, mỗi lần chỉ nên chọn tối đa 25 sản phẩm để xóa. Vui lòng chia nhỏ số lượng.",
       });
-
-      await ctx.db.delete(id);
-      await updateStats(ctx, { old: product.status });
-      deletedCount++;
     }
 
-    return deletedCount;
+    try {
+      let deletedCount = 0;
+
+      for (const id of args.ids) {
+        const product = await ctx.db.get(id);
+        if (!product) {continue;}
+
+        // Collect related items
+        const [comments, wishlistItems, cartItems] = await Promise.all([
+          ctx.db
+            .query("comments")
+            .withIndex("by_target_status", (q) =>
+              q.eq("targetType", "product").eq("targetId", id)
+            )
+            .collect(),
+          ctx.db
+            .query("wishlist")
+            .withIndex("by_product", (q) => q.eq("productId", id))
+            .collect(),
+          ctx.db
+            .query("cartItems")
+            .withIndex("by_product", (q) => q.eq("productId", id))
+            .collect(),
+        ]);
+
+        // Batch delete related items
+        await Promise.all([
+          ...comments.map( async (c) => ctx.db.delete(c._id)),
+          ...wishlistItems.map( async (w) => ctx.db.delete(w._id)),
+          ...cartItems.map( async (c) => ctx.db.delete(c._id)),
+        ]);
+
+        await removeOwnerFilesAndCleanup(ctx, {
+          ownerId: id,
+          ownerTable: "products",
+        }, {
+          previousStorageIds: [product.imageStorageId, ...(product.imageStorageIds ?? [])],
+        });
+
+        await ctx.db.delete(id);
+        await updateStats(ctx, { old: product.status });
+        deletedCount++;
+      }
+
+      return deletedCount;
+    } catch (error: any) {
+      if (error instanceof ConvexError) {
+        throw error;
+      }
+      const errorMessage = String(error?.message ?? error);
+      if (errorMessage.includes("Too many bytes read") || errorMessage.includes("limit")) {
+        throw new ConvexError({
+          code: "BULK_REMOVE_BYTES_EXCEEDED",
+          message: "Dữ liệu hình ảnh dọn dẹp vượt quá giới hạn xử lý trong 1 lần. Vui lòng chọn ít sản phẩm hơn để xóa.",
+        });
+      }
+      throw error;
+    }
   },
   returns: v.number(),
 });
@@ -2414,4 +2926,152 @@ export const getActiveTermsForProducts = query({
     return Array.from(new Set(termIds));
   },
   returns: v.array(v.id("attributeTerms")),
+});
+
+export const listProductsByCategoryForAdmin = query({
+  args: {
+    categoryId: v.id("productCategories"),
+  },
+  handler: async (ctx, args) => {
+    // 1. Lấy sản phẩm gán chính
+    let products = await ctx.db
+      .query("products")
+      .withIndex("by_category_status", (q) => q.eq("categoryId", args.categoryId))
+      .collect();
+
+    // 2. Lấy sản phẩm gán phụ qua assignments
+    const assignments = await ctx.db
+      .query("productCategoryAssignments")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .collect();
+
+    if (assignments.length > 0) {
+      const assignedProducts = await Promise.all(
+        assignments.map((item) => ctx.db.get(item.productId))
+      );
+      const validAssignedProducts = assignedProducts.filter(
+        (p): p is Doc<"products"> => Boolean(p)
+      );
+
+      const map = new Map<Id<"products">, Doc<"products">>();
+      // Cho sản phẩm gán chính vào trước
+      products.forEach((p) => map.set(p._id, p));
+      // Cho sản phẩm gán phụ vào sau
+      validAssignedProducts.forEach((p) => map.set(p._id, p));
+      products = Array.from(map.values());
+    }
+
+    // Sắp xếp các sản phẩm ảo này theo order giảm dần
+    products.sort((a, b) => b.order - a.order);
+
+    return products;
+  },
+  returns: v.array(productDoc),
+});
+
+export const listProductsForCategories = query({
+  args: {
+    categoryIds: v.array(v.id("productCategories")),
+  },
+  handler: async (ctx, args) => {
+    if (args.categoryIds.length === 0) {
+      return [];
+    }
+
+    const settings = await getVariantSettings(ctx);
+    const results: Doc<"products">[] = [];
+    const seenKeys = new Set<string>(); // Tránh trùng lặp cho cặp (productId, categoryId)
+
+    for (const catId of args.categoryIds) {
+      // 1. Lấy sản phẩm có categoryId chính trùng với catId
+      const primaryProducts = await ctx.db
+        .query("products")
+        .withIndex("by_category_status", (q) => q.eq("categoryId", catId).eq("status", "Active"))
+        .collect();
+
+      for (const p of primaryProducts) {
+        const key = `${p._id}-${catId}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          results.push({ ...p, categoryId: catId });
+        }
+      }
+
+      // 2. Lấy sản phẩm gán phụ qua assignments
+      const assignments = await ctx.db
+        .query("productCategoryAssignments")
+        .withIndex("by_category", (q) => q.eq("categoryId", catId))
+        .collect();
+
+      if (assignments.length > 0) {
+        const assignedProducts = await Promise.all(
+          assignments.map((item) => ctx.db.get(item.productId))
+        );
+        for (const p of assignedProducts) {
+          if (p && p.status === "Active") {
+            const key = `${p._id}-${catId}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              results.push({ ...p, categoryId: catId });
+            }
+          }
+        }
+      }
+    }
+
+    // Sắp xếp theo order giảm dần
+    results.sort((a, b) => b.order - a.order);
+
+    const resolved = await resolveVariantOverrides(ctx, results, settings);
+    return resolved;
+  },
+  returns: v.array(productDoc),
+});
+
+export const countActiveByCategory = query({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_status_order", (q) => q.eq("status", "Active"))
+      .collect();
+
+    const counts: Record<string, number> = {};
+    const activeProductsMap = new Map<string, any>();
+    
+    products.forEach((p) => {
+      activeProductsMap.set(p._id, p);
+      if (p.categoryId) {
+        counts[p.categoryId] = (counts[p.categoryId] ?? 0) + 1;
+      }
+    });
+
+    // Lấy thêm các gán phụ từ productCategoryAssignments
+    const assignments = await ctx.db
+      .query("productCategoryAssignments")
+      .collect();
+
+    assignments.forEach((a) => {
+      const product = activeProductsMap.get(a.productId);
+      if (product && product.categoryId !== a.categoryId) {
+        counts[a.categoryId] = (counts[a.categoryId] ?? 0) + 1;
+      }
+    });
+
+    return counts;
+  },
+  returns: v.any(),
+});
+
+export const backfillEffectivePrices = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("products").collect();
+    let count = 0;
+    for (const p of products) {
+      await recalculateProductEffectivePrice(ctx, p._id);
+      count++;
+    }
+    return count;
+  },
 });

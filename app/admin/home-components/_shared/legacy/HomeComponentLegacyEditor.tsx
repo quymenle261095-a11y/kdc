@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, cn } from '../../../components/ui';
+import { CopyableInput } from '../../../components/CopyTextButton';
 import type { ImageItem } from '../../../components/MultiImageUploader';
 import { MultiImageUploader } from '../../../components/MultiImageUploader';
 import { ImageFieldWithUpload } from '../../../components/ImageFieldWithUpload';
@@ -801,9 +802,10 @@ export default function HomeComponentEditPage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input 
+              <CopyableInput
                 value={title} 
                 onChange={(e) =>{  setTitle(e.target.value); }} 
+                copyLabel="tiêu đề hiển thị"
                 required 
                 placeholder="Nhập tiêu đề component..." 
               />

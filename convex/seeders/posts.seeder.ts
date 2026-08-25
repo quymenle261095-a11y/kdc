@@ -69,9 +69,8 @@ export class PostSeeder extends BaseSeeder<PostData> {
     const thumbnail = this.getPostThumbnail(template, slug);
     
     const status = this.faker.helpers.weightedArrayElement([
-      { value: 'Published' as const, weight: 7 },
+      { value: 'Published' as const, weight: 8 },
       { value: 'Draft' as const, weight: 2 },
-      { value: 'Archived' as const, weight: 1 },
     ]);
     
     // Generate content với multiple paragraphs

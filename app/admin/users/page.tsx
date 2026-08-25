@@ -8,8 +8,8 @@ import { api } from '@/convex/_generated/api';
 import type { Doc, Id } from '@/convex/_generated/dataModel';
 import { ChevronDown, Edit, Loader2, Plus, Search, ShieldOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, SelectCheckbox, SortableHeader, generatePaginationItems, useSortableData } from '../components/TableUtilities';
+import { Badge, Button, Card, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, MobileCardList, MobileRowCard, ResetFilterButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, TableEmptyState, TableSkeleton, TableToolbar, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { useAdminAuth } from '../auth/context';
@@ -87,21 +87,7 @@ function UsersTable({
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"users"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return ['role', 'status'];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_users_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : ['role', 'status'];
-      }
-    } catch {
-      return ['role', 'status'];
-    }
-    return ['role', 'status'];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_users_visible_columns');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<'Active' | 'Inactive' | 'Banned'>('Active');
@@ -127,9 +113,7 @@ function UsersTable({
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    window.localStorage.setItem('admin_users_visible_columns', JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
+
 
   const usersPerPage = useMemo(() => {
     const setting = settingsData?.find(s => s.settingKey === 'usersPerPage');
@@ -312,7 +296,7 @@ function UsersTable({
   };
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
   };
 
@@ -439,28 +423,23 @@ function UsersTable({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Người dùng hệ thống</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý tài khoản truy cập vào Admin</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} disabled={isExporting || exportRequested}>
-            {isExporting ? (
-              <>
-                <Loader2 size={16} className="animate-spin mr-2" />
-                Đang xuất...
-              </>
-            ) : (
-              'Xuất CSV'
-            )}
-          </Button>
-          {canCreate && (
-            <Link href="/admin/users/create"><Button className="gap-2"><Plus size={16}/> Thêm User</Button></Link>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Người dùng hệ thống"
+        description="Quản lý tài khoản truy cập vào Admin"
+        addHref={canCreate ? "/admin/users/create" : undefined}
+      >
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting || exportRequested}>
+          {isExporting ? (
+            <>
+              <Loader2 size={16} className="animate-spin mr-2" />
+              Đang xuất...
+            </>
+          ) : (
+            'Xuất CSV'
           )}
-        </div>
-      </div>
+        </Button>
+      </AdminPageHeader>
 
       {selectionEnabled && canDelete && (
         <BulkActionBar
@@ -501,295 +480,236 @@ function UsersTable({
       )}
 
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Tìm kiếm theo tên, email, điện thoại..."
-              className="pl-9"
+        <TableToolbar
+          activeFilterCount={[Boolean(filterRole), Boolean(filterStatus)].filter(Boolean).length}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
               value={searchTerm}
-              onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }}
+              onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+              placeholder="Tìm kiếm theo tên, email, SĐT..."
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isRolesEnabled && (
-              <select
-                className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                value={filterRole}
-                onChange={(e) =>{  handleFilterRole(e.target.value); }}
-              >
-                <option value="">Tất cả vai trò</option>
-                {rolesData?.map(r => <option key={r._id} value={r._id}>{r.name}</option>)}
-              </select>
-            )}
-            <select
-              className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-              value={filterStatus}
-              onChange={(e) =>{  handleFilterStatus(e.target.value); }}
-            >
-              <option value="">Tất cả trạng thái</option>
-              <option value="Active">Hoạt động</option>
-              <option value="Inactive">Không hoạt động</option>
-              <option value="Banned">Bị cấm</option>
-            </select>
-            <Button variant="outline" size="sm" onClick={handleResetFilters}>
-              Xóa lọc
-            </Button>
-            <ColumnToggle
-              columns={columns}
-              visibleColumns={resolvedVisibleColumns}
-              onToggle={(key) => {
-                setVisibleColumns(prev => prev.includes(key) ? prev.filter(col => col !== key) : [...prev, key]);
-              }}
-            />
-          </div>
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              {selectionEnabled && (
-                <TableHead className="w-[40px]">
-                  <SelectCheckbox
-                    checked={isPageSelected}
-                    onChange={toggleSelectAll}
-                    indeterminate={isPageIndeterminate}
-                    disabled={selectableUsers.length === 0}
-                    title={selectableUsers.length === 0 ? 'Không có user để chọn' : undefined}
-                  />
-                </TableHead>
+          }
+          filters={
+            <>
+              {isRolesEnabled && (
+                <FilterSelect
+                  label="Vai trò"
+                  value={filterRole}
+                  onChange={(val) => handleFilterRole(val)}
+                  placeholder="Tất cả vai trò"
+                  options={rolesData?.map(r => ({ value: r._id, label: r.name })) || []}
+                />
               )}
-              <SortableHeader label="Người dùng" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
-              {resolvedVisibleColumns.includes('role') && <SortableHeader label="Vai trò" sortKey="roleName" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('phone') && <SortableHeader label="Số điện thoại" sortKey="phone" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('lastLogin') && <SortableHeader label="Đăng nhập cuối" sortKey="lastLogin" sortConfig={sortConfig} onSort={handleSort} />}
-              {showActions && <TableHead className="text-right">Hành động</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedUsersPerPage }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  {selectionEnabled && (
-                    <TableCell>
-                      <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {showAvatar && <div className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />}
-                      <div className="space-y-2">
-                        <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                        <div className="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                      </div>
-                    </div>
-                  </TableCell>
-                  {resolvedVisibleColumns.includes('role') && (
-                    <TableCell>
-                      <div className="h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('status') && (
-                    <TableCell>
-                      <div className="h-5 w-24 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('phone') && (
-                    <TableCell>
-                      <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {resolvedVisibleColumns.includes('lastLogin') && (
-                    <TableCell>
-                      <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                  {showActions && (
-                    <TableCell className="text-right">
-                      <div className="ml-auto h-8 w-20 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedUsers.map(user => (
-                  <TableRow
-                    key={user._id}
-                    className={`${resolvedSelectedIds.includes(user._id) ? 'bg-blue-500/5' : ''} ${
-                      user.isSuperAdmin ? 'bg-amber-50/60 dark:bg-amber-950/30' : ''
-                    }`}
-                  >
-                    {selectionEnabled && (
-                      <TableCell>
-                        <SelectCheckbox
-                          checked={resolvedSelectedIds.includes(user._id)}
-                          onChange={() =>{  toggleSelectItem(user._id); }}
-                          disabled={user.isSuperAdmin}
-                          title={user.isSuperAdmin ? 'Không thể chọn Super Admin' : undefined}
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        {showAvatar && (
-                          user.avatar ? (
-                            <Image src={user.avatar} width={36} height={36} className="w-9 h-9 rounded-full object-cover" alt={user.name} />
-                          ) : (
-                            <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-medium text-slate-500">
-                              {user.name.charAt(0).toUpperCase()}
-                            </div>
-                          )
-                        )}
-                        <div>
-                          <div className="font-medium flex items-center gap-2">
-                            {user.name}
-                            {user.isSuperAdmin && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-semibold">
-                                Super Admin
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-slate-500">{user.email}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    {resolvedVisibleColumns.includes('role') && (
-                      <TableCell>
-                        {user.roleColor ? (
-                          <span
-                            className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-                            style={{ backgroundColor: user.roleColor, borderColor: user.roleColor, color: '#fff' }}
-                          >
-                            {user.roleName}
-                          </span>
-                        ) : (
-                          <Badge variant="secondary">{user.roleName}</Badge>
-                        )}
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('status') && (
-                      <TableCell>
-                        <Badge variant={user.status === 'Active' ? 'success' : (user.status === 'Inactive' ? 'secondary' : 'destructive')}>
-                          {user.status === 'Active' ? 'Hoạt động' : (user.status === 'Inactive' ? 'Không hoạt động' : 'Bị cấm')}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('phone') && (
-                      <TableCell className="text-slate-600">
-                        {user.phone || '—'}
-                      </TableCell>
-                    )}
-                    {resolvedVisibleColumns.includes('lastLogin') && (
-                      <TableCell className="text-slate-500 text-sm">{formatLastLogin(user.lastLogin)}</TableCell>
-                    )}
-                    {showActions && (
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {canEdit && (
-                            <Link href={`/admin/users/${user._id}/edit`}><Button variant="ghost" size="icon"><Edit size={16}/></Button></Link>
-                          )}
-                          {canDelete && !user.isSuperAdmin && (
-                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(user._id)}><Trash2 size={16}/></Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedUsers.length === 0 && (
+              <FilterSelect
+                label="Trạng thái"
+                value={filterStatus}
+                onChange={(val) => handleFilterStatus(val)}
+                placeholder="Tất cả trạng thái"
+                options={[
+                  { value: 'Active', label: 'Hoạt động' },
+                  { value: 'Inactive', label: 'Không hoạt động' },
+                  { value: 'Banned', label: 'Bị cấm' },
+                ]}
+              />
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim() || filterRole || filterStatus)} onReset={handleResetFilters} />
+              <ColumnToggle
+                columns={columns}
+                visibleColumns={resolvedVisibleColumns}
+                onToggle={(key) => toggleColumn(key, columns.map(c => c.key))}
+              />
+            </>
+          }
+        />
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
               <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm || filterRole || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có người dùng nào'}
-                </TableCell>
+                {selectionEnabled && (
+                  <TableHead className="w-[40px]">
+                    <SelectCheckbox
+                      checked={isPageSelected}
+                      onChange={toggleSelectAll}
+                      indeterminate={isPageIndeterminate}
+                      disabled={selectableUsers.length === 0}
+                      title={selectableUsers.length === 0 ? 'Không có user để chọn' : undefined}
+                    />
+                  </TableHead>
+                )}
+                <SortableHeader label="Người dùng" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                {resolvedVisibleColumns.includes('role') && <SortableHeader label="Vai trò" sortKey="roleName" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="status" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('phone') && <SortableHeader label="Số điện thoại" sortKey="phone" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('lastLogin') && <SortableHeader label="Đăng nhập cuối" sortKey="lastLogin" sortConfig={sortConfig} onSort={handleSort} />}
+                {showActions && <TableHead className="text-right">Hành động</TableHead>}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedUsersPerPage}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số người dùng mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>người dùng/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedUsersPerPage) + 1 : 0}–{Math.min(currentPage * resolvedUsersPerPage, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">người dùng</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
-                      </div>
-                    );
-                  }
-
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
+            </TableHeader>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedUsersPerPage} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedUsers.map(user => (
+                    <TableRow
+                      key={user._id}
+                      className={`${resolvedSelectedIds.includes(user._id) ? 'bg-blue-500/5' : ''} ${
+                        user.isSuperAdmin ? 'bg-amber-50/60 dark:bg-amber-950/30' : ''
+                      }`}
                     >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+                      {selectionEnabled && (
+                        <TableCell>
+                          <SelectCheckbox
+                            checked={resolvedSelectedIds.includes(user._id)}
+                            onChange={() =>{  toggleSelectItem(user._id); }}
+                            disabled={user.isSuperAdmin}
+                            title={user.isSuperAdmin ? 'Không thể chọn Super Admin' : undefined}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {showAvatar && (
+                            user.avatar ? (
+                              <Image src={user.avatar} width={36} height={36} className="w-9 h-9 rounded-full object-cover" alt={user.name} />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-medium text-slate-500">
+                                {user.name.charAt(0).toUpperCase()}
+                              </div>
+                            )
+                          )}
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              {user.name}
+                              {user.isSuperAdmin && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 font-semibold">
+                                  Super Admin
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500">{user.email}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      {resolvedVisibleColumns.includes('role') && (
+                        <TableCell className="whitespace-nowrap">
+                          {user.roleColor ? (
+                            <span
+                              className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                              style={{ backgroundColor: user.roleColor, borderColor: user.roleColor, color: '#fff' }}
+                            >
+                              {user.roleName}
+                            </span>
+                          ) : (
+                            <Badge variant="secondary">{user.roleName}</Badge>
+                          )}
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('status') && (
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant={user.status === 'Active' ? 'success' : (user.status === 'Inactive' ? 'secondary' : 'destructive')}>
+                            {user.status === 'Active' ? 'Hoạt động' : (user.status === 'Inactive' ? 'Không hoạt động' : 'Bị cấm')}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('phone') && (
+                        <TableCell className="text-slate-600 whitespace-nowrap">
+                          {user.phone || '—'}
+                        </TableCell>
+                      )}
+                      {resolvedVisibleColumns.includes('lastLogin') && (
+                        <TableCell className="text-slate-500 text-sm whitespace-nowrap">{formatLastLogin(user.lastLogin)}</TableCell>
+                      )}
+                      {showActions && (
+                        <TableCell className="text-right whitespace-nowrap">
+                          <RowActions>
+                            {canEdit && <EditActionButton href={`/admin/users/${user._id}/edit`} />}
+                            {canDelete && !user.isSuperAdmin && <DeleteActionButton onClick={async () => handleDelete(user._id)} />}
+                          </RowActions>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedUsers.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm || filterRole || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có người dùng nào'}
+                />
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedUsers.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm || filterRole || filterStatus ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có người dùng nào'}
             </div>
-          </div>
-        )}
+          ) : (
+            paginatedUsers.map(user => (
+              <MobileRowCard
+                key={user._id}
+                selected={resolvedSelectedIds.includes(user._id)}
+                checkbox={
+                  selectionEnabled && (
+                    <SelectCheckbox
+                      checked={resolvedSelectedIds.includes(user._id)}
+                      onChange={() => toggleSelectItem(user._id)}
+                      disabled={user.isSuperAdmin}
+                    />
+                  )
+                }
+                title={
+                  <span className="flex items-center gap-2">
+                    {user.name}
+                    {user.isSuperAdmin && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-normal">Super</span>
+                    )}
+                  </span>
+                }
+                subtitle={<span className="text-xs text-slate-500">{user.email}</span>}
+                badge={
+                  <Badge variant={user.status === 'Active' ? 'success' : (user.status === 'Inactive' ? 'secondary' : 'destructive')}>
+                    {user.status === 'Active' ? 'Hoạt động' : (user.status === 'Inactive' ? 'Không hoạt động' : 'Bị cấm')}
+                  </Badge>
+                }
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Vai trò:</span> {user.roleName}</div>
+                    {user.phone && <div><span className="text-slate-400">SĐT:</span> {user.phone}</div>}
+                    <div><span className="text-slate-400">Đăng nhập cuối:</span> {formatLastLogin(user.lastLogin)}</div>
+                  </div>
+                }
+                actions={
+                  showActions ? (
+                    <RowActions>
+                      {canEdit && <EditActionButton href={`/admin/users/${user._id}/edit`} />}
+                      {canDelete && !user.isSuperAdmin && <DeleteActionButton onClick={async () => handleDelete(user._id)} />}
+                    </RowActions>
+                  ) : undefined
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedUsersPerPage}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="người dùng"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -803,7 +723,7 @@ function UsersTable({
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }
 

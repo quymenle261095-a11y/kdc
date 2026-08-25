@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, GripVertical, Package, Plus, Settings2, Trash2 } from 'lucide-react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { Button, Input, Label, cn } from '../../../components/ui';
 import { SettingsImageUploader } from '../../../components/SettingsImageUploader';
 import { DEFAULT_DEMO_CATEGORY_PRODUCTS_SECTIONS } from '../_lib/constants';
@@ -25,7 +27,7 @@ interface CategoryProductsFormProps {
   setColumnsDesktop: (value: 3 | 4) => void;
   showViewAll: boolean;
   setShowViewAll: (value: boolean) => void;
-  categoriesData: { _id: string; name: string }[];
+  categoriesData: { _id: string; name: string; _creationTime?: number; productCount?: number }[];
   selectionMode: CategoryProductsSelectionMode;
   setSelectionMode: (value: CategoryProductsSelectionMode) => void;
   demoSections: DemoCategoryProductsSection[];
@@ -37,6 +39,12 @@ interface CategoryProductsFormProps {
   productImageCropAspectRatio: ImageAspectRatioInput;
   defaultExpanded?: boolean;
   className?: string;
+  showAddToCartButton?: boolean;
+  setShowAddToCartButton?: (value: boolean) => void;
+  showBuyNowButton?: boolean;
+  setShowBuyNowButton?: (value: boolean) => void;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  setCartButtonsLayout?: (value: 'stack' | 'grid-2') => void;
 }
 
 export const CategoryProductsForm = ({
@@ -58,9 +66,43 @@ export const CategoryProductsForm = ({
   productImageCropAspectRatio,
   defaultExpanded = true,
   className,
+  showAddToCartButton,
+  setShowAddToCartButton,
+  showBuyNowButton,
+  setShowBuyNowButton,
+  cartButtonsLayout,
+  setCartButtonsLayout,
 }: CategoryProductsFormProps) => {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+
+  const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
+  const isCartMode = saleModeSetting?.value === 'cart';
+
+  const handleQuickGenerate = (type: 'largest' | 'newest' | 'non-empty' | 'all') => {
+    let selected: typeof categoriesData = [];
+    if (type === 'largest') {
+      selected = [...categoriesData]
+        .filter(c => (c.productCount ?? 0) > 0)
+        .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0))
+        .slice(0, 4);
+    } else if (type === 'newest') {
+      selected = [...categoriesData]
+        .sort((a, b) => (b._creationTime ?? 0) - (a._creationTime ?? 0))
+        .slice(0, 4);
+    } else if (type === 'non-empty') {
+      selected = categoriesData.filter(c => (c.productCount ?? 0) > 0);
+    } else if (type === 'all') {
+      selected = categoriesData;
+    }
+
+    const items = selected.map((cat, index) => ({
+      categoryId: cat._id,
+      id: index + 1,
+      itemCount: 4,
+    }));
+    setSections(items);
+  };
 
   const activeSections = React.useMemo(() => ['settings', 'sections'], []);
   const { openSections, toggleSection, hasClosedSection, handleToggleAll } = useFormSectionsState(activeSections, defaultExpanded);
@@ -232,6 +274,51 @@ export const CategoryProductsForm = ({
               />
               <Label htmlFor="showViewAll" className="cursor-pointer">Hiển thị nút “Xem danh mục”</Label>
             </div>
+
+            {/* Cấu hình hiển thị nút mua hàng & giỏ hàng */}
+            {isCartMode && setShowAddToCartButton && setShowBuyNowButton && setCartButtonsLayout && (
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Hiển thị nút Thêm vào giỏ</Label>
+                    <p className="text-xs text-slate-500">Cho phép khách hàng thêm nhanh sản phẩm vào giỏ</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showAddToCartButton ?? true}
+                    onChange={(e) => setShowAddToCartButton(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Hiển thị nút Mua ngay</Label>
+                    <p className="text-xs text-slate-500">Khách hàng có thể nhấn mua và đi thẳng tới trang checkout</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showBuyNowButton ?? true}
+                    onChange={(e) => setShowBuyNowButton(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </div>
+
+                {(showAddToCartButton ?? true) && (showBuyNowButton ?? true) && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-200">Bố cục nút hiển thị</Label>
+                    <select
+                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                      value={cartButtonsLayout ?? 'stack'}
+                      onChange={(e) => setCartButtonsLayout(e.target.value as 'stack' | 'grid-2')}
+                    >
+                      <option value="stack">Xếp dọc (Stack)</option>
+                      <option value="grid-2">Xếp ngang (Grid 2)</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </SubSection>
 
@@ -289,6 +376,53 @@ export const CategoryProductsForm = ({
 
           {selectionMode === 'real' ? (
             <>
+              {categoriesData.length > 0 && (
+                <div className="space-y-2 p-3 bg-slate-50/50 dark:bg-slate-900/30 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Sinh nhanh danh mục</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickGenerate('largest')}
+                      disabled={categoriesData.length === 0}
+                      className="text-xs h-8"
+                    >
+                      🔥 4 danh mục nhiều SP nhất
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickGenerate('newest')}
+                      disabled={categoriesData.length === 0}
+                      className="text-xs h-8"
+                    >
+                      ✨ 4 danh mục mới nhất
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickGenerate('non-empty')}
+                      disabled={categoriesData.length === 0}
+                      className="text-xs h-8"
+                    >
+                      📦 Danh mục có SP &gt; 0
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickGenerate('all')}
+                      disabled={categoriesData.length === 0}
+                      className="text-xs h-8"
+                    >
+                      🌐 Tất cả mọi danh mục
+                    </Button>
+                  </div>
+                </div>
+              )}
               {categoriesData.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-4">
                   Chưa có danh mục sản phẩm. Vui lòng tạo danh mục trước.
@@ -390,7 +524,11 @@ export const CategoryProductsForm = ({
                         <SettingsImageUploader
                           label="Ảnh danh mục"
                           value={section.categoryImage ?? ''}
-                          onChange={(url) => updateDemoSection(section.id, { categoryImage: url ?? '' })}
+                          storageId={section.categoryImageStorageId as any}
+                          onChange={(url, storageId) => updateDemoSection(section.id, {
+                            categoryImage: url ?? '',
+                            categoryImageStorageId: storageId ? String(storageId) : null
+                          })}
                           folder="home-components/category-products"
                           naming={{ entityName: section.categoryName || 'demo-category', field: 'category-image', index: sectionIndex + 1 }}
                           previewSize="sm"
@@ -418,7 +556,11 @@ export const CategoryProductsForm = ({
                               <SettingsImageUploader
                                 label="Ảnh sản phẩm"
                                 value={product.image ?? ''}
-                                onChange={(url) => updateDemoProduct(section.id, product.id, { image: url ?? '', storageId: undefined })}
+                                storageId={product.storageId as any}
+                                onChange={(url, storageId) => updateDemoProduct(section.id, product.id, {
+                                  image: url ?? '',
+                                  storageId: storageId ? String(storageId) : undefined
+                                })}
                                 folder="home-components/category-products"
                                 naming={{ entityName: product.name || 'demo-product', field: 'product-image', index: productIndex + 1 }}
                                 previewSize="sm"

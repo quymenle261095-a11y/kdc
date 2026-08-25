@@ -10,7 +10,8 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Loader2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../../../components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Label } from '../../../../components/ui';
+import { CopyableInput } from '../../../../components/CopyTextButton';
 import { TypeColorOverrideCard } from '../../../_shared/components/TypeColorOverrideCard';
 import { TypeFontOverrideCard } from '../../../_shared/components/TypeFontOverrideCard';
 import { useTypeColorOverrideState } from '../../../_shared/hooks/useTypeColorOverride';
@@ -65,6 +66,9 @@ export default function PopupEditPage({
   const liveComponent = useQuery(api.homeComponents.getById, snapshotComponent ? 'skip' : { id: id as Id<'homeComponents'> });
   const component = snapshotComponent ?? liveComponent;
   const updateMutation = useMutation(api.homeComponents.update);
+
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const [title, setTitle] = useState('');
   const [active, setActive] = useState(true);
@@ -199,9 +203,10 @@ export default function PopupEditPage({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Tiêu đề hiển thị <span className="text-red-500">*</span></Label>
-              <Input
+              <CopyableInput
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
+                copyLabel="tiêu đề hiển thị"
                 required
                 placeholder="Nhập tiêu đề component..."
               />
@@ -264,6 +269,9 @@ export default function PopupEditPage({
               title={title}
               selectedStyle={config.style}
               onStyleChange={(style) => setConfig((current) => ({ ...current, style }))}
+              isVisualEditAllowed={isVisualEditAllowed}
+              onConfigChange={setConfig}
+              onTitleChange={setTitle}
             />
           </div>
         </div>

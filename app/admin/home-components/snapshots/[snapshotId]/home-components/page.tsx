@@ -7,19 +7,21 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowLeft, Edit, Eye, Grid, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit, Eye, Grid, GripVertical, Loader2, Plus, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import type { HomepageSnapshotPayload, SnapshotComponentPayload } from '@/lib/homepage-snapshot/types';
+import type { HomepageSnapshotPayload, SnapshotComponentPayload, SnapshotCustomThumbnail } from '@/lib/homepage-snapshot/types';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '../../../../components/ui';
 import { BulkActionBar, SelectCheckbox } from '../../../../components/TableUtilities';
 import { ModuleGuard } from '../../../../components/ModuleGuard';
 import { SettingsImageUploader } from '../../../../components/SettingsImageUploader';
 import { COMPONENT_TYPES } from '../../../create/shared';
 import type { SnapshotContactSettings, SnapshotDemoBundle, SnapshotMenuItem, SnapshotMenuPayload, SnapshotSEOSettings, SnapshotSiteSettings, SnapshotSocialSettings } from '@/components/modules/homepage/snapshot-demo-types';
+import { getQuickSyncedReorderedComponents } from '@/app/admin/home-components/_shared/lib/quickSync';
 
 type HeaderLayerColorChoice = 'white' | 'primary' | 'secondary';
+type SnapshotThemeMode = NonNullable<SnapshotSiteSettings['site_dark_mode']>;
 type SnapshotHeaderSettings = NonNullable<SnapshotDemoBundle['settings']['header']>;
 
 type SnapshotComponentRow = SnapshotComponentPayload & {
@@ -29,6 +31,7 @@ type SnapshotComponentRow = SnapshotComponentPayload & {
 
 type SnapshotMetaDraft = {
   contact: SnapshotContactSettings;
+  customThumbnail?: SnapshotCustomThumbnail;
   footerItems: SnapshotMenuItem[];
   header: SnapshotHeaderSettings;
   headerItems: SnapshotMenuItem[];
@@ -39,10 +42,10 @@ type SnapshotMetaDraft = {
 };
 
 const DEFAULT_SITE_SETTINGS: SnapshotSiteSettings = {
-  site_brand_color: '#3b82f6',
   site_brand_mode: 'dual',
   site_brand_primary: '#3b82f6',
   site_brand_secondary: '#06b6d4',
+  site_dark_mode: 'light',
   site_favicon: '',
   site_language: 'vi',
   site_logo: '',
@@ -84,6 +87,7 @@ const DEFAULT_HEADER_SETTINGS: SnapshotHeaderSettings = {
   header_style: 'classic',
   header_config: {
     logoSizeLevel: 2,
+    showDarkModeToggle: false,
     layerColors: {
       topnav: 'primary',
       navbar: 'white',
@@ -103,6 +107,19 @@ const LOGO_SIZE_OPTIONS = Array.from({ length: 30 }, (_, index) => ({
   value: index + 1,
 }));
 
+const SNAPSHOT_THEME_OPTIONS: Array<{ description: string; label: string; value: SnapshotThemeMode }> = [
+  { description: 'Luôn hiển thị giao diện sáng.', label: 'Chế độ sáng', value: 'light' },
+  { description: 'Luôn hiển thị giao diện tối.', label: 'Chế độ tối', value: 'dark' },
+  { description: 'Theo theme hệ điều hành của khách.', label: 'Theo hệ thống', value: 'system' },
+];
+
+const DEFAULT_CUSTOM_THUMBNAIL_CONFIG: NonNullable<SnapshotCustomThumbnail['config']> = {
+  backgroundColor: '#f8fafc',
+  objectFit: 'cover',
+  positionX: 50,
+  positionY: 50,
+};
+
 const normalizeHeaderLayerChoice = (value: unknown, fallback: HeaderLayerColorChoice): HeaderLayerColorChoice => (
   value === 'white' || value === 'primary' || value === 'secondary' ? value : fallback
 );
@@ -112,6 +129,10 @@ const normalizeLogoSizeLevel = (value: unknown) => {
   if (!Number.isFinite(numeric)) {return 2;}
   return Math.min(30, Math.max(1, Math.round(numeric)));
 };
+
+const normalizeSnapshotThemeMode = (value: unknown): SnapshotThemeMode => (
+  value === 'dark' || value === 'system' ? value : 'light'
+);
 
 const normalizeSnapshotHeaderSettings = (header?: SnapshotHeaderSettings | null): SnapshotHeaderSettings => {
   const rawConfig = (header?.header_config ?? {}) as Record<string, unknown>;
@@ -196,6 +217,22 @@ const buildPayload = (payload: HomepageSnapshotPayload, components: SnapshotComp
   };
 };
 
+
+const withSnapshotCustomThumbnail = (
+  payload: HomepageSnapshotPayload,
+  customThumbnail?: SnapshotCustomThumbnail,
+): HomepageSnapshotPayload => {
+  if (customThumbnail?.url) {
+    return {
+      ...payload,
+      gallery: { customThumbnail },
+    };
+  }
+  const nextPayload = { ...payload };
+  delete nextPayload.gallery;
+  return nextPayload;
+};
+
 function SortableRow({
   comp,
   index,
@@ -256,7 +293,7 @@ function SortableRow({
         </div>
       </TableCell>
       <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-1">
           <Link href={`/admin/home-components/snapshots/${snapshotId}/home-components/${encodeURIComponent(comp.componentKey)}/edit`}>
             <Button variant="ghost" size="icon"><Edit size={16} /></Button>
           </Link>
@@ -274,6 +311,7 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
   const updateSnapshot = useMutation(api.homepageSnapshots.updateHomepageSnapshot);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [statusLoading, setStatusLoading] = useState<'show' | 'hide' | null>(null);
+  const [isQuickSyncing, setIsQuickSyncing] = useState(false);
   const [metaDraft, setMetaDraft] = useState<SnapshotMetaDraft | null>(null);
   const [loadedMetaSnapshotId, setLoadedMetaSnapshotId] = useState<string | null>(null);
   const [isSavingMeta, setIsSavingMeta] = useState(false);
@@ -289,14 +327,20 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
     const nextPayload = snapshot.payload as HomepageSnapshotPayload;
     const bundle = (nextPayload.homepage.demoBundle ?? {}) as Partial<SnapshotDemoBundle>;
     const settings = (bundle.settings ?? {}) as Partial<SnapshotDemoBundle['settings']>;
+    const customThumbnail = nextPayload.gallery?.customThumbnail ?? snapshot.customThumbnail;
     setMetaDraft({
       contact: { ...DEFAULT_CONTACT_SETTINGS, ...settings.contact },
+      customThumbnail: customThumbnail ?? undefined,
       footerItems: normalizeMenuPayload(bundle.menus?.footer, 'footer').items,
       header: normalizeSnapshotHeaderSettings(settings.header),
       headerItems: normalizeMenuPayload(bundle.menus?.header, 'header').items,
       label: snapshot.label,
       seo: { ...DEFAULT_SEO_SETTINGS, ...settings.seo },
-      site: { ...DEFAULT_SITE_SETTINGS, ...settings.site },
+      site: {
+        ...DEFAULT_SITE_SETTINGS,
+        ...settings.site,
+        site_dark_mode: normalizeSnapshotThemeMode(settings.site?.site_dark_mode),
+      },
       social: { ...DEFAULT_SOCIAL_SETTINGS, ...settings.social },
     });
     setLoadedMetaSnapshotId(snapshot._id);
@@ -349,9 +393,9 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
       ...footerMenu,
       items: metaDraft.footerItems.map((item, order) => ({ ...item, menuId: footerMenu.menu._id, order })),
     };
-    const nextSite = {
+    const nextSite: SnapshotSiteSettings = {
       ...metaDraft.site,
-      site_brand_color: metaDraft.site.site_brand_primary,
+      site_dark_mode: normalizeSnapshotThemeMode(metaDraft.site.site_dark_mode),
     };
     const currentHeader = normalizeSnapshotHeaderSettings(bundle.settings?.header);
     const draftHeader = normalizeSnapshotHeaderSettings(metaDraft.header);
@@ -385,23 +429,24 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
       },
       systemStyle: bundle.systemStyle ?? payload.homepage.systemStyle ?? null,
     };
+    const nextPayload = withSnapshotCustomThumbnail({
+      ...payload,
+      manifest: {
+        ...payload.manifest,
+        snapshotLabel: metaDraft.label.trim() || snapshot.label,
+      },
+      homepage: {
+        ...payload.homepage,
+        components: syncSnapshotConfigCopies(payload.homepage.components, nextSite, metaDraft.contact, metaDraft.social, nextFooterMenu),
+        demoBundle: nextBundle,
+      },
+    }, metaDraft.customThumbnail);
 
     setIsSavingMeta(true);
     try {
       await updateSnapshot({
         label: metaDraft.label.trim() || snapshot.label,
-        payload: {
-          ...payload,
-          manifest: {
-            ...payload.manifest,
-            snapshotLabel: metaDraft.label.trim() || snapshot.label,
-          },
-          homepage: {
-            ...payload.homepage,
-            components: syncSnapshotConfigCopies(payload.homepage.components, nextSite, metaDraft.contact, metaDraft.social, nextFooterMenu),
-            demoBundle: nextBundle,
-          },
-        },
+        payload: nextPayload,
         snapshotId: snapshotId as Id<'homeComponentSnapshots'>,
       });
       toast.success('Đã cập nhật thông tin snapshot');
@@ -457,6 +502,60 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
               [layer]: value,
             },
           },
+        },
+      };
+    });
+  };
+
+  const updateCustomThumbnailImage = (url: string | undefined, storageId?: Id<'_storage'> | null) => {
+    setMetaDraft((current) => {
+      if (!current) {return current;}
+      if (!url) {
+        return { ...current, customThumbnail: undefined };
+      }
+      return {
+        ...current,
+        customThumbnail: {
+          alt: current.customThumbnail?.alt ?? current.label,
+          config: {
+            ...DEFAULT_CUSTOM_THUMBNAIL_CONFIG,
+            ...current.customThumbnail?.config,
+          },
+          storageId: storageId ?? null,
+          updatedAt: Date.now(),
+          url,
+        },
+      };
+    });
+  };
+
+  const patchCustomThumbnail = (patch: Partial<Omit<SnapshotCustomThumbnail, 'config'>>) => {
+    setMetaDraft((current) => {
+      if (!current?.customThumbnail) {return current;}
+      return {
+        ...current,
+        customThumbnail: {
+          ...current.customThumbnail,
+          ...patch,
+          updatedAt: Date.now(),
+        },
+      };
+    });
+  };
+
+  const patchCustomThumbnailConfig = (patch: Partial<NonNullable<SnapshotCustomThumbnail['config']>>) => {
+    setMetaDraft((current) => {
+      if (!current?.customThumbnail) {return current;}
+      return {
+        ...current,
+        customThumbnail: {
+          ...current.customThumbnail,
+          config: {
+            ...DEFAULT_CUSTOM_THUMBNAIL_CONFIG,
+            ...current.customThumbnail.config,
+            ...patch,
+          },
+          updatedAt: Date.now(),
         },
       };
     });
@@ -548,6 +647,24 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
     }
   };
 
+  const handleQuickSync = async () => {
+    if (sortedComponents.length === 0) {
+      toast.error('Snapshot chưa có component để đồng bộ');
+      return;
+    }
+    setIsQuickSyncing(true);
+    try {
+      await saveComponents(
+        getQuickSyncedReorderedComponents(sortedComponents),
+        'Đã đồng bộ nhanh: bo góc ít, spacing hẹp và tiêu đề căn giữa'
+      );
+    } catch {
+      toast.error('Lỗi khi đồng bộ nhanh snapshot');
+    } finally {
+      setIsQuickSyncing(false);
+    }
+  };
+
   const headerSettings = metaDraft ? normalizeSnapshotHeaderSettings(metaDraft.header) : null;
   const headerConfig = (headerSettings?.header_config ?? {}) as Record<string, unknown>;
   const headerLayerColors = (headerConfig.layerColors ?? {}) as Record<string, unknown>;
@@ -555,6 +672,7 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
   const topnavColor = normalizeHeaderLayerChoice(headerLayerColors.topnav, 'primary');
   const navbarColor = normalizeHeaderLayerChoice(headerLayerColors.navbar, 'white');
   const menuColor = normalizeHeaderLayerChoice(headerLayerColors.menu, 'secondary');
+  const showSnapshotDarkModeToggle = Boolean(headerConfig.showDarkModeToggle);
 
   return (
     <div className="space-y-4">
@@ -567,6 +685,10 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
           <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý các khối nội dung trong snapshot: {snapshot.label}</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button className="gap-2" variant="outline" onClick={() => { void handleQuickSync(); }} disabled={isQuickSyncing || sortedComponents.length === 0}>
+            {isQuickSyncing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+            Đồng bộ nhanh
+          </Button>
           <Link href={demoUrl} target="_blank">
             <Button className="gap-2" variant="outline">
               <Eye size={16} /> Xem thử
@@ -636,6 +758,51 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
                   </select>
                 </div>
                 <div className="space-y-2">
+                  <Label>Chế độ sáng/tối của snapshot</Label>
+                  <select
+                    value={metaDraft.site.site_dark_mode ?? 'light'}
+                    onChange={(event) => setMetaDraft({
+                      ...metaDraft,
+                      site: {
+                        ...metaDraft.site,
+                        site_dark_mode: normalizeSnapshotThemeMode(event.target.value),
+                      },
+                    })}
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {SNAPSHOT_THEME_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] leading-4 text-slate-400">
+                    {SNAPSHOT_THEME_OPTIONS.find((option) => option.value === (metaDraft.site.site_dark_mode ?? 'light'))?.description}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => patchHeaderConfig({ showDarkModeToggle: !showSnapshotDarkModeToggle })}
+                  className={cn(
+                    'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                    showSnapshotDarkModeToggle
+                      ? 'border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                  )}
+                >
+                  <span>
+                    <span className="block font-semibold">Nút Dark/Light trong snapshot</span>
+                    <span className="block text-[11px] opacity-75">Chỉ ảnh hưởng demo snapshot, không sửa site thật.</span>
+                  </span>
+                  <span className={cn('h-5 w-9 rounded-full p-0.5 transition-colors', showSnapshotDarkModeToggle ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-600')}>
+                    <span className={cn('block h-4 w-4 rounded-full bg-white transition-transform', showSnapshotDarkModeToggle && 'translate-x-4')} />
+                  </span>
+                </button>
+                <Link
+                  href={`/system/experiences?tab=dark_mode&snapshotId=${snapshotId}`}
+                  className="inline-flex text-xs font-medium text-cyan-600 hover:underline dark:text-cyan-400"
+                >
+                  Sửa nhanh trong tab Chế độ tối →
+                </Link>
+                <div className="space-y-2">
                   <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Phối màu header</div>
                   {([
                     ['topnav', 'Topbar', topnavColor],
@@ -668,6 +835,83 @@ function SnapshotHomeComponentsPage({ snapshotId }: { snapshotId: string }) {
                   previewSize="md"
                 />
                 <p className="text-xs text-slate-500">Ảnh chia sẻ mạng xã hội cho demo snapshot, nên dùng tỉ lệ 1200×630.</p>
+              </div>
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <SettingsImageUploader
+                  label="Thumbnail kho giao diện"
+                  value={metaDraft.customThumbnail?.url}
+                  storageId={metaDraft.customThumbnail?.storageId as Id<'_storage'> | null | undefined}
+                  onChange={updateCustomThumbnailImage}
+                  folder="snapshot-thumbnails"
+                  naming={{ entityName: metaDraft.label || 'snapshot', field: 'gallery-thumbnail', index: 1 }}
+                  previewSize="lg"
+                />
+                <p className="text-xs text-slate-500">Ảnh này được ưu tiên trên /theme-gallery và được đóng gói kèm khi tải ZIP snapshot.</p>
+                {metaDraft.customThumbnail ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label>Alt thumbnail</Label>
+                      <Input
+                        value={metaDraft.customThumbnail.alt ?? ''}
+                        onChange={(event) => patchCustomThumbnail({ alt: event.target.value })}
+                        placeholder={metaDraft.label}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Kiểu hiển thị</Label>
+                        <select
+                          value={metaDraft.customThumbnail.config?.objectFit ?? 'cover'}
+                          onChange={(event) => patchCustomThumbnailConfig({ objectFit: event.target.value as 'cover' | 'contain' })}
+                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          <option value="cover">Lấp đầy</option>
+                          <option value="contain">Giữ nguyên ảnh</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Nền</Label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={metaDraft.customThumbnail.config?.backgroundColor ?? DEFAULT_CUSTOM_THUMBNAIL_CONFIG.backgroundColor}
+                            onChange={(event) => patchCustomThumbnailConfig({ backgroundColor: event.target.value })}
+                            className="h-9 w-11 rounded-md border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800"
+                          />
+                          <Input
+                            value={metaDraft.customThumbnail.config?.backgroundColor ?? DEFAULT_CUSTOM_THUMBNAIL_CONFIG.backgroundColor}
+                            onChange={(event) => patchCustomThumbnailConfig({ backgroundColor: event.target.value })}
+                            className="h-9"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Canh ngang: {metaDraft.customThumbnail.config?.positionX ?? 50}%</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={metaDraft.customThumbnail.config?.positionX ?? 50}
+                          onChange={(event) => patchCustomThumbnailConfig({ positionX: Number(event.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Canh dọc: {metaDraft.customThumbnail.config?.positionY ?? 50}%</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={metaDraft.customThumbnail.config?.positionY ?? 50}
+                          onChange={(event) => patchCustomThumbnailConfig({ positionY: Number(event.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Màu chính</Label>

@@ -1,9 +1,11 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
 import {
@@ -19,6 +21,7 @@ import type {
   TeamEditorMember,
   TeamStyle,
 } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 interface TeamPreviewProps {
   members: TeamEditorMember[];
@@ -45,6 +48,10 @@ interface TeamPreviewProps {
   spacing?: SectionSpacing;
   desktopColumns?: TeamDesktopColumns;
   cornerRadius?: TeamCornerRadius;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onMembersChange?: (members: TeamEditorMember[]) => void;
 }
 
 export const TeamPreview = ({
@@ -71,15 +78,28 @@ export const TeamPreview = ({
   spacing,
   desktopColumns,
   cornerRadius,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onMembersChange,
 }: TeamPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
   const style = normalizeTeamStyle(selectedStyle);
+  const isVisualEditAllowed = Boolean(onMembersChange || onTitleChange || onSubtitleChange || onBadgeTextChange);
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
 
   const validation = React.useMemo(() => getTeamValidationResult({
     primary: brandColor,
     secondary,
     mode,
   }), [brandColor, secondary, mode]);
+  const tokens = React.useMemo(() => adaptTokensForDarkMode(validation.tokens, isDark), [validation.tokens, isDark]);
 
   const modeLabel = mode === 'single' ? '1 màu (single)' : '2 màu (dual)';
 
@@ -96,6 +116,9 @@ export const TeamPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
       >
         <BrowserFrame url="yoursite.com/team">
           <TeamSectionShared
@@ -104,7 +127,7 @@ export const TeamPreview = ({
             mode={mode}
             style={style}
             title={title}
-            tokens={validation.tokens}
+            tokens={tokens}
             device={device}
             carouselId={`team-preview-carousel-${device}`}
             texts={texts}
@@ -121,13 +144,18 @@ export const TeamPreview = ({
             spacing={spacing}
             desktopColumns={desktopColumns}
             cornerRadius={cornerRadius}
+            onTitleChange={onTitleChange}
+            onSubtitleChange={onSubtitleChange}
+            onBadgeTextChange={onBadgeTextChange}
+            visualEditEnabled={isVisualEditActive}
+            onMembersChange={onMembersChange}
           />
         </BrowserFrame>
       </PreviewWrapper>
 
       {mode === 'dual' ? (
         <ColorInfoPanel
-          brandColor={validation.tokens.primary}
+          brandColor={tokens.primary}
           secondary={validation.resolvedSecondary}
           description="Màu phụ áp dụng cho role, icon social, accent line và điều hướng carousel của Team."
         />

@@ -14,6 +14,7 @@ import { SectionSpacingControl } from '../../_shared/components/SectionSpacingCo
 import { useFormSectionsState } from '../../_shared/hooks/useFormSectionsState';
 import { FormSectionsToggleAllButton } from '../../_shared/components/FormSectionsToggleAllButton';
 import { HomeComponentDisplaySettingsSection } from '../../_shared/components/HomeComponentDisplaySettingsSection';
+import { QuickRouteInput } from '../../_shared/components/QuickRouteInput';
 
 export const HeroForm = ({
   heroSlides,
@@ -317,18 +318,18 @@ export const HeroForm = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Liên kết nút chính</Label>
-                <Input 
-                  value={heroContent.primaryButtonLink} 
-                  onChange={(e) =>{  setHeroContent({ ...heroContent, primaryButtonLink: e.target.value }); }}
+                <QuickRouteInput 
+                  value={heroContent.primaryButtonLink ?? ''} 
+                  onChangeValue={(v) =>{  setHeroContent({ ...heroContent, primaryButtonLink: v }); }}
                   placeholder="/contact hoặc https://..."
                 />
               </div>
               {(heroStyle === 'fullscreen' || heroStyle === 'conquest') && (
                 <div className="space-y-2">
                   <Label>Liên kết nút phụ</Label>
-                  <Input 
-                    value={heroContent.secondaryButtonLink} 
-                    onChange={(e) =>{  setHeroContent({ ...heroContent, secondaryButtonLink: e.target.value }); }}
+                  <QuickRouteInput 
+                    value={heroContent.secondaryButtonLink ?? ''} 
+                    onChangeValue={(v) =>{  setHeroContent({ ...heroContent, secondaryButtonLink: v }); }}
                     placeholder="/pricing hoặc https://..."
                   />
                 </div>

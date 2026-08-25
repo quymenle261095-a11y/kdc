@@ -6,6 +6,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Pl
 import { cn } from '../../../components/ui';
 import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
+import { EditablePreviewText } from '../../_shared/components/EditablePreviewText';
 import type { CaseStudyColorTokens } from '../_lib/colors';
 import type { CaseStudyBrandMode, CaseStudyCornerRadius, CaseStudyDesktopColumns, CaseStudyProject, CaseStudySpacing, CaseStudyStyle } from '../_types';
 import {
@@ -40,6 +41,11 @@ interface CaseStudySectionSharedProps {
   desktopColumns?: CaseStudyDesktopColumns;
   spacing?: CaseStudySpacing;
   device?: CaseStudyPreviewDevice;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onProjectTextChange?: (id: CaseStudyProject['id'], field: 'title' | 'category' | 'description', value: string) => void;
 }
 
 const resolveViewport = (width: number): CaseStudyPreviewDevice => {
@@ -100,6 +106,11 @@ export function CaseStudySectionShared({
   desktopColumns = DEFAULT_CASE_STUDY_DESKTOP_COLUMNS,
   spacing = DEFAULT_CASE_STUDY_SPACING,
   device = 'desktop',
+  visualEditEnabled,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onProjectTextChange,
 }: CaseStudySectionSharedProps) {
   const [carouselIndex, setCarouselIndex] = React.useState(0);
   const [siteViewport, setSiteViewport] = React.useState<CaseStudyPreviewDevice>('desktop');
@@ -156,6 +167,7 @@ export function CaseStudySectionShared({
   const sectionClassName = cn('px-4', context === 'preview' && viewport === 'mobile' ? 'py-4' : getCaseStudySectionSpacingClassName(spacing));
   const radiusClassName = getCaseStudyCornerRadiusClassName(cornerRadius);
   const cardBorderStyle = { borderColor: tokens.cardBorder };
+  const isVisualEditActive = context === 'preview' && Boolean(visualEditEnabled && onProjectTextChange);
 
   const getGridClassName = () => {
     if (viewport === 'mobile') {
@@ -183,6 +195,10 @@ export function CaseStudySectionShared({
       subtitleAboveTitle={subtitleAboveTitle}
       uppercaseText={uppercaseText}
       brandColor={tokens.primary}
+      visualEditEnabled={visualEditEnabled}
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
     />
   );
 
@@ -201,12 +217,28 @@ export function CaseStudySectionShared({
     </div>
   );
 
-  const renderBadge = (text: string) => (
+  const renderEditable = (
+    project: CaseStudyProject,
+    field: 'title' | 'category' | 'description',
+    fallback: string,
+    className?: string,
+    style?: React.CSSProperties,
+  ) => (
+    <EditablePreviewText
+      active={isVisualEditActive}
+      value={project[field]}
+      fallback={fallback}
+      className={className}
+      style={style}
+      onChange={(value) => onProjectTextChange?.(project.id, field, value)}
+    />
+  );
+  const renderEditableBadge = (project: CaseStudyProject) => (
     <span
       className="text-xs font-medium px-2 py-0.5 rounded-full w-fit"
       style={{ backgroundColor: tokens.badgeBackground, color: tokens.badgeText }}
     >
-      {text || 'Category'}
+      {renderEditable(project, 'category', 'Category')}
     </span>
   );
 
@@ -293,12 +325,12 @@ export function CaseStudySectionShared({
                       {renderProjectImage(project, 32)}
                     </div>
                     <div className={cn('flex flex-col h-full', viewport === 'mobile' ? 'p-3' : 'p-4')}>
-                      {renderBadge(project.category)}
+                      {renderEditableBadge(project)}
                       <h3 className="font-semibold mt-2 mb-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
-                        {project.title || 'Tên dự án'}
+                        {renderEditable(project, 'title', 'Tên dự án')}
                       </h3>
                       <p className="text-xs leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                        {project.description || 'Mô tả dự án...'}
+                        {renderEditable(project, 'description', 'Mô tả dự án...')}
                       </p>
                       <div className="mt-3 flex items-center gap-1 text-sm font-medium" style={{ color: tokens.actionText }}>
                         Xem chi tiết <ArrowRight size={14} />
@@ -353,12 +385,12 @@ export function CaseStudySectionShared({
                       {renderProjectImage(featured, 48)}
                     </div>
                     <div className="p-5">
-                      {renderBadge(featured.category)}
+                      {renderEditableBadge(featured)}
                       <h3 className={cn('font-bold mt-2 mb-2 break-words leading-snug', viewport === 'mobile' ? 'text-lg' : 'text-xl')} style={{ color: tokens.heading }}>
-                        {featured.title || 'Dự án chính'}
+                        {renderEditable(featured, 'title', 'Dự án chính')}
                       </h3>
                       <p className="text-sm leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                        {featured.description || 'Mô tả dự án...'}
+                        {renderEditable(featured, 'description', 'Mô tả dự án...')}
                       </p>
                     </div>
                   </article>
@@ -377,12 +409,12 @@ export function CaseStudySectionShared({
                         {renderProjectImage(project, 24)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        {renderBadge(project.category)}
+                        {renderEditableBadge(project)}
                         <h4 className="font-semibold text-sm mt-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
-                          {project.title || 'Tên dự án'}
+                          {renderEditable(project, 'title', 'Tên dự án')}
                         </h4>
                         <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                          {project.description || 'Mô tả dự án...'}
+                          {renderEditable(project, 'description', 'Mô tả dự án...')}
                         </p>
                       </div>
                     </article>
@@ -442,13 +474,13 @@ export function CaseStudySectionShared({
                     </div>
                     <div className="p-4 flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        {renderBadge(project.category)}
+                        {renderEditableBadge(project)}
                       </div>
                       <h3 className="font-semibold break-words leading-snug" style={{ color: tokens.neutralText }}>
-                        {project.title || 'Tên dự án'}
+                        {renderEditable(project, 'title', 'Tên dự án')}
                       </h3>
                       <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                        {project.description || 'Mô tả...'}
+                        {renderEditable(project, 'description', 'Mô tả...')}
                       </p>
                     </div>
                   </article>
@@ -495,12 +527,12 @@ export function CaseStudySectionShared({
                     <article style={{ backgroundColor: tokens.neutralSurface }}>
                       <div className={height}>{renderProjectImage(project, 32)}</div>
                       <div className="p-3">
-                        {renderBadge(project.category)}
+                        {renderEditableBadge(project)}
                         <h3 className="font-semibold text-sm mt-2 break-words leading-snug" style={{ color: tokens.neutralText }}>
-                          {project.title || 'Tên dự án'}
+                          {renderEditable(project, 'title', 'Tên dự án')}
                         </h3>
                         <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                          {project.description || 'Mô tả...'}
+                          {renderEditable(project, 'description', 'Mô tả...')}
                         </p>
                       </div>
                     </article>
@@ -570,12 +602,12 @@ export function CaseStudySectionShared({
                     <article className={cn(radiusClassName, 'h-full overflow-hidden border')} style={{ backgroundColor: tokens.neutralSurface, ...cardBorderStyle }}>
                       <div className="aspect-[4/3]">{renderProjectImage(project, 32)}</div>
                       <div className="p-4">
-                        {renderBadge(project.category)}
+                        {renderEditableBadge(project)}
                         <h3 className="font-semibold mt-2 break-words leading-snug" style={{ color: tokens.neutralText }}>
-                          {project.title || 'Tên dự án'}
+                          {renderEditable(project, 'title', 'Tên dự án')}
                         </h3>
                         <p className="text-xs mt-1 leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                          {project.description || 'Mô tả...'}
+                          {renderEditable(project, 'description', 'Mô tả...')}
                         </p>
                       </div>
                     </article>
@@ -651,12 +683,12 @@ export function CaseStudySectionShared({
                       <article style={{ backgroundColor: tokens.neutralSurface }}>
                         <div className="aspect-[4/3]">{renderProjectImage(project, 32)}</div>
                         <div className="p-4">
-                          {renderBadge(project.category)}
+                          {renderEditableBadge(project)}
                           <h3 className="font-bold mt-2 mb-1 break-words leading-snug" style={{ color: tokens.neutralText }}>
-                            {project.title || 'Tên dự án'}
+                            {renderEditable(project, 'title', 'Tên dự án')}
                           </h3>
                           <p className="text-sm leading-relaxed break-words" style={{ color: tokens.mutedText }}>
-                            {project.description || 'Mô tả...'}
+                            {renderEditable(project, 'description', 'Mô tả...')}
                           </p>
                         </div>
                       </article>

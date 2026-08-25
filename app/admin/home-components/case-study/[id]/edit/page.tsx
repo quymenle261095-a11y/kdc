@@ -463,6 +463,10 @@ export default function CaseStudyEditPage({
               spacing={headerState.spacing}
               fontStyle={fontStyle}
               fontClassName="font-active"
+              onTitleChange={setTitle}
+              onSubtitleChange={headerState.setSubtitle}
+              onBadgeTextChange={headerState.setBadgeText}
+              onProjectsChange={setProjects}
             />
           </div>
         </div>

@@ -34,9 +34,8 @@ export const listAdminWithOffset = query({
   handler: async (ctx, args) => {
     const limit = Math.min(args.limit ?? 20, 100);
     const offset = args.offset ?? 0;
-    const fetchLimit = Math.min(offset + limit + 50, 1000);
 
-    let groups = await ctx.db.query("attributeGroups").order("desc").take(fetchLimit);
+    let groups = await ctx.db.query("attributeGroups").take(1000);
 
     if (args.search?.trim()) {
       const searchLower = args.search.toLowerCase().trim();
@@ -45,6 +44,8 @@ export const listAdminWithOffset = query({
         g.code.toLowerCase().includes(searchLower)
       );
     }
+
+    groups.sort((a, b) => a.order - b.order);
 
     return groups.slice(offset, offset + limit);
   },
@@ -100,8 +101,8 @@ export const create = mutation({
     
     let nextOrder = args.order;
     if (nextOrder === undefined) {
-      const lastGroup = await ctx.db.query("attributeGroups").order("desc").first();
-      nextOrder = lastGroup ? lastGroup.order + 1 : 0;
+      const groups = await ctx.db.query("attributeGroups").take(1000);
+      nextOrder = groups.reduce((max, group) => Math.max(max, group.order), -1) + 1;
     }
     
     return ctx.db.insert("attributeGroups", {
@@ -212,6 +213,15 @@ export const getDeleteInfo = query({
       ],
     };
   },
+});
+
+export const reorder = mutation({
+  args: { items: v.array(v.object({ id: v.id("attributeGroups"), order: v.number() })) },
+  handler: async (ctx, args) => {
+    await Promise.all(args.items.map(async (item) => ctx.db.patch(item.id, { order: item.order })));
+    return null;
+  },
+  returns: v.null(),
 });
 
 export const listAdminIds = query({

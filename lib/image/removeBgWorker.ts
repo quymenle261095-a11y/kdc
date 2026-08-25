@@ -35,30 +35,24 @@ export type RemoveBgOptions = {
 async function runOnMainThread(
   imageBlob: Blob,
   callbacks: RemoveBgCallbacks,
-  options: RemoveBgOptions = {},
+  _options: RemoveBgOptions = {},
 ): Promise<void> {
   try {
-    const mode = options.mode ?? 'fast';
-    const isAdvanced = mode === 'advanced';
-
-    callbacks.onProgress?.(
-      isAdvanced ? 'Đang tải model nâng cao...' : 'Đang tải thư viện...',
-      0,
-    );
+    callbacks.onProgress?.('Đang tải model tách nền AI...', 0);
     const { removeBackground } = await import('@imgly/background-removal');
 
     const resultBlob = await removeBackground(imageBlob, {
       device: 'gpu',
-      model: isAdvanced ? 'isnet' : 'isnet_fp16',
+      model: 'isnet',
       output: {
         format: 'image/png',
         quality: 1,
       },
       progress: (key: string, current: number, total: number) => {
         const stageLabels: Record<string, string> = {
-          'compute:inference': isAdvanced ? 'Đang xử lý AI nâng cao...' : 'Đang xử lý AI...',
-          'fetch:model': 'Đang tải model...',
-          'fetch:wasm': 'Đang tải WASM...',
+          'compute:inference': 'Đang tách nền bằng AI...',
+          'fetch:model': 'Đang tải mô hình AI (~44MB, lần đầu có thể mất vài giây)...',
+          'fetch:wasm': 'Đang tải thư viện xử lý WASM...',
         };
         const stage = stageLabels[key] ?? 'Đang xử lý...';
         const percent = total > 0 ? Math.round((current / total) * 100) : 0;

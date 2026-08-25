@@ -56,6 +56,11 @@ export type SeoChecklistBuildInput = {
   seoDescription?: string;
   seoOgImage?: string;
   seoKeywords?: string;
+  seoBrandAliases?: string;
+  seoBrandSummary?: string;
+  seoBrandSearchQueries?: string;
+  seoBrandServices?: string;
+  seoBrandSameAs?: string;
   contactEmail?: string;
   contactPhone?: string;
   contactAddress?: string;
@@ -161,6 +166,11 @@ export const buildSeoChecklist = (input: SeoChecklistBuildInput): SeoChecklistRe
   };
 
   const hasSeoDescription = Boolean(input.seoDescription?.trim());
+  const hasBrandAliases = Boolean(input.seoBrandAliases?.trim());
+  const hasBrandSummary = Boolean(input.seoBrandSummary?.trim());
+  const hasBrandSearchQueries = Boolean(input.seoBrandSearchQueries?.trim());
+  const hasBrandServices = Boolean(input.seoBrandServices?.trim());
+  const hasBrandSameAs = Boolean(input.seoBrandSameAs?.trim());
   const hasOgImage = Boolean((input.seoOgImage || input.siteLogo)?.trim());
   const hasSiteName = Boolean(input.siteName?.trim());
   const hasContactPhone = Boolean(input.contactPhone?.trim());
@@ -300,6 +310,58 @@ export const buildSeoChecklist = (input: SeoChecklistBuildInput): SeoChecklistRe
       howToFix: 'Điền Meta Description ngắn gọn, tự nhiên.',
       quickActions: buildQuickActions([
         { label: 'Mở Settings SEO', href: '/admin/settings' },
+      ]),
+      autoCheck: true,
+    },
+    {
+      id: 'brand-summary',
+      category: 'entity',
+      severity: 'high',
+      status: hasBrandSummary ? 'pass' : 'warning',
+      title: 'Có giới thiệu thương hiệu ngắn',
+      whyItMatters: 'Phần này giúp Google và AI hiểu thương hiệu là ai, làm gì và phục vụ ai.',
+      howToFix: 'Điền Giới thiệu ngắn trong Admin > Settings > SEO > Thương hiệu.',
+      quickActions: buildQuickActions([
+        { label: 'Mở Settings SEO', href: '/admin/settings/seo' },
+      ]),
+      autoCheck: true,
+    },
+    {
+      id: 'brand-aliases',
+      category: 'entity',
+      severity: 'high',
+      status: hasBrandAliases && hasBrandSearchQueries ? 'pass' : 'warning',
+      title: 'Có tên gọi khác và cách khách tìm tên',
+      whyItMatters: 'Giúp Google nhận ra thương hiệu khi khách gõ viết liền, viết rời, viết hoa/thường hoặc tên cũ.',
+      howToFix: 'Thêm Tên gọi khác và Cách khách tìm thương hiệu, ví dụ dohy, dohystudio, dohy studio.',
+      quickActions: buildQuickActions([
+        { label: 'Mở Settings SEO', href: '/admin/settings/seo' },
+      ]),
+      autoCheck: true,
+    },
+    {
+      id: 'brand-services',
+      category: 'entity',
+      severity: 'medium',
+      status: hasBrandServices ? 'pass' : 'warning',
+      title: 'Có sản phẩm, dịch vụ chính',
+      whyItMatters: 'Giúp Google và AI hiểu website đang bán hoặc cung cấp gì là trọng tâm.',
+      howToFix: 'Điền 3-8 sản phẩm, dịch vụ chính trong Settings SEO.',
+      quickActions: buildQuickActions([
+        { label: 'Mở Settings SEO', href: '/admin/settings/seo' },
+      ]),
+      autoCheck: true,
+    },
+    {
+      id: 'brand-same-as',
+      category: 'entity',
+      severity: 'medium',
+      status: hasBrandSameAs || hasSocialLinks ? 'pass' : 'info',
+      title: 'Có kênh chính thức',
+      whyItMatters: 'Giúp Google nối website với social/profile chính thức của thương hiệu.',
+      howToFix: 'Thêm Google Business, Facebook, YouTube, TikTok, LinkedIn hoặc profile chính thức nếu có.',
+      quickActions: buildQuickActions([
+        { label: 'Mở Settings SEO', href: '/admin/settings/seo' },
       ]),
       autoCheck: true,
     },

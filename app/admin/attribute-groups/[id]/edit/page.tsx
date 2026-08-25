@@ -1,46 +1,428 @@
 'use client';
 
-import React, { use, useEffect, useState } from 'react';
+import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { Loader2, GripVertical, ExternalLink } from 'lucide-react';
+import { Loader2, GripVertical, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdminMutationErrorMessage } from '@/app/admin/lib/mutation-error';
-import { Badge, Button, Card, CardContent, Input, Label, cn } from '../../../components/ui';
+import { Badge, Button, Checkbox, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Input, Label, cn } from '../../../components/ui';
 import { IconPopoverPicker } from '../../../home-components/_shared/components/IconPopoverPicker';
 import { ATTRIBUTE_ICON_OPTIONS } from '../../_lib/iconRegistry';
+import { LexicalEditor } from '@/app/admin/components/LexicalEditor';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AttributeGroupPreview } from '../../_components/AttributeGroupPreview';
 import { AiAttributeTermsImportDialog, type PendingAttributeTerm } from '../../_components/AiAttributeTermsImportDialog';
-import { useUnsavedGuard } from '../../../home-components/_shared/hooks/useUnsavedGuard';
-import { HomeComponentStickyFooter } from '../../../home-components/_shared/components/HomeComponentStickyFooter';
+import { useSetAdminBreadcrumb } from '@/app/admin/context/AdminBreadcrumbContext';
+import {
+  AdminFormCard,
+  AdminFormGrid,
+  AdminFormMain,
+  AdminFormPageWrapper,
+  AdminFormSidebar,
+  AdminSelect,
+  AdminSlugInput,
+  AdminStickyFooter,
+  AdminTitleInput,
+  generateSlugFromTitle,
+} from '@/app/admin/components/FormUtilities';
 
+interface SortableTermRowProps {
+  term: {
+    _id: Id<'attributeTerms'>;
+    name: string;
+    slug: string;
+    description?: string;
+    order: number;
+  };
+  checked: boolean;
+  onToggle: (id: Id<'attributeTerms'>) => void;
+  onRemove: (id: Id<'attributeTerms'>) => void;
+  onEdit: (term: { _id: Id<'attributeTerms'>; name: string; slug: string; description?: string }) => void;
+  groupSlug: string;
+  assignedTypeSlug: string | null;
+}
+
+function SortableTermRow({ term, checked, onToggle, onRemove, onEdit }: SortableTermRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: term._id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center justify-between p-2.5 bg-white dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-sm shadow-sm transition-all',
+        isDragging && 'opacity-50 border-orange-500 shadow-md',
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical size={16} />
+        </button>
+        <Checkbox
+          checked={checked}
+          onCheckedChange={() => onToggle(term._id)}
+        />
+        <div>
+          <span className="font-medium text-slate-800 dark:text-slate-200">{term.name}</span>
+          <span className="text-xs text-slate-400 font-mono ml-2">({term.slug})</span>
+          {term.description && (
+            <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{term.description.replace(/<[^>]*>?/gm, '')}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(term)}
+          className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 h-7 px-2"
+        >
+          Sửa
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onRemove(term._id)}
+          className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 h-7 px-2"
+        >
+          Xóa
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AttributeTermsManager({
+  groupId,
+  terms,
+  groupSlug,
+  assignedTypeSlug,
+}: {
+  groupId: Id<'attributeGroups'>;
+  terms: { _id: Id<'attributeTerms'>; name: string; slug: string; description?: string; order: number }[] | undefined;
+  groupSlug: string;
+  assignedTypeSlug: string | null;
+}) {
+  const createTerm = useMutation(api.attributeTerms.create);
+  const removeTerm = useMutation(api.attributeTerms.remove);
+  const updateTerm = useMutation(api.attributeTerms.update);
+  const reorderTerms = useMutation(api.attributeTerms.reorder);
+
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTermIds, setSelectedTermIds] = useState<Id<'attributeTerms'>[]>([]);
+
+  const [editingTerm, setEditingTerm] = useState<{ _id: Id<'attributeTerms'>; name: string; slug: string; description?: string } | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSlug, setEditSlug] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleTermNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setName(val);
+    setSlug(generateSlugFromTitle(val));
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !slug.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await createTerm({
+        groupId,
+        name: name.trim(),
+        slug: slug.trim(),
+        active: true,
+        order: terms ? terms.length : 0,
+      });
+      setName('');
+      setSlug('');
+      toast.success('Đã thêm giá trị thuộc tính');
+    } catch (error) {
+      toast.error(getAdminMutationErrorMessage(error, 'Không thể thêm giá trị thuộc tính'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemove = async (id: Id<'attributeTerms'>) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa giá trị này?')) return;
+    try {
+      await removeTerm({ id });
+      setSelectedTermIds((prev) => prev.filter((item) => item !== id));
+      toast.success('Đã xóa giá trị thuộc tính');
+    } catch (error) {
+      toast.error(getAdminMutationErrorMessage(error, 'Không thể xóa giá trị thuộc tính'));
+    }
+  };
+
+  const handleStartEdit = (term: { _id: Id<'attributeTerms'>; name: string; slug: string; description?: string }) => {
+    setEditingTerm(term);
+    setEditName(term.name);
+    setEditSlug(term.slug);
+    setEditDescription(term.description ?? '');
+  };
+
+  const handleCloseEdit = () => {
+    setEditingTerm(null);
+    setEditName('');
+    setEditSlug('');
+    setEditDescription('');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTerm || !editName.trim() || !editSlug.trim()) return;
+
+    setIsSavingEdit(true);
+    try {
+      await updateTerm({
+        id: editingTerm._id,
+        name: editName.trim(),
+        slug: editSlug.trim(),
+        description: editDescription.trim(),
+      });
+      toast.success('Đã cập nhật giá trị thuộc tính');
+      handleCloseEdit();
+    } catch (error) {
+      toast.error(getAdminMutationErrorMessage(error, 'Không thể cập nhật giá trị thuộc tính'));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const toggleSelectedTerm = (id: Id<'attributeTerms'>) => {
+    setSelectedTermIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllTerms = () => {
+    if (!terms) return;
+    const allIds = terms.map((term) => term._id);
+    setSelectedTermIds(selectedTermIds.length === allIds.length ? [] : allIds);
+  };
+
+  const handleBulkRemove = async () => {
+    if (selectedTermIds.length === 0) return;
+    if (!confirm(`Xóa ${selectedTermIds.length} giá trị thuộc tính đã chọn?`)) return;
+    try {
+      for (const id of selectedTermIds) {
+        await removeTerm({ id });
+      }
+      setSelectedTermIds([]);
+      toast.success(`Đã xóa ${selectedTermIds.length} giá trị`);
+    } catch (error) {
+      toast.error(getAdminMutationErrorMessage(error, 'Không thể xóa nhiều giá trị thuộc tính'));
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !terms) return;
+
+    const oldIndex = terms.findIndex((item) => item._id === active.id);
+    const newIndex = terms.findIndex((item) => item._id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(terms, oldIndex, newIndex);
+    try {
+      await reorderTerms({ items: reordered.map((item, index) => ({ id: item._id, order: index })) });
+      toast.success('Đã cập nhật thứ tự');
+    } catch (error) {
+      console.error(error);
+      toast.error('Không thể cập nhật thứ tự');
+    }
+  };
+
+  if (terms === undefined) {
+    return (
+      <div className="text-center py-4">
+        <Loader2 className="animate-spin mx-auto text-slate-400" />
+      </div>
+    );
+  }
+
+  const isAllTermsSelected = terms.length > 0 && selectedTermIds.length === terms.length;
+
+  return (
+    <AdminFormCard title="Các giá trị thuộc tính (Terms)">
+      <div className="space-y-4">
+        <div className="flex gap-3 items-end">
+          <div className="space-y-1 flex-1">
+            <Label className="text-xs">Tên giá trị</Label>
+            <Input
+              value={name}
+              onChange={handleTermNameChange}
+              placeholder="VD: Đỏ, XL, 750ml..."
+              className="h-9 text-xs"
+            />
+          </div>
+          <div className="space-y-1 flex-1">
+            <Label className="text-xs">Slug</Label>
+            <Input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="do, xl, 750ml..."
+              className="font-mono h-9 text-xs"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleCreate}
+            disabled={isSubmitting || !name.trim() || !slug.trim()}
+            className="h-9 gap-1 text-xs"
+          >
+            {isSubmitting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+            Thêm
+          </Button>
+        </div>
+
+        {terms.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <Checkbox
+                checked={isAllTermsSelected}
+                onCheckedChange={toggleSelectAllTerms}
+              />
+              Chọn tất cả {terms.length} giá trị
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={selectedTermIds.length === 0}
+              className="text-red-500 hover:text-red-600 disabled:text-slate-400 text-xs h-7"
+              onClick={handleBulkRemove}
+            >
+              Xóa đã chọn ({selectedTermIds.length})
+            </Button>
+          </div>
+        )}
+
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={terms.map((item) => item._id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {terms.length === 0 ? (
+                <p className="text-slate-500 text-xs italic py-2 text-center">Chưa có giá trị nào.</p>
+              ) : (
+                terms.map((term) => (
+                  <SortableTermRow
+                    key={term._id}
+                    term={term}
+                    checked={selectedTermIds.includes(term._id)}
+                    onToggle={toggleSelectedTerm}
+                    onRemove={handleRemove}
+                    onEdit={handleStartEdit}
+                    groupSlug={groupSlug}
+                    assignedTypeSlug={assignedTypeSlug}
+                  />
+                ))
+              )}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+
+      {editingTerm && (
+        <Dialog open={editingTerm !== null} onOpenChange={(open) => { if (!open) handleCloseEdit(); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6">
+            <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+              <DialogTitle>Chỉnh sửa giá trị: {editingTerm.name}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSaveEdit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2 py-4 scrollbar-thin">
+                <div className="space-y-1">
+                  <Label>Tên giá trị</Label>
+                  <Input
+                    value={editName}
+                    onChange={(e) => {
+                      setEditName(e.target.value);
+                      setEditSlug(generateSlugFromTitle(e.target.value));
+                    }}
+                    required
+                    placeholder="VD: Đỏ, XL..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Slug</Label>
+                  <Input
+                    value={editSlug}
+                    onChange={(e) => setEditSlug(e.target.value)}
+                    placeholder="do, xl..."
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-semibold block">Mô tả (Lexical)</Label>
+                  <LexicalEditor
+                    key={`${editingTerm._id}:description`}
+                    resetKey={`${editingTerm._id}:description`}
+                    onChange={setEditDescription}
+                    initialContent={editDescription}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="pt-4 border-t border-slate-100 dark:border-slate-800 mt-2">
+                <Button type="button" variant="ghost" onClick={handleCloseEdit} disabled={isSavingEdit}>
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSavingEdit}>
+                  {isSavingEdit ? <Loader2 size={16} className="animate-spin mr-1" /> : null}
+                  Lưu thay đổi
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+    </AdminFormCard>
+  );
+}
 
 export default function AttributeGroupEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const groupId = id as Id<'attributeGroups'>;
 
-  const groupData = useQuery(api.attributeGroups.getById, { id: id as Id<"attributeGroups"> });
+  const groupData = useQuery(api.attributeGroups.getById, { id: groupId });
+  useSetAdminBreadcrumb(groupData?.name);
   const updateGroup = useMutation(api.attributeGroups.update);
   const createTerm = useMutation(api.attributeTerms.create);
-  const assignedTypes = useQuery(api.attributeGroups.listAssignedProductTypes, { groupId: id as Id<"attributeGroups"> });
-  const assignedType = assignedTypes?.find(type => type.active) ?? assignedTypes?.[0] ?? null;
+  const assignedTypes = useQuery(api.attributeGroups.listAssignedProductTypes, { groupId });
+  const assignedType = assignedTypes?.find((type) => type.active) ?? assignedTypes?.[0] ?? null;
 
-  // Query site brand colors
   const primarySetting = useQuery(api.settings.getByKey, { key: 'site_brand_primary' });
   const secondarySetting = useQuery(api.settings.getByKey, { key: 'site_brand_secondary' });
-  
   const enableProductTypesSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'enableProductTypes' });
   const enableProductTypes = enableProductTypesSetting?.value === true;
-  
-  // Query terms thực tế của nhóm thuộc tính
-  const terms = useQuery(api.attributeTerms.listByGroup, { groupId: id as Id<"attributeGroups"> });
+
+  const terms = useQuery(api.attributeTerms.listByGroup, { groupId });
 
   const brandPrimary = (primarySetting?.value as string) || '#ea580c';
   const brandSecondary = (secondarySetting?.value as string) || '#475569';
@@ -49,7 +431,7 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
     { label: 'Đen', value: '#000000', class: 'bg-black border-black text-white' },
     { label: 'Trắng', value: '#ffffff', class: 'bg-white border-slate-200 text-slate-800' },
     { label: 'Màu chính', value: brandPrimary, class: 'text-white', style: { backgroundColor: brandPrimary, borderColor: brandPrimary } },
-    { label: 'Màu phụ', value: brandSecondary, class: 'text-white', style: { backgroundColor: brandSecondary, borderColor: brandSecondary } }
+    { label: 'Màu phụ', value: brandSecondary, class: 'text-white', style: { backgroundColor: brandSecondary, borderColor: brandSecondary } },
   ];
 
   const [name, setName] = useState('');
@@ -63,42 +445,96 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
   const [iconColor, setIconColor] = useState('#ea580c');
   const [pendingImportedTerms, setPendingImportedTerms] = useState<PendingAttributeTerm[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const savedDisplayConfig = groupData?.displayConfig && typeof groupData.displayConfig === 'object' && !Array.isArray(groupData.displayConfig)
-    ? groupData.displayConfig as Record<string, unknown>
-    : {};
 
-  const hasChanges = groupData ? (
-    name !== groupData.name ||
-    slug !== groupData.slug ||
-    code !== groupData.code ||
-    filterType !== groupData.filterType ||
-    inputType !== groupData.inputType ||
-    isFilterable !== (groupData.isFilterable ?? true) ||
-    isSpecialFilter !== (groupData.isSpecialFilter ?? false) ||
-    iconName !== (groupData.iconPath ?? 'Wine') ||
-    iconColor !== (groupData.displayConfig?.iconColor ?? groupData.displayConfig?.color ?? '#ea580c') ||
-    pendingImportedTerms.length > 0
-  ) : false;
-
-  useUnsavedGuard(hasChanges);
+  const [initialData, setInitialData] = useState<{
+    name: string;
+    code: string;
+    slug: string;
+    filterType: string;
+    inputType: string;
+    isFilterable: boolean;
+    isSpecialFilter: boolean;
+    iconName: string;
+    iconColor: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (groupData) {
-      setName(groupData.name);
-      setCode(groupData.code);
-      setSlug(groupData.slug);
-      setFilterType(groupData.filterType);
-      setInputType(groupData.inputType);
-      setIsFilterable(groupData.isFilterable ?? true);
-      setIsSpecialFilter(groupData.isSpecialFilter ?? false);
-      setIconName(groupData.iconPath ?? 'Wine');
-      setIconColor(groupData.displayConfig?.iconColor ?? groupData.displayConfig?.color ?? '#ea580c');
-    }
-  }, [groupData]);
+    if (groupData && !initialData) {
+      const initName = groupData.name;
+      const initCode = groupData.code;
+      const initSlug = groupData.slug;
+      const initFilter = groupData.filterType;
+      const initInput = groupData.inputType;
+      const initFilterable = groupData.isFilterable ?? true;
+      const initSpecial = groupData.isSpecialFilter ?? false;
+      const initIcon = groupData.iconPath ?? 'Wine';
+      const initColor = groupData.displayConfig?.iconColor ?? groupData.displayConfig?.color ?? '#ea580c';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {return;}
+      setName(initName);
+      setCode(initCode);
+      setSlug(initSlug);
+      setFilterType(initFilter);
+      setInputType(initInput);
+      setIsFilterable(initFilterable);
+      setIsSpecialFilter(initSpecial);
+      setIconName(initIcon);
+      setIconColor(initColor);
+
+      setInitialData({
+        name: initName,
+        code: initCode,
+        slug: initSlug,
+        filterType: initFilter,
+        inputType: initInput,
+        isFilterable: initFilterable,
+        isSpecialFilter: initSpecial,
+        iconName: initIcon,
+        iconColor: initColor,
+      });
+    }
+  }, [groupData, initialData]);
+
+  const hasChanges = useMemo(() => {
+    if (!initialData) return false;
+    return (
+      name !== initialData.name ||
+      code !== initialData.code ||
+      slug !== initialData.slug ||
+      filterType !== initialData.filterType ||
+      inputType !== initialData.inputType ||
+      isFilterable !== initialData.isFilterable ||
+      isSpecialFilter !== initialData.isSpecialFilter ||
+      iconName !== initialData.iconName ||
+      iconColor !== initialData.iconColor ||
+      pendingImportedTerms.length > 0
+    );
+  }, [name, code, slug, filterType, inputType, isFilterable, isSpecialFilter, iconName, iconColor, pendingImportedTerms, initialData]);
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setName(val);
+    setSlug(generateSlugFromTitle(val));
+  };
+
+  const handleApplyAiTerms = (importedTerms: PendingAttributeTerm[]) => {
+    const existingSlugs = new Set([
+      ...(terms?.map((term) => term.slug) ?? []),
+      ...pendingImportedTerms.map((term) => term.slug),
+    ]);
+    const nextTerms = importedTerms.filter((term) => !existingSlugs.has(term.slug));
+
+    if (nextTerms.length === 0) {
+      toast.info('Tất cả giá trị trong import đã tồn tại trong danh sách.');
+      return;
+    }
+
+    setPendingImportedTerms((prev) => [...prev, ...nextTerms]);
+    toast.success(`Đã thêm ${nextTerms.length} giá trị thuộc tính mới vào danh sách chờ lưu.`);
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!name.trim() || !slug.trim()) return;
 
     if (isSpecialFilter && (filterType === 'range' || inputType === 'range')) {
       toast.error('Bộ lọc đặc biệt không được phép sử dụng kiểu khoảng giá (range). Vui lòng chọn kiểu Một lựa chọn hoặc Nhiều lựa chọn.');
@@ -107,9 +543,13 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
 
     setIsSubmitting(true);
     try {
+      const savedDisplayConfig = groupData?.displayConfig && typeof groupData.displayConfig === 'object' && !Array.isArray(groupData.displayConfig)
+        ? (groupData.displayConfig as Record<string, unknown>)
+        : {};
       const { range: _range, ...displayConfigWithoutRange } = savedDisplayConfig;
+
       await updateGroup({
-        id: id as Id<"attributeGroups">,
+        id: groupId,
         name: name.trim(),
         code: code.trim(),
         slug: slug.trim(),
@@ -124,10 +564,11 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
           color: iconColor,
         },
       });
+
       for (let i = 0; i < pendingImportedTerms.length; i++) {
         const term = pendingImportedTerms[i];
         await createTerm({
-          groupId: id as Id<"attributeGroups">,
+          groupId,
           name: term.name,
           slug: term.slug,
           description: term.description,
@@ -135,7 +576,20 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
           order: (terms?.length ?? 0) + i,
         });
       }
+
       setPendingImportedTerms([]);
+      setInitialData({
+        name: name.trim(),
+        code: code.trim(),
+        slug: slug.trim(),
+        filterType,
+        inputType,
+        isFilterable,
+        isSpecialFilter,
+        iconName,
+        iconColor,
+      });
+
       toast.success('Cập nhật nhóm thuộc tính thành công');
     } catch (error) {
       toast.error(getAdminMutationErrorMessage(error, 'Không thể cập nhật nhóm thuộc tính'));
@@ -144,112 +598,143 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
     }
   };
 
-  const handleApplyAiTerms = (importedTerms: PendingAttributeTerm[]) => {
-    const existingSlugs = new Set([
-      ...(terms ?? []).map(term => term.slug),
-      ...pendingImportedTerms.map(term => term.slug),
-    ]);
-    const newTerms = importedTerms.filter(term => !existingSlugs.has(term.slug));
-    setPendingImportedTerms(prev => [...prev, ...newTerms]);
-    if (newTerms.length < importedTerms.length) {
-      toast.info(`Đã bỏ qua ${importedTerms.length - newTerms.length} giá trị trùng slug`);
-    }
-  };
-
-  if (groupData === undefined) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 size={32} className="animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
-  if (groupData === null) {
-    return (
-      <div className="text-center py-8 text-slate-500">
-        Không tìm thấy nhóm thuộc tính
-      </div>
-    );
-  }
+  const previewTerms = useMemo(() => [
+    ...(terms ?? []),
+    ...pendingImportedTerms.map((term, index) => ({
+      _id: `pending-${term.slug}` as Id<'attributeTerms'>,
+      name: term.name,
+      slug: term.slug,
+      order: (terms?.length ?? 0) + index,
+    })),
+  ], [terms, pendingImportedTerms]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Chỉnh sửa nhóm thuộc tính</h1>
-          <Link href="/admin/attribute-groups" className="text-sm text-orange-600 hover:underline">
-            Quay lại danh sách
-          </Link>
-        </div>
-      </div>
+    <AdminFormPageWrapper
+      title="Chỉnh sửa nhóm thuộc tính"
+      subtitle="Quản lý cấu hình thuộc tính sản phẩm, kiểu lọc, icon và danh sách các terms."
+      backHref="/admin/attribute-groups"
+      isLoading={groupData === undefined}
+      notFound={groupData === null}
+      notFoundMessage="Không tìm thấy nhóm thuộc tính yêu cầu"
+      onSave={handleSubmit}
+      isSubmitting={isSubmitting}
+      isDirty={hasChanges}
+      stickyFooter={
+        <AdminStickyFooter
+          isSubmitting={isSubmitting}
+          hasChanges={hasChanges}
+          submitLabel="Lưu thay đổi"
+          onCancel={() => router.push('/admin/attribute-groups')}
+          onClickSave={() => handleSubmit()}
+          onViewWeb={() => {
+            const baseSlug = assignedType?.slug || 'products';
+            window.open(`/${baseSlug}/${slug}`, '_blank');
+          }}
+          disableViewWeb={!slug.trim()}
+          aiImportNode={
+            filterType !== 'range' ? (
+              <AiAttributeTermsImportDialog
+                groupName={name}
+                filterType={filterType}
+                inputType={inputType}
+                onApply={handleApplyAiTerms}
+              />
+            ) : undefined
+          }
+        />
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <AdminFormGrid>
+          <AdminFormMain>
+            <AdminFormCard title="Thông tin nhóm thuộc tính">
+              <AdminTitleInput
+                label="Tên nhóm thuộc tính"
+                value={name}
+                onChange={handleNameChange}
+                required
+                placeholder="VD: Dung tích, Giống nho, Thương hiệu..."
+                autoFocus
+                copyLabel="tên nhóm thuộc tính"
+              />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-5">
-          <Card className="w-full">
-            <form onSubmit={handleSubmit}>
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <Label>Tên nhóm thuộc tính <span className="text-red-500">*</span></Label>
-                  <Input 
-                    value={name} 
-                    onChange={(e) =>{  setName(e.target.value); }} 
-                    required 
-                    placeholder="Nhập tên nhóm thuộc tính..." 
-                    autoFocus 
-                  />
-                </div>
+              <AdminSlugInput
+                slug={slug}
+                onChange={setSlug}
+              />
 
-                <div className="space-y-2">
-                  <Label>Slug</Label>
-                  <Input 
-                    value={slug} 
-                    onChange={(e) =>{  setSlug(e.target.value); }} 
-                    placeholder="slug" 
-                    className="font-mono text-sm" 
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Mã nhóm (Code) <span className="text-red-500">*</span></Label>
+                <Input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                  placeholder="VD: volume, grape, brand..."
+                />
+              </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Mã (Code) <span className="text-red-500">*</span></Label>
-                  <Input 
-                    value={code} 
-                    onChange={(e) => setCode(e.target.value)} 
-                    required 
-                    placeholder="VD: color, size..." 
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Kiểu lọc</Label>
-                  <select 
+                  <Label>Kiểu lọc (Filter type)</Label>
+                  <AdminSelect
                     value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                  >
-                    <option value="single">Một lựa chọn (Single)</option>
-                    <option value="multiple">Nhiều lựa chọn (Multiple)</option>
-                    <option value="range">Khoảng giá trị (Range)</option>
-                  </select>
+                    onChange={setFilterType}
+                    options={[
+                      { value: 'single', label: 'Một lựa chọn (Single)' },
+                      { value: 'multiple', label: 'Nhiều lựa chọn (Multiple)' },
+                      { value: 'range', label: 'Khoảng giá trị (Range)' },
+                    ]}
+                  />
                 </div>
 
                 {filterType !== 'range' && (
                   <div className="space-y-2">
-                    <Label>Kiểu hiển thị</Label>
-                    <select 
+                    <Label>Kiểu hiển thị (Input type)</Label>
+                    <AdminSelect
                       value={inputType}
-                      onChange={(e) => setInputType(e.target.value)}
-                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
-                    >
-                      <option value="select">Dropdown (Select)</option>
-                      <option value="buttons">Các nút bấm (Buttons)</option>
-                      <option value="radio">Nút tròn (Radio)</option>
-                    </select>
+                      onChange={setInputType}
+                      options={[
+                        { value: 'select', label: 'Dropdown (Select)' },
+                        { value: 'buttons', label: 'Các nút bấm (Buttons)' },
+                        { value: 'radio', label: 'Nút tròn (Radio)' },
+                      ]}
+                    />
                   </div>
                 )}
+              </div>
 
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="isFilterable"
+                    checked={isFilterable}
+                    onCheckedChange={(checked) => setIsFilterable(Boolean(checked))}
+                  />
+                  <Label htmlFor="isFilterable" className="cursor-pointer font-medium">
+                    Hiển thị nhóm này trong bộ lọc sản phẩm (Filter)
+                  </Label>
+                </div>
+
+                {enableProductTypes && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="isSpecialFilter"
+                      checked={isSpecialFilter}
+                      onCheckedChange={(checked) => setIsSpecialFilter(Boolean(checked))}
+                    />
+                    <Label htmlFor="isSpecialFilter" className="cursor-pointer font-medium">
+                      Đánh dấu là bộ lọc đặc biệt
+                    </Label>
+                  </div>
+                )}
+              </div>
+            </AdminFormCard>
+
+            <AdminFormCard title="Icon & Màu sắc nhận diện">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Icon đại diện</Label>
-                  <IconPopoverPicker 
+                  <IconPopoverPicker
                     value={iconName}
                     onChange={setIconName}
                     options={ATTRIBUTE_ICON_OPTIONS}
@@ -259,418 +744,89 @@ export default function AttributeGroupEditPage({ params }: { params: Promise<{ i
 
                 <div className="space-y-2">
                   <Label>Màu sắc icon</Label>
-                  <div className="flex gap-2 mb-2 flex-wrap">
+                  <div className="flex gap-2 flex-wrap mb-2">
                     {colorPresets.map((p) => (
                       <button
                         key={p.value}
                         type="button"
                         onClick={() => setIconColor(p.value)}
                         style={p.style}
-                        className={`px-3 py-1.5 rounded text-xs font-medium border transition-all ${p.class} ${iconColor === p.value ? 'ring-2 ring-orange-500 scale-105 shadow-md' : 'opacity-80 hover:opacity-100'}`}
+                        className={`px-3 py-1 rounded text-xs font-medium border transition-all ${p.class} ${iconColor === p.value ? 'ring-2 ring-orange-500 scale-105 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
                       >
                         {p.label}
                       </button>
                     ))}
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input 
-                      type="color" 
-                      value={iconColor} 
-                      onChange={(e) => setIconColor(e.target.value)} 
-                      className="w-12 h-10 p-1 cursor-pointer border border-slate-200 rounded-md"
+                    <Input
+                      type="color"
+                      value={iconColor}
+                      onChange={(e) => setIconColor(e.target.value)}
+                      className="w-12 h-10 p-1 cursor-pointer"
                     />
-                    <Input 
-                      type="text" 
-                      value={iconColor} 
+                    <Input
+                      type="text"
+                      value={iconColor}
                       onChange={(e) => setIconColor(e.target.value)}
                       placeholder="#ea580c"
                       className="font-mono text-sm uppercase flex-1"
                     />
                   </div>
                 </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2 h-10 border border-slate-100 dark:border-slate-800/50 rounded-md px-3 bg-white dark:bg-slate-900/50">
-                    <input
-                      type="checkbox"
-                      id="isFilterable"
-                      checked={isFilterable}
-                      onChange={(e) => setIsFilterable(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                    />
-                    <Label htmlFor="isFilterable" className="text-sm font-medium cursor-pointer select-none">
-                      Hiển thị trong bộ lọc (Filter)
-                    </Label>
-                  </div>
-                  {enableProductTypes && (
-                    <div className="flex items-center gap-2 h-10 border border-slate-100 dark:border-slate-800/50 rounded-md px-3 bg-white dark:bg-slate-900/50 mt-2">
-                      <input
-                        type="checkbox"
-                        id="isSpecialFilter"
-                        checked={isSpecialFilter}
-                        onChange={(e) => setIsSpecialFilter(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                      />
-                      <Label htmlFor="isSpecialFilter" className="text-sm font-medium cursor-pointer select-none">
-                        Bộ lọc đặc biệt
-                      </Label>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-              
-              <HomeComponentStickyFooter
-                isSubmitting={isSubmitting}
-                hasChanges={hasChanges}
-                submitLabel="Lưu thay đổi"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-3">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      onClick={() => { router.push('/admin/attribute-groups'); }} 
-                      disabled={isSubmitting}
-                    >
-                      Hủy bỏ
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      title="Mở nhóm thuộc tính ngoài site"
-                      onClick={() => {
-                        const baseSlug = assignedType?.slug || 'products';
-                        const url = `/${baseSlug}/${slug}`;
-                        window.open(url, '_blank');
-                      }}
-                    >
-                      <ExternalLink size={16} />
-                    </Button>
-                  </div>
-                  <div className="flex gap-2">
-                    {filterType !== 'range' && (
-                      <AiAttributeTermsImportDialog
-                        groupName={name}
-                        filterType={filterType}
-                        inputType={inputType}
-                        onApply={handleApplyAiTerms}
-                      />
-                    )}
-                    <Button
-                      type="submit"
-                      disabled={hasChanges === false || isSubmitting}
-                      variant="accent"
-                      className={cn(
-                        hasChanges === false && !isSubmitting
-                          ? 'bg-slate-300 hover:bg-slate-300 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-800 dark:text-slate-400'
-                          : undefined
-                      )}
-                    >
-                      {isSubmitting ? 'Đang lưu...' : hasChanges === false ? 'Đã lưu' : 'Lưu thay đổi'}
-                    </Button>
-                  </div>
-                </div>
-              </HomeComponentStickyFooter>
-            </form>
-          </Card>
-
-          <Card className="mt-6">
-            <CardContent className="p-6 space-y-3">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Loại sản phẩm đang dùng nhóm này</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Nhóm thuộc tính chỉ tạo route SEO khi được gán vào ít nhất một loại sản phẩm.
-                </p>
               </div>
+            </AdminFormCard>
 
-              {assignedTypes === undefined ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  Đang tải loại sản phẩm...
-                </div>
-              ) : assignedTypes.length === 0 ? (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                  Chưa được gán vào loại sản phẩm nào. Route SEO dạng <span className="font-mono">/loai-san-pham/{slug}</span> chưa sẵn sàng để mở ngoài site.
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {assignedTypes.map(type => (
-                    <Link
-                      key={type._id}
-                      href={`/admin/product-types/${type._id}/edit`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-orange-300 hover:text-orange-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
-                    >
-                      {type.name}
-                      {!type.active && <Badge variant="secondary" className="text-[10px]">Ẩn</Badge>}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            <AttributeTermsManager
+              groupId={groupId}
+              terms={terms}
+              groupSlug={slug}
+              assignedTypeSlug={assignedType?.slug || null}
+            />
+          </AdminFormMain>
 
-        <div className="lg:col-span-7 lg:sticky lg:top-6">
-          <AttributeGroupPreview
-            name={name}
-            filterType={filterType}
-            inputType={inputType}
-            iconName={iconName}
-            iconColor={iconColor}
-            terms={[
-              ...(terms ?? []),
-              ...pendingImportedTerms.map((term, index) => ({
-                _id: `pending-${term.slug}`,
-                name: term.name,
-                slug: term.slug,
-                order: (terms?.length ?? 0) + index,
-              })),
-            ]}
-          />
-        </div>
-      </div>
-
-      <AttributeTermsManager groupId={id as Id<"attributeGroups">} terms={terms} groupSlug={slug} assignedTypeSlug={assignedType?.slug || null} />
-    </div>
-  );
-}
-
-interface SortableTermRowProps {
-  term: {
-    _id: Id<"attributeTerms">;
-    name: string;
-    slug: string;
-    order: number;
-  };
-  checked: boolean;
-  onToggle: (id: Id<"attributeTerms">) => void;
-  onRemove: (id: Id<"attributeTerms">) => void;
-  groupSlug: string;
-  assignedTypeSlug: string | null;
-}
-
-function SortableTermRow({ term, checked, onToggle, onRemove, groupSlug, assignedTypeSlug }: SortableTermRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: term._id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-900/50",
-        isDragging && "bg-slate-100 dark:bg-slate-800 opacity-80"
-      )}
-    >
-      <div className="flex items-center gap-3 flex-1">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={() => onToggle(term._id)}
-          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-        />
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className="p-1 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-grab active:cursor-grabbing"
-        >
-          <GripVertical size={16} />
-        </button>
-        <div>
-          <div className="font-medium text-slate-900 dark:text-slate-100">{term.name}</div>
-          <div className="text-xs text-slate-500 font-mono">{term.slug}</div>
-        </div>
-      </div>
-      <div className="flex gap-2 items-center">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="text-orange-600 hover:text-orange-700 flex items-center gap-1"
-          onClick={() => {
-            const baseSlug = assignedTypeSlug || 'products';
-            const url = `/${baseSlug}/${groupSlug}/${term.slug}`;
-            window.open(url, '_blank');
-          }}
-        >
-          <ExternalLink size={12} /> Mở ngoài site
-        </Button>
-        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => onRemove(term._id)}>Xóa</Button>
-      </div>
-    </div>
-  );
-}
-
-function AttributeTermsManager({ groupId, terms, groupSlug, assignedTypeSlug }: { groupId: Id<"attributeGroups">; terms?: any[]; groupSlug: string; assignedTypeSlug: string | null }) {
-  const createTerm = useMutation(api.attributeTerms.create);
-  const removeTerm = useMutation(api.attributeTerms.remove);
-  const reorderTerms = useMutation(api.attributeTerms.reorder);
-
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedTermIds, setSelectedTermIds] = useState<Id<"attributeTerms">[]>([]);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleTermNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setName(val);
-    const generatedSlug = val.toLowerCase()
-      .normalize("NFD").replaceAll(/[\u0300-\u036F]/g, "")
-      .replaceAll(/[đĐ]/g, "d")
-      .replaceAll(/[^a-z0-9\s]/g, '')
-      .replaceAll(/\s+/g, '-');
-    setSlug(generatedSlug);
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setIsSubmitting(true);
-    try {
-      await createTerm({
-        groupId,
-        name: name.trim(),
-        slug: slug.trim(),
-        active: true,
-      });
-      setName('');
-      setSlug('');
-      toast.success('Đã thêm giá trị thuộc tính');
-    } catch (error) {
-      toast.error(getAdminMutationErrorMessage(error, 'Lỗi khi thêm giá trị thuộc tính'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRemove = async (id: Id<"attributeTerms">) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa giá trị này?')) return;
-    try {
-      await removeTerm({ id });
-      toast.success('Đã xóa giá trị thuộc tính');
-    } catch (error) {
-      toast.error(getAdminMutationErrorMessage(error, 'Lỗi khi xóa giá trị thuộc tính'));
-    }
-  };
-
-  const toggleSelectedTerm = (id: Id<"attributeTerms">) => {
-    setSelectedTermIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  };
-
-  const toggleSelectAllTerms = () => {
-    if (!terms) {return;}
-    const allIds = terms.map(term => term._id);
-    setSelectedTermIds(selectedTermIds.length === allIds.length ? [] : allIds);
-  };
-
-  const handleBulkRemove = async () => {
-    if (selectedTermIds.length === 0) {return;}
-    if (!confirm(`Xóa ${selectedTermIds.length} giá trị thuộc tính đã chọn?`)) {return;}
-    try {
-      for (const id of selectedTermIds) {
-        await removeTerm({ id });
-      }
-      setSelectedTermIds([]);
-      toast.success(`Đã xóa ${selectedTermIds.length} giá trị thuộc tính`);
-    } catch (error) {
-      toast.error(getAdminMutationErrorMessage(error, 'Lỗi khi xóa nhiều giá trị thuộc tính'));
-    }
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id || !terms) return;
-
-    const oldIndex = terms.findIndex(item => item._id === active.id);
-    const newIndex = terms.findIndex(item => item._id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const reordered = arrayMove(terms, oldIndex, newIndex);
-    try {
-      await reorderTerms({ items: reordered.map((item, index) => ({ id: item._id, order: index })) });
-      toast.success('Đã cập nhật thứ tự');
-    } catch (error) {
-      console.error(error);
-      toast.error('Không thể cập nhật thứ tự');
-    }
-  };
-
-  if (terms === undefined) return <div className="text-center py-4"><Loader2 className="animate-spin mx-auto text-slate-400" /></div>;
-
-  const isAllTermsSelected = terms.length > 0 && selectedTermIds.length === terms.length;
-
-  return (
-    <Card className="max-w-4xl mx-auto md:mx-0 mt-8">
-      <div className="p-4 border-b border-slate-100 dark:border-slate-800">
-        <h2 className="text-lg font-semibold">Các giá trị thuộc tính</h2>
-      </div>
-      <CardContent className="p-6">
-        <form onSubmit={handleCreate} className="flex gap-4 items-end mb-6">
-          <div className="space-y-1 flex-1">
-            <Label className="text-xs">Tên giá trị</Label>
-            <Input value={name} onChange={handleTermNameChange} required placeholder="VD: Đỏ, XL..." />
-          </div>
-          <div className="space-y-1 flex-1">
-            <Label className="text-xs">Slug</Label>
-            <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="do, xl..." className="font-mono" />
-          </div>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Thêm'}
-          </Button>
-        </form>
-
-        {terms.length > 0 && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={isAllTermsSelected}
-                onChange={toggleSelectAllTerms}
-                className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+          <AdminFormSidebar>
+            <AdminFormCard title="Xem trước giao diện bộ lọc">
+              <AttributeGroupPreview
+                name={name}
+                filterType={filterType}
+                inputType={inputType}
+                iconName={iconName}
+                iconColor={iconColor}
+                terms={previewTerms}
               />
-              Chọn tất cả {terms.length} giá trị
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={selectedTermIds.length === 0}
-              className="text-red-500 hover:text-red-600 disabled:text-slate-400"
-              onClick={handleBulkRemove}
-            >
-              Xóa đã chọn ({selectedTermIds.length})
-            </Button>
-          </div>
-        )}
+            </AdminFormCard>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={terms.map(item => item._id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-2">
-              {terms.length === 0 ? (
-                <p className="text-slate-500 text-sm italic">Chưa có giá trị nào.</p>
-              ) : (
-                terms.map(term => (
-                  <SortableTermRow
-                    key={term._id}
-                    term={term}
-                    checked={selectedTermIds.includes(term._id)}
-                    onToggle={toggleSelectedTerm}
-                    onRemove={handleRemove}
-                    groupSlug={groupSlug}
-                    assignedTypeSlug={assignedTypeSlug}
-                  />
-                ))
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
-      </CardContent>
-    </Card>
+            <AdminFormCard title="Kiểu sản phẩm đang dùng nhóm này">
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500">
+                  Nhóm thuộc tính chỉ tạo route SEO khi được gán vào ít nhất một kiểu sản phẩm.
+                </p>
+
+                {assignedTypes === undefined ? (
+                  <p className="text-xs text-slate-500 italic py-2">Đang tải...</p>
+                ) : assignedTypes.length === 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                    Chưa được gán vào kiểu sản phẩm nào.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {assignedTypes.map((type) => (
+                      <Link
+                        key={type._id}
+                        href={`/admin/product-types/${type._id}/edit`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-orange-300 hover:text-orange-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
+                      >
+                        {type.name}
+                        {!type.active && <Badge variant="secondary" className="text-[10px]">Ẩn</Badge>}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </AdminFormCard>
+          </AdminFormSidebar>
+        </AdminFormGrid>
+      </form>
+    </AdminFormPageWrapper>
   );
 }

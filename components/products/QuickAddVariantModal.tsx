@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { useQuery } from 'convex/react';
 import { X } from 'lucide-react';
@@ -86,6 +87,7 @@ const findExactVariant = (variants: ProductVariant[], selection: VariantSelectio
   ) ?? null;
 
 export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel, onClose, onConfirm }: QuickAddVariantModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<VariantSelectionMap>({});
   const [quantity, setQuantity] = useState(1);
   const saleModeSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'saleMode' });
@@ -158,7 +160,7 @@ export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel,
       .filter((option) => option.values.length > 0);
   }, [variantOptionsSource, variantValuesSource]);
 
-  const hasVariantData = Boolean(product?.hasVariants && variants && variants.length > 0);
+  const hasVariantData = Boolean(variants && variants.length > 0);
   const hasVariants = hasVariantData && variantOptions.length > 0;
 
   const baseSelection = useMemo(
@@ -167,12 +169,6 @@ export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel,
   );
   const resolvedSelection = Object.keys(selectedOptions).length > 0 ? selectedOptions : baseSelection;
   const selectedVariant = hasVariants ? findExactVariant(variants!, resolvedSelection) : null;
-  if (!isOpen || !product) {
-    return null;
-  }
-  const basePrice = selectedVariant?.price ?? product.price;
-  const salePrice = selectedVariant ? selectedVariant.salePrice : product.salePrice;
-  const isRangeFromVariant = Boolean(product.hasVariants && !selectedVariant);
   const saleMode = useMemo<'cart' | 'contact' | 'affiliate'>(() => {
     const value = saleModeSetting?.value;
     if (value === 'contact' || value === 'affiliate') {
@@ -180,6 +176,18 @@ export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel,
     }
     return 'cart';
   }, [saleModeSetting?.value]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || !isOpen || !product) {
+    return null;
+  }
+
+  const basePrice = selectedVariant?.price ?? product.price;
+  const salePrice = selectedVariant ? selectedVariant.salePrice : product.salePrice;
+  const isRangeFromVariant = Boolean(hasVariantData && !selectedVariant);
   const showStock = stockFeature?.enabled ?? true;
   const priceDisplay = getPublicPriceLabel({ saleMode, price: basePrice, salePrice, isRangeFromVariant });
   const stockValue = selectedVariant?.stock ?? product.stock;
@@ -203,12 +211,12 @@ export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel,
         }
         const selected = resolvedSelection[optionValue.optionId];
         return !selected || selected === optionValue.valueId;
-      })
+      }) && (!showStock || (variant.stock ?? product.stock ?? 0) > 0)
     ) ?? false;
 
   const canSubmit = Boolean(selectedVariant && inStock && quantity > 0);
 
-  return (
+  const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
@@ -299,4 +307,6 @@ export function QuickAddVariantModal({ isOpen, product, brandColor, actionLabel,
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

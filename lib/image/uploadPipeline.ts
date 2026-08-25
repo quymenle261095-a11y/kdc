@@ -11,6 +11,7 @@ type PrepareImageOptions = {
   preserveGif?: boolean;
   preservePngWithTransparency?: boolean;
   crop?: ImageCropSelection;
+  targetDimension?: number;
   naming?: ImageNamingContext;
   smartLogoCrop?: boolean;
   onProgress?: (progress: SmartLogoCropProgress) => void;
@@ -41,7 +42,7 @@ function buildLegacyFilename(originalName: string, mimeType: string): string {
   return `${slugify(baseName)}-${timestamp}-${random}.${ext}`;
 }
 
-async function getImageDimensions(file: File): Promise<{ height: number; width: number }> {
+export async function getImageDimensions(file: File): Promise<{ height: number; width: number }> {
   return new Promise((resolve, reject) => {
     const img = new window.Image();
     const objectUrl = URL.createObjectURL(file);
@@ -59,6 +60,23 @@ async function getImageDimensions(file: File): Promise<{ height: number; width: 
     };
 
     img.src = objectUrl;
+  });
+}
+
+export function getImageDimensionsFromUrl(url: string): Promise<{ height: number; width: number }> {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image();
+
+    image.onload = () => {
+      if (!image.naturalWidth || !image.naturalHeight) {
+        reject(new Error('Ảnh không có kích thước hợp lệ'));
+        return;
+      }
+      resolve({ height: image.naturalHeight, width: image.naturalWidth });
+    };
+
+    image.onerror = () => reject(new Error('Không thể tải ảnh từ URL'));
+    image.src = url;
   });
 }
 
@@ -203,6 +221,65 @@ async function cropImageToAspectRatio(file: File, selection: ImageCropSelection)
   });
 }
 
+async function resizeImageToDimension(file: File, targetDimension: number): Promise<File> {
+  if (!Number.isInteger(targetDimension) || targetDimension <= 0) {
+    return file;
+  }
+
+  const dimensions = await getImageDimensions(file);
+  if (dimensions.width !== dimensions.height) {
+    throw new Error(`Ảnh phải là ảnh vuông trước khi resize về ${targetDimension}x${targetDimension}px`);
+  }
+  if (dimensions.width === targetDimension) {
+    return file;
+  }
+
+  return new Promise((resolve, reject) => {
+    const image = new window.Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Không thể khởi tạo canvas để resize ảnh'));
+        return;
+      }
+
+      canvas.width = targetDimension;
+      canvas.height = targetDimension;
+      context.drawImage(image, 0, 0, targetDimension, targetDimension);
+
+      const mimeType = file.type === 'image/png' || file.type === 'image/gif' || file.type === 'image/svg+xml'
+        ? 'image/png'
+        : file.type === 'image/jpeg'
+          ? 'image/jpeg'
+          : 'image/webp';
+      const quality = mimeType === 'image/png' ? undefined : 0.92;
+
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(objectUrl);
+        if (!blob) {
+          reject(new Error('Không thể tạo ảnh sau khi resize'));
+          return;
+        }
+
+        const extension = mimeType.split('/')[1];
+        const baseName = file.name.replace(/\.[^/.]+$/, '');
+        resolve(new File([blob], `${baseName}-${targetDimension}x${targetDimension}.${extension}`, { type: mimeType }));
+      }, mimeType, quality);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Không thể đọc ảnh để resize'));
+    };
+
+    image.src = objectUrl;
+  });
+}
+
 export function validateImageFile(file: File, maxFileSizeMb: number = DEFAULT_MAX_FILE_SIZE_MB): string | null {
   if (!file.type.startsWith('image/')) {
     return 'Vui lòng chọn file hình ảnh';
@@ -238,6 +315,11 @@ export async function prepareImageForUpload(
 
   if (cropSelection && !isAspectRatioMatch(dimensions, cropSelection.aspectRatio)) {
     sourceFile = await cropImageToAspectRatio(sourceFile, cropSelection);
+    dimensions = await getImageDimensions(sourceFile);
+  }
+
+  if (options.targetDimension) {
+    sourceFile = await resizeImageToDimension(sourceFile, options.targetDimension);
     dimensions = await getImageDimensions(sourceFile);
   }
 

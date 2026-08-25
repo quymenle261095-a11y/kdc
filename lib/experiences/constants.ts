@@ -8,6 +8,13 @@ export type ExperienceKey =
   | 'posts_detail_ui'
   | 'services_list_ui'
   | 'services_detail_ui'
+  | 'projects_list_ui'
+  | 'projects_detail_ui'
+  | 'courses_list_ui'
+  | 'courses_detail_ui'
+  | 'resources_list_ui'
+  | 'resources_detail_ui'
+  | 'lesson_detail_ui'
   | 'booking_ui'
   | 'products_list_ui'
   | 'header_menu_ui'
@@ -30,6 +37,13 @@ export const EXPERIENCE_COLORS: Record<ExperienceKey, ColorScheme> = {
   posts_detail_ui: 'blue',
   services_list_ui: 'violet',
   services_detail_ui: 'violet',
+  projects_list_ui: 'teal',
+  projects_detail_ui: 'teal',
+  courses_list_ui: 'indigo',
+  courses_detail_ui: 'indigo',
+  resources_list_ui: 'teal',
+  resources_detail_ui: 'teal',
+  lesson_detail_ui: 'indigo',
   booking_ui: 'indigo',
   products_list_ui: 'emerald',
   header_menu_ui: 'orange',
@@ -59,6 +73,13 @@ export const EXPERIENCE_NAMES: Record<ExperienceKey, string> = {
   posts_detail_ui: 'Posts Detail',
   services_list_ui: 'Services List',
   services_detail_ui: 'Services Detail',
+  projects_list_ui: 'Projects List',
+  projects_detail_ui: 'Projects Detail',
+  courses_list_ui: 'Courses List',
+  courses_detail_ui: 'Courses Detail',
+  resources_list_ui: 'Resources List',
+  resources_detail_ui: 'Resources Detail',
+  lesson_detail_ui: 'Lesson Detail',
   booking_ui: 'Booking',
   products_list_ui: 'Products List',
   header_menu_ui: 'Header Menu',

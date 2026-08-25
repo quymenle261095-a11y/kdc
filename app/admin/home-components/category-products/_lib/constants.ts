@@ -2,13 +2,13 @@ import { DEFAULT_SECTION_SPACING } from '../../_shared/types/sectionSpacing';
 import { DEFAULT_CATEGORY_PRODUCTS_CORNER_RADIUS, type CategoryProductsConfig, type DemoCategoryProductsSection } from '../_types';
 
 export const CATEGORY_PRODUCTS_STYLES = [
-  { id: 'grid', label: 'Grid' },
-  { id: 'carousel', label: 'Carousel' },
-  { id: 'cards', label: 'Cards' },
-  { id: 'bento', label: 'Bento' },
-  { id: 'magazine', label: 'Magazine' },
-  { id: 'showcase', label: 'Showcase' },
-  { id: 'wine-grid', label: 'Wine Grid' },
+  { id: 'grid', label: '(1) Dạng lưới' },
+  { id: 'carousel', label: '(2) Trượt ngang' },
+  { id: 'cards', label: '(3) Dạng thẻ' },
+  { id: 'bento', label: '(4) Ô ghép' },
+  { id: 'magazine', label: '(5) Tạp chí' },
+  { id: 'showcase', label: '(6) Trưng bày' },
+  { id: 'wine-grid', label: '(7) Lưới dọc' },
 ];
 
 export const DEFAULT_CATEGORY_PRODUCTS_CONFIG: CategoryProductsConfig = {

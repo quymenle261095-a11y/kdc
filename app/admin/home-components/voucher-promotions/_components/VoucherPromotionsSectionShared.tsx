@@ -45,6 +45,9 @@ interface VoucherPromotionsSectionSharedProps {
   cornerRadius?: VoucherPromotionsCornerRadius;
   spacing?: SectionSpacing;
   iconName?: string;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }
 
 const formatDiscount = (voucher: VoucherPromotionItem) => {
@@ -78,6 +81,9 @@ const Header = ({
   subtitleAboveTitle,
   uppercaseText,
   brandColor,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: {
   heading: string;
   description: string;
@@ -95,6 +101,9 @@ const Header = ({
   subtitleAboveTitle?: boolean;
   uppercaseText?: boolean;
   brandColor?: string;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }) => (
   <div className={`space-y-2 ${align === 'center' ? 'text-center' : 'text-left'}`}>
     <SectionHeader
@@ -111,6 +120,9 @@ const Header = ({
       uppercaseText={uppercaseText}
       brandColor={brandColor ?? tokens.heading}
       className="mb-0"
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
     />
     {ctaLabel && ctaUrl && (
       <a
@@ -184,6 +196,9 @@ export function VoucherPromotionsSectionShared({
   cornerRadius = 'lg',
   spacing = 'normal',
   iconName = 'BadgePercent',
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: VoucherPromotionsSectionSharedProps) {
   const [selectedVoucher, setSelectedVoucher] = React.useState<VoucherPromotionItem | null>(null);
 
@@ -280,6 +295,9 @@ export function VoucherPromotionsSectionShared({
         subtitleAboveTitle={subtitleAboveTitle}
         uppercaseText={uppercaseText}
         brandColor={brandColor}
+        onTitleChange={onTitleChange}
+        onSubtitleChange={onSubtitleChange}
+        onBadgeTextChange={onBadgeTextChange}
       />
     );
   };

@@ -72,11 +72,11 @@ function SortableRow({
       {visibleColumns.includes('stock') && <TableCell>{stockDisplay}</TableCell>}
       {visibleColumns.includes('status') && (
         <TableCell>
-          <Badge variant={status === 'Active' ? 'default' : 'secondary'}>{status === 'Active' ? 'Hoạt động' : 'Ẩn'}</Badge>
+          <Badge variant={status === 'Active' ? 'default' : 'secondary'}>{status === 'Active' ? 'Hiện' : 'Ẩn'}</Badge>
         </TableCell>
       )}
       {visibleColumns.includes('actions') && (
-        <TableCell className="text-right space-x-2">
+        <TableCell className="text-right space-x-1">
           <Link href={editHref}>
             <Button variant="ghost" size="icon"><Edit size={16} /></Button>
           </Link>
@@ -242,8 +242,8 @@ function ProductVariantsContent({ params }: { params: Promise<{ id: string }> })
 
   const columns = useMemo(() => {
     const base: Column[] = [
-      { key: 'select', label: 'Chọn' },
-      { key: 'drag', label: '' },
+      { key: 'select', label: 'Chọn', required: true },
+      { key: 'drag', label: '', required: true },
     ];
     if (skuEnabled) {
       base.push({ key: 'sku', label: 'SKU', required: true });
@@ -707,7 +707,7 @@ function ProductVariantsContent({ params }: { params: Promise<{ id: string }> })
               className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
             >
               <option value="all">Tất cả trạng thái</option>
-              <option value="Active">Hoạt động</option>
+              <option value="Active">Hiện</option>
               <option value="Inactive">Ẩn</option>
             </select>
           </div>
@@ -849,7 +849,7 @@ function ProductVariantsContent({ params }: { params: Promise<{ id: string }> })
                     onChange={(e) =>{  setDefaultStatus(e.target.value as 'Active' | 'Inactive'); }}
                     className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
                   >
-                    <option value="Active">Hoạt động</option>
+                    <option value="Active">Hiện</option>
                     <option value="Inactive">Ẩn</option>
                   </select>
                 </div>
@@ -1080,7 +1080,7 @@ function ProductVariantsContent({ params }: { params: Promise<{ id: string }> })
                                 }))}
                                 className="w-full h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 text-sm"
                               >
-                                <option value="Active">Hoạt động</option>
+                                <option value="Active">Hiện</option>
                                 <option value="Inactive">Ẩn</option>
                               </select>
                             </TableCell>

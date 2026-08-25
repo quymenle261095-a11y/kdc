@@ -1,4 +1,6 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React, { useState } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
@@ -10,9 +12,10 @@ import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { PreviewImage } from '../../_shared/components/PreviewImage';
 import { getVideoEmbedUrl, getVideoThumbnail, isVideoUrl } from '@/lib/utils/media';
 import { parseHighlightedHeading } from '@/lib/utils/heroText';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import {
   getBentoColors,
   getAPCATextColor,
@@ -91,6 +94,9 @@ export const HeroPreview = ({
   spacing = DEFAULT_HERO_SPACING,
   fontStyle,
   fontClassName,
+  isDark: propIsDark,
+  isVisualEditAllowed = true,
+  onContentChange,
 }: { 
   slides: { id: number; image: string; link: string; mediaType?: 'image' | 'video' }[]; 
   brandColor: string;
@@ -103,9 +109,36 @@ export const HeroPreview = ({
   spacing?: HeroSpacing;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isDark?: boolean;
+  isVisualEditAllowed?: boolean;
+  onContentChange?: (nextContent: HeroContent) => void;
 }) => {
+  const { isDark: previewDark } = usePreviewDark();
+  const isDarkState = propIsDark ?? previewDark;
   const { device, setDevice } = usePreviewDevice();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
+  const handleTextChange = (field: keyof HeroContent, nextText: string) => {
+    if (!onContentChange || !content) return;
+    onContentChange({
+      ...content,
+      [field]: nextText,
+    });
+  };
   const previewStyle = selectedStyle ?? 'slider';
   const activeSlideCount = previewStyle === 'bento'
     ? Math.min(slides.length, 4)
@@ -129,14 +162,14 @@ export const HeroPreview = ({
     secondary,
   });
   const placeholderColors = brandColors.getPlaceholder();
-  const colors = getHeroColors(brandColors.primary, brandColors.secondary, brandColors.useDualBrand);
-  const sliderColors = getSliderColors(brandColors.primary, brandColors.secondary, mode);
-  const fadeColors = getFadeColors(brandColors.primary, brandColors.secondary, mode);
-  const bentoColors = getBentoColors(brandColors.primary, brandColors.secondary, mode);
-  const conquestColors = getConquestColors(brandColors.primary, brandColors.secondary, mode);
-  const fullscreenColors = getFullscreenColors(brandColors.primary, brandColors.secondary, mode);
-  const splitColors = getSplitColors(brandColors.primary, brandColors.secondary, mode);
-  const parallaxColors = getParallaxColors(brandColors.primary, brandColors.secondary, mode);
+  const colors = adaptTokensForDarkMode(getHeroColors(brandColors.primary, brandColors.secondary, brandColors.useDualBrand), isDarkState);
+  const sliderColors = adaptTokensForDarkMode(getSliderColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const fadeColors = adaptTokensForDarkMode(getFadeColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const bentoColors = adaptTokensForDarkMode(getBentoColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const conquestColors = adaptTokensForDarkMode(getConquestColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const fullscreenColors = adaptTokensForDarkMode(getFullscreenColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const splitColors = adaptTokensForDarkMode(getSplitColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
+  const parallaxColors = adaptTokensForDarkMode(getParallaxColors(brandColors.primary, brandColors.secondary, mode), isDarkState);
   const isEmblaPreviewStyle = previewStyle === 'slider' || previewStyle === 'bento' || previewStyle === 'fullscreen' || previewStyle === 'conquest' || previewStyle === 'split' || previewStyle === 'parallax' || previewStyle === 'fade' || previewStyle === 'builderCoffee';
   const cornerRadiusClassName = getHeroCornerRadiusClassName(cornerRadius);
   const sectionSpacingClassName = getSectionSpacingClassName(spacing);
@@ -282,11 +315,11 @@ export const HeroPreview = ({
   };
 
   const renderSliderStyle = () => (
-    <section className="relative w-full bg-slate-900 overflow-hidden">
+    <section className={cn("relative w-full overflow-hidden", isDarkState ? "bg-slate-950" : "bg-transparent")}>
       <div
         className={cn(
           "relative w-full overflow-hidden",
-          device === 'mobile' ? 'aspect-[16/9] max-h-[200px]' : (device === 'tablet' ? 'aspect-[16/9] max-h-[250px]' : 'aspect-[21/9] max-h-[280px]')
+          device === 'mobile' ? 'aspect-[21/9] max-h-[200px]' : (device === 'tablet' ? 'aspect-[21/9] max-h-[250px]' : 'aspect-[21/9] max-h-[280px]')
         )}
         ref={heroEmblaRef}
       >
@@ -368,10 +401,10 @@ export const HeroPreview = ({
   );
 
   const renderFadeStyle = () => (
-    <section className="relative w-full bg-slate-900 overflow-hidden">
+    <section className={cn("relative w-full overflow-hidden", isDarkState ? "bg-slate-950" : "bg-transparent")}>
       <div className={cn(
         "relative w-full",
-        device === 'mobile' ? 'aspect-[16/9] max-h-[220px]' : (device === 'tablet' ? 'aspect-[16/9] max-h-[270px]' : 'aspect-[21/9] max-h-[300px]')
+        device === 'mobile' ? 'aspect-[21/9] max-h-[220px]' : (device === 'tablet' ? 'aspect-[21/9] max-h-[270px]' : 'aspect-[21/9] max-h-[300px]')
       )}>
         {slides.length > 0 ? (
           <>
@@ -402,9 +435,9 @@ export const HeroPreview = ({
   );
 
   const renderBuilderCoffeeStyle = () => (
-    <section className="relative w-full overflow-hidden bg-white pb-[50px]">
+    <section className="relative w-full overflow-hidden bg-white dark:bg-slate-950 pb-[50px]">
       <div className="mx-auto w-full max-w-7xl px-3">
-        <div className="mt-5 flex flex-wrap -mx-3">
+        <div className={cn("flex flex-wrap -mx-3", spacing !== 'none' && "mt-5")}>
           <div className="grid w-full max-w-full grid-cols-3 gap-[10px] px-3">
             <div className="col-span-3 overflow-hidden">
               <div className="relative">
@@ -427,8 +460,9 @@ export const HeroPreview = ({
                                   <HeroPreviewVideo src={slide.image} className="h-full w-full object-contain" />
                                 ) : (
                                   <div className="relative h-[250px] md:h-[400px] lg:h-[500px] w-full overflow-hidden">
-                                    <div className="absolute inset-0 scale-110" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(30px)' }} />
-                                    <div className="absolute inset-0 bg-black/10" />
+                                    <div className="absolute inset-0 scale-125" style={{ backgroundImage: `url(${slide.image})`, backgroundPosition: 'center', backgroundSize: 'cover', filter: 'blur(45px)' }} />
+                                    <div className={cn("absolute inset-0 z-0", isDarkState ? "bg-gradient-to-r from-slate-950/90 via-transparent to-slate-950/90" : "bg-gradient-to-r from-white/40 via-transparent to-white/40")} />
+                                    <div className={cn("absolute inset-0 z-0", isDarkState ? "bg-black/35" : "bg-black/10")} />
                                     <PreviewImage src={slide.image} alt="Sản phẩm nổi bật" className="relative z-10 mx-auto h-full w-full max-w-full object-contain align-middle" />
                                   </div>
                                 )
@@ -447,46 +481,44 @@ export const HeroPreview = ({
                             type="button"
                             aria-label="Previous"
                             onClick={prevSlide}
-                            className="absolute -left-0.5 top-1/2 z-20 h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px]"
-                            style={{
-                              backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-left.png?1778581786863")',
-                              backgroundPosition: 'center',
-                              backgroundRepeat: 'no-repeat',
-                              backgroundSize: 'contain',
-                            }}
+                            disabled={!canScrollPrev}
+                            className={cn(
+                              "absolute left-0 top-1/2 z-20 flex h-[52px] w-[20px] md:h-[118px] md:w-[32px] -translate-y-1/2 items-center justify-start pl-1 md:pl-2 rounded-r-full border border-l-0 shadow-md transition-all hover:w-[24px] md:hover:w-[38px] disabled:opacity-30 disabled:cursor-not-allowed",
+                              isDarkState ? "bg-slate-900/95 border-slate-800 text-white" : "bg-white/95 border-slate-200/80 text-slate-800"
+                            )}
                           >
-                            <span className="absolute inset-0 z-30 flex items-center justify-start pl-0.5 text-black md:pl-1">
-                              <ChevronLeft className="h-2.5 w-2.5 md:h-4 md:w-4" strokeWidth={2.1} />
+                            <span className="flex items-center justify-center">
+                              <ChevronLeft className="h-3 w-3 md:h-5 md:w-5" strokeWidth={2.5} />
                             </span>
                           </button>
                           <button
                             type="button"
                             aria-label="Next"
                             onClick={nextSlide}
-                            className="absolute -right-0.5 top-1/2 z-20 h-[52px] w-[13px] -translate-y-1/2 overflow-hidden bg-transparent text-transparent md:h-[118px] md:w-[30px]"
-                            style={{
-                              backgroundImage: 'url("https://bizweb.dktcdn.net/100/485/374/themes/945619/assets/arow-right.png?1778581786863")',
-                              backgroundPosition: 'center',
-                              backgroundRepeat: 'no-repeat',
-                              backgroundSize: 'contain',
-                            }}
+                            disabled={!canScrollNext}
+                            className={cn(
+                              "absolute right-0 top-1/2 z-20 flex h-[52px] w-[20px] md:h-[118px] md:w-[32px] -translate-y-1/2 items-center justify-end pr-1 md:pr-2 rounded-l-full border border-r-0 shadow-md transition-all hover:w-[24px] md:hover:w-[38px] disabled:opacity-30 disabled:cursor-not-allowed",
+                              isDarkState ? "bg-slate-900/95 border-slate-800 text-white" : "bg-white/95 border-slate-200/80 text-slate-800"
+                            )}
                           >
-                            <span className="absolute inset-0 z-30 flex items-center justify-end pr-0.5 text-black md:pr-1">
-                              <ChevronRight className="h-2.5 w-2.5 md:h-4 md:w-4" strokeWidth={2.1} />
+                            <span className="flex items-center justify-center">
+                              <ChevronRight className="h-3 w-3 md:h-5 md:w-5" strokeWidth={2.5} />
                             </span>
                           </button>
-                          <div className="absolute bottom-0 left-1/2 z-20 mb-4 flex h-6 w-[100px] -translate-x-1/2 items-center justify-center rounded-[15px]">
+                          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950/20 backdrop-blur-[2px]">
                             {slides.map((_, idx) => (
                               <button
                                 key={idx}
                                 type="button"
                                 aria-label={`Đi tới slide ${idx + 1}`}
                                 onClick={() =>{  setCurrentSlide(idx); }}
-                                className="mx-[3px] h-0.5 w-4 border transition-opacity"
+                                className={cn(
+                                  "h-1 rounded-full transition-all duration-300",
+                                  idx === emblaCurrentSlide ? "w-6" : "w-1.5 hover:w-3"
+                                )}
                                 style={{
-                                  backgroundColor: idx === emblaCurrentSlide ? '#8b7046' : '#cccccc',
-                                  borderColor: idx === emblaCurrentSlide ? '#8b7046' : '#cccccc',
-                                  opacity: idx === emblaCurrentSlide ? 1 : 0.7,
+                                  backgroundColor: idx === emblaCurrentSlide ? sliderColors.dotActive : sliderColors.dotInactive,
+                                  opacity: idx === emblaCurrentSlide ? 1 : 0.6,
                                 }}
                               />
                             ))}
@@ -495,7 +527,7 @@ export const HeroPreview = ({
                       )}
                     </>
                   ) : (
-                    <div className="flex aspect-[16/9] w-full items-center justify-center bg-slate-50"><span className="text-sm text-slate-400">Chưa có banner</span></div>
+                    <div className="flex aspect-[16/9] w-full items-center justify-center bg-slate-50 dark:bg-slate-900"><span className="text-sm text-slate-400">Chưa có banner</span></div>
                   )}
                 </div>
               </div>
@@ -511,7 +543,7 @@ export const HeroPreview = ({
     const bentoCurrentSlide = bentoSlides.length > 0 ? currentSlide % bentoSlides.length : 0;
     const placeholderTints = ['#f1f5f9', '#e2e8f0', '#f1f5f9', '#e2e8f0'];
     return (
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2">
+      <section className={cn("relative w-full overflow-hidden p-2", isDarkState ? "bg-slate-950" : "bg-transparent")}>
         <div className="relative w-full">
           {device === 'mobile' ? (
             <div className="relative aspect-[16/9] overflow-hidden" ref={heroEmblaRef}>
@@ -632,7 +664,7 @@ export const HeroPreview = ({
     const tripleSlides = slides.slice(0, 3);
     const placeholderTints = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
     return (
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2">
+      <section className={cn("relative w-full overflow-hidden p-2", isDarkState ? "bg-slate-950" : "bg-transparent")}>
         <div className="relative w-full">
           {device === 'mobile' ? (
             <div className="relative aspect-[16/9] overflow-hidden" ref={heroEmblaRef}>
@@ -705,7 +737,7 @@ export const HeroPreview = ({
     const tripleSlides = slides.slice(0, 3);
     const placeholderTints = ['#f1f5f9', '#e2e8f0', '#f1f5f9'];
     return (
-      <section className="relative w-full bg-slate-900 overflow-hidden p-2">
+      <section className={cn("relative w-full overflow-hidden p-2", isDarkState ? "bg-slate-950" : "bg-transparent")}>
         <div className="relative w-full">
           {device === 'mobile' ? (
             <div className="relative aspect-[16/9] overflow-hidden" ref={heroEmblaRef}>
@@ -809,7 +841,7 @@ export const HeroPreview = ({
       }
       : { borderColor: 'rgba(255,255,255,0.3)', color: '#ffffff' };
     return (
-      <section className="relative w-full bg-slate-900 overflow-hidden">
+      <section className={cn("relative w-full overflow-hidden", isDarkState ? "bg-slate-950" : "bg-transparent")}>
         <div className="relative w-full aspect-[16/9] overflow-hidden">
           {slides.length > 0 && mainSlide ? (
             <>
@@ -858,32 +890,71 @@ export const HeroPreview = ({
                   c.textAlign === 'right' && 'items-end text-right'
                 )}>
                   <div className={cn("max-w-xl", device === 'mobile' ? 'space-y-3' : 'space-y-4')}>
-                    {c.badge && (
+                    {(c.badge || isVisualEditActive) && (
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: fullscreenColors.badgeBg, color: fullscreenColors.badgeText }}>
                         <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: fullscreenColors.badgeDotPulse }} />
-                        {c.badge}
+                        <span
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleTextChange('badge', e.currentTarget.textContent ?? '')}
+                          className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        >
+                          {c.badge || (isVisualEditActive ? 'Nhập badge...' : '')}
+                        </span>
                       </div>
                     )}
                     <h1 className={cn("font-bold text-white leading-tight", device === 'mobile' ? 'text-xl' : (device === 'tablet' ? 'text-2xl' : 'text-3xl md:text-4xl'))}>
-                      {parseHighlightedHeading(c.heading ?? 'Tiêu đề chính', c.highlightColor)}
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('heading', e.currentTarget.textContent ?? '')}
+                        className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      >
+                        {isVisualEditActive ? (c.heading || 'Tiêu đề chính') : parseHighlightedHeading(c.heading ?? 'Tiêu đề chính', c.highlightColor)}
+                      </span>
                     </h1>
-                    {c.description && (
+                    {(c.description || isVisualEditActive) && (
                       <p className={cn("text-white/80", device === 'mobile' ? 'text-sm line-clamp-2' : 'text-base')}>
-                        {c.description}
+                        <span
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleTextChange('description', e.currentTarget.textContent ?? '')}
+                          className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                        >
+                          {c.description || (isVisualEditActive ? 'Mô tả chi tiết banner...' : '')}
+                        </span>
                       </p>
                     )}
                     <div className={cn("flex gap-3", device === 'mobile' ? 'flex-col' : 'flex-row',
                       c.textAlign === 'center' && 'justify-center',
                       c.textAlign === 'right' && 'justify-end'
                     )}>
-                      {c.primaryButtonText && (
-                        <a href={primaryHref} className={cn("font-medium rounded-lg", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5')} style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>
-                          {c.primaryButtonText}
+                      {(c.primaryButtonText || isVisualEditActive) && (
+                        <a
+                          href={isVisualEditActive ? undefined : primaryHref}
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleTextChange('primaryButtonText', e.currentTarget.textContent ?? '')}
+                          className={cn("font-medium rounded-lg inline-flex items-center justify-center", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
+                          style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}
+                        >
+                          {c.primaryButtonText || (isVisualEditActive ? 'Bắt đầu ngay' : '')}
                         </a>
                       )}
-                      {c.secondaryButtonText && (
-                        <a href={secondaryHref} className={cn("font-medium rounded-lg border hover:bg-white/10", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5')} style={secondaryButtonStyle}>
-                          {c.secondaryButtonText}
+                      {(c.secondaryButtonText || isVisualEditActive) && (
+                        <a
+                          href={isVisualEditActive ? undefined : secondaryHref}
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => handleTextChange('secondaryButtonText', e.currentTarget.textContent ?? '')}
+                          className={cn("font-medium rounded-lg border hover:bg-white/10 inline-flex items-center justify-center", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5',
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
+                          style={secondaryButtonStyle}
+                        >
+                          {c.secondaryButtonText || (isVisualEditActive ? 'Tìm hiểu thêm' : '')}
                         </a>
                       )}
                     </div>
@@ -949,29 +1020,68 @@ export const HeroPreview = ({
             device === 'mobile' ? 'max-w-full gap-4 pb-4' : 'min-w-[320px] max-w-[470px] gap-5 py-14',
             contentAlignClass
           )}>
-            {c.badge && (
+            {(c.badge || isVisualEditActive) && (
               <span className="inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: conquestColors.badgeBg, color: conquestColors.badgeText }}>
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: conquestColors.accentSolid }} />
-                {c.badge}
+                <span
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => handleTextChange('badge', e.currentTarget.textContent ?? '')}
+                  className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                >
+                  {c.badge || (isVisualEditActive ? 'Nhập badge...' : '')}
+                </span>
               </span>
             )}
             <h1 className={cn("font-bold uppercase leading-[1.05]", device === 'mobile' ? 'text-3xl' : 'text-5xl')}>
-              {parseHighlightedHeading(c.heading ?? 'Chinh phục tầm cao mới', c.highlightColor || conquestColors.accentSolid)}
+              <span
+                contentEditable={isVisualEditActive}
+                suppressContentEditableWarning={isVisualEditActive}
+                onBlur={(e) => handleTextChange('heading', e.currentTarget.textContent ?? '')}
+                className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+              >
+                {isVisualEditActive ? (c.heading || 'Chinh phục tầm cao mới') : parseHighlightedHeading(c.heading ?? 'Chinh phục tầm cao mới', c.highlightColor || conquestColors.accentSolid)}
+              </span>
             </h1>
-            {c.description && (
+            {(c.description || isVisualEditActive) && (
               <p className={cn("max-w-xl", device === 'mobile' ? 'text-sm' : 'text-lg')} style={{ color: conquestColors.descriptionText }}>
-                {c.description}
+                <span
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => handleTextChange('description', e.currentTarget.textContent ?? '')}
+                  className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                >
+                  {c.description || (isVisualEditActive ? 'Mô tả chi tiết banner...' : '')}
+                </span>
               </p>
             )}
             <div className={cn("flex gap-3", buttonAlignClass)}>
-              {c.primaryButtonText && (
-                <a href={primaryHref} className="rounded-full px-6 py-3 text-sm font-semibold shadow-lg" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>
-                  {c.primaryButtonText}
+              {(c.primaryButtonText || isVisualEditActive) && (
+                <a
+                  href={isVisualEditActive ? undefined : primaryHref}
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => handleTextChange('primaryButtonText', e.currentTarget.textContent ?? '')}
+                  className={cn("rounded-full px-6 py-3 text-sm font-semibold shadow-lg inline-flex items-center justify-center",
+                    isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
+                  style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}
+                >
+                  {c.primaryButtonText || (isVisualEditActive ? 'Bắt đầu ngay' : '')}
                 </a>
               )}
-              {c.secondaryButtonText && (
-                <a href={secondaryHref} className="rounded-full border px-6 py-3 text-sm font-semibold" style={secondaryButtonStyle}>
-                  {c.secondaryButtonText}
+              {(c.secondaryButtonText || isVisualEditActive) && (
+                <a
+                  href={isVisualEditActive ? undefined : secondaryHref}
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => handleTextChange('secondaryButtonText', e.currentTarget.textContent ?? '')}
+                  className={cn("rounded-full border px-6 py-3 text-sm font-semibold inline-flex items-center justify-center",
+                    isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
+                  style={secondaryButtonStyle}
+                >
+                  {c.secondaryButtonText || (isVisualEditActive ? 'Tìm hiểu thêm' : '')}
                 </a>
               )}
             </div>
@@ -1046,24 +1156,56 @@ export const HeroPreview = ({
                   c.textAlign === 'center' && 'text-center',
                   c.textAlign === 'right' && 'text-right'
                 )}>
-                  <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: splitColors.badgeBg, color: splitColors.badgeText }}>
-                    {c.badge ?? `Banner ${currentSlide + 1}/${slides.length}`}
-                  </span>
+                  {(c.badge || isVisualEditActive) && (
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide" style={{ backgroundColor: splitColors.badgeBg, color: splitColors.badgeText }}>
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('badge', e.currentTarget.textContent ?? '')}
+                        className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      >
+                        {c.badge || (isVisualEditActive ? 'Nhập badge...' : `Banner ${currentSlide + 1}/${slides.length}`)}
+                      </span>
+                    </span>
+                  )}
                   <h2 className={cn("font-bold leading-tight", device === 'mobile' ? 'text-lg' : 'text-2xl lg:text-3xl')} style={{ color: splitColors.headingText }}>
-                    {parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                    <span
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('heading', e.currentTarget.textContent ?? '')}
+                      className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                    >
+                      {isVisualEditActive ? (c.heading || 'Tiêu đề nổi bật') : parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                    </span>
                   </h2>
-                  {c.description && (
+                  {(c.description || isVisualEditActive) && (
                     <p className={cn(device === 'mobile' ? 'text-sm' : 'text-base')} style={{ color: splitColors.descriptionText }}>
-                      {c.description}
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('description', e.currentTarget.textContent ?? '')}
+                        className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      >
+                        {c.description || (isVisualEditActive ? 'Mô tả chi tiết banner...' : '')}
+                      </span>
                     </p>
                   )}
-                  {c.primaryButtonText && (
+                  {(c.primaryButtonText || isVisualEditActive) && (
                     <div className={cn("pt-2",
                       c.textAlign === 'center' && 'text-center',
                       c.textAlign === 'right' && 'text-right'
                     )}>
-                      <a href={primaryHref} className={cn("font-medium rounded-lg", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5')} style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>
-                        {c.primaryButtonText}
+                      <a
+                        href={isVisualEditActive ? undefined : primaryHref}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('primaryButtonText', e.currentTarget.textContent ?? '')}
+                        className={cn("font-medium rounded-lg inline-flex items-center justify-center", device === 'mobile' ? 'px-4 py-2 text-sm' : 'px-6 py-2.5',
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}
+                      >
+                        {c.primaryButtonText || (isVisualEditActive ? 'Bắt đầu ngay' : '')}
                       </a>
                     </div>
                   )}
@@ -1170,23 +1312,72 @@ export const HeroPreview = ({
                 )}
               </div>
               <div className="p-4" style={{ backgroundColor: parallaxColors.cardBg }}>
-                {c.badge && (
+                {(c.badge || isVisualEditActive) && (
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: parallaxColors.cardBadgeDot }} />
-                    <span className="text-xs font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full" style={{ backgroundColor: parallaxColors.cardBadgeBg, color: parallaxColors.cardBadgeText }}>{c.badge}</span>
+                    <span
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('badge', e.currentTarget.textContent ?? '')}
+                      className={cn("text-xs font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full inline-flex",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ backgroundColor: parallaxColors.cardBadgeBg, color: parallaxColors.cardBadgeText }}
+                    >
+                      {c.badge || (isVisualEditActive ? 'Nhập badge...' : '')}
+                    </span>
                   </div>
                 )}
                 <h3 className="text-base font-bold" style={{ color: parallaxColors.headingText }}>
-                  {parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                  <span
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => handleTextChange('heading', e.currentTarget.textContent ?? '')}
+                    className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                  >
+                    {isVisualEditActive ? (c.heading || 'Tiêu đề nổi bật') : parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                  </span>
                 </h3>
-                {c.description && <p className="mt-1 text-xs" style={{ color: parallaxColors.descriptionText }}>{c.description}</p>}
+                {(c.description || isVisualEditActive) && (
+                  <p className="mt-1 text-xs" style={{ color: parallaxColors.descriptionText }}>
+                    <span
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('description', e.currentTarget.textContent ?? '')}
+                      className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                    >
+                      {c.description || (isVisualEditActive ? 'Mô tả chi tiết banner...' : '')}
+                    </span>
+                  </p>
+                )}
                 <div className="flex items-center gap-3 mt-3">
-                  {c.primaryButtonText && (
-                    <a href={primaryHref} className="rounded-lg px-3 py-1.5 text-xs font-medium" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>
-                      {c.primaryButtonText}
+                  {(c.primaryButtonText || isVisualEditActive) && (
+                    <a
+                      href={isVisualEditActive ? undefined : primaryHref}
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('primaryButtonText', e.currentTarget.textContent ?? '')}
+                      className={cn("rounded-lg px-3 py-1.5 text-xs font-medium inline-flex items-center justify-center",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}
+                    >
+                      {c.primaryButtonText || (isVisualEditActive ? 'Bắt đầu ngay' : '')}
                     </a>
                   )}
-                  {c.countdownText && <span className="text-xs" style={{ color: parallaxColors.countdownText }}>{c.countdownText}</span>}
+                  {(c.countdownText || isVisualEditActive) && (
+                    <span
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('countdownText', e.currentTarget.textContent ?? '')}
+                      className={cn("text-xs inline-flex",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: parallaxColors.countdownText }}
+                    >
+                      {c.countdownText || (isVisualEditActive ? 'Còn lại 00:00:00' : '')}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1199,7 +1390,7 @@ export const HeroPreview = ({
       );
     }
     return (
-      <section className="relative w-full bg-slate-900 overflow-hidden">
+      <section className={cn("relative w-full overflow-hidden", isDarkState ? "bg-slate-950" : "bg-transparent")}>
         <div className={cn(
           "relative w-full",
           device === 'tablet' ? 'h-[320px]' : 'h-[380px]'
@@ -1226,28 +1417,71 @@ export const HeroPreview = ({
                   cornerRadiusClassName,
                   'p-5 max-w-lg'
                 )} style={{ backgroundColor: parallaxColors.cardBg }}>
-                  {c.badge && (
+                  {(c.badge || isVisualEditActive) && (
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: parallaxColors.cardBadgeDot }} />
-                      <span className="text-xs font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full" style={{ backgroundColor: parallaxColors.cardBadgeBg, color: parallaxColors.cardBadgeText }}>{c.badge}</span>
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('badge', e.currentTarget.textContent ?? '')}
+                        className={cn("text-xs font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded-full inline-flex",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ backgroundColor: parallaxColors.cardBadgeBg, color: parallaxColors.cardBadgeText }}
+                      >
+                        {c.badge || (isVisualEditActive ? 'Nhập badge...' : '')}
+                      </span>
                     </div>
                   )}
                   <h3 className="text-xl font-bold" style={{ color: parallaxColors.headingText }}>
-                    {parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                    <span
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => handleTextChange('heading', e.currentTarget.textContent ?? '')}
+                      className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                    >
+                      {isVisualEditActive ? (c.heading || 'Tiêu đề nổi bật') : parseHighlightedHeading(c.heading ?? 'Tiêu đề nổi bật', c.highlightColor)}
+                    </span>
                   </h3>
-                  {c.description && (
+                  {(c.description || isVisualEditActive) && (
                     <p className="mt-1 text-sm" style={{ color: parallaxColors.descriptionText }}>
-                      {c.description}
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('description', e.currentTarget.textContent ?? '')}
+                        className={cn(isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text')}
+                      >
+                        {c.description || (isVisualEditActive ? 'Mô tả chi tiết banner...' : '')}
+                      </span>
                     </p>
                   )}
                   <div className="flex items-center gap-3 mt-3">
-                    {c.primaryButtonText && (
-                      <a href={primaryHref} className="rounded-lg px-5 py-2 text-sm font-medium" style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}>
-                        {c.primaryButtonText}
+                    {(c.primaryButtonText || isVisualEditActive) && (
+                      <a
+                        href={isVisualEditActive ? undefined : primaryHref}
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('primaryButtonText', e.currentTarget.textContent ?? '')}
+                        className={cn("rounded-lg px-5 py-2 text-sm font-medium inline-flex items-center justify-center",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ backgroundColor: primaryButtonBg, color: primaryButtonText }}
+                      >
+                        {c.primaryButtonText || (isVisualEditActive ? 'Bắt đầu ngay' : '')}
                       </a>
                     )}
-                    {c.countdownText && (
-                      <span className="text-sm" style={{ color: parallaxColors.countdownText }}>{c.countdownText}</span>
+                    {(c.countdownText || isVisualEditActive) && (
+                      <span
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => handleTextChange('countdownText', e.currentTarget.textContent ?? '')}
+                        className={cn("text-sm inline-flex",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: parallaxColors.countdownText }}
+                      >
+                        {c.countdownText || (isVisualEditActive ? 'Còn lại 00:00:00' : '')}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -1287,8 +1521,13 @@ export const HeroPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame url="yoursite.com">
+        <div className="space-y-3">
+
+          <BrowserFrame url="yoursite.com">
           <div className="relative px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ backgroundColor: colors.primarySolid, opacity: 0.6 }} />
             <div className="flex items-center gap-3">
@@ -1313,7 +1552,8 @@ export const HeroPreview = ({
             <div className="flex gap-3">{[1,2,3,4].slice(0, device === 'mobile' ? 2 : 4).map(i => (<div key={i} className="flex-1 h-16 bg-slate-100 dark:bg-slate-800 rounded-lg"></div>))}</div>
           </div>
         </BrowserFrame>
-      </PreviewWrapper>
+      </div>
+    </PreviewWrapper>
       {previewStyle === 'slider' && mode === 'dual' && sliderColors.similarity > 0.9 && (
         <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
           ⚠️ Hai màu quá giống nhau (similarity: {(sliderColors.similarity * 100).toFixed(0)}%). Khuyến nghị chọn màu phụ khác biệt hơn.

@@ -256,7 +256,7 @@ export default async function ThemeDetailPage({
   const seoTitle = firstText(seo.seo_title, `${brandName} - Website giới thiệu thương hiệu`);
   const seoDescription = firstText(seo.seo_description, tagline);
   const ogImage = firstText(seo.seo_og_image, site.site_logo);
-  const primaryColor = firstText(site.site_brand_primary, site.site_brand_color, '#111827');
+  const primaryColor = firstText(site.site_brand_primary, '#111827');
   const secondaryColor = firstText(site.site_brand_secondary);
   const phone = firstText(contact.contact_phone);
   const address = firstText(contact.contact_address);

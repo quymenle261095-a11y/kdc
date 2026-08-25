@@ -1,9 +1,11 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
 import { ColorInfoPanel } from '../../_shared/components/ColorInfoPanel';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { SectionHeader } from '../../_shared/components/SectionHeader';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { BENEFITS_STYLES } from '../_lib/constants';
@@ -15,6 +17,7 @@ import {
 } from '../_lib/colors';
 import { BenefitsSectionShared } from './BenefitsSectionShared';
 import type { BenefitItem, BenefitsBrandMode, BenefitsConfig, BenefitsStyle } from '../_types';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 interface BenefitsPreviewProps {
   items: BenefitItem[];
@@ -27,6 +30,12 @@ interface BenefitsPreviewProps {
   config?: Partial<BenefitsConfig>;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isVisualEditAllowed?: boolean;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  onItemsChange?: (value: BenefitItem[]) => void;
+  onButtonTextChange?: (value: string) => void;
 }
 
 export const BenefitsPreview = ({
@@ -40,9 +49,27 @@ export const BenefitsPreview = ({
   config,
   fontStyle,
   fontClassName,
+  isVisualEditAllowed = true,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  onItemsChange,
+  onButtonTextChange,
 }: BenefitsPreviewProps) => {
   const { device, setDevice } = usePreviewDevice();
+  const { isDark } = usePreviewDark();
   const resolvedTitle = typeof title === 'string' ? title.trim() : '';
+
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
 
   const previewStyle = normalizeBenefitsStyle(selectedStyle ?? '1');
   const setPreviewStyle = (nextStyle: string) => {
@@ -63,13 +90,13 @@ export const BenefitsPreview = ({
   );
 
   const tokens = React.useMemo(
-    () => getBenefitsSectionColors({
+    () => adaptTokensForDarkMode(getBenefitsSectionColors({
       harmony,
       mode,
       primary: brandColor,
       secondary,
-    }),
-    [brandColor, secondary, mode, harmony],
+    }), isDark),
+    [brandColor, secondary, mode, harmony, isDark],
   );
 
   const sectionConfig = React.useMemo(
@@ -86,6 +113,7 @@ export const BenefitsPreview = ({
       showItemNumbers: config?.showItemNumbers,
       subHeading: config?.subHeading,
       visualImage: config?.visualImage,
+      subtitle: config?.subtitle,
     }),
     [
       config?.buttonLink,
@@ -100,11 +128,30 @@ export const BenefitsPreview = ({
       config?.showItemNumbers,
       config?.subHeading,
       config?.visualImage,
+      config?.subtitle,
     ],
   );
 
   const previewSubtitle = (config?.subtitle ?? '').trim();
   const previewBadgeText = (config?.badgeText ?? '').trim();
+
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
+  const handleItemTextUpdate = (idx: number, field: 'title' | 'description', nextText: string) => {
+    if (!onItemsChange) return;
+    const nextItems = items.map((item, i) => {
+      if (i === idx) {
+        return {
+          ...item,
+          [field]: nextText,
+        };
+      }
+      return item;
+    });
+    onItemsChange(nextItems);
+  };
 
   return (
     <>
@@ -119,39 +166,52 @@ export const BenefitsPreview = ({
         deviceWidthClass={deviceWidths[device]}
         fontStyle={fontStyle}
         fontClassName={fontClassName}
+      visualEditActive={isVisualEditActive}
+      visualEditAllowed={isVisualEditAllowed}
+      onVisualEditToggle={handleToggleVisualEdit}
       >
-        <BrowserFrame url="yoursite.com/benefits">
-          <section className="px-4 py-10" style={{ backgroundColor: tokens.neutralBackground }}>
-            <div className="mx-auto max-w-6xl space-y-6">
-              <SectionHeader
-                title={resolvedTitle}
-                subtitle={previewSubtitle}
-                badgeText={previewBadgeText}
-                hideHeader={config?.hideHeader}
-                showTitle={config?.showTitle}
-                showSubtitle={config?.showSubtitle}
-                showBadge={config?.showBadge}
-                headerAlign={config?.headerAlign}
-                titleColorPrimary={config?.titleColorPrimary}
-                subtitleAboveTitle={config?.subtitleAboveTitle}
-                uppercaseText={config?.uppercaseText}
-                brandColor={brandColor}
-              />
+        <div className="space-y-3">
 
-              <BenefitsSectionShared
-                items={items}
-                style={previewStyle}
-                title={resolvedTitle}
-                config={sectionConfig}
-                tokens={tokens}
-                mode={mode}
-                context="preview"
-                previewDevice={device}
-                skipHeader={true}
-              />
-            </div>
-          </section>
-        </BrowserFrame>
+          <BrowserFrame url="yoursite.com/benefits">
+            <section className="px-4 py-10" style={{ backgroundColor: tokens.neutralBackground }}>
+              <div className="mx-auto max-w-6xl space-y-6">
+                <SectionHeader
+                  title={resolvedTitle}
+                  subtitle={previewSubtitle}
+                  badgeText={previewBadgeText}
+                  hideHeader={config?.hideHeader}
+                  showTitle={config?.showTitle}
+                  showSubtitle={config?.showSubtitle}
+                  showBadge={config?.showBadge}
+                  headerAlign={config?.headerAlign}
+                  titleColorPrimary={config?.titleColorPrimary}
+                  subtitleAboveTitle={config?.subtitleAboveTitle}
+                  uppercaseText={config?.uppercaseText}
+                  brandColor={brandColor}
+                  visualEditEnabled={isVisualEditActive}
+                  onTitleChange={onTitleChange}
+                  onSubtitleChange={onSubtitleChange}
+                  onBadgeTextChange={onBadgeTextChange}
+                />
+
+                <BenefitsSectionShared
+                  items={items}
+                  style={previewStyle}
+                  title={resolvedTitle}
+                  config={sectionConfig}
+                  tokens={tokens}
+                  mode={mode}
+                  context="preview"
+                  previewDevice={device}
+                  skipHeader={true}
+                  isVisualEditActive={isVisualEditActive}
+                  onItemTextUpdate={handleItemTextUpdate}
+                  onButtonTextChange={onButtonTextChange}
+                />
+              </div>
+            </section>
+          </BrowserFrame>
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' ? (

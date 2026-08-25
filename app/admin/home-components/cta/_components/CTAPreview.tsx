@@ -1,9 +1,11 @@
 'use client';
+import { usePreviewVisualEdit } from '../../_shared/components/PreviewWrapper';
+
 
 import React from 'react';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { BrowserFrame } from '../../_shared/components/BrowserFrame';
-import { PreviewWrapper } from '../../_shared/components/PreviewWrapper';
+import { PreviewWrapper, usePreviewDark } from '../../_shared/components/PreviewWrapper';
 import { deviceWidths, usePreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import {
   getCTAAccentBalance,
@@ -13,13 +15,54 @@ import { CTASectionShared } from './CTASectionShared';
 import type { CTAConfig, CTAStyle } from '../_types';
 
 const CTA_STYLES: { id: CTAStyle; label: string }[] = [
-  { id: 'banner', label: 'Banner' },
-  { id: 'centered', label: 'Centered' },
-  { id: 'split', label: 'Split' },
-  { id: 'floating', label: 'Floating' },
-  { id: 'gradient', label: 'Gradient' },
-  { id: 'minimal', label: 'Minimal' },
+  { id: 'banner', label: '(1) Thanh ngang' },
+  { id: 'centered', label: '(2) Căn giữa' },
+  { id: 'split', label: '(3) Chia đôi' },
+  { id: 'floating', label: '(4) Khối nổi' },
+  { id: 'gradient', label: '(5) Chuyển màu' },
+  { id: 'minimal', label: '(6) Tối giản' },
 ];
+
+const CTAPreviewContent = ({
+  config,
+  brandColor,
+  secondary,
+  mode,
+  style,
+  isVisualEditActive,
+  onConfigChange,
+}: {
+  config: CTAConfig;
+  brandColor: string;
+  secondary: string;
+  mode: 'single' | 'dual';
+  style: CTAStyle;
+  isVisualEditActive?: boolean;
+  onConfigChange?: (config: CTAConfig) => void;
+}) => {
+  const { isDark } = usePreviewDark();
+  const { tokens } = React.useMemo(() => getCTAValidationResult({
+    config,
+    primary: brandColor,
+    secondary,
+    mode,
+    style,
+    isDark,
+  }), [brandColor, config, isDark, mode, secondary, style]);
+
+  return (
+    <BrowserFrame url="yoursite.com">
+      <CTASectionShared
+        config={config}
+        style={style}
+        tokens={tokens}
+        context="preview"
+        isVisualEditActive={isVisualEditActive}
+        onConfigChange={onConfigChange}
+      />
+    </BrowserFrame>
+  );
+};
 
 export const CTAPreview = ({
   config,
@@ -30,6 +73,8 @@ export const CTAPreview = ({
   onStyleChange,
   fontStyle,
   fontClassName,
+  isVisualEditAllowed = true,
+  onConfigChange,
 }: {
   config: CTAConfig;
   brandColor: string;
@@ -39,15 +84,26 @@ export const CTAPreview = ({
   onStyleChange?: (style: CTAStyle) => void;
   fontStyle?: React.CSSProperties;
   fontClassName?: string;
+  isVisualEditAllowed?: boolean;
+  onConfigChange?: (config: CTAConfig) => void;
 }) => {
   const { device, setDevice } = usePreviewDevice();
+  const [visualEditEnabled, setVisualEditEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isVisualEditAllowed) {
+      setVisualEditEnabled(false);
+    }
+  }, [isVisualEditAllowed]);
+
+  const visualEditContext = usePreviewVisualEdit();
+  const isVisualEditActive = isVisualEditAllowed && (visualEditContext.active || visualEditEnabled);
   const style = selectedStyle;
 
   const {
     accessibility,
     harmonyStatus,
     resolvedSecondary,
-    tokens,
   } = getCTAValidationResult({
     config,
     primary: brandColor,
@@ -58,6 +114,10 @@ export const CTAPreview = ({
 
   const accentBalance = getCTAAccentBalance(style);
 
+  const handleToggleVisualEdit = () => {
+    setVisualEditEnabled((prev) => !prev);
+  };
+
   return (
     <>
       <PreviewWrapper
@@ -65,6 +125,9 @@ export const CTAPreview = ({
         device={device}
         setDevice={setDevice}
         previewStyle={style}
+        visualEditActive={isVisualEditActive}
+        visualEditAllowed={isVisualEditAllowed}
+        onVisualEditToggle={handleToggleVisualEdit}
         setPreviewStyle={(s) => onStyleChange?.(s as CTAStyle)}
         styles={CTA_STYLES}
         info={mode === 'single' ? '1 màu' : '2 màu'}
@@ -72,9 +135,18 @@ export const CTAPreview = ({
         fontStyle={fontStyle}
         fontClassName={fontClassName}
       >
-        <BrowserFrame url="yoursite.com">
-          <CTASectionShared config={config} style={style} tokens={tokens} context="preview" />
-        </BrowserFrame>
+        <div className="space-y-3">
+
+          <CTAPreviewContent
+            config={config}
+            brandColor={brandColor}
+            secondary={secondary}
+            mode={mode}
+            style={style}
+            isVisualEditActive={isVisualEditActive}
+            onConfigChange={onConfigChange}
+          />
+        </div>
       </PreviewWrapper>
 
       {mode === 'dual' && harmonyStatus.isTooSimilar && (

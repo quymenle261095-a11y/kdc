@@ -5,6 +5,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CalendarDays, Check, Loader2, Search, X } from 'lucide-react';
+import { AdminPageHeader, AdminPageLayout, AdminPagination, FilterSelect, ResetFilterButton, SearchInput } from '../components/TableUtilities';
 import { toast } from 'sonner';
 import { Badge, Button, Card, CardContent, Input } from '../components/ui';
 import { ModuleGuard } from '../components/ModuleGuard';
@@ -200,50 +201,37 @@ function BookingsContent() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-indigo-500/10 rounded-lg">
-          <CalendarDays className="w-6 h-6 text-indigo-600" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Đặt lịch</h1>
-          <p className="text-sm text-slate-500 mt-1">Lịch tháng và danh sách lịch hẹn theo ngày</p>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Quản lý đặt lịch"
+        description="Lịch tháng và danh sách lịch hẹn theo ngày"
+      />
 
       <Card>
         <CardContent className="p-4 grid grid-cols-1 lg:grid-cols-4 gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <Input
-              value={searchInput}
-              onChange={(e) => { setSearchInput(e.target.value); setCurrentPage(1); }}
-              placeholder="Tìm theo tên khách..."
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            value={searchInput}
+            onChange={(val) => { setSearchInput(val); setCurrentPage(1); }}
+            placeholder="Tìm theo tên khách..."
+          />
 
-          <select
+          <FilterSelect
             value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value as '' | BookingStatus); setCurrentPage(1); }}
-            className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-          >
-            <option value="">Tất cả trạng thái</option>
-            <option value="Pending">Chờ xác nhận</option>
-            <option value="Confirmed">Đã xác nhận</option>
-            <option value="Cancelled">Đã hủy</option>
-          </select>
+            onChange={(val) => { setStatusFilter((val || '') as '' | BookingStatus); setCurrentPage(1); }}
+            placeholder="Tất cả trạng thái"
+            options={[
+              { value: 'Pending', label: 'Chờ xác nhận' },
+              { value: 'Confirmed', label: 'Đã xác nhận' },
+              { value: 'Cancelled', label: 'Đã hủy' },
+            ]}
+          />
 
-          <select
+          <FilterSelect
             value={serviceFilter}
-            onChange={(e) => { setServiceFilter(e.target.value); setCurrentPage(1); }}
-            className="h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm"
-          >
-            <option value="">Tất cả dịch vụ</option>
-            {servicesData?.map((service) => (
-              <option key={service._id} value={service._id}>{service.title}</option>
-            ))}
-          </select>
+            onChange={(val) => { setServiceFilter(val); setCurrentPage(1); }}
+            placeholder="Tất cả dịch vụ"
+            options={(servicesData ?? []).map(service => ({ value: service._id, label: service.title }))}
+          />
 
           <Input
             type="date"
@@ -333,43 +321,21 @@ function BookingsContent() {
               )}
             </div>
 
-            <div className="flex items-center justify-between text-sm text-slate-500">
-              <div className="flex items-center gap-2">
-                <span>Hiển thị:</span>
-                <select
-                  value={resolvedPageSize}
-                  onChange={(e) => { setPageSizeOverride(Number(e.target.value || 20)); setCurrentPage(1); }}
-                  className="h-8 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 text-xs"
-                >
-                  {[10, 20, 30, 50].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => { setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                >
-                  Trước
-                </Button>
-                <span>{currentPage}/{totalPages}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => { setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                >
-                  Sau
-                </Button>
-              </div>
-            </div>
+            <AdminPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={resolvedPageSize}
+              totalItems={totalCount}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSizeOverride(size);
+                setCurrentPage(1);
+              }}
+              entityLabel="lịch hẹn"
+            />
           </CardContent>
         </Card>
       </div>
-    </div>
+    </AdminPageLayout>
   );
 }

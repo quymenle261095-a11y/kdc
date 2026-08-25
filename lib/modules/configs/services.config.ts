@@ -1,4 +1,4 @@
-import { DollarSign, Clock, Star, Briefcase, FileText, Code } from 'lucide-react';
+import { DollarSign, Clock, Star, Briefcase, FileText, Code, Search } from 'lucide-react';
 import { defineModuleWithRuntime } from '../define-module';
  
 export const servicesModule = defineModuleWithRuntime({
@@ -13,6 +13,7 @@ export const servicesModule = defineModuleWithRuntime({
      { key: 'enablePrice', label: 'Hiển thị giá', icon: DollarSign, linkedField: 'price' },
      { key: 'enableDuration', label: 'Thời gian', icon: Clock, linkedField: 'duration' },
      { key: 'enableFeatured', label: 'Nổi bật', icon: Star, linkedField: 'featured', enabled: false },
+     { key: 'enableAdvancedSEO', label: 'SEO nâng cao', icon: Search, linkedField: 'focusKeyword', enabled: true },
      { key: 'enableMarkdownRender', label: 'Markdown render', icon: FileText, linkedField: 'markdownRender', enabled: false },
      { key: 'enableHtmlRender', label: 'HTML render', icon: Code, linkedField: 'htmlRender', enabled: false },
    ],
@@ -24,6 +25,16 @@ export const servicesModule = defineModuleWithRuntime({
       label: 'Cho phép nhiều danh mục',
       type: 'toggle',
       default: false,
+    },
+    {
+      key: 'commerceMode',
+      label: 'Chế độ thương mại',
+      type: 'select',
+      default: 'contact',
+      options: [
+        { value: 'cart', label: 'Giỏ hàng & thanh toán' },
+        { value: 'contact', label: 'Nút liên hệ (/contact)' },
+      ],
     },
     {
       key: 'defaultStatus',
@@ -54,9 +65,13 @@ export const servicesModule = defineModuleWithRuntime({
       { enabled: false, fieldKey: 'featured', isSystem: false, linkedFeature: 'enableFeatured', name: 'Nổi bật', order: 10, required: false, type: 'boolean' },
       { enabled: true, fieldKey: 'metaTitle', group: 'seo', isSystem: false, name: 'Meta Title', order: 11, required: false, type: 'text' },
       { enabled: true, fieldKey: 'metaDescription', group: 'seo', isSystem: false, name: 'Meta Description', order: 12, required: false, type: 'textarea' },
-      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 13, required: false, type: 'select' },
-      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 14, required: false, type: 'textarea' },
-      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 15, required: false, type: 'textarea' },
+      { enabled: true, fieldKey: 'focusKeyword', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Từ khóa chính', order: 13, required: false, type: 'text' },
+      { enabled: true, fieldKey: 'tags', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Tags', order: 14, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'relatedQueries', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'Cách khách hay tìm', order: 15, required: false, type: 'tags' },
+      { enabled: true, fieldKey: 'faqItems', group: 'seo', isSystem: false, linkedFeature: 'enableAdvancedSEO', name: 'FAQ', order: 16, required: false, type: 'json' },
+      { enabled: true, fieldKey: 'renderType', isSystem: false, name: 'Kiểu render', order: 17, required: false, type: 'select' },
+      { enabled: false, fieldKey: 'markdownRender', isSystem: false, linkedFeature: 'enableMarkdownRender', name: 'Markdown render', order: 18, required: false, type: 'textarea' },
+      { enabled: false, fieldKey: 'htmlRender', isSystem: false, linkedFeature: 'enableHtmlRender', name: 'HTML render', order: 19, required: false, type: 'textarea' },
       { enabled: true, fieldKey: 'bookingEnabled', group: 'booking', isSystem: false, name: 'Cho phép đặt lịch', order: 16, required: false, type: 'boolean' },
       { enabled: true, fieldKey: 'bookingDurationMin', group: 'booking', isSystem: false, name: 'Thời lượng (phút)', order: 17, required: false, type: 'number' },
       { enabled: true, fieldKey: 'bookingSlotIntervalMin', group: 'booking', isSystem: false, name: 'Khoảng cách slot (phút)', order: 18, required: false, type: 'number' },

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from 'convex/react';
-import { Facebook, Instagram, Linkedin, Twitter, Youtube } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Youtube, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import {
   CONTACT_EXPERIENCE_KEY,
@@ -10,7 +10,7 @@ import {
   type ContactExperienceConfig,
 } from '@/lib/experiences/contact/config';
 import { useBrandColors } from '@/components/site/hooks';
-import { TikTokIcon, ZaloIcon } from './SocialIcons';
+import { TikTokIcon, ZaloIcon, PinterestIcon } from './SocialIcons';
 import { getContactMapDataFromSettings } from '@/lib/contact/getContactMapData';
 
 type SocialLinkItem = {
@@ -111,12 +111,13 @@ export function useContactPageData(): {
 
     const candidates = [
       { label: 'Facebook', fieldKey: 'social_facebook', href: settingsMap.social_facebook || '', color: '#1877f2', icon: Facebook },
-      { label: 'Twitter', fieldKey: 'social_twitter', href: settingsMap.social_twitter || '', color: '#1da1f2', icon: Twitter },
+      { label: 'X (Twitter)', fieldKey: 'social_twitter', href: settingsMap.social_twitter || '', color: '#000000', icon: X },
       { label: 'Instagram', fieldKey: 'social_instagram', href: settingsMap.social_instagram || '', color: '#e1306c', icon: Instagram },
       { label: 'LinkedIn', fieldKey: 'social_linkedin', href: settingsMap.social_linkedin || '', color: '#0a66c2', icon: Linkedin },
       { label: 'YouTube', fieldKey: 'social_youtube', href: settingsMap.social_youtube || '', color: '#ff0000', icon: Youtube },
       { label: 'TikTok', fieldKey: 'social_tiktok', href: settingsMap.social_tiktok || '', color: '#000000', icon: TikTokIcon },
       { label: 'Zalo', fieldKey: 'contact_zalo', href: zaloLink, color: '#0084ff', icon: ZaloIcon },
+      { label: 'Pinterest', fieldKey: 'social_pinterest', href: settingsMap.social_pinterest || '', color: '#E60023', icon: PinterestIcon },
     ];
 
     return candidates

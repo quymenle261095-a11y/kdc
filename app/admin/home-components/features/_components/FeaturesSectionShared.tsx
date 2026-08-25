@@ -71,7 +71,15 @@ interface FeaturesSectionSharedProps {
   spacing?: SectionSpacing;
   desktopColumns?: FeaturesDesktopColumns;
   cornerRadius?: FeaturesCornerRadius;
+  isDark?: boolean;
+  isVisualEditActive?: boolean;
+  onItemTextUpdate?: (idx: number, field: 'title' | 'description', nextText: string) => void;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
 }
+
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 
 export function FeaturesSectionShared({
   items,
@@ -98,6 +106,12 @@ export function FeaturesSectionShared({
   spacing = DEFAULT_SECTION_SPACING,
   desktopColumns = DEFAULT_FEATURES_DESKTOP_COLUMNS,
   cornerRadius = DEFAULT_FEATURES_CORNER_RADIUS,
+  isDark,
+  isVisualEditActive = false,
+  onItemTextUpdate,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: FeaturesSectionSharedProps) {
   const normalizedItems = React.useMemo(() => normalizeItems(items), [items]);
   const previewDevice = resolveDevice(device);
@@ -105,11 +119,11 @@ export function FeaturesSectionShared({
   const resolvedCornerRadius = normalizeFeaturesCornerRadius(cornerRadius);
   const cardRadiusClassName = getFeaturesCornerRadiusClassName(resolvedCornerRadius);
 
-  const colors = React.useMemo(() => getFeaturesColorTokens({
+  const colors = React.useMemo(() => adaptTokensForDarkMode(getFeaturesColorTokens({
     primary: brandColor,
     secondary,
     mode,
-  }), [brandColor, secondary, mode]);
+  }), isDark ?? false), [brandColor, secondary, mode, isDark]);
 
   const sectionTitle = title?.trim() || 'Tính năng nổi bật';
 
@@ -188,6 +202,10 @@ export function FeaturesSectionShared({
         subtitleAboveTitle={subtitleAboveTitle}
         uppercaseText={uppercaseText}
         brandColor={brandColor}
+        visualEditEnabled={isVisualEditActive}
+        onTitleChange={onTitleChange}
+        onSubtitleChange={onSubtitleChange}
+        onBadgeTextChange={onBadgeTextChange}
       />
     );
   };
@@ -237,12 +255,32 @@ export function FeaturesSectionShared({
                     <IconComponent size={24} strokeWidth={2} />
                   </div>
                 ) : null}
-                <h3 className="font-bold text-base md:text-lg mb-2 leading-snug break-words" style={{ color: colors.body }}>
-                  {item.title || 'Tên tính năng'}
+                <h3
+                  contentEditable={isVisualEditActive}
+                  suppressContentEditableWarning={isVisualEditActive}
+                  onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                  className={cn(
+                    "font-bold text-base md:text-lg mb-2 leading-snug break-words",
+                    isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                  )}
+                  style={{ color: colors.body }}
+                >
+                  {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                 </h3>
-                <p className="text-xs md:text-sm leading-relaxed break-words" style={{ color: colors.muted }}>
-                  {item.description || 'Mô tả tính năng...'}
-                </p>
+                {(item.description || isVisualEditActive) ? (
+                  <p
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      "text-xs md:text-sm leading-relaxed break-words",
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ color: colors.muted }}
+                  >
+                    {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                  </p>
+                ) : null}
               </div>
             );
           })}
@@ -292,12 +330,32 @@ export function FeaturesSectionShared({
                   </div>
                 ) : null}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm leading-snug break-words" style={{ color: colors.body }}>
-                    {item.title || 'Tên tính năng'}
+                  <h3
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      "font-semibold text-sm leading-snug break-words",
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ color: colors.body }}
+                  >
+                    {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                   </h3>
-                  <p className="text-xs leading-snug break-words" style={{ color: colors.muted }}>
-                    {item.description || 'Mô tả tính năng...'}
-                  </p>
+                  {(item.description || isVisualEditActive) ? (
+                    <p
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "text-xs leading-snug break-words",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: colors.muted }}
+                    >
+                      {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
@@ -345,12 +403,32 @@ export function FeaturesSectionShared({
                   </div>
                 ) : null}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm mb-0.5 leading-snug break-words" style={{ color: colors.body }}>
-                    {item.title || 'Tính năng'}
+                  <h3
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      "font-semibold text-sm mb-0.5 leading-snug break-words",
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ color: colors.body }}
+                  >
+                    {item.title || (isVisualEditActive ? 'Tính năng' : '')}
                   </h3>
-                  <p className="text-xs leading-snug break-words" style={{ color: colors.muted }}>
-                    {item.description || 'Mô tả...'}
-                  </p>
+                  {(item.description || isVisualEditActive) ? (
+                    <p
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "text-xs leading-snug break-words",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: colors.muted }}
+                    >
+                      {item.description || (isVisualEditActive ? 'Mô tả...' : '')}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
@@ -409,12 +487,32 @@ export function FeaturesSectionShared({
                       {String(idx + 1).padStart(2, '0')}
                     </span>
                   </div>
-                  <h3 className="font-bold text-base md:text-lg mb-2 leading-snug break-words" style={{ color: colors.body }}>
-                    {item.title || 'Tên tính năng'}
+                  <h3
+                    contentEditable={isVisualEditActive}
+                    suppressContentEditableWarning={isVisualEditActive}
+                    onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                    className={cn(
+                      "font-bold text-base md:text-lg mb-2 leading-snug break-words",
+                      isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                    )}
+                    style={{ color: colors.body }}
+                  >
+                    {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                   </h3>
-                  <p className="text-xs md:text-sm leading-relaxed break-words flex-1" style={{ color: colors.muted }}>
-                    {item.description || 'Mô tả tính năng...'}
-                  </p>
+                  {(item.description || isVisualEditActive) ? (
+                    <p
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "text-xs md:text-sm leading-relaxed break-words flex-1",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: colors.muted }}
+                    >
+                      {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                    </p>
+                  ) : null}
                   <div className="mt-4 pt-4 border-t" style={{ borderColor: colors.neutralBorder }}>
                     <span className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: colors.actionText }}>
                       Tìm hiểu thêm <ArrowRight size={14} />
@@ -499,12 +597,32 @@ export function FeaturesSectionShared({
                         <IconComponent size={24} strokeWidth={2} />
                       </div>
                     ) : null}
-                    <h3 className="font-bold text-base md:text-lg mb-2 leading-snug break-words" style={{ color: colors.body }}>
-                      {item.title || 'Tên tính năng'}
+                    <h3
+                      contentEditable={isVisualEditActive}
+                      suppressContentEditableWarning={isVisualEditActive}
+                      onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                      className={cn(
+                        "font-bold text-base md:text-lg mb-2 leading-snug break-words",
+                        isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                      )}
+                      style={{ color: colors.body }}
+                    >
+                      {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                     </h3>
-                    <p className="text-xs md:text-sm leading-relaxed break-words" style={{ color: colors.muted }}>
-                      {item.description || 'Mô tả tính năng...'}
-                    </p>
+                    {(item.description || isVisualEditActive) ? (
+                      <p
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "text-xs md:text-sm leading-relaxed break-words",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: colors.muted }}
+                      >
+                        {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -614,12 +732,32 @@ export function FeaturesSectionShared({
                           <IconComponent size={20} strokeWidth={2} />
                         </div>
                       ) : null}
-                      <h3 className="font-bold text-base md:text-lg leading-snug break-words" style={{ color: colors.body }}>
-                        {item.title || 'Tên tính năng'}
+                      <h3
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "font-bold text-base md:text-lg leading-snug break-words",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: colors.body }}
+                      >
+                        {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                       </h3>
-                      <p className="mt-2 text-xs md:text-sm leading-relaxed break-words" style={{ color: colors.muted }}>
-                        {item.description || 'Mô tả tính năng...'}
-                      </p>
+                      {(item.description || isVisualEditActive) ? (
+                        <p
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(
+                            "mt-2 text-xs md:text-sm leading-relaxed break-words",
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
+                          style={{ color: colors.muted }}
+                        >
+                          {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -724,12 +862,32 @@ export function FeaturesSectionShared({
                           <IconComponent size={21} strokeWidth={2} />
                         </div>
                       ) : null}
-                      <h3 className="font-bold text-[13px] md:text-[14px] mb-1.5 leading-snug text-balance break-words" style={{ color: colors.carouselText }}>
-                        {item.title || 'Tên tính năng'}
+                      <h3
+                        contentEditable={isVisualEditActive}
+                        suppressContentEditableWarning={isVisualEditActive}
+                        onBlur={(e) => onItemTextUpdate?.(idx, 'title', e.currentTarget.textContent ?? '')}
+                        className={cn(
+                          "font-bold text-[13px] md:text-[14px] mb-1.5 leading-snug text-balance break-words",
+                          isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                        )}
+                        style={{ color: colors.carouselText }}
+                      >
+                        {item.title || (isVisualEditActive ? 'Tên tính năng' : '')}
                       </h3>
-                      <p className="text-[11px] md:text-xs leading-snug break-words" style={{ color: colors.carouselMuted }}>
-                        {item.description || 'Mô tả tính năng...'}
-                      </p>
+                      {(item.description || isVisualEditActive) ? (
+                        <p
+                          contentEditable={isVisualEditActive}
+                          suppressContentEditableWarning={isVisualEditActive}
+                          onBlur={(e) => onItemTextUpdate?.(idx, 'description', e.currentTarget.textContent ?? '')}
+                          className={cn(
+                            "text-[11px] md:text-xs leading-snug break-words",
+                            isVisualEditActive && 'outline-dashed outline-1 outline-blue-500 hover:bg-blue-50/50 cursor-text select-text'
+                          )}
+                          style={{ color: colors.carouselMuted }}
+                        >
+                          {item.description || (isVisualEditActive ? 'Mô tả tính năng...' : '')}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </div>

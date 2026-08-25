@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { useSystemBrandColors } from '../../create/shared';
+import { useSystemBrandColors } from './useSystemBrandColors';
 import { HOME_COMPONENT_TYPE_VALUES } from '@/lib/home-components/componentTypes';
 import {
   getTypeOverrideState,

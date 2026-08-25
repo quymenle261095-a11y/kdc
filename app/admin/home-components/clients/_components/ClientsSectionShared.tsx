@@ -40,6 +40,10 @@ interface ClientsSectionSharedProps {
   cornerRadius?: ClientsCornerRadius;
   noBorderRadius?: boolean;
   brandColor: string;
+  visualEditEnabled?: boolean;
+  onTitleChange?: (val: string) => void;
+  onSubtitleChange?: (val: string) => void;
+  onBadgeTextChange?: (val: string) => void;
 }
 
 export const normalizeClientsStyleSafe = (value: unknown): ClientsStyle => {
@@ -209,6 +213,10 @@ export function ClientsSectionShared({
   cornerRadius,
   noBorderRadius,
   brandColor,
+  visualEditEnabled,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
 }: ClientsSectionSharedProps) {
   const normalizedItems = React.useMemo(() => normalizeClientItems(items), [items]);
   const selectedStyle = normalizeClientsStyleSafe(style);
@@ -239,6 +247,10 @@ export function ClientsSectionShared({
           subtitleAboveTitle={subtitleAboveTitle}
           uppercaseText={uppercaseText}
           brandColor={brandColor}
+          visualEditEnabled={visualEditEnabled}
+          onTitleChange={onTitleChange}
+          onSubtitleChange={onSubtitleChange}
+          onBadgeTextChange={onBadgeTextChange}
         />
       )}
 

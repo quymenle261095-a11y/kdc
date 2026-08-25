@@ -15,7 +15,7 @@ export interface AboutEditorStat extends AboutPersistStat {
   id: string;
 }
 
-export type AboutStyle = 'classic' | 'bento' | 'minimal' | 'split' | 'timeline' | 'showcase' | 'spaCollage' | 'solarFeature';
+export type AboutStyle = 'classic' | 'bento' | 'minimal' | 'split' | 'timeline' | 'showcase' | 'spaCollage' | 'solarFeature' | 'kanban';
 export type AboutBrandMode = 'single' | 'dual';
 export type AboutHarmony = 'analogous' | 'complementary' | 'triadic';
 export type AboutCornerRadius = 'none' | 'sm' | 'lg';

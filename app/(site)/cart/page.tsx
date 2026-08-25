@@ -10,10 +10,15 @@ import { useBrandColors } from '@/components/site/hooks';
 import { getCartColors } from '@/components/site/cart/colors';
 import { useCart, useCartExpiry } from '@/lib/cart';
 import { useCartConfig } from '@/lib/experiences';
-import { useCustomerAuth } from '@/app/(site)/auth/context';
 import type { Id } from '@/convex/_generated/dataModel';
 
 const formatPrice = (value: number) => new Intl.NumberFormat('vi-VN', { currency: 'VND', style: 'currency' }).format(value);
+const itemTypeLabel = (itemType?: 'product' | 'service' | 'course' | 'resource') => {
+  if (itemType === 'service') return 'Dịch vụ';
+  if (itemType === 'course') return 'Khóa học';
+  if (itemType === 'resource') return 'Tài nguyên';
+  return 'Sản phẩm';
+};
 
 export default function CartPage() {
   const brandColors = useBrandColors();
@@ -22,9 +27,8 @@ export default function CartPage() {
     [brandColors.primary, brandColors.secondary, brandColors.mode]
   );
   const { cart, items, itemsCount, totalAmount, isLoading, updateQuantity, removeItem, clearCart, updateNote } = useCart();
-  const { isAuthenticated, openLoginModal } = useCustomerAuth();
   const cartConfig = useCartConfig();
-  const cartModule = useQuery(api.admin.modules.getModuleByKey, { key: 'cart' });
+  const commerceCapabilities = useQuery(api.cart.getCommerceCapabilities, {});
   const layoutStyle = cartConfig.layoutStyle;
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<'newest' | 'name-asc' | 'price-asc' | 'price-desc' | 'qty-desc'>('newest');
@@ -98,6 +102,59 @@ export default function CartPage() {
   const handleUpdateQuantity = async (itemId: Id<'cartItems'>, quantity: number) => {
     await updateQuantity(itemId, quantity);
   };
+  const renderQuantityControl = (item: (typeof items)[number], size: 'table' | 'sm' | 'md') => {
+    if (item.itemType === 'course' || item.itemType === 'resource') {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="rounded-full px-2 py-1 text-xs font-medium" style={{ backgroundColor: tokens.surfaceSoft, color: tokens.metaText }}>
+            1 {item.itemType === 'resource' ? 'tài nguyên' : 'khóa học'}
+          </span>
+        </div>
+      );
+    }
+
+    const buttonClass = size === 'md'
+      ? 'w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]'
+      : size === 'table'
+        ? 'w-7 h-7 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]'
+        : 'w-6 h-6 rounded border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]';
+    const countClass = size === 'md'
+      ? 'w-8 text-center text-sm font-medium'
+      : size === 'table'
+        ? 'w-7 text-center text-sm font-medium'
+        : 'w-6 text-center text-sm font-medium';
+    const iconSize = size === 'md' ? 14 : 12;
+
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={buttonClass}
+          style={{
+            borderColor: tokens.quantityButtonBorder,
+            backgroundColor: tokens.quantityButtonBg,
+            ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
+          }}
+          onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
+        >
+          <Minus size={iconSize} style={{ color: tokens.quantityButtonIcon }} />
+        </button>
+        <span className={countClass} style={{ color: tokens.bodyText }}>{item.quantity}</span>
+        <button
+          type="button"
+          className={buttonClass}
+          style={{
+            borderColor: tokens.quantityButtonBorder,
+            backgroundColor: tokens.quantityButtonBg,
+            ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
+          }}
+          onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
+        >
+          <Plus size={iconSize} style={{ color: tokens.quantityButtonIcon }} />
+        </button>
+      </div>
+    );
+  };
 
   const expiresAt = cart?.expiresAt ?? null;
   const { expiryText, isExpired } = useCartExpiry(expiresAt);
@@ -134,7 +191,12 @@ export default function CartPage() {
     return result;
   }, [items, layoutStyle, searchQuery, sortOption]);
 
-  if (cartModule && !cartModule.enabled) {
+  if (commerceCapabilities && !commerceCapabilities.cartAvailable) {
+    const message = !commerceCapabilities.cartEnabled
+      ? 'Hãy bật module Giỏ hàng để sử dụng tính năng này.'
+      : !commerceCapabilities.ordersEnabled
+        ? 'Hãy bật module Đơn hàng để sử dụng thanh toán.'
+        : 'Hãy bật chế độ giỏ hàng cho ít nhất một module Sản phẩm, Dịch vụ hoặc Khóa học.';
     return (
       <div className="max-w-5xl mx-auto px-4 py-16 text-center">
         <div
@@ -143,33 +205,12 @@ export default function CartPage() {
         >
           <ShoppingCart size={32} style={{ color: tokens.emptyStateIcon }} />
         </div>
-        <h1 className="text-2xl font-bold mb-2" style={{ color: tokens.emptyStateTitle }}>Giỏ hàng đang tắt</h1>
-        <p style={{ color: tokens.emptyStateText }}>Hãy bật module Giỏ hàng để sử dụng tính năng này.</p>
+        <h1 className="text-2xl font-bold mb-2" style={{ color: tokens.emptyStateTitle }}>Giỏ hàng chưa khả dụng</h1>
+        <p style={{ color: tokens.emptyStateText }}>{message}</p>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center">
-        <div
-          className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: tokens.emptyStateIconBg }}
-        >
-          <ShoppingCart size={32} style={{ color: tokens.emptyStateIcon }} />
-        </div>
-        <h1 className="text-2xl font-bold mb-2" style={{ color: tokens.emptyStateTitle }}>Đăng nhập để xem giỏ hàng</h1>
-        <p className="mb-6" style={{ color: tokens.emptyStateText }}>Bạn cần đăng nhập để quản lý giỏ hàng của mình.</p>
-        <button
-          onClick={openLoginModal}
-          className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-medium"
-          style={{ backgroundColor: tokens.primaryButtonBg, color: tokens.primaryButtonText }}
-        >
-          Đăng nhập ngay
-        </button>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -213,13 +254,13 @@ export default function CartPage() {
           <Package size={32} style={{ color: tokens.emptyStateIcon }} />
         </div>
         <h1 className="text-2xl font-bold mb-2" style={{ color: tokens.emptyStateTitle }}>Giỏ hàng trống</h1>
-        <p className="mb-6" style={{ color: tokens.emptyStateText }}>Hãy chọn thêm sản phẩm để tiếp tục mua sắm.</p>
+        <p className="mb-6" style={{ color: tokens.emptyStateText }}>Hãy chọn thêm sản phẩm, dịch vụ hoặc khóa học để tiếp tục.</p>
         <Link
           href="/products"
           className="inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-medium"
           style={{ backgroundColor: tokens.emptyStateActionBg, color: tokens.emptyStateActionText }}
         >
-          Xem sản phẩm
+          Tiếp tục mua sắm
         </Link>
       </div>
     );
@@ -230,7 +271,7 @@ export default function CartPage() {
       <div className="mb-8 flex flex-col gap-3">
         <div>
           <h1 className="text-3xl font-bold" style={{ color: tokens.headingColor }}>Giỏ hàng của bạn</h1>
-          <p className="mt-2" style={{ color: tokens.metaText }}>{itemsCount} sản phẩm trong giỏ hàng.</p>
+          <p className="mt-2" style={{ color: tokens.metaText }}>{itemsCount} mục trong giỏ hàng.</p>
         </div>
         {shouldShowExpiry && (
           <div
@@ -246,14 +287,14 @@ export default function CartPage() {
       {layoutStyle === 'table' ? (
         <div className="space-y-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm" style={{ color: tokens.metaText }}>Hiển thị {filteredItems.length} sản phẩm</div>
+            <div className="text-sm" style={{ color: tokens.metaText }}>Hiển thị {filteredItems.length} mục</div>
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: tokens.searchIcon }} />
                 <input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Tìm theo tên sản phẩm..."
+                  placeholder="Tìm theo tên..."
                   className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] placeholder:text-[var(--input-placeholder)]"
                   style={{
                     backgroundColor: tokens.inputBg,
@@ -293,7 +334,7 @@ export default function CartPage() {
                 <table className="w-full text-sm">
                   <thead style={{ backgroundColor: tokens.tableHeaderBg, color: tokens.tableHeaderText }}>
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium">Sản phẩm</th>
+                      <th className="px-4 py-3 text-left font-medium">Mục</th>
                       <th className="px-4 py-3 text-left font-medium">Đơn giá</th>
                       <th className="px-4 py-3 text-left font-medium">Số lượng</th>
                       <th className="px-4 py-3 text-left font-medium">Thành tiền</th>
@@ -319,6 +360,7 @@ export default function CartPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="font-medium line-clamp-2" style={{ color: tokens.bodyText }}>{item.productName}</div>
+                              <div className="text-[11px] font-medium mt-1" style={{ color: tokens.metaText }}>{itemTypeLabel(item.itemType)}</div>
                               {item.variantId && variantTitleById.get(item.variantId) && (
                                 <div className="text-xs mt-1" style={{ color: tokens.metaText }}>{variantTitleById.get(item.variantId)}</div>
                               )}
@@ -327,33 +369,7 @@ export default function CartPage() {
                         </td>
                         <td className="px-4 py-4 font-medium" style={{ color: tokens.priceText }}>{formatPrice(item.price)}</td>
                         <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="w-7 h-7 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                              style={{
-                                borderColor: tokens.quantityButtonBorder,
-                                backgroundColor: tokens.quantityButtonBg,
-                                ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                              }}
-                              onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
-                            >
-                              <Minus size={12} style={{ color: tokens.quantityButtonIcon }} />
-                            </button>
-                            <span className="w-7 text-center text-sm font-medium" style={{ color: tokens.bodyText }}>{item.quantity}</span>
-                            <button
-                              type="button"
-                              className="w-7 h-7 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                              style={{
-                                borderColor: tokens.quantityButtonBorder,
-                                backgroundColor: tokens.quantityButtonBg,
-                                ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                              }}
-                              onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
-                            >
-                              <Plus size={12} style={{ color: tokens.quantityButtonIcon }} />
-                            </button>
-                          </div>
+                          {renderQuantityControl(item, 'table')}
                         </td>
                         <td className="px-4 py-4 font-semibold" style={{ color: tokens.bodyText }}>{formatPrice(item.subtotal)}</td>
                         <td className="px-4 py-4 text-right">
@@ -397,37 +413,12 @@ export default function CartPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-base line-clamp-2" style={{ color: tokens.bodyText }}>{item.productName}</h3>
+                      <div className="text-[11px] font-medium mt-1" style={{ color: tokens.metaText }}>{itemTypeLabel(item.itemType)}</div>
                       {item.variantId && variantTitleById.get(item.variantId) && (
                         <p className="text-xs mt-1" style={{ color: tokens.metaText }}>{variantTitleById.get(item.variantId)}</p>
                       )}
                       <div className="font-bold text-sm mt-1" style={{ color: tokens.priceText }}>{formatPrice(item.price)}</div>
-                      <div className="mt-4 flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                          style={{
-                            borderColor: tokens.quantityButtonBorder,
-                            backgroundColor: tokens.quantityButtonBg,
-                            ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                          }}
-                          onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
-                        >
-                          <Minus size={14} style={{ color: tokens.quantityButtonIcon }} />
-                        </button>
-                        <span className="w-8 text-center text-sm font-medium" style={{ color: tokens.bodyText }}>{item.quantity}</span>
-                        <button
-                          type="button"
-                          className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                          style={{
-                            borderColor: tokens.quantityButtonBorder,
-                            backgroundColor: tokens.quantityButtonBg,
-                            ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                          }}
-                          onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
-                        >
-                          <Plus size={14} style={{ color: tokens.quantityButtonIcon }} />
-                        </button>
-                      </div>
+                      <div className="mt-4">{renderQuantityControl(item, 'md')}</div>
                     </div>
                     <div className="flex flex-col items-end justify-between">
                       <button
@@ -530,37 +521,12 @@ export default function CartPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-sm line-clamp-2" style={{ color: tokens.bodyText }}>{item.productName}</h3>
+                    <div className="text-[11px] font-medium mt-1" style={{ color: tokens.metaText }}>{itemTypeLabel(item.itemType)}</div>
                     {item.variantId && variantTitleById.get(item.variantId) && (
                       <p className="text-xs mt-1" style={{ color: tokens.metaText }}>{variantTitleById.get(item.variantId)}</p>
                     )}
                     <div className="text-sm font-semibold mt-1" style={{ color: tokens.priceText }}>{formatPrice(item.price)}</div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="w-6 h-6 rounded border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                        style={{
-                          borderColor: tokens.quantityButtonBorder,
-                          backgroundColor: tokens.quantityButtonBg,
-                          ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                        }}
-                        onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
-                      >
-                        <Minus size={12} style={{ color: tokens.quantityButtonIcon }} />
-                      </button>
-                      <span className="w-6 text-center text-sm font-medium" style={{ color: tokens.bodyText }}>{item.quantity}</span>
-                      <button
-                        type="button"
-                        className="w-6 h-6 rounded border flex items-center justify-center hover:bg-[var(--qty-hover-bg)]"
-                        style={{
-                          borderColor: tokens.quantityButtonBorder,
-                          backgroundColor: tokens.quantityButtonBg,
-                          ['--qty-hover-bg' as never]: tokens.quantityButtonHoverBg,
-                        }}
-                        onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
-                      >
-                        <Plus size={12} style={{ color: tokens.quantityButtonIcon }} />
-                      </button>
-                    </div>
+                    <div className="mt-2">{renderQuantityControl(item, 'sm')}</div>
                   </div>
                   <div className="flex flex-col items-end justify-between">
                     <button

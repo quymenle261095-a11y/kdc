@@ -8,7 +8,8 @@ import { normalizeFeaturesCornerRadius, type FeatureItem, type FeaturesStyle } f
 import { normalizeSectionSpacing } from '@/app/admin/home-components/_shared/types/sectionSpacing';
 import type { HomeComponentSectionProps } from '../types';
 
-export function FeaturesRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+
+export function FeaturesRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const items = Array.isArray(config.items) ? (config.items as FeatureItem[]) : [];
   const style = (config.style as FeaturesStyle) ?? 'carousel6';
   const showIcons = config.showIcons !== false;
@@ -19,8 +20,8 @@ export function FeaturesRuntimeSection({ config, brandColor, secondary, mode, ti
 
   return (
     <section className={isFullwidthCarousel ? 'py-0 w-full overflow-hidden' : 'py-8 px-3'}>
-      <div className={isFullwidthCarousel ? 'w-full' : 'mx-auto max-w-7xl'}>
-        <div className={isFullwidthCarousel ? 'mx-auto max-w-7xl px-3 pt-8' : undefined}>
+      <div className={isFullwidthCarousel ? 'w-full' : 'mx-auto max-w-7xl tv:max-w-[1600px]'}>
+        <div className={isFullwidthCarousel ? 'mx-auto max-w-7xl tv:max-w-[1600px] px-3 pt-8' : undefined}>
         <SectionHeader
           title={title}
           subtitle={headerConfig.subtitle}
@@ -49,6 +50,7 @@ export function FeaturesRuntimeSection({ config, brandColor, secondary, mode, ti
           spacing={spacing}
           desktopColumns={config.desktopColumns === 4 ? 4 : 3}
           cornerRadius={cornerRadius}
+          isDark={isDark}
         />
       </div>
     </section>

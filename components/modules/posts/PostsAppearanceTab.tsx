@@ -43,8 +43,8 @@ import { useBrandColor } from '@/components/site/hooks';
  }
  
 export function PostsAppearanceTab({ onHasChanges, onSaveRef }: PostsAppearanceTabProps) {
-   const listStyleSetting = useQuery(api.settings.getByKey, { key: 'posts_list_style' });
-   const detailStyleSetting = useQuery(api.settings.getByKey, { key: 'posts_detail_style' });
+   const listConfigSetting = useQuery(api.settings.getByKey, { key: 'posts_list_ui' });
+   const detailConfigSetting = useQuery(api.settings.getByKey, { key: 'posts_detail_ui' });
    const brandColor = useBrandColor();
    const setMultipleSettings = useMutation(api.settings.setMultiple);
    
@@ -54,8 +54,10 @@ export function PostsAppearanceTab({ onHasChanges, onSaveRef }: PostsAppearanceT
    const [activePreview, setActivePreview] = useState<'list' | 'detail'>('list');
    const [hasChanges, setHasChanges] = useState(false);
    
-   const resolvedListStyle = listStyle ?? (listStyleSetting?.value as PostsListStyle) ?? 'fullwidth';
-   const resolvedDetailStyle = detailStyle ?? (detailStyleSetting?.value as PostsDetailStyle) ?? 'classic';
+   const listConfig = (listConfigSetting?.value && typeof listConfigSetting.value === 'object') ? listConfigSetting.value as Record<string, unknown> : {};
+   const detailConfig = (detailConfigSetting?.value && typeof detailConfigSetting.value === 'object') ? detailConfigSetting.value as Record<string, unknown> : {};
+   const resolvedListStyle = listStyle ?? (listConfig.layoutStyle as PostsListStyle | undefined) ?? 'fullwidth';
+   const resolvedDetailStyle = detailStyle ?? (detailConfig.layoutStyle as PostsDetailStyle | undefined) ?? 'classic';
    
    useEffect(() => {
      onHasChanges?.(hasChanges);
@@ -64,13 +66,13 @@ export function PostsAppearanceTab({ onHasChanges, onSaveRef }: PostsAppearanceT
    const handleSave = useCallback(async () => {
      await setMultipleSettings({
        settings: [
-         { group: 'posts', key: 'posts_list_style', value: resolvedListStyle },
-         { group: 'posts', key: 'posts_detail_style', value: resolvedDetailStyle },
+         { group: 'experience', key: 'posts_list_ui', value: { ...listConfig, layoutStyle: resolvedListStyle } },
+         { group: 'experience', key: 'posts_detail_ui', value: { ...detailConfig, layoutStyle: resolvedDetailStyle } },
        ]
      });
      setHasChanges(false);
      toast.success('Đã lưu cài đặt giao diện!');
-   }, [resolvedListStyle, resolvedDetailStyle, setMultipleSettings]);
+   }, [detailConfig, listConfig, resolvedDetailStyle, resolvedListStyle, setMultipleSettings]);
    
    useEffect(() => {
      if (onSaveRef) onSaveRef.current = handleSave;

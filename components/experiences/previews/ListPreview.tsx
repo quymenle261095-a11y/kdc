@@ -11,6 +11,7 @@ type ProductListCornerRadius = 'none' | 'sm' | 'lg';
 
 type PostsListPreviewProps = {
   layoutStyle: ListLayoutStyle;
+  gridColumns?: number;
   paginationType?: PaginationType;
   showSearch?: boolean;
   showCategories?: boolean;
@@ -30,10 +31,11 @@ type PaginationTokens = {
   neutralTextLight: string;
 };
 
-const normalizeLayoutStyle = (style: ListLayoutStyle): 'fullwidth' | 'sidebar' | 'magazine' => {
-  if (style === 'grid' || style === 'fullwidth') {return 'fullwidth';}
-  if (style === 'list' || style === 'sidebar') {return 'sidebar';}
-  return 'magazine';
+const normalizeLayoutStyle = (style: ListLayoutStyle): 'grid' | 'sidebar' | 'list' => {
+  if (style === 'grid' || style === 'fullwidth') {return 'grid';}
+  if (style === 'sidebar') {return 'sidebar';}
+  if (style === 'list' || style === 'magazine' || style === 'masonry') {return 'list';}
+  return 'grid';
 };
 
 function PaginationPreview({
@@ -77,6 +79,7 @@ function PaginationPreview({
 
 export function PostsListPreview({
   layoutStyle,
+  gridColumns,
   paginationType = 'pagination',
   showSearch = true,
   showCategories = true,
@@ -101,12 +104,17 @@ export function PostsListPreview({
   const isCompact = device !== 'desktop';
   const visiblePosts = device === 'mobile' ? 2 : 4;
   const showMobilePanel = isCompact && (showSearch || showCategories);
-  const gridClass = isMobile ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3';
+  const gridCols = gridColumns ?? 3;
+  const gridClass = device === 'mobile'
+    ? (gridCols === 4 ? 'grid-cols-2' : 'grid-cols-1')
+    : device === 'tablet'
+      ? (gridCols === 4 ? 'grid-cols-2' : 'grid-cols-3')
+      : (gridCols === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-3');
 
-  if (style === 'fullwidth') {
+  if (style === 'grid') {
     return (
       <div className="py-6 md:py-10 px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
           <div className="text-center mb-3">
             <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Tin tức & Bài viết</h2>
           </div>
@@ -314,7 +322,7 @@ export function PostsListPreview({
     
     return (
       <div className={`py-6 md:py-10 px-4`}>
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
           <div className="text-center mb-3">
             <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Tin tức & Bài viết</h2>
           </div>
@@ -401,40 +409,30 @@ export function PostsListPreview({
             
             {/* Main Content */}
             <main className={`flex-1 ${mainOrder}`}>
-              <div className="space-y-2.5">
+              <div className={`grid ${gridClass} gap-3`}>
                 {mockPosts.slice(0, visiblePosts).map((post) => (
-                  <div key={post.id} className="rounded-lg overflow-hidden border" style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}>
-                    <div className="flex flex-col sm:flex-row">
-                      {/* Image */}
-                      <div className={`${isMobile ? '' : 'sm:w-40 md:w-48'} flex-shrink-0`}>
-                        <div className={`${isMobile ? 'aspect-video' : 'aspect-video sm:aspect-[4/3] sm:h-full'} flex items-center justify-center relative`} style={{ backgroundColor: tokens.cardBorder }}>
-                          <FileText size={28} style={{ color: tokens.neutralTextLight }} />
-                        </div>
+                  <div key={post.id} className="rounded-lg overflow-hidden shadow-sm border h-full flex flex-col" style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}>
+                    <div className="aspect-video flex items-center justify-center" style={{ backgroundColor: tokens.cardBorder }}>
+                      <FileText size={24} style={{ color: tokens.neutralTextLight }} />
+                    </div>
+                    <div className="p-3 flex-1 flex flex-col">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span
+                          className="text-xs font-medium px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: tokens.categoryBadgeBg,
+                            color: tokens.categoryBadgeText,
+                            borderColor: tokens.categoryBadgeBorder,
+                          }}
+                        >
+                          {post.category}
+                        </span>
                       </div>
-                      
-                      {/* Content */}
-                      <div className="p-3 flex-1 flex flex-col justify-center">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className="text-xs font-medium px-2 py-0.5 rounded"
-                            style={{
-                              backgroundColor: tokens.categoryBadgeBg,
-                              color: tokens.categoryBadgeText,
-                              borderColor: tokens.categoryBadgeBorder,
-                            }}
-                          >
-                            {post.category}
-                          </span>
-                          <span className="text-xs" style={{ color: tokens.neutralTextLight }}>{post.date}</span>
-                        </div>
-                        <h2 className="text-sm font-semibold line-clamp-2 mb-1" style={{ color: tokens.bodyText }}>
-                          {post.title}
-                        </h2>
-                        <div className="h-3 rounded w-4/5 mb-1.5" style={{ backgroundColor: tokens.cardBorder }} />
-                        <div className="flex items-center gap-1 text-xs" style={{ color: tokens.neutralTextLight }}>
-                          <span>👁</span>
-                          <span>{post.views.toLocaleString()}</span>
-                        </div>
+                      <h3 className="text-sm font-semibold line-clamp-2 flex-1" style={{ color: tokens.bodyText }}>{post.title}</h3>
+                      <div className="h-3 rounded mt-1.5 w-4/5" style={{ backgroundColor: tokens.cardBorder }} />
+                      <div className="flex items-center justify-between text-xs mt-2.5 pt-2.5 border-t" style={{ color: tokens.neutralTextLight, borderColor: tokens.cardBorder }}>
+                        <span>{post.date}</span>
+                        <span>{post.views} views</span>
                       </div>
                     </div>
                   </div>
@@ -448,10 +446,215 @@ export function PostsListPreview({
     );
   }
 
+  if (style === 'list') {
+    return (
+      <div className="py-6 md:py-10 px-4">
+        <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
+          <div className="text-center mb-3">
+            <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Tin tức & Bài viết</h2>
+          </div>
+        {showFilterBar && (
+          <div className="mb-5 space-y-2.5">
+            <div
+              className="rounded-lg border p-3 shadow-sm"
+              style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.cardBorder }}
+            >
+              <div className="flex items-center gap-2">
+                {/* Search */}
+                {showSearch && (
+                  <div className={`relative flex-1 min-w-0 ${isDesktop ? 'max-w-xs' : ''}`}>
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: tokens.inputIcon }} />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm..."
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm placeholder:text-[var(--placeholder-color)]"
+                      style={{
+                        '--placeholder-color': tokens.inputPlaceholder,
+                        borderColor: tokens.inputBorder,
+                        backgroundColor: tokens.inputBackground,
+                        color: tokens.inputText,
+                      } as React.CSSProperties}
+                      disabled
+                    />
+                  </div>
+                )}
+                
+                {/* Category Dropdown */}
+                {showCategories && isDesktop && (
+                  <div className="relative">
+                    <select
+                      className="appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm min-w-[140px]"
+                      style={{
+                        borderColor: tokens.inputBorder,
+                        backgroundColor: tokens.inputBackground,
+                        color: tokens.inputText,
+                      }}
+                      disabled
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tokens.inputIcon }} />
+                  </div>
+                )}
+                
+                {isDesktop && <div className="flex-1" />}
+                
+                {/* Sort Dropdown */}
+                {isDesktop && (
+                  <div className="relative">
+                    <select
+                      className="appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm"
+                      style={{
+                        borderColor: tokens.inputBorder,
+                        backgroundColor: tokens.inputBackground,
+                        color: tokens.inputText,
+                      }}
+                      disabled
+                    >
+                      <option>Mới nhất</option>
+                      <option>Cũ nhất</option>
+                      <option>Xem nhiều</option>
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: tokens.inputIcon }} />
+                  </div>
+                )}
+                
+                {showMobilePanel && (
+                  <button
+                    className="flex items-center gap-2 px-3 py-2 border rounded-lg text-sm shrink-0"
+                    style={{ borderColor: tokens.inputBorder, color: tokens.bodyText, backgroundColor: tokens.cardBackground }}
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                    Bộ lọc
+                  </button>
+                )}
+              </div>
+              
+              {showMobilePanel && (
+                <div className="mt-3 pt-3 border-t space-y-3" style={{ borderColor: tokens.cardBorder }}>
+                  {showCategories && (
+                    <div>
+                      <label className="text-xs font-medium uppercase tracking-wider mb-1.5 block" style={{ color: tokens.neutralTextLight }}>
+                        Danh mục
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {categories.map((cat, i) => (
+                          <span
+                            key={cat}
+                            className="px-2.5 py-1 rounded-full text-sm font-medium"
+                            style={i === 0 ? {
+                              backgroundColor: tokens.filterActiveBg,
+                              color: tokens.filterActiveText,
+                            } : {
+                              backgroundColor: tokens.filterTagBg,
+                              color: tokens.filterTagText,
+                              borderColor: tokens.filterTagBorder,
+                            }}
+                          >
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs font-medium uppercase tracking-wider mb-1.5 block" style={{ color: tokens.neutralTextLight }}>
+                      Sắp xếp
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border rounded-lg text-sm"
+                      style={{
+                        borderColor: tokens.inputBorder,
+                        backgroundColor: tokens.inputBackground,
+                        color: tokens.inputText,
+                      }}
+                      disabled
+                    >
+                      <option>Mới nhất</option>
+                      <option>Cũ nhất</option>
+                      <option>Xem nhiều</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {isDesktop ? (
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm" style={{ color: tokens.filterCountText }}>4 bài viết</span>
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: tokens.filterTagBg,
+                      color: tokens.filterTagText,
+                      borderColor: tokens.filterTagBorder,
+                    }}
+                  >
+                    Tin tức
+                  </span>
+                </div>
+                <button className="text-sm hover:underline" style={{ color: tokens.filterClearText }}>
+                  Xóa bộ lọc
+                </button>
+              </div>
+            ) : (
+              <div className="text-sm" style={{ color: tokens.filterCountText }}>4 bài viết</div>
+            )}
+          </div>
+        )}
+
+        {/* List - Horizontal Cards */}
+        <div className="space-y-2.5 max-w-4xl mx-auto">
+          {mockPosts.slice(0, visiblePosts).map((post) => (
+            <div key={post.id} className="rounded-lg overflow-hidden border" style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}>
+              <div className="flex flex-col sm:flex-row">
+                <div className={`${isMobile ? '' : 'sm:w-40 md:w-48'} flex-shrink-0`}>
+                  <div className={`${isMobile ? 'aspect-video' : 'aspect-video sm:aspect-[4/3] sm:h-full'} flex items-center justify-center relative`} style={{ backgroundColor: tokens.cardBorder }}>
+                    <FileText size={28} style={{ color: tokens.neutralTextLight }} />
+                  </div>
+                </div>
+                
+                <div className="p-3 flex-1 flex flex-col justify-center">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: tokens.categoryBadgeBg,
+                        color: tokens.categoryBadgeText,
+                        borderColor: tokens.categoryBadgeBorder,
+                      }}
+                    >
+                      {post.category}
+                    </span>
+                    <span className="text-xs" style={{ color: tokens.neutralTextLight }}>{post.date}</span>
+                  </div>
+                  <h2 className="text-sm font-semibold line-clamp-2 mb-1" style={{ color: tokens.bodyText }}>
+                    {post.title}
+                  </h2>
+                  <div className="h-3 rounded w-4/5 mb-1.5" style={{ backgroundColor: tokens.cardBorder }} />
+                  <div className="flex items-center gap-1 text-xs" style={{ color: tokens.neutralTextLight }}>
+                    <span>👁</span>
+                    <span>{post.views.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <PaginationPreview paginationType={paginationType} brandColor={brandColor} tokens={tokens} />
+        </div>
+      </div>
+    );
+  }
+
   // Magazine layout
   return (
     <div className="py-6 md:py-10 px-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
         <div className="text-center mb-3">
           <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Tin tức & Bài viết</h2>
         </div>
@@ -598,7 +801,7 @@ export function PostsListPreview({
               <span className="text-sm" style={{ color: tokens.metaText }}>4 bài viết</span>
             </div>
             
-            <div className={`grid ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'} gap-3`}>
+            <div className={`grid ${gridClass} gap-3`}>
               {mockPosts.slice(0, visiblePosts).map((post) => (
                 <div key={post.id} className="h-full flex flex-col rounded-lg overflow-hidden border" style={{ backgroundColor: tokens.cardBackground, borderColor: tokens.cardBorder }}>
                   <div className="relative aspect-video overflow-hidden" style={{ backgroundColor: tokens.cardBorder }}>
@@ -641,6 +844,7 @@ export function PostsListPreview({
 
 type ProductsListPreviewProps = {
   layoutStyle: ProductsListLayoutStyle;
+  gridColumns?: number;
   paginationType?: PaginationType;
   showSearch?: boolean;
   showCategories?: boolean;
@@ -653,6 +857,8 @@ type ProductsListPreviewProps = {
   showAddToCartButton?: boolean;
   showBuyNowButton?: boolean;
   showPromotionBadge?: boolean;
+  cartButtonsLayout?: 'stack' | 'grid-2';
+  priceFilterMode?: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
 };
 
 const getProductListRadiusClass = (cornerRadius: ProductListCornerRadius) => {
@@ -676,12 +882,16 @@ function PreviewMobileProductsFilters({
   showCategories,
   tokens,
   radiusClass,
+  priceFilterMode,
+  brandColor,
 }: {
   categories: string[];
   showSearch: boolean;
   showCategories: boolean;
   tokens: ReturnType<typeof getProductsListColors>;
   radiusClass: string;
+  priceFilterMode?: 'disabled' | 'custom' | 'smart_dropdown' | 'slider';
+  brandColor?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -730,7 +940,7 @@ function PreviewMobileProductsFilters({
 
           {showCategories && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider" style={{ color: tokens.metaText }}>Danh mục</p>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider" style={{ color: tokens.metaText }}>Danh mục sản phẩm</p>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((cat, i) => (
                   <span
@@ -745,6 +955,56 @@ function PreviewMobileProductsFilters({
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {priceFilterMode && priceFilterMode !== 'disabled' && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider" style={{ color: tokens.metaText }}>Khoảng giá</p>
+              {priceFilterMode === 'custom' && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Từ"
+                    className="w-1/2 px-2 py-1 border rounded text-sm"
+                    style={{ borderColor: tokens.inputBorder, backgroundColor: tokens.inputBackground, color: tokens.inputText }}
+                    disabled
+                  />
+                  <input
+                    type="text"
+                    placeholder="Đến"
+                    className="w-1/2 px-2 py-1 border rounded text-sm"
+                    style={{ borderColor: tokens.inputBorder, backgroundColor: tokens.inputBackground, color: tokens.inputText }}
+                    disabled
+                  />
+                </div>
+              )}
+              {priceFilterMode === 'smart_dropdown' && (
+                <select
+                  className="w-full px-2 py-1 border rounded text-sm"
+                  style={{ borderColor: tokens.inputBorder, backgroundColor: tokens.inputBackground, color: tokens.inputText }}
+                  disabled
+                >
+                  <option>Tất cả khoảng giá</option>
+                  <option>Dưới 500kđ</option>
+                  <option>500kđ - 1Mđ</option>
+                  <option>1Mđ - 2Mđ</option>
+                  <option>Trên 2Mđ</option>
+                </select>
+              )}
+              {priceFilterMode === 'slider' && (
+                <div className="px-1 py-2">
+                  <div className="h-1 w-full bg-slate-200 rounded relative">
+                    <div className="absolute left-[20%] right-[30%] h-full bg-red-500 rounded" style={{ backgroundColor: brandColor }} />
+                    <div className="absolute left-[20%] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border bg-white" style={{ borderColor: brandColor }} />
+                    <div className="absolute right-[30%] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border bg-white" style={{ borderColor: brandColor }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-400 mt-1.5">
+                    <span>100kđ</span>
+                    <span>3.5Mđ</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -774,6 +1034,7 @@ function PreviewMobileProductsFilters({
 
 export function ProductsListPreview({
   layoutStyle,
+  gridColumns,
   paginationType = 'pagination',
   showSearch = true,
   showCategories = true,
@@ -786,12 +1047,19 @@ export function ProductsListPreview({
   showAddToCartButton = true,
   showBuyNowButton = true,
   showPromotionBadge = true,
+  cartButtonsLayout = 'stack',
+  priceFilterMode = 'custom',
 }: ProductsListPreviewProps) {
-  const categories = ['Tất cả', 'Điện thoại', 'Laptop', 'Tablet', 'Phụ kiện'];
+  const categories = ['Tất cả danh mục', 'Thiết bị bếp', '↳ Tủ bếp dưới', '↳ Tủ bếp trên', 'Thiết bị vệ sinh', '↳ Bồn rửa chén'];
   const isMobile = device === 'mobile';
   const isDesktop = device === 'desktop';
   const visibleProducts = isMobile ? 2 : 4;
-  const gridClass = isMobile ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3';
+  const gridCols = gridColumns ?? 3;
+  const gridClass = device === 'mobile'
+    ? (gridCols === 4 ? 'grid-cols-2' : 'grid-cols-1')
+    : device === 'tablet'
+      ? (gridCols === 4 ? 'grid-cols-2' : 'grid-cols-3')
+      : (gridCols === 4 ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-3');
   const tokens = getProductsListColors(brandColor, secondaryColor, colorMode);
   const radiusClass = getProductListRadiusClass(cornerRadius);
 
@@ -860,7 +1128,11 @@ export function ProductsListPreview({
           </div>
         </div>
         {(showAddToCartButton || showBuyNowButton) && (
-          <div className="mt-2.5 space-y-2">
+          <div className={
+            cartButtonsLayout === 'grid-2' && showAddToCartButton && showBuyNowButton
+              ? "mt-2.5 grid grid-cols-2 gap-2"
+              : "mt-2.5 space-y-2"
+          }>
             {showAddToCartButton && (
               <button
                 className="w-full py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
@@ -889,7 +1161,7 @@ export function ProductsListPreview({
   if (layoutStyle === 'grid') {
     return (
       <div className="py-6 md:py-10 px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
           <div className="text-center mb-3">
             <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Sản phẩm</h2>
           </div>
@@ -903,6 +1175,8 @@ export function ProductsListPreview({
                   showCategories={showCategories}
                   tokens={tokens}
                   radiusClass={radiusClass}
+                  priceFilterMode={priceFilterMode}
+                  brandColor={brandColor}
                 />
               )}
               <div
@@ -994,6 +1268,8 @@ export function ProductsListPreview({
                   showCategories={showCategories}
                   tokens={tokens}
                   radiusClass={radiusClass}
+                  priceFilterMode={priceFilterMode}
+                  brandColor={brandColor}
                 />
               )}
               <div
@@ -1100,15 +1376,32 @@ export function ProductsListPreview({
                       )}
                     </div>
                   </div>
-                  {showAddToCartButton && (
-                    <button
-                      className="mt-2.5 w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
-                      style={{ backgroundColor: tokens.primaryActionBg, color: tokens.primaryActionText }}
-                      disabled={!product.inStock}
-                    >
-                      <ShoppingCart size={14} />
-                      {product.inStock ? 'Thêm vào giỏ' : 'Hết hàng'}
-                    </button>
+                  {(showAddToCartButton || showBuyNowButton) && (
+                    <div className={
+                      cartButtonsLayout === 'grid-2' && showAddToCartButton && showBuyNowButton
+                        ? "mt-2.5 grid grid-cols-2 gap-2 max-w-xs"
+                        : "mt-2.5 space-y-2 max-w-xs"
+                    }>
+                      {showAddToCartButton && (
+                        <button
+                          className="w-full py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                          style={{ backgroundColor: tokens.primaryActionBg, color: tokens.primaryActionText }}
+                          disabled={!product.inStock}
+                        >
+                          <ShoppingCart size={14} />
+                          {product.inStock ? 'Thêm vào giỏ' : 'Hết hàng'}
+                        </button>
+                      )}
+                      {showBuyNowButton && (
+                        <button
+                          className="w-full py-2 rounded-lg text-sm font-medium border transition-colors disabled:opacity-55 flex items-center justify-center"
+                          style={{ borderColor: tokens.secondaryActionBorder, color: tokens.secondaryActionText }}
+                          disabled={!product.inStock}
+                        >
+                          {product.inStock ? 'Mua ngay' : 'Hết hàng'}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1129,7 +1422,7 @@ export function ProductsListPreview({
 
   return (
     <div className="py-6 md:py-10 px-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
         <div className="text-center mb-3">
           <h2 className="text-2xl md:text-3xl font-bold" style={{ color: tokens.headingColor }}>Sản phẩm</h2>
         </div>
@@ -1142,6 +1435,8 @@ export function ProductsListPreview({
               showCategories={showCategories}
               tokens={tokens}
               radiusClass={radiusClass}
+              priceFilterMode={priceFilterMode}
+              brandColor={brandColor}
             />
           )}
           <aside className={`${sidebarWidth} hidden lg:block flex-shrink-0 ${sidebarOrder}`}>
@@ -1170,7 +1465,7 @@ export function ProductsListPreview({
                 <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
                   <h3 className="font-semibold text-sm mb-2 flex items-center gap-2" style={{ color: tokens.bodyText }}>
                     <FileText size={14} style={{ color: tokens.secondary }} />
-                    Danh mục
+                    Danh mục sản phẩm
                   </h3>
                   <ul className="space-y-0.5">
                     {categories.map((cat, i) => (
@@ -1190,35 +1485,69 @@ export function ProductsListPreview({
                   </ul>
                 </div>
               )}
-              <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
-                <h3 className="font-semibold text-sm mb-2" style={{ color: tokens.bodyText }}>Khoảng giá</h3>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Từ"
-                    className="w-1/2 px-2 py-1.5 border rounded text-sm placeholder:text-[var(--placeholder-color)]"
-                    style={{
-                      borderColor: tokens.inputBorder,
-                      backgroundColor: tokens.inputBackground,
-                      color: tokens.inputText,
-                      '--placeholder-color': tokens.inputPlaceholder,
-                    } as React.CSSProperties}
-                    disabled
-                  />
-                  <input
-                    type="text"
-                    placeholder="Đến"
-                    className="w-1/2 px-2 py-1.5 border rounded text-sm placeholder:text-[var(--placeholder-color)]"
-                    style={{
-                      borderColor: tokens.inputBorder,
-                      backgroundColor: tokens.inputBackground,
-                      color: tokens.inputText,
-                      '--placeholder-color': tokens.inputPlaceholder,
-                    } as React.CSSProperties}
-                    disabled
-                  />
+              {priceFilterMode !== 'disabled' && (
+                <div className={`${radiusClass} border p-3`} style={{ backgroundColor: tokens.filterBarBackground, borderColor: tokens.filterBarBorder }}>
+                  <h3 className="font-semibold text-sm mb-2" style={{ color: tokens.bodyText }}>Khoảng giá</h3>
+                  {priceFilterMode === 'custom' && (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Từ"
+                        className="w-1/2 px-2 py-1.5 border rounded text-sm placeholder:text-[var(--placeholder-color)]"
+                        style={{
+                          borderColor: tokens.inputBorder,
+                          backgroundColor: tokens.inputBackground,
+                          color: tokens.inputText,
+                          '--placeholder-color': tokens.inputPlaceholder,
+                        } as React.CSSProperties}
+                        disabled
+                      />
+                      <input
+                        type="text"
+                        placeholder="Đến"
+                        className="w-1/2 px-2 py-1.5 border rounded text-sm placeholder:text-[var(--placeholder-color)]"
+                        style={{
+                          borderColor: tokens.inputBorder,
+                          backgroundColor: tokens.inputBackground,
+                          color: tokens.inputText,
+                          '--placeholder-color': tokens.inputPlaceholder,
+                        } as React.CSSProperties}
+                        disabled
+                      />
+                    </div>
+                  )}
+                  {priceFilterMode === 'smart_dropdown' && (
+                    <select
+                      className="w-full px-2 py-1.5 border rounded text-sm"
+                      style={{
+                        borderColor: tokens.inputBorder,
+                        backgroundColor: tokens.inputBackground,
+                        color: tokens.inputText,
+                      }}
+                      disabled
+                    >
+                      <option>Tất cả khoảng giá</option>
+                      <option>Dưới 500.000đ</option>
+                      <option>500.000đ - 1.000.000đ</option>
+                      <option>1.000.000đ - 2.000.000đ</option>
+                      <option>Trên 2.000.000đ</option>
+                    </select>
+                  )}
+                  {priceFilterMode === 'slider' && (
+                    <div className="px-1 py-3">
+                      <div className="h-1 w-full bg-slate-200 rounded relative">
+                        <div className="absolute left-[20%] right-[30%] h-full bg-red-500 rounded" style={{ backgroundColor: brandColor }} />
+                        <div className="absolute left-[20%] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border shadow bg-white cursor-pointer" style={{ borderColor: brandColor }} />
+                        <div className="absolute right-[30%] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border shadow bg-white cursor-pointer" style={{ borderColor: brandColor }} />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-2 font-medium">
+                        <span>100kđ</span>
+                        <span>3.5Mđ</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           </aside>
 

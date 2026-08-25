@@ -104,12 +104,6 @@ export const EXTRA_FEATURE_OPTIONS: ExtraFeatureOption[] = [
     modules: ['services', 'serviceCategories'],
   },
   {
-    description: 'Quản lý công việc nội bộ theo dạng Kanban.',
-    key: 'kanban',
-    label: 'Kanban nội bộ',
-    modules: ['kanban'],
-  },
-  {
     description: 'Theo dõi và nhắc khách gia hạn subscription.',
     key: 'subscriptions',
     label: 'Quản lý gia hạn',
@@ -138,7 +132,6 @@ const SCALE_MODULE_KEYS = [
   'subscriptions',
   'customers',
   'homepage',
-  'kanban',
   'menus',
   'orders',
   'postCategories',
@@ -164,7 +157,6 @@ const SCALE_QUANTITIES: Record<DataScale, Record<string, number>> = {
     subscriptions: 8,
     customers: 5,
     homepage: 6,
-    kanban: 6,
     menus: 2,
     orders: 5,
     postCategories: 3,
@@ -188,7 +180,6 @@ const SCALE_QUANTITIES: Record<DataScale, Record<string, number>> = {
     subscriptions: 14,
     customers: 20,
     homepage: 6,
-    kanban: 12,
     menus: 3,
     orders: 20,
     postCategories: 5,
@@ -212,7 +203,6 @@ const SCALE_QUANTITIES: Record<DataScale, Record<string, number>> = {
     subscriptions: 20,
     customers: 50,
     homepage: 6,
-    kanban: 20,
     menus: 4,
     orders: 50,
     postCategories: 6,
@@ -244,7 +234,6 @@ const SCALE_SUMMARY_ITEMS: Array<{ key: string; label: string }> = [
   { key: 'comments', label: 'Bình luận' },
   { key: 'promotions', label: 'Khuyến mãi' },
   { key: 'wishlist', label: 'Wishlist' },
-  { key: 'kanban', label: 'Kanban' },
   { key: 'subscriptions', label: 'Gia hạn' },
 ];
 

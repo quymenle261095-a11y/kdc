@@ -1,20 +1,17 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Bot, Check, Copy, FileText, X, CheckCircle2 } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Label, Input, cn } from '../../components/ui';
+import { Button, Input, Label } from '../../components/ui';
+import { AiImportDialogShell } from '../../components/AiImportDialogShell';
 import type { FaqItem } from '../../home-components/faq/_types';
 import { useTypeAiImportEnabled } from '../../home-components/_shared/hooks/useTypeAiImportEnabled';
 
-interface AiCategoryContentImportProps {
-  categoryName: string;
-  categoryDescription: string;
-  onApply: (data: {
-    filterFooterContent: string;
-    productDetailSuffixContent: string;
-    faqItems: FaqItem[];
-  }) => void;
+interface CategoryContentPayload {
+  filterFooterContent?: string;
+  productDetailSuffixContent?: string;
+  faqItems?: Array<{ question: string; answer: string }>;
 }
 
 const SAMPLE_CATEGORY_JSON = `{
@@ -32,23 +29,23 @@ const SAMPLE_CATEGORY_JSON = `{
   ]
 }`;
 
-const cleanJsonInput = (raw: string) => {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-};
-
 export function AiCategoryContentImport({
   categoryName,
   categoryDescription,
   onApply,
-}: AiCategoryContentImportProps) {
+}: {
+  categoryName: string;
+  categoryDescription: string;
+  onApply: (data: {
+    filterFooterContent: string;
+    productDetailSuffixContent: string;
+    faqItems: FaqItem[];
+  }) => void;
+}) {
   const isAiImportEnabled = useTypeAiImportEnabled('productCategories');
   const [open, setOpen] = useState(false);
   const [nameInput, setNameInput] = useState(categoryName);
   const [infoInput, setInfoInput] = useState(categoryDescription);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
 
   // Đồng bộ với thay đổi từ form bên ngoài khi mở dialog
   React.useEffect(() => {
@@ -104,14 +101,10 @@ Schema JSON bắt buộc:
 }`;
   }, [nameInput, infoInput]);
 
-  const result = useMemo(() => {
-    if (!rawInput.trim()) { return { errors: [], data: null }; }
-    
-    const errors: string[] = [];
+  const handleParse = (raw: string) => {
     let parsed: any = null;
-
     try {
-      parsed = JSON.parse(cleanJsonInput(rawInput));
+      parsed = JSON.parse(raw);
     } catch {
       return { errors: ['JSON chưa hợp lệ. Hãy kiểm tra dấu ngoặc hoặc các ký tự đặc biệt.'], data: null };
     }
@@ -119,6 +112,8 @@ Schema JSON bắt buộc:
     if (typeof parsed !== 'object' || parsed === null) {
       return { errors: ['Dữ liệu gốc phải là một đối tượng JSON.'], data: null };
     }
+
+    const errors: string[] = [];
 
     if (parsed.filterFooterContent && typeof parsed.filterFooterContent !== 'string') {
       errors.push('Trường "filterFooterContent" phải là một chuỗi văn bản HTML.');
@@ -147,228 +142,109 @@ Schema JSON bắt buộc:
       }
     }
 
-    return { errors, data: parsed };
-  }, [rawInput]);
-
-  const canApply = rawInput.trim().length > 0 && result.data !== null && result.errors.length === 0;
-
-  if (!isAiImportEnabled) {
-    return null;
-  }
-
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt AI' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+    return { errors, data: parsed as CategoryContentPayload };
   };
 
-  const applyItem = () => {
-    if (!canApply || !result.data) { return; }
-    
-    // Map FAQ items to valid format with client-side IDs
-    const resolvedFaqItems: FaqItem[] = (result.data.faqItems || []).map((f: any, idx: number) => ({
+  const handleApply = (data: CategoryContentPayload) => {
+    const resolvedFaqItems: FaqItem[] = (data.faqItems || []).map((f, idx) => ({
       id: Date.now() + idx,
       question: (f.question || '').trim(),
       answer: (f.answer || '').trim(),
     }));
 
     onApply({
-      filterFooterContent: (result.data.filterFooterContent || '').trim(),
-      productDetailSuffixContent: (result.data.productDetailSuffixContent || '').trim(),
+      filterFooterContent: (data.filterFooterContent || '').trim(),
+      productDetailSuffixContent: (data.productDetailSuffixContent || '').trim(),
       faqItems: resolvedFaqItems,
     });
 
     toast.success('Đã tự động điền nội dung danh mục và FAQ thành công!');
-    setOpen(false);
-    setRawInput('');
   };
+
+  if (!isAiImportEnabled) {
+    return null;
+  }
 
   return (
     <>
-      <Button 
-        type="button" 
-        variant="outline" 
-        className="gap-2 border-orange-200 dark:border-orange-900/60 hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-950/20"
+      <Button
+        type="button"
+        variant="outline"
+        className="gap-2"
         onClick={() => setOpen(true)}
       >
-        <Bot size={16} /> 
-        Import AI
+        <Bot size={16} />
+        Nhập AI
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-5xl max-h-[92vh] overflow-y-auto p-6">
-          <DialogHeader className="mb-4">
-            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              <Bot size={22} className="text-orange-500" />
-              Tạo nội dung SEO & FAQ chuẩn EEAT bằng AI
-            </DialogTitle>
-            <DialogDescription>
-              Cung cấp định hướng để tự động tạo bài viết chân trang, chính sách bảo hành và FAQ hữu ích cho khách hàng.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] items-start">
-            {/* Cột trái: Tham số & Prompt */}
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
-                <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200">1. Định hướng cho AI</h3>
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <Label className="text-xs mb-1 block">Tên danh mục</Label>
-                    <Input 
-                      placeholder="Ví dụ: Giày Nike chính hãng..." 
-                      value={nameInput} 
-                      onChange={(e) => setNameInput(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs mb-1 block">Thông tin bổ sung / Đặc tính nổi bật</Label>
-                    <textarea 
-                      placeholder="Ví dụ: Bảo hành 12 tháng, giao nhanh 2h, chuyên chạy bộ, đệm air cực êm..." 
-                      value={infoInput} 
-                      onChange={(e) => setInfoInput(e.target.value)}
-                      className="w-full min-h-[70px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40 relative">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
-                    <FileText size={15} /> Prompt chuẩn SEO
-                  </Label>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8 gap-1.5 text-xs border-slate-200 dark:border-slate-700" 
-                    onClick={() => void copyText(prompt, 'prompt')}
-                  >
-                    {lastCopied === 'prompt' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                    Copy Prompt
-                  </Button>
-                </div>
-                <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300 font-mono">
-                  {prompt}
-                </pre>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="text-sm font-semibold text-slate-800 dark:text-slate-200">JSON mẫu</Label>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8 gap-1.5 text-xs border-slate-200 dark:border-slate-700" 
-                    onClick={() => void copyText(SAMPLE_CATEGORY_JSON, 'sample')}
-                  >
-                    {lastCopied === 'sample' ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
-                    Copy JSON mẫu
-                  </Button>
-                </div>
-                <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300 font-mono">
-                  {SAMPLE_CATEGORY_JSON}
-                </pre>
-              </div>
-            </div>
-
-            {/* Cột phải: Dán & Preview */}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  2. Dán kết quả từ AI
-                </Label>
-                <textarea
-                  className="min-h-[260px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  placeholder="Dán mã JSON nhận được từ chatbot AI vào đây..."
-                  value={rawInput}
-                  onChange={(event) => setRawInput(event.target.value)}
+      <AiImportDialogShell<CategoryContentPayload>
+        open={open}
+        onOpenChange={setOpen}
+        title="Tạo nội dung SEO & FAQ danh mục bằng AI"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={prompt}
+        sampleJson={SAMPLE_CATEGORY_JSON}
+        extraContent={
+          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-900/50 space-y-2">
+            <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+              Tùy biến định hướng cho Prompt:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px] text-slate-500">Tên danh mục</Label>
+                <Input
+                  placeholder="Ví dụ: Giày Nike chính hãng..."
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  className="h-8 text-xs bg-white dark:bg-slate-950"
                 />
               </div>
-
-              {rawInput.trim().length > 0 && (
-                <div className={cn(
-                  'rounded-lg border p-3.5 text-sm',
-                  result.errors.length > 0
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
-                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300'
-                )}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">
-                      {result.errors.map((error) => (
-                        <li key={error} className="flex gap-1.5 items-start">
-                          <X size={14} className="mt-0.5 shrink-0 text-red-500" />
-                          <span>{error}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="flex gap-1.5 items-center">
-                      <CheckCircle2 size={16} className="shrink-0 text-green-500" />
-                      <span className="font-medium">Cấu trúc dữ liệu hợp lệ! Sẵn sàng điền vào form.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {result.data && result.errors.length === 0 && (
-                <div className="space-y-3 rounded-xl border border-slate-100 dark:border-slate-800 p-4 bg-slate-50/30 dark:bg-slate-900/30">
-                  <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200">3. Xem trước nội dung tạo ra</h3>
-                  
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1 text-xs">
-                    {result.data.filterFooterContent && (
-                      <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-                        <p className="font-bold text-slate-700 dark:text-slate-300 mb-1 border-b pb-1">Nội dung cuối trang (Footer Content)</p>
-                        <div className="line-clamp-3 text-slate-500 dark:text-slate-400 prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: result.data.filterFooterContent }} />
-                      </div>
-                    )}
-                    
-                    {result.data.productDetailSuffixContent && (
-                      <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-                        <p className="font-bold text-slate-700 dark:text-slate-300 mb-1 border-b pb-1">Nối đuôi chi tiết sản phẩm (Suffix Content)</p>
-                        <div className="line-clamp-3 text-slate-500 dark:text-slate-400 prose dark:prose-invert" dangerouslySetInnerHTML={{ __html: result.data.productDetailSuffixContent }} />
-                      </div>
-                    )}
-
-                    {result.data.faqItems && result.data.faqItems.length > 0 && (
-                      <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-                        <p className="font-bold text-slate-700 dark:text-slate-300 mb-1 border-b pb-1">Danh sách câu hỏi thường gặp FAQ ({result.data.faqItems.length})</p>
-                        <div className="space-y-1.5">
-                          {result.data.faqItems.map((item: any, idx: number) => (
-                            <div key={idx} className="border-b last:border-0 border-slate-100 pb-1 last:pb-0 dark:border-slate-700">
-                              <p className="font-medium text-slate-800 dark:text-slate-200">Q: {item.question}</p>
-                              <p className="text-slate-500 dark:text-slate-400 line-clamp-1">A: {item.answer}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div>
+                <Label className="text-[10px] text-slate-500">Đặc tính / Cam kết nổi bật</Label>
+                <Input
+                  placeholder="Ví dụ: Bảo hành 12 tháng, giao 2h, chuyên chạy bộ..."
+                  value={infoInput}
+                  onChange={(e) => setInfoInput(e.target.value)}
+                  className="h-8 text-xs bg-white dark:bg-slate-950"
+                />
+              </div>
             </div>
           </div>
-
-          <DialogFooter className="gap-2 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <Button type="button" variant="ghost" className="h-9" onClick={() => setOpen(false)}>
-              Huỷ
-            </Button>
-            <Button 
-              type="button" 
-              variant="accent" 
-              disabled={!canApply} 
-              onClick={applyItem}
-              className="h-9"
-            >
-              Áp dụng vào form
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        }
+        directSessionId="admin-category-content-import"
+        directPlaceholder="Ví dụ: Danh mục Giày chạy bộ, nổi bật chính hãng, đổi trả 7 ngày, khách cần chọn đúng size và độ êm."
+        parse={handleParse}
+        renderPreview={(data) => (
+          <div className="space-y-2 text-xs">
+            {data.filterFooterContent && (
+              <div className="rounded border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 font-bold text-slate-700 dark:text-slate-300">Nội dung chân trang:</p>
+                <div className="line-clamp-2 text-slate-500" dangerouslySetInnerHTML={{ __html: data.filterFooterContent }} />
+              </div>
+            )}
+            {data.productDetailSuffixContent && (
+              <div className="rounded border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 font-bold text-slate-700 dark:text-slate-300">Cam kết chi tiết sản phẩm:</p>
+                <div className="line-clamp-2 text-slate-500" dangerouslySetInnerHTML={{ __html: data.productDetailSuffixContent }} />
+              </div>
+            )}
+            {data.faqItems && data.faqItems.length > 0 && (
+              <div className="rounded border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900">
+                <p className="mb-1 font-bold text-slate-700 dark:text-slate-300">Danh sách FAQ ({data.faqItems.length} câu hỏi):</p>
+                <div className="space-y-1">
+                  {data.faqItems.map((item, idx) => (
+                    <div key={idx} className="text-slate-600 dark:text-slate-400">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">Q: {item.question}</span> — {item.answer}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }

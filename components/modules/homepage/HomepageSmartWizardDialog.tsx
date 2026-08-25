@@ -120,8 +120,8 @@ const applyIndustryConfig = (
   }
 
   if (type === 'ProductList' || type === 'ProductGrid') {
-    next.sectionTitle = industry.productTitle;
-    next.subTitle = industry.productSubtitle;
+    next.subtitle = industry.productTitle;
+    next.badgeText = industry.productSubtitle;
   }
 
   return next;

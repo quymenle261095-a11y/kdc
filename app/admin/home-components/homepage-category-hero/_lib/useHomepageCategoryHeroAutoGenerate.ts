@@ -38,9 +38,6 @@ export function useHomepageCategoryHeroAutoGenerate(
     [autoGenerateConfig.productScanLimit]
   );
 
-  const legacyPayload = useQuery(api.productCategories.listActiveWithStats, {
-    productLimit,
-  });
   useEffect(() => {
     let active = true;
     convex
@@ -63,7 +60,7 @@ export function useHomepageCategoryHeroAutoGenerate(
     };
   }, [autoGenerateConfig.maxItemsPerGroup, convex, productLimit]);
 
-  const categoriesPayload = heroPayload ?? (legacyPayload ? { ...legacyPayload, productsByCategory: [] } : undefined);
+  const categoriesPayload = heroPayload ?? undefined;
   const hierarchyFeature = useQuery(api.admin.modules.getModuleFeature, {
     moduleKey: 'products',
     featureKey: 'enableCategoryHierarchy',

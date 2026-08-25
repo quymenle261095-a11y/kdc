@@ -2,9 +2,10 @@
 
 import React, { useMemo, useState } from 'react';
 import { AdminImage as Image } from '@/app/admin/components/AdminImage';
-import { Bot, Check, Copy, FileText, X } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Label, cn } from '../../../components/ui';
+import { Button } from '../../../components/ui';
+import { AiImportDialogShell } from '@/app/admin/components/AiImportDialogShell';
 import type { DemoProductItem } from '../_types';
 import type { DemoServiceItem } from '../../service-list/_types';
 import type { DemoProductCategoryItem } from '../../product-categories/_types';
@@ -86,12 +87,6 @@ const trimText = (value: unknown, maxLength: number) => {
   return String(value).trim().slice(0, maxLength);
 };
 
-const cleanJsonInput = (raw: string) => {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-};
-
 const isValidImageUrl = (value: string) => {
   if (!value) { return true; }
   if (value.startsWith('/')) { return true; }
@@ -108,7 +103,7 @@ const parseAiDemoProducts = (raw: string): ParseResult => {
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
     return { errors: ['JSON chưa hợp lệ. Hãy dán object có key "products" hoặc array sản phẩm.'], items: [] };
   }
@@ -180,29 +175,19 @@ export function AiDemoProductsImport({
 }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = useState(false);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
-
-  const result = useMemo(() => parseAiDemoProducts(rawInput), [rawInput]);
-  const canApply = rawInput.trim().length > 0 && result.items.length > 0 && result.errors.length === 0;
 
   if (!isAiImportEnabled) {
     return null;
   }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    const res = parseAiDemoProducts(rawInput);
+    return { data: res.items.length > 0 ? res.items : null, errors: res.errors };
   };
 
-  const applyItems = () => {
-    if (!canApply) { return; }
-    onApply(result.items);
-    toast.success(`Đã nhập ${result.items.length} sản phẩm demo`);
-    setOpen(false);
-    setRawInput('');
+  const handleApply = (items: DemoProductItem[]) => {
+    onApply(items);
+    toast.success(`Đã nhập ${items.length} sản phẩm demo`);
   };
 
   return (
@@ -213,116 +198,37 @@ export function AiDemoProductsImport({
         </Button>
       </HomeComponentFooterActionPortal>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import sản phẩm demo bằng AI</DialogTitle>
-            <DialogDescription>
-              Copy prompt, nhờ AI tạo JSON, dán kết quả vào đây để preview rồi áp dụng vào form.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5">
-                    <FileText size={14} /> Prompt chuẩn
-                  </Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(AI_PRODUCTS_PROMPT, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />}
-                    Copy
-                  </Button>
+      <AiImportDialogShell<DemoProductItem[]>
+        open={open}
+        onOpenChange={setOpen}
+        title="Import sản phẩm demo bằng AI"
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={AI_PRODUCTS_PROMPT}
+        sampleJson={SAMPLE_JSON}
+        directSessionId="admin-demo-products-import"
+        directPlaceholder="Ví dụ: Tạo 8 sản phẩm demo cho shop phụ kiện tủ bếp, có giá VNĐ, tag hot/sale và mô tả ngắn."
+        parse={handleParse}
+        renderPreview={(items) => (
+          <div className="max-h-52 overflow-auto rounded-lg border border-slate-100 dark:border-slate-800">
+            {items.map((item, index) => (
+              <div key={item.id} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-800">
+                <span className="w-5 text-xs text-slate-400">{index + 1}</span>
+                {item.image ? (
+                  <Image src={item.image} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
+                ) : (
+                  <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-slate-800" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
+                  <p className="truncate text-xs text-slate-500">{[item.price, item.category, item.tag].filter(Boolean).join(' • ')}</p>
                 </div>
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                  {AI_PRODUCTS_PROMPT}
-                </pre>
               </div>
-
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label>JSON mẫu</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(SAMPLE_JSON, 'sample')}>
-                    {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />}
-                    Copy
-                  </Button>
-                </div>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {SAMPLE_JSON}
-                </pre>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Dán kết quả AI</Label>
-                <textarea
-                  className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  placeholder={SAMPLE_JSON}
-                  value={rawInput}
-                  onChange={(event) => setRawInput(event.target.value)}
-                />
-              </div>
-
-              {rawInput.trim().length > 0 && (
-                <div className={cn(
-                  'rounded-lg border p-3 text-sm',
-                  result.errors.length > 0
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300'
-                    : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300'
-                )}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">
-                      {result.errors.map((error) => (
-                        <li key={error} className="flex gap-1.5">
-                          <X size={14} className="mt-0.5 shrink-0" />
-                          <span>{error}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="flex gap-1.5">
-                      <Check size={14} className="mt-0.5 shrink-0" />
-                      <span>Sẵn sàng nhập {result.items.length} sản phẩm.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {result.items.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Preview ({result.items.length})</Label>
-                  <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    {result.items.map((item, index) => (
-                      <div key={item.id} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-800">
-                        <span className="w-5 text-xs text-slate-400">{index + 1}</span>
-                        {item.image ? (
-                          <Image src={item.image} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
-                        ) : (
-                          <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-slate-800" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{item.name}</p>
-                          <p className="truncate text-xs text-slate-500">{[item.price, item.category, item.tag].filter(Boolean).join(' • ')}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
-
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Huỷ
-            </Button>
-            <Button type="button" disabled={!canApply} onClick={applyItems}>
-              Áp dụng vào form
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }
@@ -388,7 +294,7 @@ const parseGenericItems = <T extends { id: string | number }>(raw: string, confi
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(cleanJsonInput(raw));
+    parsed = JSON.parse(raw);
   } catch {
     return { errors: [`JSON chưa hợp lệ. Hãy dán object có key "${config.rootKey}" hoặc array ${config.itemLabel}.`], items: [] };
   }
@@ -470,29 +376,20 @@ function GenericAiDemoImport<T extends { id: string | number }>({
 }) {
   const isAiImportEnabled = useTypeAiImportEnabled();
   const [open, setOpen] = useState(false);
-  const [rawInput, setRawInput] = useState('');
-  const [lastCopied, setLastCopied] = useState<'prompt' | 'sample' | null>(null);
   const prompt = useMemo(() => formatGenericPrompt(config), [config]);
-  const result = useMemo(() => parseGenericItems(rawInput, config), [rawInput, config]);
-  const canApply = rawInput.trim().length > 0 && result.items.length > 0 && result.errors.length === 0;
 
   if (!isAiImportEnabled) {
     return null;
   }
 
-  const copyText = async (value: string, type: 'prompt' | 'sample') => {
-    await navigator.clipboard.writeText(value);
-    setLastCopied(type);
-    toast.success(type === 'prompt' ? 'Đã copy prompt' : 'Đã copy JSON mẫu');
-    window.setTimeout(() => setLastCopied(null), 1500);
+  const handleParse = (rawInput: string) => {
+    const res = parseGenericItems(rawInput, config);
+    return { data: res.items.length > 0 ? res.items : null, errors: res.errors };
   };
 
-  const applyItems = () => {
-    if (!canApply) { return; }
-    onApply(result.items);
-    toast.success(`Đã nhập ${result.items.length} ${config.itemLabel}`);
-    setOpen(false);
-    setRawInput('');
+  const handleApply = (items: T[]) => {
+    onApply(items);
+    toast.success(`Đã nhập ${items.length} ${config.itemLabel}`);
   };
 
   return (
@@ -502,76 +399,38 @@ function GenericAiDemoImport<T extends { id: string | number }>({
           <Bot size={16} /> {config.buttonLabel}
         </Button>
       </HomeComponentFooterActionPortal>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="w-[94vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{config.dialogTitle}</DialogTitle>
-            <DialogDescription>Copy prompt, nhờ AI tạo JSON, dán kết quả vào đây để preview rồi áp dụng vào form.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label className="flex items-center gap-1.5"><FileText size={14} /> Prompt chuẩn</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(prompt, 'prompt')}>
-                    {lastCopied === 'prompt' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
+
+      <AiImportDialogShell<T[]>
+        open={open}
+        onOpenChange={setOpen}
+        title={config.dialogTitle}
+        description="Quy trình 1 chạm: Sao chép Prompt ➔ Nhờ AI tạo JSON ➔ Dán kết quả vào đây."
+        prompt={prompt}
+        sampleJson={sample}
+        directSessionId={`admin-demo-${config.rootKey}-import`}
+        directPlaceholder={`Ví dụ: Tạo 6 ${config.itemLabel} demo phù hợp website nội thất/phụ kiện tủ bếp, nội dung tự nhiên và có ảnh URL nếu có.`}
+        parse={handleParse}
+        renderPreview={(items) => (
+          <div className="max-h-52 overflow-auto rounded-lg border border-slate-100 dark:border-slate-800">
+            {items.map((item, index) => (
+              <div key={item.id} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-800">
+                <span className="w-5 text-xs text-slate-400">{index + 1}</span>
+                {config.imageKey && typeof item[config.imageKey] === 'string' && item[config.imageKey] ? (
+                  <Image src={item[config.imageKey] as string} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
+                ) : (
+                  <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-slate-800" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{String(item[config.nameKey] ?? '')}</p>
+                  <p className="truncate text-xs text-slate-500">{config.metaKeys.map((key) => item[key]).filter(Boolean).join(' • ')}</p>
                 </div>
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-white p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">{prompt}</pre>
               </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <Label>JSON mẫu</Label>
-                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => void copyText(sample, 'sample')}>
-                    {lastCopied === 'sample' ? <Check size={12} /> : <Copy size={12} />} Copy
-                  </Button>
-                </div>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-[11px] leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{sample}</pre>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Dán kết quả AI</Label>
-                <textarea className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" placeholder={sample} value={rawInput} onChange={(event) => setRawInput(event.target.value)} />
-              </div>
-              {rawInput.trim().length > 0 && (
-                <div className={cn('rounded-lg border p-3 text-sm', result.errors.length > 0 ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300' : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-300')}>
-                  {result.errors.length > 0 ? (
-                    <ul className="space-y-1">{result.errors.map((error) => (<li key={error} className="flex gap-1.5"><X size={14} className="mt-0.5 shrink-0" /><span>{error}</span></li>))}</ul>
-                  ) : (
-                    <div className="flex gap-1.5"><Check size={14} className="mt-0.5 shrink-0" /><span>Sẵn sàng nhập {result.items.length} {config.itemLabel}.</span></div>
-                  )}
-                </div>
-              )}
-              {result.items.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Preview ({result.items.length})</Label>
-                  <div className="max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    {result.items.map((item, index) => (
-                      <div key={item.id} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0 dark:border-slate-800">
-                        <span className="w-5 text-xs text-slate-400">{index + 1}</span>
-                        {config.imageKey && typeof item[config.imageKey] === 'string' && item[config.imageKey] ? (
-                          <Image src={item[config.imageKey] as string} alt="" width={40} height={40} className="h-10 w-10 rounded object-cover" />
-                        ) : (
-                          <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-slate-800" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{String(item[config.nameKey] ?? '')}</p>
-                          <p className="truncate text-xs text-slate-500">{config.metaKeys.map((key) => item[key]).filter(Boolean).join(' • ')}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Huỷ</Button>
-            <Button type="button" disabled={!canApply} onClick={applyItems}>Áp dụng vào form</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+        applyButtonText="Áp dụng vào form"
+        onApply={handleApply}
+      />
     </>
   );
 }
@@ -872,7 +731,7 @@ const PROCESS_IMPORT_CONFIG: GenericImportConfig<ProcessFormStep> = {
   itemLabel: 'bước',
   metaKeys: ['icon'],
   nameKey: 'title',
-  promptIntro: 'Hãy tạo danh sách các bước quy trình cho website doanh nghiệp tiếng Việt theo số lượng tôi yêu cầu. Tối đa 4 bước.',
+  promptIntro: 'Hãy tạo danh sách các bước quy trình cho website doanh nghiệp tiếng Việt theo số lượng tôi yêu cầu. Tối đa 8 bước.',
   rootKey: 'steps',
 };
 
@@ -1300,6 +1159,12 @@ export function AiDemoCategoryProductsImport({
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>Dán kết quả AI</Label>
+                <AiDirectGeneratePanel
+                  prompt={CATEGORY_PRODUCTS_PROMPT}
+                  sessionId="admin-category-products-import"
+                  onGenerated={setRawInput}
+                  placeholder="Ví dụ: Tạo 4 section danh mục cho shop phụ kiện tủ bếp, mỗi section có 4 sản phẩm phù hợp và giá VNĐ."
+                />
                 <textarea className="min-h-64 w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" placeholder={CATEGORY_PRODUCTS_SAMPLE} value={rawInput} onChange={(event) => setRawInput(event.target.value)} />
               </div>
               {rawInput.trim().length > 0 && (

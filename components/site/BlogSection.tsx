@@ -9,6 +9,7 @@ import {
   getBlogColorTokens,
   type BlogBrandMode,
 } from '@/app/admin/home-components/blog/_lib/colors';
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
 import { sortBlogPosts } from '@/app/admin/home-components/blog/_lib/constants';
 import { BlogSectionRuntime } from '@/app/admin/home-components/blog/_components/BlogSectionRuntime';
 import { normalizeBlogConfig } from '@/app/admin/home-components/blog/_types';
@@ -23,9 +24,10 @@ interface BlogSectionProps {
   mode: BlogBrandMode;
   title: string;
   snapshotComponentKey?: string;
+  isDark?: boolean;
 }
 
-export function BlogSection({ config, brandColor, secondary, mode, title, snapshotComponentKey }: BlogSectionProps) {
+export function BlogSection({ config, brandColor, secondary, mode, title, snapshotComponentKey, isDark }: BlogSectionProps) {
   const snapshotDemo = useSnapshotDemoContext();
   const normalizedConfig = React.useMemo(() => normalizeBlogConfig(config), [config]);
   const style = normalizedConfig.style;
@@ -37,11 +39,14 @@ export function BlogSection({ config, brandColor, secondary, mode, title, snapsh
   const headerConfig = extractSectionHeaderConfig(config);
   const sectionSpacingClassName = getSectionSpacingClassName(normalizedConfig.spacing);
 
-  const tokens = getBlogColorTokens({
-    primary: brandColor,
-    secondary,
-    mode,
-  });
+  const tokens = adaptTokensForDarkMode(
+    getBlogColorTokens({
+      primary: brandColor,
+      secondary,
+      mode,
+    }),
+    isDark ?? false
+  );
 
   const querySortBy = sortBy === 'popular'
     ? 'popular'

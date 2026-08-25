@@ -26,20 +26,30 @@ export interface ModuleSettingGroup {
   icon?: LucideIcon;
 }
  
- export interface ModuleDefinition {
-   key: string;
-   name: string;
-   description: string;
-   icon: LucideIcon;
-   color: 'cyan' | 'orange' | 'violet' | 'emerald' | 'rose' | 'blue' | 'amber' | 'indigo';
-   categoryModuleKey?: string;
-   features?: ModuleFeature[];
-   settings?: ModuleSetting[];
+export interface ModuleCapability {
+  key: string;
+  name: string;
+  status: 'ready' | 'roadmap' | 'deprecated';
+  enabled: boolean;
+  disabledToggle?: boolean;
+  description?: string;
+}
+
+export interface ModuleDefinition {
+  key: string;
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  color: 'cyan' | 'orange' | 'violet' | 'emerald' | 'rose' | 'blue' | 'amber' | 'indigo';
+  categoryModuleKey?: string;
+  capabilities?: ModuleCapability[];
+  features?: ModuleFeature[];
+  settings?: ModuleSetting[];
   settingGroups?: ModuleSettingGroup[];
-   conventionNote?: string;
+  conventionNote?: string;
   tabs?: ('config' | 'appearance')[];
   runtimeConfig?: ModuleRuntimeConfig;
- }
+}
 
 export type ModuleDefinitionWithRuntime = ModuleDefinition & {
   runtimeConfig: ModuleRuntimeConfig;

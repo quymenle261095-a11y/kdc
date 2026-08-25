@@ -1,13 +1,13 @@
 import type { SpeedDialConfig, SpeedDialStyle } from '../_types';
 
 export const SPEED_DIAL_STYLES: Array<{ id: SpeedDialStyle; label: string }> = [
-  { id: 'fab', label: 'Layout 1' },
-  { id: 'sidebar', label: 'Layout 2' },
-  { id: 'pills', label: 'Layout 3' },
-  { id: 'stack', label: 'Layout 4' },
-  { id: 'dock', label: 'Layout 5' },
-  { id: 'minimal', label: 'Layout 6' },
-  { id: 'builder-bar', label: 'Layout 7' },
+  { id: 'fab', label: '(1) Nút tròn' },
+  { id: 'sidebar', label: '(2) Thanh bên' },
+  { id: 'pills', label: '(3) Dạng dẹt' },
+  { id: 'stack', label: '(4) Xếp chồng' },
+  { id: 'dock', label: '(5) Thanh dưới' },
+  { id: 'minimal', label: '(6) Tối giản' },
+  { id: 'builder-bar', label: '(7) Thanh khối' },
 ];
 
 export const normalizeSpeedDialStyle = (value?: string): SpeedDialStyle => {
@@ -32,4 +32,5 @@ export const DEFAULT_SPEED_DIAL_CONFIG: SpeedDialConfig = {
   defaultOpen: true,
   showOnAllPages: false,
   enableShadow: true,
+  enableGlassmorphism: false,
 };

@@ -1,5 +1,7 @@
 'use client';
 
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import React from 'react';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
 import { useTypeColorOverrideState } from '../../_shared/hooks/useTypeColorOverride';
@@ -17,6 +19,7 @@ import {
 import {
   getAboutValidationResult,
 } from '../../about/_lib/colors';
+import type { AboutConfig } from '../../about/_types';
 
 export default function AboutCreatePage() {
   const COMPONENT_TYPE = 'About';
@@ -25,6 +28,9 @@ export default function AboutCreatePage() {
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { primary, secondary, mode } = effectiveColors;
   const fontStyle = { '--font-active': `var(${effectiveFont.fontVariable})` } as React.CSSProperties;
+
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
 
   const headerState = useSectionHeaderState({
     hideHeader: false,
@@ -42,6 +48,41 @@ export default function AboutCreatePage() {
   const { openSections: headerOpenSections, toggleSection: toggleHeaderSection } = useFormSectionsState(['header'], true);
 
   const [state, setState] = React.useState(DEFAULT_ABOUT_EDITOR_STATE);
+
+  const handleConfigChange = (nextConfig: AboutConfig) => {
+    setState((prev) => {
+      const nextFeatures = prev.features.map((f, idx) => {
+        const incoming = nextConfig.features?.[idx];
+        if (!incoming) {return f;}
+        return {
+          ...f,
+          title: incoming.title ?? f.title,
+        };
+      });
+
+      const nextStats = prev.stats.map((s, idx) => {
+        const incoming = nextConfig.stats?.[idx];
+        if (!incoming) {return s;}
+        return {
+          ...s,
+          value: incoming.value ?? s.value,
+          label: incoming.label ?? s.label,
+        };
+      });
+
+      return {
+        ...prev,
+        subHeading: nextConfig.subHeading !== undefined ? nextConfig.subHeading : prev.subHeading,
+        heading: nextConfig.heading !== undefined ? nextConfig.heading : prev.heading,
+        highlightText: nextConfig.highlightText !== undefined ? nextConfig.highlightText : prev.highlightText,
+        description: nextConfig.description !== undefined ? nextConfig.description : prev.description,
+        phone: nextConfig.phone !== undefined ? nextConfig.phone : prev.phone,
+        buttonText: nextConfig.buttonText !== undefined ? nextConfig.buttonText : prev.buttonText,
+        features: nextFeatures,
+        stats: nextStats,
+      };
+    });
+  };
 
   const validation = React.useMemo(
     () => getAboutValidationResult({
@@ -187,6 +228,11 @@ export default function AboutCreatePage() {
         badgeText={headerState.badgeText}
         spacing={headerState.spacing}
         cornerRadius={state.cornerRadius ?? 'lg'}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onConfigChange={handleConfigChange}
+        onTitleChange={setTitle}
+        onSubtitleChange={headerState.setSubtitle}
+        onBadgeTextChange={headerState.setBadgeText}
       />
     </ComponentFormWrapper>
   );

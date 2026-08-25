@@ -19,6 +19,7 @@ interface SpeedDialSectionProps {
   secondary: string;
   mode: SpeedDialBrandMode;
   title: string;
+  isDark?: boolean;
 }
 
 const normalizePosition = (value: unknown): SpeedDialPosition => {
@@ -40,13 +41,14 @@ const normalizeBoolean = (value: unknown, fallback: boolean) => (
   typeof value === 'boolean' ? value : fallback
 );
 
-export function SpeedDialSection({ config, brandColor, secondary, mode, title }: SpeedDialSectionProps) {
+export function SpeedDialSection({ config, brandColor, secondary, mode, title, isDark }: SpeedDialSectionProps) {
   const actions = React.useMemo(() => normalizeSiteActions(config.actions), [config.actions]);
 
   const style = normalizeSpeedDialStyle(typeof config.style === 'string' ? config.style : undefined);
   const position = normalizePosition(config.position);
   const defaultOpen = normalizeBoolean(config.defaultOpen, DEFAULT_SPEED_DIAL_CONFIG.defaultOpen);
   const enableShadow = normalizeBoolean(config.enableShadow, DEFAULT_SPEED_DIAL_CONFIG.enableShadow);
+  const enableGlassmorphism = normalizeBoolean(config.enableGlassmorphism, DEFAULT_SPEED_DIAL_CONFIG.enableGlassmorphism ?? false);
 
   return (
     <SpeedDialSectionShared
@@ -60,6 +62,8 @@ export function SpeedDialSection({ config, brandColor, secondary, mode, title }:
       context="site"
       defaultOpen={defaultOpen}
       enableShadow={enableShadow}
+      enableGlassmorphism={enableGlassmorphism}
+      isDark={isDark}
     />
   );
 }

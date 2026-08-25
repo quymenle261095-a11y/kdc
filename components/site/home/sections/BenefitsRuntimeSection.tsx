@@ -10,7 +10,9 @@ import { normalizeBenefitsCornerRadius, normalizeBenefitsSpacing } from '@/app/a
 import type { BenefitItem, BenefitsBrandMode, BenefitsConfig, BenefitsStyle } from '@/app/admin/home-components/benefits/_types';
 import type { HomeComponentSectionProps } from '../types';
 
-export function BenefitsRuntimeSection({ config, brandColor, secondary, mode, title }: HomeComponentSectionProps) {
+import { adaptTokensForDarkMode } from '@/components/site/home/utils/darkModeColorAdapter';
+
+export function BenefitsRuntimeSection({ config, brandColor, secondary, mode, title, isDark }: HomeComponentSectionProps & { isDark?: boolean }) {
   const benefitsConfig = config as unknown as Partial<BenefitsConfig>;
   const items: BenefitItem[] = (benefitsConfig.items ?? []).map((item, idx) => ({
     description: item.description ?? '',
@@ -21,12 +23,12 @@ export function BenefitsRuntimeSection({ config, brandColor, secondary, mode, ti
 
   const style: BenefitsStyle = normalizeBenefitsStyle(benefitsConfig.style);
   const harmony = normalizeBenefitsHarmony(benefitsConfig.harmony);
-  const tokens = getBenefitsSectionColors({
+  const tokens = adaptTokensForDarkMode(getBenefitsSectionColors({
     harmony,
     mode: mode as BenefitsBrandMode,
     primary: brandColor,
     secondary,
-  });
+  }), isDark ?? false);
 
   const headerConfig = extractSectionHeaderConfig(config);
   const sectionSpacingClassName = getSectionSpacingClassName(normalizeBenefitsSpacing(benefitsConfig.spacing, benefitsConfig.noVerticalMargin));
@@ -34,7 +36,7 @@ export function BenefitsRuntimeSection({ config, brandColor, secondary, mode, ti
 
   return (
     <section className={`${sectionSpacingClassName} px-3`}>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl tv:max-w-[1600px] mx-auto">
         <SectionHeader
           title={title}
           subtitle={headerConfig.subtitle}

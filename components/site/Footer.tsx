@@ -42,7 +42,7 @@ export function Footer() {
 
   return (
     <footer className="bg-slate-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="max-w-7xl tv:max-w-[1600px] mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Company Info */}
           <div className="lg:col-span-1">
@@ -148,7 +148,7 @@ export function Footer() {
       
       {/* Copyright */}
       <div className="border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl tv:max-w-[1600px] mx-auto px-4 py-4">
           <p className="text-center text-sm text-slate-500">
             © {currentYear} {siteName}. All rights reserved.
           </p>

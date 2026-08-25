@@ -624,7 +624,7 @@ function SubscriptionsWorkspace() {
                     <td className="py-3 pr-4">
                       <Badge variant={STATUS_BADGES[task.status].variant}>{STATUS_LABELS[task.status]}</Badge>
                     </td>
-                    <td className="py-3 flex items-center gap-2">
+                    <td className="py-3 flex items-center gap-1">
                       <button
                         type="button"
                         className="text-xs text-blue-600"

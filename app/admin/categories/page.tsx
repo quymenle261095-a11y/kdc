@@ -8,11 +8,14 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { ChevronDown, Edit, ExternalLink, FolderTree, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui';
-import { BulkActionBar, ColumnToggle, generatePaginationItems, SelectCheckbox, SortableHeader, useSortableData } from '../components/TableUtilities';
+import { AdminDragHandle, AdminPageHeader, AdminPageLayout, AdminPagination, buildOrderUpdates, BulkActionBar, ColumnToggle, DeleteActionButton, EditActionButton, FilterSelect, getNextSortState, getReorderedItems, MobileCardList, MobileRowCard, ResetFilterButton, RowActionButton, RowActions, SearchInput, SelectCheckbox, SortableHeader, SortableTableRow, TableCellControls, TableEmptyState, TableHeadControls, TableSkeleton, TableToolbar, useAdminDndSensors, usePersistedColumns, useSortableData } from '../components/TableUtilities';
 import { ModuleGuard } from '../components/ModuleGuard';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { usePersistedPageSize } from '../components/usePersistedPageSize';
 import { buildCategoryPath, normalizeRouteMode } from '@/lib/ia/route-mode';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 export default function CategoriesListPage() {
   return (
@@ -28,27 +31,14 @@ function CategoriesContent() {
   const featuresData = useQuery(api.admin.modules.listModuleFeatures, { moduleKey: 'products' });
   const enableProductTypesSetting = useQuery(api.admin.modules.getModuleSetting, { moduleKey: 'products', settingKey: 'enableProductTypes' });
   const deleteCategory = useMutation(api.productCategories.remove);
+  const reorderCategories = useMutation(api.productCategories.reorder);
   const routeModeSetting = useQuery(api.settings.getValue, { key: 'ia_route_mode', defaultValue: 'unified' });
   const routeMode = useMemo(() => normalizeRouteMode(routeModeSetting), [routeModeSetting]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: 'asc' | 'desc' }>({ direction: 'asc', key: null });
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-    try {
-      const stored = window.localStorage.getItem('admin_categories_visible_columns');
-      if (stored) {
-        const parsed = JSON.parse(stored) as string[];
-        return parsed.length > 0 ? parsed : [];
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  });
+  const { visibleColumns, toggleColumn } = usePersistedColumns('admin_categories_visible_columns');
   const [manualSelectedIds, setManualSelectedIds] = useState<Id<"productCategories">[]>([]);
   const [selectionMode, setSelectionMode] = useState<'manual' | 'all'>('manual');
   const [currentPage, setCurrentPage] = useState(1);
@@ -56,6 +46,7 @@ function CategoriesContent() {
   const [deleteTargetId, setDeleteTargetId] = useState<Id<"productCategories"> | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const dndSensors = useAdminDndSensors();
 
   const isSelectAllActive = selectionMode === 'all';
 
@@ -66,11 +57,7 @@ function CategoriesContent() {
     return () =>{  clearTimeout(timer); };
   }, [searchTerm]);
 
-  useEffect(() => {
-    if (visibleColumns.length > 0) {
-      window.localStorage.setItem('admin_categories_visible_columns', JSON.stringify(visibleColumns));
-    }
-  }, [visibleColumns]);
+
 
   const offset = (currentPage - 1) * resolvedPageSize;
 
@@ -119,7 +106,7 @@ function CategoriesContent() {
   }, [selectAllData?.hasMore]);
 
   const columns = useMemo(() => [
-    { key: 'select', label: 'Chọn' },
+    { key: 'select', label: 'Chọn', required: true },
     { key: 'name', label: 'Tên danh mục', required: true },
     { key: 'slug', label: 'Slug' },
     ...(enableProductTypes ? [{ key: 'productTypes', label: 'Product Type' }] : []),
@@ -131,23 +118,7 @@ function CategoriesContent() {
   const resolvedVisibleColumns = (visibleColumns.length > 0 ? visibleColumns : columnKeys)
     .filter(key => columnKeys.includes(key));
 
-  useEffect(() => {
-    if (!enableProductTypes || visibleColumns.length === 0 || visibleColumns.includes('productTypes') || typeof window === 'undefined') {
-      return;
-    }
-    const migrationKey = 'admin_categories_product_types_column_seen';
-    if (window.localStorage.getItem(migrationKey) === 'true') {
-      return;
-    }
-    setVisibleColumns(prev => {
-      const base = prev.length > 0 ? prev : columnKeys;
-      const statusIndex = base.indexOf('status');
-      const next = [...base];
-      next.splice(statusIndex >= 0 ? statusIndex : next.length, 0, 'productTypes');
-      return next;
-    });
-    window.localStorage.setItem(migrationKey, 'true');
-  }, [columnKeys, enableProductTypes, visibleColumns]);
+
 
   const productCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -177,11 +148,60 @@ function CategoriesContent() {
     ?.find(feature => feature.featureKey === 'enableCategoryHierarchy')
     ?.enabled ?? false;
 
+  const aggregateProductCountMap = useMemo(() => {
+    if (!hierarchyEnabled || !categoriesAllData) {
+      return productCountMap;
+    }
+
+    const categoryProductIdsMap = new Map<string, Set<string>>();
+    const childrenMap = new Map<string, string[]>();
+
+    categoriesAllData.forEach(category => {
+      categoryProductIdsMap.set(category._id, new Set());
+      if (category.parentId) {
+        const children = childrenMap.get(category.parentId) ?? [];
+        children.push(category._id);
+        childrenMap.set(category.parentId, children);
+      }
+    });
+
+    productsData?.forEach(product => {
+      categoryProductIdsMap.get(product.categoryId)?.add(product._id);
+    });
+
+    const collectScopeIds = (categoryId: string) => {
+      const ids: string[] = [categoryId];
+      const queue = [categoryId];
+      const seen = new Set(queue);
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (!current) {continue;}
+        (childrenMap.get(current) ?? []).forEach(childId => {
+          if (seen.has(childId)) {return;}
+          seen.add(childId);
+          ids.push(childId);
+          queue.push(childId);
+        });
+      }
+      return ids;
+    };
+
+    const map: Record<string, number> = {};
+    categoriesAllData.forEach(category => {
+      const productIds = new Set<string>();
+      collectScopeIds(category._id).forEach(categoryId => {
+        categoryProductIdsMap.get(categoryId)?.forEach(productId => productIds.add(productId));
+      });
+      map[category._id] = productIds.size;
+    });
+    return map;
+  }, [categoriesAllData, hierarchyEnabled, productCountMap, productsData]);
+
   const categories = useMemo(() => categoriesData?.map(cat => ({
       ...cat,
       id: cat._id,
-      count: productCountMap[cat._id] || 0,
-    })) ?? [], [categoriesData, productCountMap]);
+      count: aggregateProductCountMap[cat._id] || 0,
+    })) ?? [], [aggregateProductCountMap, categoriesData]);
 
   const treeSortedCategories = useMemo(() => {
     if (!hierarchyEnabled || sortConfig.key !== null) {
@@ -219,17 +239,18 @@ function CategoriesContent() {
   }, [categories, hierarchyEnabled, sortConfig.key]);
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({ direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc', key }));
+    setSortConfig(prev => getNextSortState(prev, key));
     setCurrentPage(1);
     applyManualSelection([]);
   };
 
   const sortedData = useSortableData(treeSortedCategories, sortConfig);
+  const isReorderEnabled = !debouncedSearchTerm.trim() && (sortConfig.key === null || sortConfig.key === 'order');
 
   const totalCount = totalCountData?.count ?? 0;
   const totalPages = totalCount ? Math.ceil(totalCount / resolvedPageSize) : 1;
   const paginatedData = sortedData;
-  const tableColumnCount = resolvedVisibleColumns.length;
+  const tableColumnCount = resolvedVisibleColumns.length + 1;
   const selectedIds = isSelectAllActive && selectAllData ? selectAllData.ids : manualSelectedIds;
   const isSelectingAll = isSelectAllActive && selectAllData === undefined;
 
@@ -302,21 +323,38 @@ function CategoriesContent() {
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!isReorderEnabled) {return;}
+    const reordered = getReorderedItems(paginatedData, event.active.id, event.over?.id, category => category.id);
+    if (!reordered) {return;}
+
+    try {
+      await reorderCategories({
+        items: buildOrderUpdates(
+          reordered,
+          paginatedData.map(category => category.order),
+          category => category.id,
+          (_category, index) => offset + index
+        ),
+      });
+      setSortConfig({ direction: 'asc', key: null });
+      toast.success('Đã cập nhật thứ tự danh mục');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật thứ tự danh mục');
+    }
+  };
+
   const openFrontend = (slug: string) => {
     window.open(buildCategoryPath({ categorySlug: slug, mode: routeMode, moduleKey: 'products' }), '_blank');
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Danh mục sản phẩm</h1>
-          <p className="text-sm text-slate-500">Tổ chức cây thư mục cho cửa hàng</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/categories/create"><Button className="gap-2"><Plus size={16}/> Thêm danh mục</Button></Link>
-        </div>
-      </div>
+    <AdminPageLayout>
+      <AdminPageHeader
+        title="Danh mục sản phẩm"
+        description="Tổ chức cây thư mục cho cửa hàng"
+        addHref="/admin/categories/create"
+      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}
@@ -332,189 +370,197 @@ function CategoriesContent() {
       />
       
       <Card>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input placeholder="Tìm kiếm danh mục..." className="pl-9" value={searchTerm} onChange={(e) =>{  setSearchTerm(e.target.value); setCurrentPage(1); applyManualSelection([]); }} />
-          </div>
-          <Button variant="outline" size="sm" onClick={handleResetFilters}>Xóa lọc</Button>
-          <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={(key) =>{
-            setVisibleColumns(prev => {
-              const base = prev.length > 0 ? prev : columns.map(c => c.key);
-              return base.includes(key) ? base.filter(col => col !== key) : [...base, key];
-            });
-          }} />
-        </div>
-        <Table>
-          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
-            <TableRow>
-              {resolvedVisibleColumns.includes('select') && <TableHead className="w-[40px]"><SelectCheckbox checked={isPageSelected} onChange={toggleSelectAll} indeterminate={isPageIndeterminate} /></TableHead>}
-              {resolvedVisibleColumns.includes('name') && <SortableHeader label="Tên danh mục" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('slug') && <SortableHeader label="Slug" sortKey="slug" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('productTypes') && <TableHead>Product Type</TableHead>}
-              {resolvedVisibleColumns.includes('count') && <SortableHeader label="Số sản phẩm" sortKey="count" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
-              {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="active" sortConfig={sortConfig} onSort={handleSort} />}
-              {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              Array.from({ length: resolvedPageSize }).map((_, index) => (
-                <TableRow key={`loading-${index}`}>
-                  <TableCell colSpan={tableColumnCount}>
-                    <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <>
-                {paginatedData.map(cat => (
-                  <TableRow key={cat.id} className={selectedIds.includes(cat.id) ? 'bg-orange-500/5' : ''}>
-                {resolvedVisibleColumns.includes('select') && <TableCell><SelectCheckbox checked={selectedIds.includes(cat.id)} onChange={() =>{  toggleSelectItem(cat.id); }} /></TableCell>}
-                {resolvedVisibleColumns.includes('name') && (
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <FolderTree size={16} className={cat.parentId ? 'text-slate-400' : 'text-orange-500'} />
-                        <span>{cat.name}</span>
-                        {hierarchyEnabled && cat.parentId && (
-                          <Badge variant="outline" className="text-xs py-0 px-1.5 font-normal">Con</Badge>
-                        )}
-                      </div>
-                      {hierarchyEnabled && cat.parentId && (
-                        <span className="text-xs text-slate-400 pl-6">
-                          ↳ {parentNameMap[cat.parentId] ?? 'Không rõ cha'}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('slug') && <TableCell className="text-slate-500 font-mono text-sm">{cat.slug}</TableCell>}
-                {resolvedVisibleColumns.includes('productTypes') && (
-                  <TableCell>
-                    <div className="flex max-w-[260px] flex-wrap gap-1">
-                      {(categoryProductTypesMap[cat.id] ?? []).length > 0 ? (
-                        categoryProductTypesMap[cat.id].map(type => (
-                          <Badge key={type._id} variant="outline" className="text-xs font-normal">
-                            {type.name}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-sm text-slate-400">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('count') && <TableCell className="text-center"><Badge variant="secondary">{cat.count}</Badge></TableCell>}
-                {resolvedVisibleColumns.includes('status') && (
-                  <TableCell>
-                    <Badge variant={cat.active ? 'success' : 'secondary'}>{cat.active ? 'Hoạt động' : 'Ẩn'}</Badge>
-                  </TableCell>
-                )}
-                {resolvedVisibleColumns.includes('actions') && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" className="text-blue-600 hover:text-blue-700" title="Xem trên web" onClick={() =>{  openFrontend(cat.slug); }}><ExternalLink size={16}/></Button>
-                      <Link href={`/admin/categories/${cat.id}/edit`}><Button variant="ghost" size="icon"><Edit size={16}/></Button></Link>
-                      <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={ async () => handleDelete(cat.id)}><Trash2 size={16}/></Button>
-                    </div>
-                  </TableCell>
-                )}
-                  </TableRow>
-                ))}
-              </>
-            )}
-            {!isTableLoading && paginatedData.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={tableColumnCount} className="text-center py-8 text-slate-500">
-                  {searchTerm ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có danh mục nào.'}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        {totalCount > 0 && !isTableLoading && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 flex w-full items-center justify-between text-sm text-slate-500 sm:order-1 sm:w-auto sm:justify-start sm:gap-6">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-600">Hiển thị</span>
-                <select
-                  value={resolvedPageSize}
-                  onChange={(event) =>{  setPageSizeOverride(Number(event.target.value)); setCurrentPage(1); applyManualSelection([]); }}
-                  className="h-8 w-[70px] appearance-none rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none"
-                  aria-label="Số danh mục mỗi trang"
-                >
-                  {[10, 20, 30, 50, 100].map((size) => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                <span>danh mục/trang</span>
-              </div>
-
-              <div className="text-right sm:text-left">
-                <span className="font-medium text-slate-900">
-                  {totalCount ? ((currentPage - 1) * resolvedPageSize) + 1 : 0}–{Math.min(currentPage * resolvedPageSize, totalCount)}
-                </span>
-                <span className="mx-1 text-slate-300">/</span>
-                <span className="font-medium text-slate-900">
-                  {totalCount}{totalCountData?.hasMore ? '+' : ''}
-                </span>
-                <span className="ml-1 text-slate-500">danh mục</span>
-              </div>
-            </div>
-
-            <div className="order-1 flex w-full justify-center sm:order-2 sm:w-auto sm:justify-end">
-              <nav className="flex items-center space-x-1 sm:space-x-2" aria-label="Phân trang">
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.max(1, prev - 1)); }}
-                  disabled={currentPage === 1}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang trước"
-                >
-                  <ChevronDown className="h-4 w-4 rotate-90" />
-                </button>
-
-                {generatePaginationItems(currentPage, totalPages).map((item, index) => {
-                  if (item === 'ellipsis') {
-                    return (
-                      <div key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-slate-400">
-                        …
-                      </div>
-                    );
-                  }
-
-                  const pageNum = item as number;
-                  const isActive = pageNum === currentPage;
-                  const isMobileHidden = !isActive && pageNum !== 1 && pageNum !== totalPages;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() =>{  setCurrentPage(pageNum); }}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-all duration-200 ${
-                        isActive
-                          ? 'bg-orange-600 text-white shadow-sm border font-medium'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      } ${isMobileHidden ? 'hidden sm:inline-flex' : ''}`}
-                      aria-current={isActive ? 'page' : undefined}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() =>{  setCurrentPage((prev) => Math.min(totalPages, prev + 1)); }}
-                  disabled={currentPage >= totalPages}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-                >
-                  <ChevronDown className="h-4 w-4 -rotate-90" />
-                </button>
-              </nav>
-            </div>
+        <TableToolbar
+          activeFilterCount={0}
+          onResetFilters={handleResetFilters}
+          search={
+            <SearchInput
+              value={searchTerm}
+              onChange={(val) => { setSearchTerm(val); setCurrentPage(1); applyManualSelection([]); }}
+              placeholder="Tìm kiếm danh mục..."
+            />
+          }
+          filters={
+            <>
+              <ResetFilterButton isFiltered={Boolean(searchTerm.trim())} onReset={handleResetFilters} />
+              <ColumnToggle columns={columns} visibleColumns={resolvedVisibleColumns} onToggle={toggleColumn} />
+            </>
+          }
+        />
+        {!isReorderEnabled && (
+          <div className="px-4 py-3 text-xs text-slate-500 border-b border-slate-100 dark:border-slate-800">
+            Tắt tìm kiếm và quay về thứ tự mặc định để kéo thả đổi vị trí.
           </div>
         )}
+        <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {/* Desktop View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-white dark:[&_th]:bg-slate-900">
+              <TableRow>
+                <TableHeadControls
+                  showDrag
+                  showSelect={resolvedVisibleColumns.includes('select')}
+                  checked={isPageSelected}
+                  onChange={toggleSelectAll}
+                  indeterminate={isPageIndeterminate}
+                />
+                {resolvedVisibleColumns.includes('name') && <SortableHeader label="Tên danh mục" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('slug') && <SortableHeader label="Slug" sortKey="slug" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('productTypes') && <TableHead>Product Type</TableHead>}
+                {resolvedVisibleColumns.includes('count') && <SortableHeader label="Số sản phẩm" sortKey="count" sortConfig={sortConfig} onSort={handleSort} className="text-center" />}
+                {resolvedVisibleColumns.includes('status') && <SortableHeader label="Trạng thái" sortKey="active" sortConfig={sortConfig} onSort={handleSort} />}
+                {resolvedVisibleColumns.includes('actions') && <TableHead className="text-right">Hành động</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <SortableContext items={paginatedData.map(cat => cat.id)} strategy={verticalListSortingStrategy}>
+            <TableBody>
+              {isTableLoading ? (
+                <TableSkeleton rows={resolvedPageSize} cols={tableColumnCount} />
+              ) : (
+                <>
+                  {paginatedData.map(cat => (
+                    <SortableTableRow key={cat.id} id={cat.id} disabled={!isReorderEnabled} selected={selectedIds.includes(cat.id)}>
+                      {({ attributes, disabled, listeners }) => (
+                        <>
+                  <TableCellControls
+                    showDrag
+                    showSelect={resolvedVisibleColumns.includes('select')}
+                    checked={selectedIds.includes(cat.id)}
+                    onChange={() => { toggleSelectItem(cat.id); }}
+                    attributes={attributes}
+                    dragDisabled={disabled}
+                    listeners={listeners}
+                  />
+                  {resolvedVisibleColumns.includes('name') && (
+                    <TableCell className="font-medium">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <FolderTree size={16} className={cat.parentId ? 'text-slate-400' : 'text-orange-500'} />
+                          <span>{cat.name}</span>
+                          {hierarchyEnabled && cat.parentId && (
+                            <Badge variant="outline" className="text-xs py-0 px-1.5 font-normal">Con</Badge>
+                          )}
+                        </div>
+                        {hierarchyEnabled && cat.parentId && (
+                          <span className="text-xs text-slate-400 pl-6">
+                            ↳ {parentNameMap[cat.parentId] ?? 'Không rõ cha'}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('slug') && <TableCell className="text-slate-500 font-mono text-sm whitespace-nowrap">{cat.slug}</TableCell>}
+                  {resolvedVisibleColumns.includes('productTypes') && (
+                    <TableCell>
+                      <div className="flex max-w-[260px] flex-wrap gap-1">
+                        {(categoryProductTypesMap[cat.id] ?? []).length > 0 ? (
+                          categoryProductTypesMap[cat.id].map(type => (
+                            <Badge key={type._id} variant="outline" className="text-xs font-normal">
+                              {type.name}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-slate-400">—</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('count') && <TableCell className="text-center whitespace-nowrap"><Badge variant="secondary">{cat.count}</Badge></TableCell>}
+                  {resolvedVisibleColumns.includes('status') && (
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={cat.active ? 'success' : 'secondary'}>{cat.active ? 'Hiện' : 'Ẩn'}</Badge>
+                    </TableCell>
+                  )}
+                  {resolvedVisibleColumns.includes('actions') && (
+                    <TableCell className="text-right whitespace-nowrap">
+                      <RowActions>
+                        <RowActionButton
+                          title="Xem trên web"
+                          icon={<ExternalLink size={16} />}
+                          onClick={() => openFrontend(cat.slug)}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        />
+                        <EditActionButton href={`/admin/categories/${cat.id}/edit`} />
+                        <DeleteActionButton onClick={async () => handleDelete(cat.id)} />
+                      </RowActions>
+                    </TableCell>
+                  )}
+                        </>
+                      )}
+                    </SortableTableRow>
+                  ))}
+                </>
+              )}
+              {!isTableLoading && paginatedData.length === 0 && (
+                <TableEmptyState
+                  colSpan={tableColumnCount}
+                  message={searchTerm ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có danh mục nào.'}
+                />
+              )}
+            </TableBody>
+            </SortableContext>
+          </Table>
+        </div>
+
+        {/* Mobile View */}
+        <MobileCardList>
+          {isTableLoading ? (
+            <div className="p-4 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+          ) : paginatedData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {searchTerm ? 'Không tìm thấy kết quả phù hợp' : 'Chưa có danh mục nào.'}
+            </div>
+          ) : (
+            paginatedData.map(cat => (
+              <MobileRowCard
+                key={cat.id}
+                selected={selectedIds.includes(cat.id)}
+                checkbox={<SelectCheckbox checked={selectedIds.includes(cat.id)} onChange={() => toggleSelectItem(cat.id)} />}
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <FolderTree size={15} className={cat.parentId ? 'text-slate-400' : 'text-orange-500'} />
+                    {cat.name}
+                  </span>
+                }
+                subtitle={<span className="font-mono text-xs text-slate-400">{cat.slug}</span>}
+                badge={<Badge variant={cat.active ? 'success' : 'secondary'}>{cat.active ? 'Hiện' : 'Ẩn'}</Badge>}
+                details={
+                  <div className="space-y-1">
+                    <div><span className="text-slate-400">Số sản phẩm:</span> {cat.count}</div>
+                    {hierarchyEnabled && cat.parentId && <div><span className="text-slate-400">Danh mục cha:</span> {parentNameMap[cat.parentId] ?? '—'}</div>}
+                  </div>
+                }
+                actions={
+                  <RowActions>
+                    <RowActionButton
+                      title="Xem trên web"
+                      icon={<ExternalLink size={16} />}
+                      onClick={() => openFrontend(cat.slug)}
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                    />
+                    <EditActionButton href={`/admin/categories/${cat.id}/edit`} />
+                    <DeleteActionButton onClick={async () => handleDelete(cat.id)} />
+                  </RowActions>
+                }
+              />
+            ))
+          )}
+        </MobileCardList>
+        </DndContext>
+        <AdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={resolvedPageSize}
+          totalItems={totalCount}
+          onPageChange={(page) => { setCurrentPage(page); applyManualSelection([]); }}
+          onPageSizeChange={(size) => {
+            setPageSizeOverride(size);
+            setCurrentPage(1);
+            applyManualSelection([]);
+          }}
+          entityLabel="danh mục"
+        />
       </Card>
       <DeleteConfirmDialog
         open={isDeleteOpen}
@@ -528,6 +574,6 @@ function CategoriesContent() {
         onConfirm={async () => handleConfirmDelete()}
         isLoading={isDeleteLoading}
       />
-    </div>
+    </AdminPageLayout>
   );
 }

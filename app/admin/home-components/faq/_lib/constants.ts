@@ -5,13 +5,13 @@ export const DEFAULT_FAQ_ITEMS: FaqItem[] = [
 ];
 
 export const FAQ_STYLES: FaqStyleOption[] = [
-  { id: 'wine-list', label: 'Wine List' },
-  { id: 'accordion', label: 'Minimal' },
-  { id: 'minimal', label: 'Floating' },
-  { id: 'timeline', label: 'Split' },
-  { id: 'cards', label: 'Grid' },
-  { id: 'two-column', label: 'Showcase' },
-  { id: 'tabbed', label: 'Brand' },
+  { id: 'wine-list', label: '(1) Xếp dọc' },
+  { id: 'accordion', label: '(2) Đóng mở' },
+  { id: 'minimal', label: '(3) Khối nổi' },
+  { id: 'timeline', label: '(4) Chia đôi' },
+  { id: 'cards', label: '(5) Lưới thẻ' },
+  { id: 'two-column', label: '(6) Hai cột' },
+  { id: 'tabbed', label: '(7) Phân tab' },
 ];
 
 export const DEFAULT_FAQ_CONFIG: FaqConfig = {

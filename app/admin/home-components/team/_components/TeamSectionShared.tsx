@@ -7,6 +7,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import { cn } from '../../../components/ui';
 import { TikTokIcon, ZaloIcon } from '@/components/site/SocialIcons';
 import { SectionHeader } from '../../_shared/components/SectionHeader';
+import { EditablePreviewText } from '../../_shared/components/EditablePreviewText';
 import type { PreviewDevice } from '../../_shared/hooks/usePreviewDevice';
 import { getSectionSpacingClassName, normalizeSectionSpacing } from '../../_shared/types/sectionSpacing';
 import type { SectionSpacing } from '../../_shared/types/sectionSpacing';
@@ -50,10 +51,16 @@ interface TeamSectionSharedProps {
   spacing?: SectionSpacing;
   desktopColumns?: TeamDesktopColumns;
   cornerRadius?: TeamCornerRadius;
+  onTitleChange?: (value: string) => void;
+  onSubtitleChange?: (value: string) => void;
+  onBadgeTextChange?: (value: string) => void;
+  visualEditEnabled?: boolean;
+  onMembersChange?: (members: TeamEditorMember[]) => void;
 }
 
 interface NormalizedTeamMember {
   key: string;
+  sourceIndex: number;
   name: string;
   role: string;
   avatar: string;
@@ -84,7 +91,7 @@ const toMemberRecord = (raw: unknown): Record<string, unknown> => {
   return {};
 };
 
-const buildMemberKey = (raw: Record<string, unknown>, member: Omit<NormalizedTeamMember, 'key'>, index: number) => {
+const buildMemberKey = (raw: Record<string, unknown>, member: Pick<NormalizedTeamMember, 'name' | 'role' | 'email'>, index: number) => {
   const idCandidate = raw.id ?? raw.key;
 
   if (typeof idCandidate === 'string' && idCandidate.trim().length > 0) {
@@ -129,6 +136,7 @@ const normalizeMembers = (input: Array<TeamMember | TeamEditorMember>): Normaliz
 
     return {
       key: count === 0 ? baseKey : `${baseKey}::${count}`,
+      sourceIndex: index,
       name: toText(raw.name),
       role: toText(raw.role),
       avatar: toText(raw.avatar),
@@ -432,11 +440,17 @@ export function TeamSectionShared({
   spacing,
   desktopColumns,
   cornerRadius,
+  onTitleChange,
+  onSubtitleChange,
+  onBadgeTextChange,
+  visualEditEnabled = false,
+  onMembersChange,
 }: TeamSectionSharedProps) {
   const isPreview = context === 'preview';
   const isMobilePreview = isPreview && device === 'mobile';
   const isTabletPreview = isPreview && device === 'tablet';
   const heading = title.trim() || 'Đội ngũ của chúng tôi';
+  const isVisualEditActive = isPreview && visualEditEnabled && Boolean(onMembersChange);
   // Ưu tiên subtitle từ prop header config, fallback texts.subtitle (legacy)
   const subtitleText = subtitleProp !== undefined ? subtitleProp : (texts.subtitle || '');
   const emptyMessage = texts.emptyMessage || 'Chưa có thành viên nào.';
@@ -476,6 +490,33 @@ export function TeamSectionShared({
       showBadge={showBadge}
       badgeText={badgeText}
       brandColor={tokens.primary}
+      onTitleChange={onTitleChange}
+      onSubtitleChange={onSubtitleChange}
+      onBadgeTextChange={onBadgeTextChange}
+      visualEditEnabled={visualEditEnabled}
+    />
+  );
+  const handleMemberTextChange = (member: NormalizedTeamMember, field: 'name' | 'role' | 'bio', value: string) => {
+    onMembersChange?.(members.map((item, index) => (
+      index === member.sourceIndex ? { ...item, [field]: value } : item
+    )) as TeamEditorMember[]);
+  };
+  const renderMemberText = (
+    member: NormalizedTeamMember,
+    field: 'name' | 'role' | 'bio',
+    fallback: string,
+    className?: string,
+    style?: React.CSSProperties,
+    as?: React.ElementType,
+  ) => (
+    <EditablePreviewText
+      active={isVisualEditActive}
+      value={member[field]}
+      fallback={fallback}
+      className={className}
+      style={style}
+      as={as}
+      onChange={(value) => handleMemberTextChange(member, field, value)}
     />
   );
 
@@ -586,13 +627,13 @@ export function TeamSectionShared({
                     className={cn('mb-0.5 break-words text-xs font-medium leading-snug text-slate-500 transition-colors duration-200 group-hover:text-[var(--team-hover-color)]', uppercaseText && 'uppercase')}
                     style={{ '--team-hover-color': hoverAccent } as React.CSSProperties}
                   >
-                    {member.role || 'Chức vụ'}
+                    {renderMemberText(member, 'role', 'Chức vụ')}
                   </p>
                   <h3
                     className="mb-2 break-words font-bold leading-snug"
                     style={{ color: tokens.neutralText, fontSize: isPreview ? (isMobilePreview ? '0.85rem' : '1rem') : '1.05rem' }}
                   >
-                    {member.name || 'Thành viên'}
+                    {renderMemberText(member, 'name', 'Thành viên')}
                   </h3>
                   <div className="flex items-center gap-1.5">
                     <TeamSocialButtonNeutral platform="facebook" value={member.facebook} context={context} brandColor={hoverAccent} />
@@ -662,24 +703,24 @@ export function TeamSectionShared({
                 className="break-words text-[0.8em] font-semibold leading-snug"
                 style={{ color: tokens.neutralText, fontSize }}
               >
-                {member.name || 'Thành viên'}
+                {renderMemberText(member, 'name', 'Thành viên')}
               </h3>
               <p
                 className="mt-0.5 break-words text-[0.92em] leading-snug"
                 style={{ color: hovered ? hoverAccent : tokens.mutedText, fontSize: roleSize }}
               >
-                {member.role || 'Chức vụ'}
+                {renderMemberText(member, 'role', 'Chức vụ')}
               </p>
             </div>
           </div>
 
           {/* Bio */}
-          {member.bio && (
+          {(member.bio || isVisualEditActive) && (
             <p
               className="mt-2 break-words text-[0.92em] leading-snug"
               style={{ color: tokens.mutedText, fontSize: roleSize }}
             >
-              {member.bio}
+              {renderMemberText(member, 'bio', 'Mô tả thành viên')}
             </p>
           )}
 
@@ -806,10 +847,10 @@ export function TeamSectionShared({
                       />
                     </div>
                     <div className="p-4">
-                      <h3 className="break-words font-semibold leading-snug" style={{ color: tokens.neutralText }}>{member.name || 'Thành viên'}</h3>
-                      <p className="mt-0.5 break-words text-sm leading-snug text-slate-500 transition-colors duration-200 group-hover:text-[var(--team-carousel-hover)]">{member.role || 'Chức vụ'}</p>
-                      {member.bio ? (
-                        <p className="mt-2 break-words text-xs leading-snug" style={{ color: tokens.mutedText }}>{member.bio}</p>
+                      <h3 className="break-words font-semibold leading-snug" style={{ color: tokens.neutralText }}>{renderMemberText(member, 'name', 'Thành viên')}</h3>
+                      <p className="mt-0.5 break-words text-sm leading-snug text-slate-500 transition-colors duration-200 group-hover:text-[var(--team-carousel-hover)]">{renderMemberText(member, 'role', 'Chức vụ')}</p>
+                      {member.bio || isVisualEditActive ? (
+                        <p className="mt-2 break-words text-xs leading-snug" style={{ color: tokens.mutedText }}>{renderMemberText(member, 'bio', 'Mô tả thành viên')}</p>
                       ) : null}
                       <div className="mt-3 pt-3 border-t flex items-center gap-2" style={{ borderColor: tokens.cardBorder }}>
                         <TeamSocialButton platform="facebook" value={member.facebook} context={context} tokens={tokens} sizeClass="w-7 h-7" iconSize={12} />
@@ -972,13 +1013,13 @@ export function TeamSectionShared({
                         fontSize: isPreview ? (isMobilePreview ? '0.78rem' : '0.85rem') : '0.95rem',
                       }}
                     >
-                      {member.name || 'Thành viên'}
+                      {renderMemberText(member, 'name', 'Thành viên')}
                     </h4>
                     <p
                       className="mt-0.5 break-words leading-snug text-slate-500 transition-colors duration-200 group-hover:text-[var(--team-bento-hover)]"
                       style={{ fontSize: isPreview ? '0.7rem' : '0.78rem' }}
                     >
-                      {member.role || 'Chức vụ'}
+                      {renderMemberText(member, 'role', 'Chức vụ')}
                     </p>
 
                     {/* Social icons — xám, hover brand */}
@@ -1108,7 +1149,7 @@ export function TeamSectionShared({
               className="break-words font-bold leading-snug text-[#111] transition-colors duration-200 group-hover:text-white"
                 style={{ fontSize: isPreview ? (isMobilePreview ? '0.8rem' : '0.88rem') : '1rem' }}
               >
-                {member.name || 'Thành viên'}
+                {renderMemberText(member, 'name', 'Thành viên')}
               </h3>
               <p
                 className="break-words uppercase leading-snug text-[#888] transition-colors duration-200 group-hover:text-white/80"
@@ -1118,7 +1159,7 @@ export function TeamSectionShared({
                   marginTop: '2px',
                 }}
               >
-                {member.role || 'Chức vụ'}
+                {renderMemberText(member, 'role', 'Chức vụ')}
               </p>
             </div>
           </article>
@@ -1286,7 +1327,7 @@ export function TeamSectionShared({
                     fontSize: isPreview ? (isMobilePreview ? '0.78rem' : '0.85rem') : '0.95rem',
                   }}
                 >
-                  {member.name || 'Thành viên'}
+                  {renderMemberText(member, 'name', 'Thành viên')}
                 </h3>
                 <p
                   className="mt-0.5 break-words leading-snug text-slate-500 transition-colors duration-200 group-hover:text-white/80"
@@ -1294,7 +1335,7 @@ export function TeamSectionShared({
                     fontSize: isPreview ? '0.62rem' : '0.72rem',
                   }}
                 >
-                  {member.role || 'Chức vụ'}
+                  {renderMemberText(member, 'role', 'Chức vụ')}
                 </p>
               </div>
 
@@ -1467,13 +1508,13 @@ export function TeamSectionShared({
                     className="mb-1 break-words text-[12px] font-semibold leading-snug text-[#231f20] transition-colors duration-300 group-hover:text-white md:text-[13px]"
                     title={member.name || 'Thành viên'}
                   >
-                    {member.name || 'Thành viên'}
+                    {renderMemberText(member, 'name', 'Thành viên')}
                   </h3>
                   <p
                     className="break-words text-[10px] leading-snug text-[#231f20] transition-colors duration-300 group-hover:text-white md:text-[11px]"
                     title={member.role || 'Chức vụ'}
                   >
-                    {member.role || 'Chức vụ'}
+                    {renderMemberText(member, 'role', 'Chức vụ')}
                   </p>
                 </div>
                 <div
@@ -1616,13 +1657,13 @@ export function TeamSectionShared({
 
                       <div className="flex flex-1 flex-col items-center p-4 text-center md:p-5">
                         <h3 className="mb-2 break-words text-[15px] font-semibold leading-snug text-[#0e121d] md:text-[17px]">
-                          {member.name || 'Thành viên'}
+                          {renderMemberText(member, 'name', 'Thành viên')}
                         </h3>
                         <p
                           className="mb-3 break-words text-xs leading-snug md:text-[13px]"
                           style={{ color: tokens.primary }}
                         >
-                          {member.role || 'Chức vụ'}
+                          {renderMemberText(member, 'role', 'Chức vụ')}
                         </p>
                         <div className="mt-auto flex flex-wrap items-center justify-center gap-2">
                           {layout8Socials.map((platform) => (

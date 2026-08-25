@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { AlertTriangle, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Button, Input, Label, cn } from '../../../components/ui';
 import { ComponentFormWrapper, useComponentForm } from '../shared';
@@ -21,6 +23,7 @@ import type {
   PricingStyle,
 } from '../../pricing/_types';
 import { AiDemoPricingImport } from '../../product-list/_components/AiDemoProductsImport';
+import { QuickRouteInput } from '@/app/admin/home-components/_shared/components/QuickRouteInput';
 
 const DEFAULT_PLANS: PricingEditorPlan[] = [
   {
@@ -81,6 +84,8 @@ const sanitizeFeatures = (value: string) => (
 
 export default function PricingCreatePage() {
   const COMPONENT_TYPE = 'Pricing';
+  const systemConfig = useQuery(api.homeComponentSystemConfig.getConfig);
+  const isVisualEditAllowed = systemConfig?.typeVisualEditOverrides?.[COMPONENT_TYPE]?.enabled ?? true;
   const { title, setTitle, active, setActive, handleSubmit, isSubmitting } = useComponentForm('Bảng giá', COMPONENT_TYPE);
   const { customState, effectiveColors, showCustomBlock, setCustomState, systemColors } = useTypeColorOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
   const { customState: customFontState, effectiveFont, showCustomBlock: showFontCustomBlock, setCustomState: setCustomFontState } = useTypeFontOverrideState(COMPONENT_TYPE, { seedCustomFromSettingsWhenTypeEmpty: true });
@@ -453,11 +458,11 @@ export default function PricingCreatePage() {
                     setPricingPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, buttonText: e.target.value } : p)));
                   }}
                 />
-                <Input
+                <QuickRouteInput
                   placeholder="Link nút"
                   value={plan.buttonLink}
-                  onChange={(e) => {
-                    setPricingPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, buttonLink: e.target.value } : p)));
+                  onChangeValue={(v) => {
+                    setPricingPlans((prev) => prev.map((p) => (p.id === plan.id ? { ...p, buttonLink: v } : p)));
                   }}
                 />
               </div>
@@ -508,6 +513,23 @@ export default function PricingCreatePage() {
           spacing,
         }}
         gridCols={pricingConfig.gridCols}
+        isVisualEditAllowed={isVisualEditAllowed}
+        onTitleChange={setTitle}
+        onSubtitleChange={setSubtitle}
+        onBadgeTextChange={setBadgeText}
+        onItemsChange={(nextPlans) => {
+          setPricingPlans(nextPlans.map((plan, idx) => ({
+            id: pricingPlans[idx]?.id ?? idx + 1,
+            name: plan.name,
+            price: plan.price,
+            yearlyPrice: plan.yearlyPrice ?? '',
+            period: plan.period,
+            features: plan.features,
+            isPopular: plan.isPopular,
+            buttonText: plan.buttonText,
+            buttonLink: plan.buttonLink,
+          })));
+        }}
       />
     </ComponentFormWrapper>
   );
